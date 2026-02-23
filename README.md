@@ -2,6 +2,10 @@
 
 A 3D browser-based implementation of BISCUITS, a 5-minute push-your-luck dice game where the goal is to achieve the **lowest score**.
 
+Game play demo link https://colinmichaels.github.io/virtual-bitches/      
+
+# DEV INFO
+
 ## Quick Start
 
 ```bash
