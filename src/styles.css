@@ -124,6 +124,12 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 4px 8px rgba(0,0,0,0.3);
 }
 
+/* Focused state for keyboard navigation */
+.die-wrapper.focused .die-2d {
+  box-shadow: 0 0 0 3px rgba(100, 180, 255, 0.8), 0 4px 8px rgba(0,0,0,0.3);
+  transform: translateY(-2px);
+}
+
 .die-wrapper .die-2d.selected {
   transform: scale(1.05);
   /* Add glow effect */
@@ -347,8 +353,11 @@ h1, h2, h3, h4, h5, h6 {
   transform: translateX(-50%);
   display: flex;
   gap: 12px;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 600px;
 }
 
 button {
@@ -379,6 +388,15 @@ button.primary {
 
 button.primary:hover:not(:disabled) {
   background: #c23652;
+}
+
+button.secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ddd;
+}
+
+button.secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 button.danger {
@@ -753,6 +771,13 @@ button.danger:hover:not(:disabled) {
   padding-bottom: 8px;
 }
 
+.setting-description {
+  margin: -8px 0 16px 0;
+  color: #aaa;
+  font-size: 13px;
+  font-style: italic;
+}
+
 .setting-row {
   display: flex;
   align-items: center;
@@ -802,6 +827,61 @@ button.danger:hover:not(:disabled) {
   margin-top: 24px;
   padding-top: 24px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Tutorial Modal */
+.tutorial-content {
+  max-width: 600px;
+  text-align: center;
+}
+
+.tutorial-icon {
+  font-size: 72px;
+  margin-bottom: 20px;
+  animation: bounce 1s ease-in-out;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.tutorial-title {
+  font-size: 32px;
+  margin-bottom: 20px;
+  color: #fff;
+}
+
+.tutorial-body {
+  font-size: 18px;
+  line-height: 1.6;
+  color: #ddd;
+  margin-bottom: 32px;
+}
+
+.tutorial-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+
+.tutorial-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.tutorial-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transition: all 0.3s;
+}
+
+.tutorial-dot.active {
+  background: #e94560;
+  transform: scale(1.3);
 }
 
 /* Notification System - Game-style Floating Text */
@@ -1203,12 +1283,13 @@ button.danger:hover:not(:disabled) {
 
   /* Camera Controls - Horizontal layout at bottom */
   #camera-controls {
-    bottom: 10px;
-    left: 10px;
-    right: 10px;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
     flex-direction: row;
     justify-content: center;
-    padding: 8px;
+    padding: 6px;
+    max-width: calc(100vw - 16px);
   }
 
   .camera-label {
@@ -1217,27 +1298,33 @@ button.danger:hover:not(:disabled) {
 
   .camera-buttons {
     display: flex;
-    gap: 8px;
+    gap: 6px;
   }
 
   .camera-btn {
-    width: 40px;
-    height: 40px;
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
   }
 
   /* Action Controls - Full width at bottom */
   #controls {
-    bottom: 70px; /* Above camera controls */
-    left: 10px;
-    right: 10px;
+    bottom: 60px; /* Above camera controls */
+    left: 8px;
+    right: 8px;
     transform: none;
-    width: calc(100% - 20px);
+    width: calc(100% - 16px);
+    max-width: calc(100vw - 16px);
   }
 
   #action-btn {
     width: 100%;
-    font-size: 18px;
-    padding: 16px;
+    max-width: 100%;
+    font-size: 16px;
+    padding: 14px 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* Game Over Screen */
@@ -1399,11 +1486,13 @@ button.danger:hover:not(:disabled) {
     left: 5px;
     right: 5px;
     padding: 6px;
+    max-width: calc(100vw - 10px);
   }
 
   .camera-btn {
     width: 36px;
     height: 36px;
+    flex-shrink: 0;
   }
 
   /* Action Button */
@@ -1412,11 +1501,17 @@ button.danger:hover:not(:disabled) {
     left: 5px;
     right: 5px;
     width: calc(100% - 10px);
+    max-width: calc(100vw - 10px);
   }
 
   #action-btn {
+    width: 100%;
+    max-width: 100%;
     font-size: 16px;
-    padding: 14px;
+    padding: 14px 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* Splash Screen */
