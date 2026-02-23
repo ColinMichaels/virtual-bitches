@@ -1,0 +1,24 @@
+{
+  "name": "biscuits-game",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:dev": "vite --mode development",
+    "build": "tsc && vite build",
+    "build:dev": "tsc && vite build --mode development",
+    "build:prod": "tsc && vite build --mode production",
+    "preview": "vite preview",
+    "test": "tsx src/engine/rules.test.ts"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^7.0.0",
+    "@babylonjs/loaders": "^7.0.0",
+    "marked": "^17.0.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.0"
+  }
+}

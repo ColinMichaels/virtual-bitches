@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIRTUAL BITCHES - Push Your Luck Dice Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Inter:wght@400;500;600;700&display=swap"
+          rel="stylesheet">
+    <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+<div id="app">
+    <canvas id="renderCanvas"></canvas>
+
+    <div id="dice-row"></div>
+
+    <div id="hud">
+        <div class="stat">
+            <div class="stat-label">Roll</div>
+            <div class="stat-value" id="roll-count">0</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">Score</div>
+            <div class="stat-value" id="score">0</div>
+        </div>
+        <div id="dice-pool">
+            <div class="stat-label">Remaining</div>
+            <div id="pool-list"></div>
+        </div>
+        <div id="selected-info" style="display:none;">
+            <div><strong>Selected:</strong> <span id="selected-count">0</span></div>
+            <div><strong>Points:</strong> <span id="selected-points">0</span></div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <button id="action-btn" class="primary">Roll Dice (Space)</button>
+    </div>
+
+    <button id="settings-gear-btn" title="Settings (ESC)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 1v6m0 6v6M5.6 5.6l4.2 4.2m4.4 4.4l4.2 4.2M1 12h6m6 0h6M5.6 18.4l4.2-4.2m4.4-4.4l4.2-4.2"/>
+        </svg>
+    </button>
+
+    <div id="camera-controls">
+        <div class="camera-label">Camera</div>
+        <div class="camera-buttons">
+            <button class="camera-btn" data-view="default" title="Default View">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <circle cx="12" cy="12" r="3"/>
+                </svg>
+            </button>
+            <button class="camera-btn" data-view="top" title="Top View">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="5" y="5" width="14" height="14"/>
+                    <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+                </svg>
+            </button>
+            <button class="camera-btn" data-view="side" title="Side View">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="8" y="5" width="8" height="14"/>
+                    <path d="M16 12h6M2 12h6"/>
+                </svg>
+            </button>
+            <button class="camera-btn" data-view="front" title="Front View">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="5" y="8" width="14" height="8"/>
+                    <path d="M12 16v6M12 2v6"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div id="game-over">
+        <h1>Game Complete!</h1>
+        <div id="final-score">0</div>
+        <p>Lower is better</p>
+        <div id="seed-actions">
+            <p class="seed-info">Save your game seed to replay this exact run later</p>
+            <div class="seed-buttons">
+                <button id="copy-seed-btn" class="seed-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    Copy Seed
+                </button>
+                <button id="download-seed-btn" class="seed-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Download Seed
+                </button>
+            </div>
+        </div>
+        <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+            <button id="view-leaderboard-btn" class="primary">View Leaderboard</button>
+            <button id="new-game-btn" class="primary">New Game</button>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

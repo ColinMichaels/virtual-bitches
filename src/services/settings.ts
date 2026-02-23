@@ -1,0 +1,196 @@
+/**
+ * Settings Service
+ * Manages game settings and persists them to localStorage
+ */
+
+export interface AudioSettings {
+  masterVolume: number; // 0-1
+  sfxVolume: number; // 0-1
+  musicVolume: number; // 0-1
+  sfxEnabled: boolean;
+  musicEnabled: boolean;
+}
+
+export interface DisplaySettings {
+  graphicsQuality: "low" | "medium" | "high";
+  shadowsEnabled: boolean;
+  particlesEnabled: boolean;
+}
+
+export interface ControlSettings {
+  cameraSensitivity: number; // 0.5-2.0
+}
+
+export interface GameSettings {
+  showTutorial: boolean;
+  confirmBeforeNewGame: boolean;
+}
+
+export interface Settings {
+  audio: AudioSettings;
+  display: DisplaySettings;
+  controls: ControlSettings;
+  game: GameSettings;
+}
+
+const DEFAULT_SETTINGS: Settings = {
+  audio: {
+    masterVolume: 0.7,
+    sfxVolume: 0.8,
+    musicVolume: 0.5,
+    sfxEnabled: true,
+    musicEnabled: true,
+  },
+  display: {
+    graphicsQuality: "high",
+    shadowsEnabled: true,
+    particlesEnabled: true,
+  },
+  controls: {
+    cameraSensitivity: 1.0,
+  },
+  game: {
+    showTutorial: true,
+    confirmBeforeNewGame: false,
+  },
+};
+
+const STORAGE_KEY = "biscuits-settings";
+
+export class SettingsService {
+  private settings: Settings;
+  private listeners: Array<(settings: Settings) => void> = [];
+
+  constructor() {
+    this.settings = this.loadSettings();
+  }
+
+  /**
+   * Load settings from localStorage or use defaults
+   */
+  private loadSettings(): Settings {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Merge with defaults to handle new settings added in updates
+        return this.mergeWithDefaults(parsed);
+      }
+    } catch (error) {
+      console.warn("Failed to load settings:", error);
+    }
+    return { ...DEFAULT_SETTINGS };
+  }
+
+  /**
+   * Merge loaded settings with defaults (handles missing keys)
+   */
+  private mergeWithDefaults(loaded: any): Settings {
+    return {
+      audio: { ...DEFAULT_SETTINGS.audio, ...loaded.audio },
+      display: { ...DEFAULT_SETTINGS.display, ...loaded.display },
+      controls: { ...DEFAULT_SETTINGS.controls, ...loaded.controls },
+      game: { ...DEFAULT_SETTINGS.game, ...loaded.game },
+    };
+  }
+
+  /**
+   * Save settings to localStorage
+   */
+  private saveSettings(): void {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+    }
+  }
+
+  /**
+   * Get current settings
+   */
+  getSettings(): Settings {
+    return { ...this.settings };
+  }
+
+  /**
+   * Update audio settings
+   */
+  updateAudio(audio: Partial<AudioSettings>): void {
+    this.settings.audio = { ...this.settings.audio, ...audio };
+    this.saveSettings();
+    this.notifyListeners();
+  }
+
+  /**
+   * Update display settings
+   */
+  updateDisplay(display: Partial<DisplaySettings>): void {
+    this.settings.display = { ...this.settings.display, ...display };
+    this.saveSettings();
+    this.notifyListeners();
+  }
+
+  /**
+   * Update control settings
+   */
+  updateControls(controls: Partial<ControlSettings>): void {
+    this.settings.controls = { ...this.settings.controls, ...controls };
+    this.saveSettings();
+    this.notifyListeners();
+  }
+
+  /**
+   * Update game settings
+   */
+  updateGame(game: Partial<GameSettings>): void {
+    this.settings.game = { ...this.settings.game, ...game };
+    this.saveSettings();
+    this.notifyListeners();
+  }
+
+  /**
+   * Reset to default settings
+   */
+  resetToDefaults(): void {
+    this.settings = { ...DEFAULT_SETTINGS };
+    this.saveSettings();
+    this.notifyListeners();
+  }
+
+  /**
+   * Subscribe to settings changes
+   */
+  onChange(listener: (settings: Settings) => void): () => void {
+    this.listeners.push(listener);
+    // Return unsubscribe function
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener);
+    };
+  }
+
+  /**
+   * Notify all listeners of settings changes
+   */
+  private notifyListeners(): void {
+    this.listeners.forEach((listener) => listener(this.settings));
+  }
+
+  /**
+   * Get effective SFX volume (master * sfx * enabled)
+   */
+  getSfxVolume(): number {
+    if (!this.settings.audio.sfxEnabled) return 0;
+    return this.settings.audio.masterVolume * this.settings.audio.sfxVolume;
+  }
+
+  /**
+   * Get effective music volume (master * music * enabled)
+   */
+  getMusicVolume(): number {
+    if (!this.settings.audio.musicEnabled) return 0;
+    return this.settings.audio.masterVolume * this.settings.audio.musicVolume;
+  }
+}
+
+// Singleton instance
+export const settingsService = new SettingsService();

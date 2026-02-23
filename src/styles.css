@@ -1,0 +1,1539 @@
+/* Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  background: #1a1a2e;
+  color: #eee;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Caprasimo', cursive, system-ui;
+  font-weight: 400;
+}
+
+/* Main Layout */
+#app {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+#renderCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* Left Sidebar HUD */
+#hud {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: rgba(0,0,0,0.7);
+  padding: 20px;
+  border-radius: 8px;
+  min-width: 200px;
+}
+
+.stat {
+  margin: 8px 0;
+}
+
+.stat-label {
+  font-size: 12px;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #e94560;
+}
+
+#dice-pool {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255,255,255,0.2);
+}
+
+.die-count {
+  display: flex;
+  justify-content: space-between;
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+#selected-info {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(233, 69, 96, 0.2);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* Top Center - 2D Dice Row */
+#dice-row {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: #06013b;
+  background: linear-gradient(64deg, rgb(60, 54, 54) 0%, rgba(49, 49, 117, 1) 42%, rgba(71, 71, 71, 1) 100%);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+  border-radius: 8px;
+  flex-wrap: wrap;
+  max-width: 80%;
+  justify-content: center;
+}
+
+.die-wrapper {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.die-2d {
+  width: 60px;
+  height: 60px;
+  background: transparent;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  transition: all 0.2s;
+  border: 3px solid transparent;
+  position: relative;
+}
+
+.die-wrapper:hover .die-2d {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.die-wrapper .die-2d.selected {
+  transform: scale(1.05);
+  /* Add glow effect */
+  filter: drop-shadow(0 0 8px rgba(255,204,0,0.6))
+          drop-shadow(0 0 16px rgba(255,204,0,0.4));
+}
+
+/* Create border effect for clipped shapes using ::before pseudo-element */
+.die-wrapper .die-2d.d4.selected::before,
+.die-wrapper .die-2d.d8.selected::before,
+.die-wrapper .die-2d.d10.selected::before,
+.die-wrapper .die-2d.d12.selected::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  background: #ffcc00;
+  z-index: -1;
+}
+
+/* Apply same clip-paths to pseudo-elements */
+.die-wrapper .die-2d.d4.selected::before {
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+}
+
+.die-wrapper .die-2d.d8.selected::before {
+  clip-path: polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%);
+}
+
+.die-wrapper .die-2d.d10.selected::before {
+  clip-path: polygon(50% 0%, 80% 20%, 100% 60%, 80% 100%, 20% 100%, 0% 60%, 20% 20%);
+}
+
+.die-wrapper .die-2d.d12.selected::before {
+  clip-path: polygon(50% 0%, 80% 10%, 100% 40%, 90% 75%, 60% 95%, 40% 95%, 10% 75%, 0% 40%, 20% 10%);
+}
+
+/* For d6 (no clip-path), use border + box-shadow */
+.die-wrapper .die-2d.d6.selected {
+  border: 4px solid #ffcc00;
+  box-shadow: 0 0 16px rgba(255,204,0,0.8),
+              0 0 24px rgba(255,204,0,0.4),
+              inset 0 0 8px rgba(255,204,0,0.3);
+}
+
+/* For d20 (circle), use border + box-shadow */
+.die-wrapper .die-2d.d20.selected {
+  border: 4px solid #ffcc00;
+  box-shadow: 0 0 16px rgba(255,204,0,0.8),
+              0 0 24px rgba(255,204,0,0.4),
+              inset 0 0 8px rgba(255,204,0,0.3);
+}
+
+.die-2d .top-value {
+  font-size:24px;
+  font-weight: 900;
+  color: #efefef;
+  text-shadow: 0 1px 3px rgba(0,0,0,1);
+  line-height: 1;
+}
+
+.die-2d .points {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-top: 2px;
+  background: rgba(177, 177, 177, 0.5);
+  text-shadow: 0 1px 3px rgba(0,0,0,1);
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+
+.die-wrapper .kind {
+  position: absolute;
+  top: -7px;
+  right: -6px;
+  font-size: 10px;
+  color: white;
+  font-weight: 800;
+  background: #555;
+  padding: 3px 5px;
+  border-radius: 50%;
+  line-height: 1;
+  min-width: 18px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  border: 1px solid #818181;
+  z-index: 10;
+}
+
+/* Die shape variations */
+.die-2d.d4 {
+  background: #f5a5a5;
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  border-radius: 0;
+}
+.die-2d.d6 {
+  background: #f0f0f0;
+  border-radius: 8px;
+}
+.die-2d.d8 {
+  background: #a5c9f5;
+  clip-path: polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%);
+  border-radius: 0;
+}
+.die-2d.d10 {
+  background: #f5e5a5;
+  clip-path: polygon(50% 0%, 80% 20%, 100% 60%, 80% 100%, 20% 100%, 0% 60%, 20% 20%);
+  border-radius: 0;
+}
+.die-2d.d12 {
+  background: #d5a5f5;
+  clip-path: polygon(50% 0%, 80% 10%, 100% 40%, 90% 75%, 60% 95%, 40% 95%, 10% 75%, 0% 40%, 20% 10%);
+  border-radius: 0;
+
+}
+.die-2d.d20 {
+  background: #a5f5c9;
+  border-radius: 50%;
+}
+
+/* Settings Gear Button - Top Right */
+#settings-gear-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  padding: 12px;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+#settings-gear-btn svg {
+  width: 24px;
+  height: 24px;
+  color: #fff;
+}
+
+#settings-gear-btn:hover {
+  background: rgba(233, 69, 96, 0.8);
+  border-color: #e94560;
+  transform: rotate(90deg) scale(1.1);
+}
+
+#settings-gear-btn:active {
+  transform: rotate(90deg) scale(0.95);
+}
+
+/* Camera Controls - Bottom Left */
+#camera-controls {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(0,0,0,0.7);
+  padding: 12px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.camera-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.7;
+  text-align: center;
+}
+
+.camera-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.camera-btn {
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-btn svg {
+  width: 20px;
+  height: 20px;
+  color: #fff;
+}
+
+.camera-btn:hover {
+  background: rgba(255,255,255,0.2);
+  border-color: rgba(255,255,255,0.4);
+  transform: translateY(-2px);
+}
+
+.camera-btn:active {
+  transform: translateY(0);
+}
+
+/* Bottom Controls */
+#controls {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  flex-direction: column;
+  align-items: center;
+}
+
+button {
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #0f3460;
+  color: white;
+  transition: all 0.2s;
+}
+
+button:hover:not(:disabled) {
+  background: #16213e;
+  transform: translateY(-2px);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: #e94560;
+}
+
+button.primary:hover:not(:disabled) {
+  background: #c23652;
+}
+
+button.danger {
+  background: #d9534f;
+  color: #fff;
+}
+
+button.danger:hover:not(:disabled) {
+  background: #c9302c;
+}
+
+/* Game Over Screen */
+#game-over {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.9);
+  padding: 40px;
+  border-radius: 12px;
+  text-align: center;
+  display: none;
+}
+
+#game-over.show {
+  display: block;
+}
+
+#final-score {
+  font-size: 72px;
+  font-weight: 700;
+  color: #e94560;
+  margin: 20px 0;
+}
+
+#share-link {
+  display: none; /* Hidden - replaced by seed actions */
+}
+
+/* Seed Actions in Game Over */
+#seed-actions {
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.seed-info {
+  font-size: 13px;
+  color: #bbb;
+  margin: 0 0 12px 0;
+}
+
+.seed-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.seed-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: rgba(74, 158, 255, 0.15);
+  border: 1px solid #4a9eff;
+  color: #4a9eff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.seed-btn:hover {
+  background: rgba(74, 158, 255, 0.25);
+  transform: translateY(-2px);
+}
+
+.seed-btn:active {
+  transform: translateY(0);
+}
+
+.seed-btn svg {
+  flex-shrink: 0;
+}
+
+/* Splash Screen */
+#splash-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  transition: opacity 0.5s ease-out;
+}
+
+#splash-screen.fade-out {
+  opacity: 0;
+}
+
+#splash-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.splash-content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 60px 80px;
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  animation: slideUp 0.8s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.splash-title {
+  font-family: 'Caprasimo', cursive, system-ui;
+  font-size: 72px;
+  font-weight: 400;
+  color: #e94560;
+  margin: 0 0 16px 0;
+  letter-spacing: 4px;
+  text-shadow: 0 4px 20px rgba(233, 69, 96, 0.5);
+}
+
+.splash-subtitle {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 20px;
+  font-weight: 500;
+  color: #aaa;
+  margin: 0 0 8px 0;
+  letter-spacing: 2px;
+}
+
+.splash-tagline {
+  font-size: 16px;
+  color: #888;
+  margin: 0 0 40px 0;
+  font-style: italic;
+}
+
+.splash-buttons {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.splash-btn {
+  min-width: 160px;
+  font-size: 18px;
+  padding: 16px 32px;
+}
+
+/* Modal Base Styles */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 2000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(5px);
+}
+
+.modal-content {
+  position: relative;
+  z-index: 1;
+  background: rgba(26, 26, 46, 0.95);
+  padding: 40px;
+  border-radius: 12px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 50px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.modal-header h2 {
+  font-size: 28px;
+  margin: 0;
+  color: #eee;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 36px;
+  cursor: pointer;
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: #fff;
+}
+
+/* Rules Modal Specific Styles */
+.rules-modal-content {
+  max-width: 800px;
+}
+
+.rules-body {
+  line-height: 1.7;
+}
+
+.rules-body h1 {
+  font-size: 32px;
+  color: #e94560;
+  margin: 0 0 24px 0;
+  border-bottom: 2px solid rgba(233, 69, 96, 0.3);
+  padding-bottom: 12px;
+}
+
+.rules-body h2 {
+  font-size: 24px;
+  color: #fff;
+  margin: 32px 0 16px 0;
+}
+
+.rules-body h3 {
+  font-size: 20px;
+  color: #ccc;
+  margin: 24px 0 12px 0;
+}
+
+.rules-body p {
+  margin: 12px 0;
+  color: #bbb;
+}
+
+.rules-body ul, .rules-body ol {
+  margin: 12px 0;
+  padding-left: 24px;
+  color: #bbb;
+}
+
+.rules-body li {
+  margin: 8px 0;
+}
+
+.rules-body strong {
+  color: #e94560;
+  font-weight: 600;
+}
+
+.rules-body code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.rules-body hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 32px 0;
+}
+
+.rules-body em {
+  color: #999;
+  font-style: italic;
+}
+
+.rules-body .loading {
+  text-align: center;
+  padding: 40px;
+  color: #888;
+}
+
+/* Settings Modal */
+#settings-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 2000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(5px);
+}
+
+.settings-content {
+  position: relative;
+  z-index: 1;
+  background: rgba(26, 26, 46, 0.95);
+  padding: 40px;
+  border-radius: 12px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-content h2 {
+  margin: 0 0 24px 0;
+  color: #e94560;
+  font-size: 32px;
+}
+
+.settings-section {
+  margin-bottom: 32px;
+}
+
+.settings-section h3 {
+  margin: 0 0 16px 0;
+  color: #fff;
+  font-size: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 8px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.setting-row label {
+  flex: 1;
+  color: #ddd;
+  font-size: 14px;
+}
+
+.setting-row input[type="range"] {
+  flex: 2;
+  cursor: pointer;
+}
+
+.setting-row input[type="checkbox"] {
+  width: auto;
+  margin-right: 8px;
+  cursor: pointer;
+}
+
+.setting-row select {
+  flex: 1;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.setting-row span {
+  min-width: 50px;
+  text-align: right;
+  color: #aaa;
+  font-size: 14px;
+}
+
+.settings-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Notification System - Game-style Floating Text */
+#notification-container {
+  position: fixed;
+  top: 40%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.notification {
+  padding: 8px 16px;
+  font-size: 28px;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  opacity: 0;
+  position: absolute;
+  white-space: nowrap;
+  text-shadow: 0 0 10px currentColor,
+               0 0 20px currentColor,
+               0 0 30px currentColor,
+               0 2px 4px rgba(0, 0, 0, 0.8);
+  animation: floatUp 2s ease-out forwards;
+}
+
+/* Stagger multiple notifications with different directions */
+.notification:nth-child(2) {
+  animation: floatUpLeft 2s ease-out forwards;
+}
+
+.notification:nth-child(3) {
+  animation: floatUpRight 2s ease-out forwards;
+}
+
+.notification:nth-child(4) {
+  animation: floatUp 2s ease-out forwards;
+  animation-delay: 0.2s;
+}
+
+@keyframes floatUp {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.8);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-20px) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-120px) scale(1);
+  }
+}
+
+@keyframes floatUpLeft {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.8);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-30px, -20px) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-60px, -120px) scale(1);
+  }
+}
+
+@keyframes floatUpRight {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.8);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(30px, -20px) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(60px, -120px) scale(1);
+  }
+}
+
+.notification-info {
+  color: #66b3ff;
+}
+
+.notification-success {
+  color: #5dff5d;
+}
+
+.notification-warning {
+  color: #ffd700;
+}
+
+.notification-error {
+  color: #ff5555;
+}
+
+/* Leaderboard Modal */
+.leaderboard-modal-content {
+  max-width: 700px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.leaderboard-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  color: #999;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  color: #eee;
+}
+
+.tab-btn.active {
+  color: #4a9eff;
+  border-bottom-color: #4a9eff;
+}
+
+.stats-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.stat-box {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.stat-box .stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.7;
+  margin-bottom: 5px;
+}
+
+.stat-box .stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #4a9eff;
+}
+
+.scores-section {
+  margin-top: 20px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.section-header h3 {
+  font-size: 18px;
+  color: #eee;
+}
+
+.btn-clear-history {
+  background: rgba(255, 85, 85, 0.2);
+  color: #ff5555;
+  border: 1px solid #ff5555;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-clear-history:hover {
+  background: rgba(255, 85, 85, 0.3);
+}
+
+.score-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.score-entry {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 15px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  transition: background 0.2s;
+}
+
+.score-entry:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.score-entry .rank {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffd700;
+  min-width: 40px;
+}
+
+.score-entry .score-info {
+  flex: 1;
+}
+
+.score-entry .score-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #4a9eff;
+  margin-bottom: 5px;
+}
+
+.score-entry .score-meta {
+  display: flex;
+  gap: 15px;
+  font-size: 12px;
+  color: #999;
+}
+
+.btn-replay {
+  background: rgba(74, 158, 255, 0.2);
+  border: 1px solid #4a9eff;
+  color: #4a9eff;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-replay:hover {
+  background: rgba(74, 158, 255, 0.3);
+  transform: scale(1.05);
+}
+
+.btn-replay svg {
+  width: 20px;
+  height: 20px;
+}
+
+.empty-message {
+  text-align: center;
+  padding: 40px 20px;
+  color: #999;
+  font-size: 14px;
+}
+
+.global-placeholder {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+}
+
+.global-placeholder svg {
+  margin: 0 auto 20px;
+  opacity: 0.3;
+}
+
+.global-placeholder h3 {
+  font-size: 24px;
+  color: #eee;
+  margin-bottom: 10px;
+}
+
+.global-placeholder p {
+  font-size: 16px;
+  margin-bottom: 5px;
+}
+
+.global-placeholder .subtitle {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+/* ============================================
+   RESPONSIVE / MOBILE LAYOUT
+   ============================================ */
+
+/* Tablet Portrait and Below (768px) */
+@media screen and (max-width: 768px) {
+  /* HUD - Ultra compact single row at very top */
+  #hud {
+    top: 3px;
+    left: 3px;
+    right: 55px; /* Leave space for settings button */
+    padding: 4px 8px;
+    min-width: unset;
+    font-size: 11px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+  }
+
+  .stat {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .stat-label {
+    font-size: 9px;
+  }
+
+  .stat-value {
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  /* Hide dice pool and selected info on mobile */
+  #dice-pool,
+  #selected-info {
+    display: none !important;
+  }
+
+  /* Dice Row - Below HUD, smaller dice */
+  #dice-row {
+    top: 32px; /* Below compact HUD */
+    left: 3px;
+    right: 3px;
+    transform: none;
+    max-width: calc(100% - 6px);
+    width: calc(100% - 6px);
+    padding: 6px;
+    gap: 4px;
+    justify-content: space-evenly;
+  }
+
+  .die-wrapper .die-2d {
+    width: 48px;
+    height: 48px;
+  }
+
+  .die-wrapper .kind {
+    font-size: 9px;
+    padding: 2px 4px;
+    top: -5px;
+    right: -5px;
+  }
+
+  /* Smaller fonts in dice */
+  .die-2d .value {
+    font-size: 14px;
+  }
+  .die-2d .top-value{
+    font-size: 17px;
+  }
+
+  .die-2d .points {
+    font-size: 8px;
+  }
+
+  /* Settings Button - Smaller */
+  #settings-gear-btn {
+    top: 10px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+    padding: 8px;
+  }
+
+  #settings-gear-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Camera Controls - Horizontal layout at bottom */
+  #camera-controls {
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    flex-direction: row;
+    justify-content: center;
+    padding: 8px;
+  }
+
+  .camera-label {
+    display: none; /* Hide label on mobile */
+  }
+
+  .camera-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .camera-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* Action Controls - Full width at bottom */
+  #controls {
+    bottom: 70px; /* Above camera controls */
+    left: 10px;
+    right: 10px;
+    transform: none;
+    width: calc(100% - 20px);
+  }
+
+  #action-btn {
+    width: 100%;
+    font-size: 18px;
+    padding: 16px;
+  }
+
+  /* Game Over Screen */
+  #game-over {
+    width: 90%;
+    padding: 30px 20px;
+  }
+
+  #game-over h1 {
+    font-size: 32px;
+  }
+
+  #final-score {
+    font-size: 48px;
+  }
+
+  /* Modals */
+  .modal-content {
+    width: 95%;
+    max-width: 95%;
+    padding: 20px;
+    max-height: 90vh;
+  }
+
+  .modal-header h2 {
+    font-size: 22px;
+  }
+
+  .settings-content {
+    padding: 20px;
+  }
+
+  /* Splash Screen */
+  .splash-content {
+    padding: 40px 30px;
+  }
+
+  .splash-title {
+    font-size: 48px;
+    letter-spacing: 2px;
+  }
+
+  .splash-subtitle {
+    font-size: 16px;
+  }
+
+  .splash-tagline {
+    font-size: 14px;
+  }
+
+  .splash-buttons {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .splash-btn {
+    width: 100%;
+    min-width: unset;
+  }
+
+  /* Leaderboard */
+  .leaderboard-tabs {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .tab-btn {
+    width: 100%;
+  }
+
+  .score-entry {
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .score-entry .score-meta {
+    flex-wrap: wrap;
+  }
+}
+
+/* Mobile Portrait (480px and below) */
+@media screen and (max-width: 480px) {
+  /* Ultra compact HUD - single row */
+  #hud {
+    top: 2px;
+    left: 2px;
+    right: 45px;
+    padding: 3px 6px;
+    min-width: unset;
+    font-size: 10px;
+    gap: 10px;
+  }
+
+  .stat {
+    margin: 0;
+    gap: 3px;
+  }
+
+  .stat-label {
+    font-size: 8px;
+  }
+
+  .stat-value {
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  /* Hide dice pool and selected info on mobile */
+  #dice-pool,
+  #selected-info {
+    display: none !important;
+  }
+
+  /* Dice Row - Compact, smaller dice */
+  #dice-row {
+    top: 26px; /* Below compact HUD */
+    left: 2px;
+    right: 2px;
+    max-width: calc(100% - 4px);
+    width: calc(100% - 4px);
+    padding: 5px;
+    gap: 3px;
+    justify-content: space-evenly;
+  }
+
+  .die-wrapper .die-2d {
+    width: 42px;
+    height: 42px;
+  }
+
+  .die-wrapper .kind {
+    font-size: 8px;
+    padding: 1px 3px;
+    top: -4px;
+    right: -4px;
+  }
+
+  /* Smaller fonts in dice */
+  .die-2d .value {
+    font-size: 12px;
+  }
+
+  .die-2d .points {
+    font-size: 7px;
+  }
+
+  /* Settings Button */
+  #settings-gear-btn {
+    top: 5px;
+    right: 5px;
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Camera Controls */
+  #camera-controls {
+    bottom: 5px;
+    left: 5px;
+    right: 5px;
+    padding: 6px;
+  }
+
+  .camera-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Action Button */
+  #controls {
+    bottom: 55px;
+    left: 5px;
+    right: 5px;
+    width: calc(100% - 10px);
+  }
+
+  #action-btn {
+    font-size: 16px;
+    padding: 14px;
+  }
+
+  /* Splash Screen */
+  .splash-content {
+    padding: 30px 20px;
+  }
+
+  .splash-title {
+    font-size: 36px;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+  }
+
+  .splash-subtitle {
+    font-size: 14px;
+  }
+
+  .splash-tagline {
+    font-size: 12px;
+    margin-bottom: 30px;
+  }
+
+  .splash-btn {
+    font-size: 14px;
+    padding: 12px 20px;
+  }
+
+  /* Modals - Full screen on small mobile */
+  .modal-content {
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    padding: 15px;
+  }
+
+  .modal-header h2 {
+    font-size: 18px;
+  }
+
+  /* Game Over */
+  #game-over h1 {
+    font-size: 24px;
+  }
+
+  #final-score {
+    font-size: 36px;
+  }
+}
+
+/* Landscape Mobile */
+@media screen and (max-height: 500px) and (orientation: landscape) {
+  /* Optimize for landscape mobile */
+  #hud {
+    top: 5px;
+    left: 5px;
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .stat {
+    margin: 2px 0;
+  }
+
+  .stat-value {
+    font-size: 16px;
+  }
+
+  #dice-row {
+    top: 5px;
+    padding: 6px;
+    gap: 4px;
+  }
+
+
+  .die-wrapper .die-2d {
+    width: 35px;
+    height: 35px;
+  }
+
+  #settings-gear-btn {
+    width: 32px;
+    height: 32px;
+    top: 5px;
+    right: 5px;
+  }
+
+  #camera-controls {
+    left: 5px;
+    bottom: 5px;
+    padding: 4px;
+  }
+
+  .camera-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  #controls {
+    bottom: 45px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto;
+    right: auto;
+  }
+
+  #action-btn {
+    padding: 10px 30px;
+    font-size: 14px;
+  }
+
+  .splash-title {
+    font-size: 32px;
+  }
+
+  .splash-content {
+    padding: 20px 30px;
+  }
+}
