@@ -13,6 +13,7 @@ import { PointerEventTypes } from "@babylonjs/core";
 import { audioService } from "./services/audio.js";
 import { scoreHistoryService } from "./services/score-history.js";
 import { environment } from "@env";
+import { settingsService } from "./services/settings.js";
 
 class Game {
   private state: GameState;
@@ -25,8 +26,10 @@ class Game {
   private settingsModal: SettingsModal;
   private leaderboardModal: LeaderboardModal;
   private gameStartTime: number;
+  private selectedDieIndex = 0; // For keyboard navigation
 
   private actionBtn: HTMLButtonElement;
+  private deselectBtn: HTMLButtonElement;
   private gameOverEl: HTMLElement;
   private finalScoreEl: HTMLElement;
   private shareLinkEl: HTMLElement;
@@ -58,6 +61,7 @@ class Game {
 
     // UI elements
     this.actionBtn = document.getElementById("action-btn") as HTMLButtonElement;
+    this.deselectBtn = document.getElementById("deselect-btn") as HTMLButtonElement;
     this.gameOverEl = document.getElementById("game-over")!;
     this.finalScoreEl = document.getElementById("final-score")!;
     this.shareLinkEl = document.getElementById("share-link")!;
@@ -81,6 +85,11 @@ class Game {
     // Handle new game request from settings
     this.settingsModal.setOnNewGame(() => {
       this.startNewGame();
+    });
+
+    // Handle How to Play button in settings
+    this.settingsModal.setOnHowToPlay(() => {
+      rulesModal.show();
     });
 
     this.setupControls();
@@ -123,6 +132,12 @@ class Game {
       this.handleAction();
     });
 
+    // Deselect all button
+    this.deselectBtn.addEventListener("click", () => {
+      audioService.playSfx("click");
+      this.handleDeselectAll();
+    });
+
     this.newGameBtn.addEventListener("click", () => {
       audioService.playSfx("click");
       this.handleNewGame();
@@ -161,6 +176,41 @@ class Game {
       if (e.code === "Space" && !this.animating && !this.paused) {
         e.preventDefault();
         this.handleAction();
+      }
+
+      // Arrow key navigation for dice selection (only when ROLLED)
+      if (this.state.status === "ROLLED" && !this.animating && !this.paused) {
+        const activeDice = this.state.dice.filter((d) => d.inPlay && !d.scored);
+
+        if (activeDice.length === 0) return;
+
+        if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
+          e.preventDefault();
+
+          if (e.code === "ArrowLeft") {
+            this.selectedDieIndex = (this.selectedDieIndex - 1 + activeDice.length) % activeDice.length;
+          } else {
+            this.selectedDieIndex = (this.selectedDieIndex + 1) % activeDice.length;
+          }
+
+          // Highlight the focused die
+          this.highlightFocusedDie(activeDice[this.selectedDieIndex].id);
+        }
+
+        // Enter key - toggle selection of focused die
+        if (e.code === "Enter") {
+          e.preventDefault();
+          const focusedDie = activeDice[this.selectedDieIndex];
+          if (focusedDie) {
+            this.handleDieClick(focusedDie.id);
+          }
+        }
+      }
+
+      // 'D' key - deselect all (when dice are selected)
+      if (e.code === "KeyD" && this.state.status === "ROLLED" && this.state.selected.size > 0 && !this.animating && !this.paused) {
+        e.preventDefault();
+        this.handleDeselectAll();
       }
     });
   }
@@ -243,6 +293,37 @@ class Game {
     }
   }
 
+  private handleDeselectAll() {
+    if (this.paused || this.animating || this.state.status !== "ROLLED") return;
+
+    // Deselect all dice
+    const selectedIds = Array.from(this.state.selected);
+    selectedIds.forEach((dieId) => {
+      this.dispatch({ t: "TOGGLE_SELECT", dieId });
+      this.diceRenderer.setSelected(dieId, false);
+    });
+
+    notificationService.show("Deselected All", "info");
+  }
+
+  private highlightFocusedDie(dieId: string) {
+    // Remove focus from all dice
+    const allDiceElements = document.querySelectorAll(".die-wrapper");
+    allDiceElements.forEach((el) => el.classList.remove("focused"));
+
+    // Add focus to the selected die
+    const dieElement = document.querySelector(`[data-die-id="${dieId}"]`);
+    if (dieElement) {
+      dieElement.classList.add("focused");
+      // Show notification about keyboard controls on first use
+      const hasSeenKeyboardHint = sessionStorage.getItem("keyboardHintShown");
+      if (!hasSeenKeyboardHint) {
+        notificationService.show("← → to navigate, Enter to select, D to deselect all", "info");
+        sessionStorage.setItem("keyboardHintShown", "true");
+      }
+    }
+  }
+
   private handleRoll() {
     if (this.paused) return;
 
@@ -262,6 +343,7 @@ class Game {
 
     this.diceRenderer.animateRoll(this.state.dice, () => {
       this.animating = false;
+      this.selectedDieIndex = 0; // Reset keyboard navigation index
       this.updateUI();
 
       // Show notification after roll completes
@@ -291,7 +373,13 @@ class Game {
       this.updateUI();
 
       // Show score notification
-      notificationService.show(`+${points} Points!`, "success");
+      if (points === 0) {
+        notificationService.show("🎉 Perfect Roll! +0 Points!", "success");
+        // Celebrate perfect roll with particles
+        this.scene.celebrateSuccess("perfect");
+      } else {
+        notificationService.show(`+${points} Points!`, "success");
+      }
     });
 
     this.dispatch({ t: "SCORE_SELECTED" });
@@ -301,9 +389,16 @@ class Game {
     // Hide game over screen
     this.gameOverEl.classList.remove("show");
 
-    // Create new game state with new seed
+    // Create new game state with new seed and game variants from settings
     const seed = this.generateSeed();
-    this.state = createGame(seed);
+    const settings = settingsService.getSettings();
+    const config = {
+      addD20: settings.game.addD20,
+      addD4: settings.game.addD4,
+      add2ndD10: settings.game.add2ndD10,
+      d100Mode: settings.game.d100Mode,
+    };
+    this.state = createGame(seed, config);
 
     // Clear all dice from renderer
     this.diceRenderer.clearDice();
@@ -328,9 +423,16 @@ class Game {
     // Hide game over screen
     this.gameOverEl.classList.remove("show");
 
-    // Create new game state with new seed
+    // Create new game state with new seed and game variants from settings
     const seed = this.generateSeed();
-    this.state = createGame(seed);
+    const settings = settingsService.getSettings();
+    const config = {
+      addD20: settings.game.addD20,
+      addD4: settings.game.addD4,
+      add2ndD10: settings.game.add2ndD10,
+      d100Mode: settings.game.d100Mode,
+    };
+    this.state = createGame(seed, config);
 
     // Clear all dice from renderer
     this.diceRenderer.clearDice();
@@ -355,6 +457,7 @@ class Game {
       this.actionBtn.textContent = "Roll Dice (Space)";
       this.actionBtn.disabled = this.animating || this.paused;
       this.actionBtn.className = "primary";
+      this.deselectBtn.style.display = "none";
     } else if (this.state.status === "ROLLED") {
       const hasSelection = this.state.selected.size > 0;
       if (hasSelection) {
@@ -364,19 +467,25 @@ class Game {
         this.actionBtn.textContent = `Score +${points} (Space)`;
         this.actionBtn.disabled = this.animating || this.paused;
         this.actionBtn.className = "primary";
+        this.deselectBtn.style.display = "inline-block";
       } else {
         this.actionBtn.textContent = "Select Dice to Score";
         this.actionBtn.disabled = true;
         this.actionBtn.className = "";
+        this.deselectBtn.style.display = "none";
       }
     } else {
       this.actionBtn.disabled = true;
+      this.deselectBtn.style.display = "none";
     }
   }
 
   private showGameOver() {
     // Play game over sound
     audioService.playSfx("gameOver");
+
+    // Celebrate game completion with particles
+    this.scene.celebrateSuccess("complete");
 
     // Calculate game duration
     const gameDuration = Date.now() - this.gameStartTime;
@@ -394,7 +503,7 @@ class Game {
     const rank = scoreHistoryService.getRank(this.state.score);
 
     // Show game over notification
-    notificationService.show(`Final Score: ${this.state.score}`, "success");
+    notificationService.show(`🎮 Game Complete! Final Score: ${this.state.score}`, "success");
 
     this.finalScoreEl.textContent = this.state.score.toString();
     const shareURL = generateShareURL(this.state);

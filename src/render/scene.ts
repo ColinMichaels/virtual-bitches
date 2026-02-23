@@ -10,8 +10,10 @@ import {
   MeshBuilder,
   StandardMaterial,
   Color3,
-  Mesh,
   DynamicTexture,
+  ParticleSystem,
+  Texture,
+  Color4,
 } from "@babylonjs/core";
 
 export class GameScene {
@@ -169,26 +171,57 @@ export class GameScene {
 
     const trayMat = new StandardMaterial("trayMat", this.scene);
 
-    // Create gradient texture for felt
-    const trayTexture = new DynamicTexture("trayTexture", { width: 512, height: 512 }, this.scene, false);
+    // Create enhanced felt texture
+    const trayTexture = new DynamicTexture("trayTexture", { width: 1024, height: 1024 }, this.scene, false);
     const trayCtx = trayTexture.getContext();
 
-    // Create very subtle radial gradient for felt depth
-    const trayGradient = trayCtx.createRadialGradient(256, 256, 150, 256, 256, 400);
-    trayGradient.addColorStop(0, "#1d1e22"); // Very slightly lighter center
-    trayGradient.addColorStop(0.8, "#1A1B1E"); // Base color
-    trayGradient.addColorStop(1, "#17181c"); // Slightly darker edges
+    // Base color with subtle radial gradient
+    const trayGradient = trayCtx.createRadialGradient(512, 512, 200, 512, 512, 700);
+    trayGradient.addColorStop(0, "#1d1e22");
+    trayGradient.addColorStop(0.7, "#1A1B1E");
+    trayGradient.addColorStop(1, "#16171b");
 
     trayCtx.fillStyle = trayGradient;
-    trayCtx.fillRect(0, 0, 512, 512);
+    trayCtx.fillRect(0, 0, 1024, 1024);
 
-    // Add subtle noise/texture for felt effect
-    for (let i = 0; i < 5000; i++) {
-      const x = Math.random() * 512;
-      const y = Math.random() * 512;
-      const brightness = Math.random() * 20 + 10;
-      trayCtx.fillStyle = `rgba(${brightness}, ${brightness}, ${brightness}, 0.1)`;
-      trayCtx.fillRect(x, y, 1, 1);
+    // Add realistic felt fiber texture with directional streaks
+    const imageData = trayCtx.getImageData(0, 0, 1024, 1024);
+    const data = imageData.data;
+
+    // Create felt fiber pattern using Perlin-like noise
+    for (let y = 0; y < 1024; y++) {
+      for (let x = 0; x < 1024; x++) {
+        const idx = (y * 1024 + x) * 4;
+
+        // Multi-octave noise for felt texture
+        const noise1 = Math.sin(x * 0.1 + y * 0.05) * 0.5 + 0.5;
+        const noise2 = Math.sin(x * 0.3 + y * 0.2 + 50) * 0.5 + 0.5;
+        const noise3 = Math.sin(x * 0.8 + y * 0.6 + 100) * 0.5 + 0.5;
+
+        // Random fiber noise
+        const fiberNoise = (Math.random() - 0.5) * 25;
+
+        // Combine noise layers
+        const combined = (noise1 * 8 + noise2 * 5 + noise3 * 3 + fiberNoise) * 0.5;
+
+        // Apply to existing color
+        data[idx] += combined;
+        data[idx + 1] += combined;
+        data[idx + 2] += combined;
+      }
+    }
+
+    trayCtx.putImageData(imageData, 0, 0);
+
+    // Add subtle highlights for fabric weave effect
+    for (let i = 0; i < 2000; i++) {
+      const x = Math.random() * 1024;
+      const y = Math.random() * 1024;
+      const size = Math.random() * 2 + 1;
+      const brightness = Math.random() * 15 + 10;
+
+      trayCtx.fillStyle = `rgba(${brightness}, ${brightness}, ${brightness}, 0.15)`;
+      trayCtx.fillRect(x, y, size, size * 0.5);
     }
 
     trayTexture.update();
@@ -209,26 +242,52 @@ export class GameScene {
 
     const scoredMat = new StandardMaterial("scoredMat", this.scene);
 
-    // Create gradient texture for scored area
-    const scoredTexture = new DynamicTexture("scoredTexture", { width: 512, height: 512 }, this.scene, false);
+    // Create enhanced felt texture for scored area (darker)
+    const scoredTexture = new DynamicTexture("scoredTexture", { width: 1024, height: 1024 }, this.scene, false);
     const scoredCtx = scoredTexture.getContext();
 
-    // Create very subtle gradient for depth
-    const scoredGradient = scoredCtx.createRadialGradient(256, 256, 150, 256, 256, 400);
-    scoredGradient.addColorStop(0, "#18191d"); // Very slightly lighter center
-    scoredGradient.addColorStop(0.8, "#15161A"); // Base color
-    scoredGradient.addColorStop(1, "#131417"); // Slightly darker edges
+    // Base color with subtle radial gradient (darker than main tray)
+    const scoredGradient = scoredCtx.createRadialGradient(512, 512, 200, 512, 512, 700);
+    scoredGradient.addColorStop(0, "#18191d");
+    scoredGradient.addColorStop(0.7, "#15161A");
+    scoredGradient.addColorStop(1, "#121316");
 
     scoredCtx.fillStyle = scoredGradient;
-    scoredCtx.fillRect(0, 0, 512, 512);
+    scoredCtx.fillRect(0, 0, 1024, 1024);
 
-    // Add subtle noise/texture for felt effect
-    for (let i = 0; i < 5000; i++) {
-      const x = Math.random() * 512;
-      const y = Math.random() * 512;
-      const brightness = Math.random() * 15 + 8;
-      scoredCtx.fillStyle = `rgba(${brightness}, ${brightness}, ${brightness}, 0.1)`;
-      scoredCtx.fillRect(x, y, 1, 1);
+    // Add realistic felt fiber texture
+    const scoredImageData = scoredCtx.getImageData(0, 0, 1024, 1024);
+    const scoredData = scoredImageData.data;
+
+    for (let y = 0; y < 1024; y++) {
+      for (let x = 0; x < 1024; x++) {
+        const idx = (y * 1024 + x) * 4;
+
+        // Multi-octave noise for felt texture
+        const noise1 = Math.sin(x * 0.1 + y * 0.05 + 30) * 0.5 + 0.5;
+        const noise2 = Math.sin(x * 0.3 + y * 0.2 + 80) * 0.5 + 0.5;
+        const noise3 = Math.sin(x * 0.8 + y * 0.6 + 130) * 0.5 + 0.5;
+
+        const fiberNoise = (Math.random() - 0.5) * 20;
+        const combined = (noise1 * 7 + noise2 * 4 + noise3 * 2 + fiberNoise) * 0.5;
+
+        scoredData[idx] += combined;
+        scoredData[idx + 1] += combined;
+        scoredData[idx + 2] += combined;
+      }
+    }
+
+    scoredCtx.putImageData(scoredImageData, 0, 0);
+
+    // Add subtle highlights for fabric weave effect
+    for (let i = 0; i < 1500; i++) {
+      const x = Math.random() * 1024;
+      const y = Math.random() * 1024;
+      const size = Math.random() * 2 + 1;
+      const brightness = Math.random() * 12 + 8;
+
+      scoredCtx.fillStyle = `rgba(${brightness}, ${brightness}, ${brightness}, 0.12)`;
+      scoredCtx.fillRect(x, y, size, size * 0.5);
     }
 
     scoredTexture.update();
@@ -240,8 +299,6 @@ export class GameScene {
   }
 
   setCameraView(view: "default" | "top" | "side" | "front") {
-    const transitionSpeed = 0.5;
-
     switch (view) {
       case "top":
         // Top-down view
@@ -269,6 +326,82 @@ export class GameScene {
         this.camera.radius = this.defaultCameraState.radius;
         break;
     }
+  }
+
+  /**
+   * Create particle burst effect at a specific position
+   */
+  createParticleBurst(position: Vector3, color: Color4 = new Color4(1, 0.8, 0, 1), count: number = 50) {
+    const particles = new ParticleSystem("particles", count, this.scene);
+
+    // Create a simple sphere for particle texture (procedural)
+    particles.particleTexture = new Texture("https://assets.babylonjs.com/textures/flare.png", this.scene);
+
+    // Emission
+    particles.emitter = position;
+    particles.minEmitBox = new Vector3(-0.2, 0, -0.2);
+    particles.maxEmitBox = new Vector3(0.2, 0, 0.2);
+
+    // Colors
+    particles.color1 = color;
+    particles.color2 = new Color4(color.r * 0.5, color.g * 0.5, color.b * 0.5, 1);
+    particles.colorDead = new Color4(color.r * 0.2, color.g * 0.2, color.b * 0.2, 0);
+
+    // Size
+    particles.minSize = 0.3;
+    particles.maxSize = 0.8;
+
+    // Life time
+    particles.minLifeTime = 0.5;
+    particles.maxLifeTime = 1.0;
+
+    // Emission rate
+    particles.emitRate = count;
+    particles.manualEmitCount = count;
+
+    // Speed
+    particles.minEmitPower = 3;
+    particles.maxEmitPower = 6;
+    particles.updateSpeed = 0.01;
+
+    // Direction
+    particles.direction1 = new Vector3(-1, 2, -1);
+    particles.direction2 = new Vector3(1, 4, 1);
+
+    // Gravity
+    particles.gravity = new Vector3(0, -9.8, 0);
+
+    // Start and stop
+    particles.start();
+
+    // Auto-dispose after 2 seconds
+    setTimeout(() => {
+      particles.stop();
+      setTimeout(() => particles.dispose(), 1000);
+    }, 100);
+  }
+
+  /**
+   * Create celebration effect for perfect roll or game complete
+   */
+  celebrateSuccess(type: "perfect" | "complete") {
+    const colors = {
+      perfect: new Color4(1, 0.84, 0, 1), // Gold
+      complete: new Color4(0.2, 1, 0.3, 1), // Green
+    };
+
+    const positions = [
+      new Vector3(-4, 1, 0),
+      new Vector3(4, 1, 0),
+      new Vector3(0, 1, -3),
+      new Vector3(0, 1, 3),
+    ];
+
+    positions.forEach((pos, i) => {
+      setTimeout(() => {
+        this.createParticleBurst(pos, colors[type], type === "complete" ? 80 : 50);
+      }, i * 100);
+    });
   }
 
   dispose() {

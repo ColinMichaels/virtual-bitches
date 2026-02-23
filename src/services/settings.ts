@@ -24,6 +24,10 @@ export interface ControlSettings {
 export interface GameSettings {
   showTutorial: boolean;
   confirmBeforeNewGame: boolean;
+  addD20: boolean;
+  addD4: boolean;
+  add2ndD10: boolean;
+  d100Mode: boolean;
 }
 
 export interface Settings {
@@ -52,6 +56,10 @@ const DEFAULT_SETTINGS: Settings = {
   game: {
     showTutorial: true,
     confirmBeforeNewGame: false,
+    addD20: false,
+    addD4: false,
+    add2ndD10: false,
+    d100Mode: false,
   },
 };
 
