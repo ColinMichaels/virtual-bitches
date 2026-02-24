@@ -209,6 +209,39 @@ ThemeManager → Load Geometry/Textures → Create Materials →
 
 ---
 
+### 6. Utilities Layer (`src/utils/`)
+
+**Cross-cutting utility functions**
+
+- **`logger.ts`**: Centralized logging system (90 lines)
+  - Environment-aware log levels (DEBUG, INFO, WARN, ERROR)
+  - Module-specific loggers with prefixes
+  - Production mode suppresses debug logs
+  - Used across 10+ modules for consistent logging
+
+**Usage Pattern**:
+```typescript
+import { logger } from "../utils/logger.js";
+const log = logger.create('ModuleName');
+
+log.debug("Detailed debugging info");  // Only in dev
+log.info("General information");       // Always shown
+log.warn("Warning message");           // Always shown
+log.error("Error occurred:", error);   // Always shown
+```
+
+**Log Levels**:
+- `DEBUG` (0): Detailed diagnostics (dev only)
+- `INFO` (1): General information
+- `WARN` (2): Warnings and potential issues
+- `ERROR` (3): Critical errors
+
+**Environment Control**:
+- Development: All logs shown (DEBUG, INFO, WARN, ERROR)
+- Production: Only INFO, WARN, ERROR shown (DEBUG suppressed)
+
+---
+
 ## Data Flow
 
 ### Game Loop
@@ -300,6 +333,9 @@ biscuits-game/
 │   │   ├── audio.ts         # Sound effects
 │   │   ├── settings.ts      # User preferences
 │   │   └── score-history.ts # Score tracking
+│   │
+│   ├── utils/           # Utility functions
+│   │   └── logger.ts        # Centralized logging
 │   │
 │   ├── environments/    # Environment configs
 │   │   ├── types.ts         # Environment interface
