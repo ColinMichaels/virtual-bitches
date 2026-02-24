@@ -267,12 +267,6 @@ export class SettingsModal {
       this.hide();
     });
 
-    // Close on escape key
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this.container.style.display !== "none") {
-        this.hide();
-      }
-    });
   }
 
   /**
@@ -335,6 +329,13 @@ export class SettingsModal {
     if (this.onClose) {
       this.onClose();
     }
+  }
+
+  /**
+   * Check if settings modal is visible
+   */
+  isVisible(): boolean {
+    return this.container.style.display === "flex";
   }
 
   /**

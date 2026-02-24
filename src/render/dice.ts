@@ -26,22 +26,23 @@ const DIE_SIZES: Record<DieKind, number> = {
 };
 
 // Individual die colors - glossy plastic dice
+// Individual die colors - muted palette for better pip/text visibility
 const DIE_COLORS: Color3[] = [
-  Color3.FromHexString("#1a1a1a"), // Black d6
-  Color3.FromHexString("#2d8b45"), // Green d6
-  Color3.FromHexString("#3366cc"), // Blue d6
-  Color3.FromHexString("#ffd700"), // Yellow d6
-  Color3.FromHexString("#ff69b4"), // Pink d6
-  Color3.FromHexString("#cc2233"), // Red d6
-  Color3.FromHexString("#ff3333"), // Red d6 #2
-  Color3.FromHexString("#f5deb3"), // Cream d6
-  Color3.FromHexString("#e8e8e8"), // White d6
-  Color3.FromHexString("#1a1a1a"), // Black d6 #2
-  Color3.FromHexString("#8b4513"), // Brown/amber glitter d6
-  Color3.FromHexString("#1a1a1a"), // Black d6 #3
-  Color3.FromHexString("#6b7c8e"), // Blue-gray d10
-  Color3.FromHexString("#cc2233"), // Red d12
-  Color3.FromHexString("#9966cc"), // Purple d20
+  Color3.FromHexString("#2a2a2a"), // Dark gray d6 (was black)
+  Color3.FromHexString("#3d5a4a"), // Muted green d6
+  Color3.FromHexString("#4a5c7a"), // Muted blue d6
+  Color3.FromHexString("#b8a062"), // Muted gold d6 (was bright yellow)
+  Color3.FromHexString("#8f6f7e"), // Muted pink d6
+  Color3.FromHexString("#7a3d3d"), // Muted red d6
+  Color3.FromHexString("#8a4a4a"), // Muted red d6 #2
+  Color3.FromHexString("#c4b399"), // Muted cream d6
+  Color3.FromHexString("#c8c8c8"), // Light gray d6 (was white)
+  Color3.FromHexString("#2a2a2a"), // Dark gray d6 #2 (was black)
+  Color3.FromHexString("#6b5139"), // Muted brown d6
+  Color3.FromHexString("#2a2a2a"), // Dark gray d6 #3 (was black)
+  Color3.FromHexString("#5a6470"), // Muted blue-gray d10
+  Color3.FromHexString("#7a3d3d"), // Muted red d12
+  Color3.FromHexString("#6b5688"), // Muted purple d20
 ];
 
 export class DiceRenderer {
@@ -298,43 +299,6 @@ export class DiceRenderer {
       ctx.beginPath();
       ctx.arc(x, y, pipRadius, 0, Math.PI * 2);
       ctx.fill();
-
-      // Add inner shadow for concave effect (light from top-left)
-      const innerShadow = ctx.createRadialGradient(
-        x,
-        y,
-        0,
-        x,
-        y,
-        pipRadius
-      );
-      innerShadow.addColorStop(0, "rgba(0, 0, 0, 0)");
-      innerShadow.addColorStop(0.7, "rgba(0, 0, 0, 0)");
-      innerShadow.addColorStop(0.85, "rgba(0, 0, 0, 0.3)");
-      innerShadow.addColorStop(1, "rgba(0, 0, 0, 0.6)");
-
-      ctx.fillStyle = innerShadow;
-      ctx.beginPath();
-      ctx.arc(x, y, pipRadius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Add highlight on opposite edge for depth
-      const highlight = ctx.createRadialGradient(
-        x - pipRadius * 0.4,
-        y - pipRadius * 0.4,
-        0,
-        x - pipRadius * 0.4,
-        y - pipRadius * 0.4,
-        pipRadius * 0.6
-      );
-      highlight.addColorStop(0, "rgba(255, 255, 255, 0.6)");
-      highlight.addColorStop(0.5, "rgba(255, 255, 255, 0.2)");
-      highlight.addColorStop(1, "rgba(255, 255, 255, 0)");
-
-      ctx.fillStyle = highlight;
-      ctx.beginPath();
-      ctx.arc(x, y, pipRadius, 0, Math.PI * 2);
-      ctx.fill();
     });
   }
 
@@ -455,9 +419,20 @@ export class DiceRenderer {
       const randomX = offsetX + (Math.random() - 0.5) * 1.5;
       const randomZ = offsetZ + (Math.random() - 0.5) * 1.5;
 
-      // Animate from above
+      // Animate from above - adjust landing height based on die type
       const startY = 15;
-      const endY = 0.6;
+      let endY = 0.6; // Default for d6
+
+      // Raise d8 and d12 so they don't sink into the table
+      if (die.def.kind === "d8") {
+        endY = 0.8;
+      } else if (die.def.kind === "d12") {
+        endY = 0.9;
+      } else if (die.def.kind === "d4") {
+        endY = 0.7;
+      } else if (die.def.kind === "d20") {
+        endY = 0.95;
+      }
 
       mesh.position = new Vector3(randomX, startY, randomZ);
 
@@ -514,7 +489,7 @@ export class DiceRenderer {
 
       rotAnim.setKeys([
         { frame: 0, value: startRotation },
-        { frame: animDuration * 0.5, value: midRotation }, // Wild tumbling mid-air
+        { frame: animDuration * 0.25, value: midRotation }, // Wild tumbling mid-air
         { frame: animDuration, value: finalRotation }, // Settle to correct face
       ]);
 
@@ -524,13 +499,13 @@ export class DiceRenderer {
       rotAnim.setEasingFunction(ease);
 
       mesh.animations = [dropAnim, rotAnim];
-      this.scene.beginAnimation(mesh, 0, animDuration, false, 1, () => {
+      this.scene.beginAnimation(mesh, 0, animDuration, false, 0.45, () => {
         this.updateDie(die);
       });
     });
 
     // Increase timeout to account for varying animation durations
-    setTimeout(onComplete, 800);
+    setTimeout(onComplete, 1000);
   }
 
   animateScore(dice: DieState[], selected: Set<string>, onComplete: () => void) {
@@ -674,13 +649,36 @@ export class DiceRenderer {
         return d6Rotations[value] || new Vector3(0, 0, 0);
 
       // For polyhedra, keep flat for now (would need face normal calculations)
+        // For d8 and d12, add slight tilt so they look like they landed on a face
       case "d8":
-      case "d10":
+        // Octahedron - tilt to rest on one triangular face
+        return new Vector3(
+            Math.PI / 8 + (Math.random() - 0.5) * 0.2,
+            0,
+            Math.PI / 8 + (Math.random() - 0.5) * 0.2
+        );
+
       case "d12":
-      case "d20":
+        // Dodecahedron - tilt to rest on one pentagonal face
+        return new Vector3(
+            Math.PI / 6 + (Math.random() - 0.5) * 0.3,
+            0,
+            Math.PI / 7 + (Math.random() - 0.5) * 0.3
+        );
+
       case "d4":
+        // Tetrahedron - point up
+        return new Vector3(-Math.PI / 3, 0, 0);
+
+      case "d10":
+      case "d20":
       default:
-        return new Vector3(0, 0, 0);
+        // Keep relatively flat for d10 and d20
+        return new Vector3(
+            (Math.random() - 0.5) * 0.3,
+            0,
+            (Math.random() - 0.5) * 0.3
+        );
     }
   }
 

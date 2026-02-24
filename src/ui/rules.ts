@@ -67,12 +67,6 @@ export class RulesModal {
       this.hide();
     });
 
-    // Close on escape key
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this.container.style.display === "flex") {
-        this.hide();
-      }
-    });
   }
 
   show(): void {
@@ -81,5 +75,9 @@ export class RulesModal {
 
   hide(): void {
     this.container.style.display = "none";
+  }
+
+  isVisible(): boolean {
+    return this.container.style.display === "flex";
   }
 }

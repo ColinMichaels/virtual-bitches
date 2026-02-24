@@ -36,6 +36,7 @@ class Game {
   private newGameBtn: HTMLButtonElement;
   private viewLeaderboardBtn: HTMLButtonElement;
   private settingsGearBtn: HTMLButtonElement;
+  private leaderboardBtn: HTMLButtonElement;
 
   constructor() {
     // Parse URL for replay
@@ -68,6 +69,8 @@ class Game {
     this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement;
     this.viewLeaderboardBtn = document.getElementById("view-leaderboard-btn") as HTMLButtonElement;
     this.settingsGearBtn = document.getElementById("settings-gear-btn") as HTMLButtonElement;
+
+    this.leaderboardBtn = document.getElementById("leaderboard-btn") as HTMLButtonElement;
 
     // Initialize modals (shared with splash)
     this.settingsModal = settingsModal;
@@ -154,6 +157,12 @@ class Game {
       this.togglePause();
     });
 
+    // Leaderboard button
+    this.leaderboardBtn.addEventListener("click", () => {
+      audioService.playSfx("click");
+      this.leaderboardModal.show();
+    });
+
     // Camera controls
     const cameraButtons = document.querySelectorAll(".camera-btn");
     cameraButtons.forEach((btn) => {
@@ -167,9 +176,19 @@ class Game {
     // Keyboard shortcuts
     window.addEventListener("keydown", (e) => {
       // ESC key - toggle pause/settings
+      // ESC key - close modals or toggle pause/settings
       if (e.code === "Escape") {
         e.preventDefault();
-        this.togglePause();
+
+        // Check if any modal is open and close it first
+        if (rulesModal.isVisible()) {
+          rulesModal.hide();
+        } else if (this.leaderboardModal.isVisible()) {
+          this.leaderboardModal.hide();
+        } else {
+          // No other modals open, toggle settings/pause
+          this.togglePause();
+        }
       }
 
       // Space key - multipurpose action (roll or score)
@@ -506,6 +525,22 @@ class Game {
     notificationService.show(`🎮 Game Complete! Final Score: ${this.state.score}`, "success");
 
     this.finalScoreEl.textContent = this.state.score.toString();
+    // Display player's rank
+    const rankEl = document.getElementById("rank-display")!;
+    const stats = scoreHistoryService.getStats();
+    if (rank) {
+      const totalGames = stats.totalGames;
+      const rankEmoji = rank === 1 ? "🏆" : rank <= 3 ? "🥉" : "📊";
+      rankEl.innerHTML = `<p style="font-size: 1.2em; opacity: 0.8; margin: 10px 0;">${rankEmoji} Rank #${rank} of ${totalGames} games</p>`;
+
+      // Add special message for personal best
+      if (this.state.score === stats.bestScore) {
+        rankEl.innerHTML += `<p style="color: gold; font-weight: bold; margin: 5px 0;">🎉 NEW PERSONAL BEST!</p>`;
+      }
+    } else {
+      rankEl.innerHTML = `<p style="opacity: 0.8; margin: 10px 0;">🎮 First game!</p>`;
+    }
+
     const shareURL = generateShareURL(this.state);
     this.shareLinkEl.textContent = shareURL;
 

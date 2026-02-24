@@ -237,6 +237,13 @@ export class LeaderboardModal {
   }
 
   /**
+   * Check if leaderboard modal is visible
+   */
+  isVisible(): boolean {
+    return this.container.style.display === "flex";
+  }
+
+  /**
    * Dispose resources
    */
   dispose(): void {
