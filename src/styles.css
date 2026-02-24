@@ -79,24 +79,128 @@ h1, h2, h3, h4, h5, h6 {
 /* Mode indicator styling */
 #mode-indicator {
   margin-left: auto;
+  position: relative;
 }
 
-#mode-indicator .stat-value-compact {
+.mode-switcher {
   font-size: 14px;
   padding: 4px 12px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
 }
 
-#mode-indicator .stat-value-compact.mode-easy {
+.mode-switcher:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.mode-switcher.mode-easy {
   background: rgba(135, 206, 235, 0.3);
   color: #87CEEB;
+  border-color: rgba(135, 206, 235, 0.5);
 }
 
-#mode-indicator .stat-value-compact.mode-hard {
+.mode-switcher.mode-easy:hover {
+  background: rgba(135, 206, 235, 0.4);
+}
+
+.mode-switcher.mode-hard {
   background: rgba(255, 69, 0, 0.3);
   color: #FF6347;
+  border-color: rgba(255, 69, 0, 0.5);
+}
+
+.mode-switcher.mode-hard:hover {
+  background: rgba(255, 69, 0, 0.4);
+}
+
+.mode-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: rgba(0, 0, 0, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 8px;
+  min-width: 180px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.mode-option {
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: all 0.2s;
+}
+
+.mode-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.mode-option[data-mode="easy"]:hover {
+  background: rgba(135, 206, 235, 0.2);
+  border-color: rgba(135, 206, 235, 0.5);
+}
+
+.mode-option[data-mode="hard"]:hover {
+  background: rgba(255, 69, 0, 0.2);
+  border-color: rgba(255, 69, 0, 0.5);
+}
+
+.mode-option.active {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.mode-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mode-desc {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* Dice remaining inline display */
+.stat-remaining {
+  flex: 1;
+
+}
+
+.stat-remaining #pool-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 12px;
+  color: #fff;
+}
+
+.stat-remaining .die-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
 }
 
 /* Dice Row - Full width, part of unified HUD */
@@ -107,8 +211,9 @@ h1, h2, h3, h4, h5, h6 {
   padding: 12px;
   background: #06013b;
   background: linear-gradient(64deg, rgb(60, 54, 54) 0%, rgba(49, 49, 117, 1) 42%, rgba(71, 71, 71, 1) 100%);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.3);
   border-radius: 0;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
   flex-wrap: wrap;
   width: 100%;
   justify-content: flex-start;
@@ -1433,6 +1538,11 @@ button.danger:hover:not(:disabled) {
 
   .stat-compact {
     gap: 6px;
+  }
+
+  /* Hide dice remaining on mobile to save space */
+  .stat-remaining {
+    display: none;
   }
 
   .stat-label-compact {
