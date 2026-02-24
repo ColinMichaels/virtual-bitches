@@ -15,15 +15,16 @@
     "bumpLevel": 0.75,
     "specularPower": 32,
     "textureScale": {
-      "u": 1.9,
-      "v": 1.9
+      "u": 2.0,
+      "v": 2.0
     },
     "textureOffset": {
-      "u": 0.05,
-      "v": 0.05
+      "u": 0.0,
+      "v": 0.0
     }
   },
   "diceAvailable": ["d4", "d6", "d8", "d10", "d12", "d20"],
   "fallbackTheme": "smooth",
-  "useFallbackFor": ["d4", "d8", "d10", "d12", "d20"]
+  "useFallbackFor": ["d4", "d8", "d10", "d12", "d20"],
+  "description": "Simple pip texture for d6 only. All other dice use smooth theme with numbers."
 }

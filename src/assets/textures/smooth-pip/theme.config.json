@@ -15,8 +15,8 @@
     "bumpLevel": 0.75,
     "specularPower": 32,
     "textureScale": {
-      "u": 1.9,
-      "v": 1.9
+      "u": 2.0,
+      "v": 2.0
     },
     "textureOffset": {
       "u": 0.05,

@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24
+**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Evening)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -29,21 +29,35 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ `gemstone` - Translucent gem-like dice
 - **Total Working Themes**: 8/8 (all themes functional)
 
-#### Texture Offset Misalignment
-- **Status**: ✅ Baseline UV coordinates added
-- **Completed**: Added default UV coordinates (scale: 1.9/1.9, offset: 0.05/0.05) to all color material themes
-- **Files Updated**:
-  - `public/assets/themes/default/theme.config.json`
-  - `public/assets/themes/gemstone/theme.config.json`
-  - `public/assets/themes/smooth-pip/theme.config.json` (already had values)
-- **Notes**:
-  - Standard material themes (diceOfRolling, wooden, smooth, rust, blueGreenMetal) use baked texture atlases and don't need UV adjustments
-  - Color material themes now have consistent baseline UV coordinates
-  - **Fine-tuning still needed** once color material transparency bug is fixed (can't visually verify alignment on transparent dice)
-  - Use DebugView (Alt+D) for precise adjustments after transparency fix
-- **AI Prompt** (for after transparency fix):
+#### Smooth-Pip d6 Texture Mapping
+- **Status**: ⚠️ BLOCKED - Debug investigation needed
+- **Issue**: The d6 texture mapping in smooth-pip theme still not displaying correctly despite trying scale 2.0×2.0
+- **Context**:
+  - smooth-pip theme has simple 1-6 grid layout for d6 only
+  - All other dice (d4, d8, d10, d12, d20) correctly use smooth fallback with numbers
+  - Debug view sliders appear to work for standard materials but not color materials
+  - WeakMap texture cache implemented but texture updates may not be propagating to GPU
+- **What We Tried**:
+  - ✅ Implemented fallback theme system (d6 uses smooth-pip, others use smooth)
+  - ✅ Added texture scale/offset to theme configs (2.0×2.0 scale, 0.0×0.0 offset)
+  - ✅ Unified splash screen with same theme system
+  - ✅ Added debug logging to track texture updates
+  - ✅ Material variant switcher (light/dark) for color materials
+  - ✅ WeakMap-based texture cache for ShaderMaterials
+  - ⚠️ Debug view sliders connected but visual updates not visible for color materials
+- **Possible Root Causes**:
+  - BabylonJS textures may need `texture.updateSamplingMode()` or similar to force GPU update
+  - ShaderMaterial uniforms might need manual refresh after texture property changes
+  - d6 mesh UV coordinates might be incompatible with the texture layout
+  - Texture atlas layout for d6 might be completely different from what we expect
+- **Next Steps** (deferred):
+  - Check BabylonJS documentation for forcing texture updates on ShaderMaterial
+  - Verify d6 mesh UV coordinates in smoothDice.json geometry file
+  - Examine actual pips texture file to understand layout
+  - Consider per-die texture scale/offset overrides in theme config
+- **AI Prompt** (for future work):
   ```
-  Use DebugView (Alt+D) to fine-tune UV coordinates for BISCUITS color material themes. Test each theme with all die types (d4-d20), adjust textureScale and textureOffset sliders until pips/numbers are perfectly centered, then update theme.config.json files with the refined values.
+  Investigate why smooth-pip d6 texture mapping isn't working despite scale 2.0×2.0. Check: (1) BabylonJS ShaderMaterial texture update requirements, (2) d6 mesh UV coordinates in geometry file, (3) actual texture layout in pips-light-rgba.png, (4) whether debug view slider changes are reaching the GPU. Consider adding per-die texture overrides to theme.config.json if d6 needs different values than d4.
   ```
 
 ---
@@ -234,7 +248,35 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 
 ## ✅ Recently Completed
 
-### Custom Shader & Theme System (2026-02-24)
+### Fallback Theme System & Debug Enhancements (2026-02-24 Evening)
+- ✅ **Implemented fallback theme system**
+  - Themes can specify `fallbackTheme` and `useFallbackFor` in config
+  - Per-die material selection based on fallback rules
+  - smooth-pip theme: d6 uses pip texture, all others fallback to smooth with numbers
+- ✅ **Material cache for fallback themes**
+  - DiceRenderer and SplashDiceRenderer cache both primary and fallback materials
+  - Proper material selection based on die type at render time
+- ✅ **Unified splash screen rendering**
+  - Splash screen now uses same theme system as main game
+  - Applies texture scale/offset from theme configs
+  - Respects fallback theme configuration
+  - Matches main game rendering logic exactly
+- ✅ **Enhanced debug view**
+  - Added material variant switcher (light/dark) for color materials
+  - Material variant control auto-hides for standard material themes
+  - Per-die texture updates (only updates current die's material)
+  - Shows theme info including fallback status
+  - Enhanced console logging for texture update debugging
+- ✅ **WeakMap texture cache**
+  - Changed from string-based lookup to instance-based WeakMap
+  - More reliable texture reference tracking for ShaderMaterials
+  - Proper cleanup and garbage collection
+- ✅ **Theme configuration updates**
+  - smooth-pip: Configured for d6 only (fallback to smooth for d4/d8/d10/d12/d20)
+  - Added texture scale 2.0×2.0 for smooth-pip d6
+  - Documented theme-specific requirements
+
+### Custom Shader & Theme System (2026-02-24 Morning)
 - ✅ **Implemented custom shader material for color themes** (MAJOR FEATURE)
   - Created `src/render/colorMaterial.ts` with custom GLSL shaders
   - Vertex shader: Standard transformations with UV/normal passthrough
