@@ -592,7 +592,9 @@ class Game {
     }
 
     const shareURL = generateShareURL(this.state);
-    this.shareLinkEl.textContent = shareURL;
+    if (this.shareLinkEl) {
+      this.shareLinkEl.textContent = shareURL;
+    }
 
     // Setup seed action buttons
     this.setupSeedActions(shareURL);
