@@ -5,10 +5,12 @@
 
 import { settingsService, Settings } from "../services/settings.js";
 import { audioService } from "../services/audio.js";
+import { ThemeSwitcher } from "./themeSwitcher.js";
 
 export class SettingsModal {
   private container: HTMLElement;
   private settings: Settings;
+  private themeSwitcher: ThemeSwitcher;
   private onClose: (() => void) | null = null;
   private onNewGame: (() => void) | null = null;
   private onHowToPlay: (() => void) | null = null;
@@ -80,6 +82,9 @@ export class SettingsModal {
           </div>
         </div>
 
+        <div class="settings-section" id="theme-switcher-container">
+        </div>
+
         <div class="settings-section">
           <h3>Game Variants</h3>
           <p class="setting-description">These variants will apply to new games only</p>
@@ -123,6 +128,14 @@ export class SettingsModal {
     `;
 
     document.body.appendChild(this.container);
+
+    // Create and add theme switcher
+    this.themeSwitcher = new ThemeSwitcher();
+    const themeSwitcherContainer = this.container.querySelector("#theme-switcher-container");
+    if (themeSwitcherContainer) {
+      themeSwitcherContainer.appendChild(this.themeSwitcher.getElement());
+    }
+
     this.setupEventListeners();
   }
 

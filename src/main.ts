@@ -15,6 +15,7 @@ import { audioService } from "./services/audio.js";
 import { scoreHistoryService } from "./services/score-history.js";
 import { environment } from "@env";
 import { settingsService } from "./services/settings.js";
+import { themeManager } from "./services/themeManager.js";
 
 class Game {
   private state: GameState;
@@ -637,27 +638,63 @@ class Game {
   }
 }
 
-// Initialize modals (shared across screens)
-const settingsModal = new SettingsModal();
-const leaderboardModal = new LeaderboardModal();
-const rulesModal = new RulesModal();
+// Initialize theme manager first, then create everything else
+let settingsModal: SettingsModal;
+let leaderboardModal: LeaderboardModal;
+let rulesModal: RulesModal;
+let splash: SplashScreen;
 
-// Show splash screen first
-const splash = new SplashScreen(
-  () => {
-    // On start game
-    new Game();
-  },
-  () => {
-    // On settings
-    settingsModal.show();
-  },
-  () => {
-    // On leaderboard
-    leaderboardModal.show();
-  },
-  () => {
-    // On rules
-    rulesModal.show();
-  }
-);
+themeManager.initialize().then(() => {
+  console.log("✅ Theme manager initialized");
+
+  // Now create modals after theme manager is ready
+  settingsModal = new SettingsModal();
+  leaderboardModal = new LeaderboardModal();
+  rulesModal = new RulesModal();
+
+  // Create splash screen after theme manager is ready
+  splash = new SplashScreen(
+    () => {
+      // On start game
+      new Game();
+    },
+    () => {
+      // On settings
+      settingsModal.show();
+    },
+    () => {
+      // On leaderboard
+      leaderboardModal.show();
+    },
+    () => {
+      // On rules
+      rulesModal.show();
+    }
+  );
+}).catch((error) => {
+  console.error("❌ Failed to initialize theme manager:", error);
+
+  // Create modals and splash anyway even if theme loading failed
+  settingsModal = new SettingsModal();
+  leaderboardModal = new LeaderboardModal();
+  rulesModal = new RulesModal();
+
+  splash = new SplashScreen(
+    () => {
+      // On start game
+      new Game();
+    },
+    () => {
+      // On settings
+      settingsModal.show();
+    },
+    () => {
+      // On leaderboard
+      leaderboardModal.show();
+    },
+    () => {
+      // On rules
+      rulesModal.show();
+    }
+  );
+});

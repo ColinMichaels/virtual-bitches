@@ -10,6 +10,7 @@
 import {
   Scene,
   Mesh,
+  MeshBuilder,
   StandardMaterial,
   Color3,
   Vector3,
@@ -21,9 +22,11 @@ import {
   Texture,
   Ray,
 } from "@babylonjs/core";
+import { CustomMaterial } from "@babylonjs/materials/custom/customMaterial";
 import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
 import "@babylonjs/loaders/glTF";
 import { DieState, DieKind } from "../engine/types.js";
+import { themeManager } from "../services/themeManager.js";
 
 const DIE_SIZES: Record<DieKind, number> = {
   d4: 1.2,
@@ -79,6 +82,9 @@ export class DiceRenderer {
   // Rotation cache for raycast-detected rotations (d10, d12)
   private rotationCache = new Map<string, Map<number, Vector3>>();
 
+  // Theme change unsubscribe function
+  private unsubscribeTheme?: () => void;
+
   constructor(private scene: Scene) {
     const generators = this.scene.lights
       .map((light) => light.getShadowGenerator())
@@ -89,6 +95,11 @@ export class DiceRenderer {
     this.highlightLayer = new HighlightLayer("highlight", this.scene);
     this.highlightLayer.blurHorizontalSize = 1.0;
     this.highlightLayer.blurVerticalSize = 1.0;
+
+    // Subscribe to theme changes
+    this.unsubscribeTheme = themeManager.onThemeChange(() => {
+      this.onThemeChanged();
+    });
 
     // Initialize asynchronously
     this.initializeAsync();
@@ -179,7 +190,15 @@ export class DiceRenderer {
    * Uses SceneLoader to import .babylon JSON format
    */
   private async loadGeometry(): Promise<void> {
-    const response = await fetch("/src/assets/textures/smooth-pip/smoothDice.json");
+    const themeConfig = themeManager.getCurrentThemeConfig();
+    if (!themeConfig) {
+      throw new Error("No theme config available");
+    }
+
+    const geometryPath = `${themeManager.getCurrentThemePath()}/${themeConfig.meshFile}`;
+    console.log(`📦 Loading geometry from: ${geometryPath}`);
+
+    const response = await fetch(geometryPath);
     if (!response.ok) {
       throw new Error(`Failed to load geometry: ${response.statusText}`);
     }
@@ -236,10 +255,15 @@ export class DiceRenderer {
    * Following dice-box approach: two materials for readability
    */
   private async createMaterials(): Promise<void> {
-    // Choose theme: 'diceOfRolling' (standard) or 'default' (color overlay)
-    const useTheme = "diceOfRolling"; // Change to "default" for color overlay mode
+    const themeConfig = themeManager.getCurrentThemeConfig();
+    if (!themeConfig) {
+      console.error("❌ No theme config available");
+      return;
+    }
 
-    if (useTheme === "diceOfRolling") {
+    console.log(`🎨 Loading materials for theme: ${themeConfig.name}`);
+
+    if (themeConfig.material.type === 'standard') {
       await this.createStandardMaterial();
     } else {
       await this.createColorMaterial();
@@ -251,22 +275,31 @@ export class DiceRenderer {
    * Uses texture atlas with all colors baked in
    */
   private async createStandardMaterial(): Promise<void> {
-    const basePath = "/src/assets/textures/diceOfRolling";
+    const basePath = themeManager.getCurrentThemePath();
+    const themeConfig = themeManager.getCurrentThemeConfig()!;
     console.log("🎨 Loading standard material from:", basePath);
 
-    const diffuseTexture = new Texture(`${basePath}/diffuse.jpg`, this.scene);
-    const normalMap = new Texture(`${basePath}/normal.png`, this.scene);
-    const specularMap = new Texture(`${basePath}/specularity.jpg`, this.scene);
+    const diffuseTexture = new Texture(`${basePath}/${themeConfig.material.diffuseTexture}`, this.scene);
+    const normalMap = new Texture(`${basePath}/${themeConfig.material.bumpTexture}`, this.scene);
 
+    let specularMap: Texture | null = null;
+    if (themeConfig.material.specularTexture) {
+      specularMap = new Texture(`${basePath}/${themeConfig.material.specularTexture}`, this.scene);
+    }
+
+    // Wait for textures to load
     await new Promise<void>((resolve) => {
       let loadedCount = 0;
+      const totalTextures = specularMap ? 3 : 2;
       const checkLoaded = () => {
         loadedCount++;
-        if (loadedCount === 3) resolve();
+        if (loadedCount === totalTextures) resolve();
       };
       diffuseTexture.onLoadObservable.addOnce(checkLoaded);
       normalMap.onLoadObservable.addOnce(checkLoaded);
-      specularMap.onLoadObservable.addOnce(checkLoaded);
+      if (specularMap) {
+        specularMap.onLoadObservable.addOnce(checkLoaded);
+      }
     });
 
     console.log("✅ Standard material textures loaded");
@@ -274,10 +307,13 @@ export class DiceRenderer {
     this.materialDark = new StandardMaterial("dice-material", this.scene);
     this.materialDark.diffuseTexture = diffuseTexture;
     this.materialDark.bumpTexture = normalMap;
-    this.materialDark.bumpTexture.level = 0.5;
-    this.materialDark.specularTexture = specularMap;
+    this.materialDark.bumpTexture.level = themeConfig.material.bumpLevel || 0.5;
+
+    if (specularMap) {
+      this.materialDark.specularTexture = specularMap;
+    }
     this.materialDark.specularColor = new Color3(0.5, 0.5, 0.5);
-    this.materialDark.specularPower = 64;
+    this.materialDark.specularPower = themeConfig.material.specularPower || 64;
 
     this.materialLight = this.materialDark;
   }
@@ -285,49 +321,80 @@ export class DiceRenderer {
   /**
    * Create color material (default/smooth-pip style)
    * Uses transparent texture overlay on colored dice body
+   * Following dice-box approach: mix diffuse color with texture alpha
    */
   private async createColorMaterial(): Promise<void> {
-    const basePath = "/src/assets/textures/default";
+    const basePath = themeManager.getCurrentThemePath();
+    const themeConfig = themeManager.getCurrentThemeConfig()!;
     console.log("🎨 Loading color material from:", basePath);
 
-    const diffuseLight = new Texture(`${basePath}/diffuse-light-rgba.png`, this.scene);
+    const diffuseConfig = themeConfig.material.diffuseTexture as { light: string; dark: string };
+    // Load textures with alpha channel enabled
+    const diffuseLight = new Texture(`${basePath}/${diffuseConfig.light}`, this.scene);
     diffuseLight.hasAlpha = true;
-    const diffuseDark = new Texture(`${basePath}/diffuse-dark-rgba.png`, this.scene);
+    const diffuseDark = new Texture(`${basePath}/${diffuseConfig.dark}`, this.scene);
     diffuseDark.hasAlpha = true;
-    const normalMap = new Texture(`${basePath}/normal.png`, this.scene);
-    const specularMap = new Texture(`${basePath}/specular.jpg`, this.scene);
+    const normalMap = new Texture(`${basePath}/${themeConfig.material.bumpTexture}`, this.scene);
+
+    let specularMap: Texture | null = null;
+    if (themeConfig.material.specularTexture) {
+      specularMap = new Texture(`${basePath}/${themeConfig.material.specularTexture}`, this.scene);
+    }
 
     await new Promise<void>((resolve) => {
       let loadedCount = 0;
+      const totalTextures = specularMap ? 4 : 3;
       const checkLoaded = () => {
         loadedCount++;
-        if (loadedCount === 4) resolve();
+        if (loadedCount === totalTextures) resolve();
       };
       diffuseLight.onLoadObservable.addOnce(checkLoaded);
       diffuseDark.onLoadObservable.addOnce(checkLoaded);
       normalMap.onLoadObservable.addOnce(checkLoaded);
-      specularMap.onLoadObservable.addOnce(checkLoaded);
+      if (specularMap) {
+        specularMap.onLoadObservable.addOnce(checkLoaded);
+      }
     });
 
     console.log("✅ Color material textures loaded");
 
-    // Material for DARK dice (uses light numbers on dark background)
-    this.materialDark = new StandardMaterial("dice-material-dark", this.scene);
-    this.materialDark.opacityTexture = diffuseLight; // Use opacity for transparent overlay
-    this.materialDark.bumpTexture = normalMap;
-    this.materialDark.bumpTexture.level = 0.5;
-    this.materialDark.specularTexture = specularMap;
-    this.materialDark.specularColor = new Color3(0.8, 0.8, 0.8);
-    this.materialDark.specularPower = 64;
+    // Apply texture scaling if specified (for themes with different texture sizes)
+    const textureScale = (themeConfig.material as any).textureScale;
+    if (textureScale) {
+      diffuseLight.uScale = textureScale.u || 1;
+      diffuseLight.vScale = textureScale.v || 1;
+      diffuseDark.uScale = textureScale.u || 1;
+      diffuseDark.vScale = textureScale.v || 1;
+      normalMap.uScale = textureScale.u || 1;
+      normalMap.vScale = textureScale.v || 1;
+    }
 
-    // Material for LIGHT dice (uses dark numbers on light background)
-    this.materialLight = new StandardMaterial("dice-material-light", this.scene);
-    this.materialLight.opacityTexture = diffuseDark;
-    this.materialLight.bumpTexture = normalMap;
-    this.materialLight.bumpTexture.level = 0.5;
-    this.materialLight.specularTexture = specularMap;
-    this.materialLight.specularColor = new Color3(0.8, 0.8, 0.8);
-    this.materialLight.specularPower = 64;
+    // Apply texture offset if specified (for fine-tuning alignment)
+    const textureOffset = (themeConfig.material as any).textureOffset;
+    if (textureOffset) {
+      diffuseLight.uOffset = textureOffset.u || 0;
+      diffuseLight.vOffset = textureOffset.v || 0;
+      diffuseDark.uOffset = textureOffset.u || 0;
+      diffuseDark.vOffset = textureOffset.v || 0;
+      normalMap.uOffset = textureOffset.u || 0;
+      normalMap.vOffset = textureOffset.v || 0;
+    }
+
+    // Simplified approach: just use white base material with texture overlay
+    // No custom colors for now - focus on getting the texture mapping right first
+    this.materialDark = new StandardMaterial("dice-material-white", this.scene);
+    this.materialDark.diffuseColor = new Color3(1, 1, 1); // White base
+    this.materialDark.diffuseTexture = diffuseLight;
+    this.materialDark.bumpTexture = normalMap;
+    this.materialDark.bumpTexture.level = themeConfig.material.bumpLevel || 0.5;
+    if (specularMap) {
+      this.materialDark.specularTexture = specularMap;
+    }
+    this.materialDark.specularColor = new Color3(0.8, 0.8, 0.8);
+    this.materialDark.specularPower = themeConfig.material.specularPower || 64;
+
+    // Use the same white material for both light and dark (just focusing on getting it to work)
+    this.materialLight = this.materialDark;
   }
 
   /**
@@ -364,31 +431,15 @@ export class DiceRenderer {
     instance.isPickable = true; // Enable clicking for selection
     console.log(`✅ Cloned mesh for ${die.def.kind}:`, die.id);
 
-    // Get die color
-    const color = DIE_COLORS[this.colorIndex % DIE_COLORS.length];
-    const hexColor = this.colorToHex(color);
+    // For now, just use white material directly - no custom colors per die
+    // Store white color for UI purposes
+    const hexColor = "#ffffff";
     this.dieColors.set(die.id, hexColor);
-    this.colorIndex++;
 
-    console.log(`🎲 Creating ${die.def.kind}, color:`, color);
+    console.log(`🎲 Creating ${die.def.kind} with white material`);
 
-    // Clone material for this die
-    const material = this.materialDark!.clone(`${die.id}-material`);
-
-    // Tint the texture atlas with the die color
-    // Use a subtle tint to preserve the texture's details
-    material.diffuseColor = new Color3(
-      0.5 + color.r * 0.5,
-      0.5 + color.g * 0.5,
-      0.5 + color.b * 0.5
-    );
-
-    // Debug: log material state
-    console.log(`Material diffuseColor:`, material.diffuseColor);
-    console.log(`Material diffuseTexture:`, material.diffuseTexture ? 'loaded' : 'missing');
-    console.log(`Material bumpTexture:`, material.bumpTexture ? 'loaded' : 'missing');
-
-    instance.material = material;
+    // Use the shared white material directly (no cloning, no color customization)
+    instance.material = this.materialDark;
 
     // Apply size scaling - dice-box models are VERY small, need significant scaling
     const size = DIE_SIZES[die.def.kind];
@@ -942,7 +993,85 @@ export class DiceRenderer {
     this.isDebugMode = false;
   }
 
+  /**
+   * Handle theme change - reload materials and update all dice
+   */
+  private async onThemeChanged(): Promise<void> {
+    console.log("🔄 Theme changed, reloading materials...");
+
+    // Dispose old materials
+    this.materialLight?.dispose();
+    this.materialDark?.dispose();
+
+    // Reload materials with new theme
+    await this.createMaterials();
+
+    // Update all existing dice with new materials
+    this.meshes.forEach((mesh, dieId) => {
+      const color = this.dieColors.get(dieId);
+      if (color && this.materialDark) {
+        // Clone material for this die
+        const material = this.materialDark.clone(`${dieId}-material`);
+        const colorObj = Color3.FromHexString(color);
+
+        // Tint the texture with the die color
+        material.diffuseColor = new Color3(
+          0.5 + colorObj.r * 0.5,
+          0.5 + colorObj.g * 0.5,
+          0.5 + colorObj.b * 0.5
+        );
+
+        mesh.material = material;
+      }
+    });
+
+    console.log("✅ Theme updated for all dice");
+  }
+
+  /**
+   * Update texture mapping for live debugging
+   * Updates scale and offset for all textures on current materials
+   */
+  updateTextureMapping(scaleU: number, scaleV: number, offsetU: number, offsetV: number): void {
+    console.log(`🎨 Updating texture mapping: scale(${scaleU}, ${scaleV}) offset(${offsetU}, ${offsetV})`);
+
+    // Update materialDark textures
+    if (this.materialDark) {
+      if (this.materialDark.diffuseTexture) {
+        this.materialDark.diffuseTexture.uScale = scaleU;
+        this.materialDark.diffuseTexture.vScale = scaleV;
+        this.materialDark.diffuseTexture.uOffset = offsetU;
+        this.materialDark.diffuseTexture.vOffset = offsetV;
+      }
+      if (this.materialDark.bumpTexture) {
+        this.materialDark.bumpTexture.uScale = scaleU;
+        this.materialDark.bumpTexture.vScale = scaleV;
+        this.materialDark.bumpTexture.uOffset = offsetU;
+        this.materialDark.bumpTexture.vOffset = offsetV;
+      }
+    }
+
+    // Update materialLight textures (if different from materialDark)
+    if (this.materialLight && this.materialLight !== this.materialDark) {
+      if (this.materialLight.diffuseTexture) {
+        this.materialLight.diffuseTexture.uScale = scaleU;
+        this.materialLight.diffuseTexture.vScale = scaleV;
+        this.materialLight.diffuseTexture.uOffset = offsetU;
+        this.materialLight.diffuseTexture.vOffset = offsetV;
+      }
+      if (this.materialLight.bumpTexture) {
+        this.materialLight.bumpTexture.uScale = scaleU;
+        this.materialLight.bumpTexture.vScale = scaleV;
+        this.materialLight.bumpTexture.uOffset = offsetU;
+        this.materialLight.bumpTexture.vOffset = offsetV;
+      }
+    }
+  }
+
   dispose() {
+    // Unsubscribe from theme changes
+    this.unsubscribeTheme?.();
+
     this.meshes.forEach((mesh) => mesh.dispose());
     this.meshes.clear();
 

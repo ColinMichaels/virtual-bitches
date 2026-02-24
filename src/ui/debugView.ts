@@ -6,6 +6,7 @@
 import { DiceRenderer } from "../render/dice.js";
 import { GameScene } from "../render/scene.js";
 import { DieKind } from "../engine/types.js";
+import { themeManager } from "../services/themeManager.js";
 
 const DICE_CONFIG: Array<{ kind: DieKind; faces: number; label: string }> = [
   { kind: "d4", faces: 4, label: "D4 (4 faces)" },
@@ -58,13 +59,47 @@ export class DebugView {
           <!-- Values will be populated here -->
         </div>
 
+        <div class="debug-texture-controls">
+          <h3>Texture Mapping Controls</h3>
+
+          <div class="debug-control-group">
+            <label>Theme</label>
+            <select id="debug-theme-select" class="debug-theme-select">
+              <!-- Will be populated dynamically -->
+            </select>
+          </div>
+
+          <div class="debug-control-group">
+            <label>Scale U: <span id="scale-u-value">1.9</span></label>
+            <input type="range" id="scale-u-slider" min="0.5" max="3.0" step="0.01" value="1.9">
+          </div>
+
+          <div class="debug-control-group">
+            <label>Scale V: <span id="scale-v-value">1.9</span></label>
+            <input type="range" id="scale-v-slider" min="0.5" max="3.0" step="0.01" value="1.9">
+          </div>
+
+          <div class="debug-control-group">
+            <label>Offset U: <span id="offset-u-value">0.05</span></label>
+            <input type="range" id="offset-u-slider" min="-0.5" max="0.5" step="0.01" value="0.05">
+          </div>
+
+          <div class="debug-control-group">
+            <label>Offset V: <span id="offset-v-value">0.05</span></label>
+            <input type="range" id="offset-v-slider" min="-0.5" max="0.5" step="0.01" value="0.05">
+          </div>
+
+          <button id="debug-save-btn" class="debug-save-btn">Save to Console</button>
+        </div>
+
         <div class="debug-instructions">
           <p><strong>Instructions:</strong></p>
           <ul>
             <li>Look at each die in the 3D scene</li>
             <li>Verify the top face matches the label</li>
             <li>Use ← → buttons to switch dice types</li>
-            <li>Camera controls still work</li>
+            <li>Adjust texture sliders to fix mapping</li>
+            <li>Click "Save to Console" to log values</li>
           </ul>
         </div>
       </div>
@@ -76,6 +111,45 @@ export class DebugView {
     document.getElementById("debug-close-btn")?.addEventListener("click", () => this.hide());
     document.getElementById("debug-prev-btn")?.addEventListener("click", () => this.previousDie());
     document.getElementById("debug-next-btn")?.addEventListener("click", () => this.nextDie());
+    document.getElementById("debug-save-btn")?.addEventListener("click", () => this.saveTextureSettings());
+
+    // Theme selector
+    document.getElementById("debug-theme-select")?.addEventListener("change", (e) => {
+      const themeName = (e.target as HTMLSelectElement).value;
+      themeManager.setTheme(themeName);
+      // Load theme's texture settings into sliders
+      this.loadThemeTextureSettings();
+      // Re-render dice after theme change
+      setTimeout(() => this.renderCurrentDie(), 500);
+    });
+
+    // Populate theme dropdown
+    this.populateThemeDropdown();
+
+    // Texture control sliders
+    document.getElementById("scale-u-slider")?.addEventListener("input", (e) => {
+      const value = parseFloat((e.target as HTMLInputElement).value);
+      document.getElementById("scale-u-value")!.textContent = value.toFixed(2);
+      this.updateTextureMapping();
+    });
+
+    document.getElementById("scale-v-slider")?.addEventListener("input", (e) => {
+      const value = parseFloat((e.target as HTMLInputElement).value);
+      document.getElementById("scale-v-value")!.textContent = value.toFixed(2);
+      this.updateTextureMapping();
+    });
+
+    document.getElementById("offset-u-slider")?.addEventListener("input", (e) => {
+      const value = parseFloat((e.target as HTMLInputElement).value);
+      document.getElementById("offset-u-value")!.textContent = value.toFixed(2);
+      this.updateTextureMapping();
+    });
+
+    document.getElementById("offset-v-slider")?.addEventListener("input", (e) => {
+      const value = parseFloat((e.target as HTMLInputElement).value);
+      document.getElementById("offset-v-value")!.textContent = value.toFixed(2);
+      this.updateTextureMapping();
+    });
 
     // ESC key to close
     document.addEventListener("keydown", (e) => {
@@ -85,6 +159,84 @@ export class DebugView {
     });
   }
 
+  private updateTextureMapping(): void {
+    const scaleU = parseFloat((document.getElementById("scale-u-slider") as HTMLInputElement).value);
+    const scaleV = parseFloat((document.getElementById("scale-v-slider") as HTMLInputElement).value);
+    const offsetU = parseFloat((document.getElementById("offset-u-slider") as HTMLInputElement).value);
+    const offsetV = parseFloat((document.getElementById("offset-v-slider") as HTMLInputElement).value);
+
+    // Update the dice renderer's texture mapping
+    this.diceRenderer.updateTextureMapping(scaleU, scaleV, offsetU, offsetV);
+  }
+
+  private saveTextureSettings(): void {
+    const scaleU = parseFloat((document.getElementById("scale-u-slider") as HTMLInputElement).value);
+    const scaleV = parseFloat((document.getElementById("scale-v-slider") as HTMLInputElement).value);
+    const offsetU = parseFloat((document.getElementById("offset-u-slider") as HTMLInputElement).value);
+    const offsetV = parseFloat((document.getElementById("offset-v-slider") as HTMLInputElement).value);
+    const currentTheme = themeManager.getCurrentTheme();
+
+    console.log(`=== Texture Mapping Settings for ${currentTheme} ===`);
+    console.log(`"textureScale": {`);
+    console.log(`  "u": ${scaleU},`);
+    console.log(`  "v": ${scaleV}`);
+    console.log(`},`);
+    console.log(`"textureOffset": {`);
+    console.log(`  "u": ${offsetU},`);
+    console.log(`  "v": ${offsetV}`);
+    console.log(`}`);
+    console.log("================================");
+  }
+
+  private populateThemeDropdown(): void {
+    const select = document.getElementById("debug-theme-select") as HTMLSelectElement;
+    if (!select) return;
+
+    const themes = themeManager.getAvailableThemes();
+    const currentTheme = themeManager.getCurrentTheme();
+
+    select.innerHTML = themes.map(({ name, config }) =>
+      `<option value="${name}" ${name === currentTheme ? 'selected' : ''}>${config.name}</option>`
+    ).join('');
+  }
+
+  private loadThemeTextureSettings(): void {
+    const themeConfig = themeManager.getCurrentThemeConfig();
+    if (!themeConfig) return;
+
+    // Get texture scale and offset from theme config (or use defaults)
+    const textureScale = (themeConfig.material as any).textureScale || { u: 1.0, v: 1.0 };
+    const textureOffset = (themeConfig.material as any).textureOffset || { u: 0.0, v: 0.0 };
+
+    // Update slider values
+    const scaleUSlider = document.getElementById("scale-u-slider") as HTMLInputElement;
+    const scaleVSlider = document.getElementById("scale-v-slider") as HTMLInputElement;
+    const offsetUSlider = document.getElementById("offset-u-slider") as HTMLInputElement;
+    const offsetVSlider = document.getElementById("offset-v-slider") as HTMLInputElement;
+
+    if (scaleUSlider) {
+      scaleUSlider.value = textureScale.u.toString();
+      document.getElementById("scale-u-value")!.textContent = textureScale.u.toFixed(2);
+    }
+    if (scaleVSlider) {
+      scaleVSlider.value = textureScale.v.toString();
+      document.getElementById("scale-v-value")!.textContent = textureScale.v.toFixed(2);
+    }
+    if (offsetUSlider) {
+      offsetUSlider.value = textureOffset.u.toString();
+      document.getElementById("offset-u-value")!.textContent = textureOffset.u.toFixed(2);
+    }
+    if (offsetVSlider) {
+      offsetVSlider.value = textureOffset.v.toString();
+      document.getElementById("offset-v-value")!.textContent = textureOffset.v.toFixed(2);
+    }
+
+    // Apply the settings to the renderer
+    this.updateTextureMapping();
+
+    console.log(`📐 Loaded texture settings for ${themeConfig.name}:`, textureScale, textureOffset);
+  }
+
   show(): void {
     this.isVisible = true;
     this.container.style.display = "block";
@@ -92,6 +244,9 @@ export class DebugView {
 
     // Set debug camera view
     this.scene.setCameraView("debug");
+
+    // Load current theme's texture settings
+    this.loadThemeTextureSettings();
 
     // Render current die type
     this.renderCurrentDie();
