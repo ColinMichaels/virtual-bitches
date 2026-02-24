@@ -19,6 +19,7 @@ import { environment } from "@env";
 import { settingsService } from "./services/settings.js";
 import { themeManager } from "./services/themeManager.js";
 import { logger } from "./utils/logger.js";
+import { shouldShowHints } from "./engine/modes.js";
 
 const log = logger.create('Game');
 
@@ -52,13 +53,20 @@ class Game {
     const seed = params.get("seed") || this.generateSeed();
     const logEncoded = params.get("log");
 
+    // Get settings for mode configuration
+    const settings = settingsService.getSettings();
+    const mode = {
+      difficulty: settings.game.difficulty,
+      variant: "classic" as const,
+    };
+
     if (logEncoded) {
       // Replay mode
       const actions = deserializeActions(logEncoded);
       this.state = replay(seed, actions);
     } else {
       // New game
-      this.state = createGame(seed);
+      this.state = createGame(seed, {}, mode);
     }
 
     // Initialize rendering
@@ -67,6 +75,10 @@ class Game {
     this.diceRenderer = new DiceRenderer(this.scene.scene);
     this.hud = new HUD();
     this.diceRow = new DiceRow((dieId) => this.handleDieClick(dieId), this.diceRenderer as any);
+
+    // Set initial hint mode based on game mode
+    const hintsEnabled = shouldShowHints(this.state.mode);
+    this.diceRow.setHintMode(hintsEnabled);
 
     // UI elements
     this.actionBtn = document.getElementById("action-btn") as HTMLButtonElement;
@@ -106,6 +118,12 @@ class Game {
     // Handle How to Play button in settings
     this.settingsModal.setOnHowToPlay(() => {
       rulesModal.show();
+    });
+
+    // Listen to settings changes to update hint mode
+    settingsService.onChange((settings) => {
+      const hintsEnabled = shouldShowHints(this.state.mode);
+      this.diceRow.setHintMode(hintsEnabled);
     });
 
     this.setupControls();
@@ -521,7 +539,18 @@ class Game {
       add2ndD10: settings.game.add2ndD10,
       d100Mode: settings.game.d100Mode,
     };
-    this.state = createGame(seed, config);
+
+    // Create mode based on difficulty setting
+    const mode = {
+      difficulty: settings.game.difficulty,
+      variant: "classic" as const,
+    };
+
+    this.state = createGame(seed, config, mode);
+
+    // Update hint mode based on new game mode
+    const hintsEnabled = shouldShowHints(this.state.mode);
+    this.diceRow.setHintMode(hintsEnabled);
 
     // Clear all dice from renderer
     this.diceRenderer.clearDice();

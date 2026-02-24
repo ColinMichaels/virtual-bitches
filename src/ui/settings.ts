@@ -7,6 +7,7 @@ import { settingsService, Settings } from "../services/settings.js";
 import { audioService } from "../services/audio.js";
 import { hapticsService } from "../services/haptics.js";
 import { ThemeSwitcher } from "./themeSwitcher.js";
+import { GameDifficulty } from "../engine/types.js";
 
 export class SettingsModal {
   private container: HTMLElement;
@@ -94,8 +95,26 @@ export class SettingsModal {
         </div>
 
         <div class="settings-section">
+          <h3>Game Mode</h3>
+          <p class="setting-description">Changes apply to new games only</p>
+
+          <div class="setting-row">
+            <label for="game-difficulty">Difficulty</label>
+            <select id="game-difficulty">
+              <option value="easy" ${this.settings.game.difficulty === "easy" ? "selected" : ""}>Easy (Hints + More Help)</option>
+              <option value="normal" ${this.settings.game.difficulty === "normal" ? "selected" : ""}>Normal (Standard Rules)</option>
+              <option value="hard" ${this.settings.game.difficulty === "hard" ? "selected" : ""}>Hard (No Hints, Strict)</option>
+            </select>
+          </div>
+
+          <div class="setting-row difficulty-info">
+            <p id="difficulty-info-text" class="setting-description"></p>
+          </div>
+        </div>
+
+        <div class="settings-section">
           <h3>Game Variants</h3>
-          <p class="setting-description">These variants will apply to new games only</p>
+          <p class="setting-description">Customize your dice pool</p>
 
           <div class="setting-row">
             <label>
@@ -145,6 +164,7 @@ export class SettingsModal {
     }
 
     this.setupEventListeners();
+    this.updateDifficultyInfo();
   }
 
   /**
@@ -223,6 +243,16 @@ export class SettingsModal {
     const shadowsEnabled = document.getElementById("shadows-enabled") as HTMLInputElement;
     shadowsEnabled.addEventListener("change", () => {
       settingsService.updateDisplay({ shadowsEnabled: shadowsEnabled.checked });
+      audioService.playSfx("click");
+    });
+
+    // Game Difficulty
+    const gameDifficulty = document.getElementById("game-difficulty") as HTMLSelectElement;
+    gameDifficulty.addEventListener("change", () => {
+      settingsService.updateGame({
+        difficulty: gameDifficulty.value as GameDifficulty
+      });
+      this.updateDifficultyInfo();
       audioService.playSfx("click");
     });
 
@@ -343,6 +373,29 @@ export class SettingsModal {
       this.settings.game.add2ndD10;
     (document.getElementById("variant-d100") as HTMLInputElement).checked =
       this.settings.game.d100Mode;
+
+    // Update difficulty
+    (document.getElementById("game-difficulty") as HTMLSelectElement).value =
+      this.settings.game.difficulty;
+    this.updateDifficultyInfo();
+  }
+
+  /**
+   * Update difficulty description
+   */
+  private updateDifficultyInfo(): void {
+    const infoText = document.getElementById("difficulty-info-text");
+    if (!infoText) return;
+
+    const difficulty = (document.getElementById("game-difficulty") as HTMLSelectElement).value as GameDifficulty;
+
+    const descriptions = {
+      easy: "✨ Shows hints highlighting best scoring choices. Future updates will add undo/redo options.",
+      normal: "🎲 Standard BISCUITS rules. No hints or special assistance.",
+      hard: "🔥 Coming soon: Stricter rules and no hints. For experienced players only."
+    };
+
+    infoText.textContent = descriptions[difficulty];
   }
 
   /**

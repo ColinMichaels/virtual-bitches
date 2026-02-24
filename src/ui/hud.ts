@@ -1,6 +1,7 @@
 import { GameState } from "../engine/types.js";
 import { getDiceCounts } from "../engine/rules.js";
 import { calculateSelectionPoints } from "../engine/rules.js";
+import { getDifficultyName } from "../engine/modes.js";
 
 export class HUD {
   private rollCountEl: HTMLElement;
@@ -11,6 +12,7 @@ export class HUD {
   private selectedPointsEl: HTMLElement;
   private hudDetailsEl: HTMLElement;
   private toggleBtn: HTMLElement;
+  private modeDisplayEl: HTMLElement;
   private isCollapsed: boolean;
 
   constructor() {
@@ -22,6 +24,7 @@ export class HUD {
     this.selectedPointsEl = document.getElementById("selected-points")!;
     this.hudDetailsEl = document.getElementById("hud-details")!;
     this.toggleBtn = document.getElementById("hud-toggle-btn")!;
+    this.modeDisplayEl = document.getElementById("mode-display")!;
 
     // Load collapsed state from localStorage (default collapsed on first load)
     const savedState = localStorage.getItem('hudCollapsed');
@@ -52,6 +55,18 @@ export class HUD {
     // Update basic stats
     this.rollCountEl.textContent = state.rollIndex.toString();
     this.scoreEl.textContent = state.score.toString();
+
+    // Update mode display
+    const difficultyName = getDifficultyName(state.mode.difficulty);
+    this.modeDisplayEl.textContent = difficultyName;
+
+    // Add color classes for different modes
+    this.modeDisplayEl.className = "stat-value-compact";
+    if (state.mode.difficulty === "easy") {
+      this.modeDisplayEl.classList.add("mode-easy");
+    } else if (state.mode.difficulty === "hard") {
+      this.modeDisplayEl.classList.add("mode-hard");
+    }
 
     // Update dice pool
     const counts = getDiceCounts(state.dice);

@@ -67,8 +67,8 @@ export class DiceRow {
     return divider;
   }
 
-  private calculateHints(dice: DieState[]): Map<string, 'best' | 'good' | 'normal'> {
-    const hints = new Map<string, 'best' | 'good' | 'normal'>();
+  private calculateHints(dice: DieState[]): Map<string, 'perfect' | 'best' | 'good' | 'normal'> {
+    const hints = new Map<string, 'perfect' | 'best' | 'good' | 'normal'>();
 
     // Calculate all point values
     const pointValues = dice.map(d => ({
@@ -82,19 +82,21 @@ export class DiceRow {
 
     // Assign hint levels
     pointValues.forEach(({ id, points }) => {
-      if (points === maxPoints) {
-        hints.set(id, 'best');
+      if (points === 0) {
+        hints.set(id, 'perfect'); // Zero points = perfect roll (green)
+      } else if (points === maxPoints) {
+        hints.set(id, 'best'); // Highest points = best choice (gold)
       } else if (points >= threshold) {
-        hints.set(id, 'good');
+        hints.set(id, 'good'); // Close to max = good choice (blue)
       } else {
-        hints.set(id, 'normal');
+        hints.set(id, 'normal'); // Below threshold = normal (white)
       }
     });
 
     return hints;
   }
 
-  private createDieElement(die: DieState, selected: boolean, hintLevel: 'best' | 'good' | 'normal' = 'normal'): HTMLElement {
+  private createDieElement(die: DieState, selected: boolean, hintLevel: 'perfect' | 'best' | 'good' | 'normal' = 'normal'): HTMLElement {
     // Create wrapper to hold both die and badge
     const wrapper = document.createElement("div");
     wrapper.className = "die-wrapper";

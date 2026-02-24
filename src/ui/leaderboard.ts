@@ -5,6 +5,7 @@
 
 import { scoreHistoryService, GameScore, ScoreStats } from "../services/score-history.js";
 import { audioService } from "../services/audio.js";
+import { getDifficultyName } from "../engine/modes.js";
 
 export class LeaderboardModal {
   private container: HTMLElement;
@@ -138,7 +139,11 @@ export class LeaderboardModal {
   private renderScoreList(scores: GameScore[]): string {
     return `
       <div class="score-list">
-        ${scores.map((score, index) => `
+        ${scores.map((score, index) => {
+          const modeName = score.mode ? getDifficultyName(score.mode.difficulty) : 'Normal';
+          const modeClass = score.mode?.difficulty === 'easy' ? 'mode-easy' :
+                           score.mode?.difficulty === 'hard' ? 'mode-hard' : '';
+          return `
           <div class="score-entry">
             <div class="rank">#${index + 1}</div>
             <div class="score-info">
@@ -147,6 +152,7 @@ export class LeaderboardModal {
                 <span>${this.formatDate(score.timestamp)}</span>
                 <span>${score.rollCount} rolls</span>
                 <span>${this.formatDuration(score.duration)}</span>
+                <span class="mode-badge ${modeClass}">${modeName}</span>
               </div>
             </div>
             <button class="btn-replay" data-score-id="${score.id}" title="Replay this game">
@@ -156,7 +162,8 @@ export class LeaderboardModal {
               </svg>
             </button>
           </div>
-        `).join("")}
+        `;
+        }).join("")}
       </div>
     `;
   }
