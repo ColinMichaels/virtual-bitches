@@ -97,8 +97,8 @@ export class SplashDiceRenderer {
 
     // Import meshes
     const result = await SceneLoader.ImportMeshAsync(
-      null,
-      null,
+      "",
+      "",
       "data:" + JSON.stringify(geometryData),
       this.scene
     );
@@ -113,7 +113,9 @@ export class SplashDiceRenderer {
       // Store as template mesh
       mesh.setEnabled(false);
       mesh.isPickable = false;
-      mesh.freezeNormals();
+      if ((mesh as Mesh).freezeNormals) {
+        (mesh as Mesh).freezeNormals();
+      }
       this.templateMeshes.set(mesh.name, mesh as Mesh);
     });
   }

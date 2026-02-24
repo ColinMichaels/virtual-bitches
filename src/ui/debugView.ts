@@ -18,7 +18,7 @@ const DICE_CONFIG: Array<{ kind: DieKind; faces: number; label: string }> = [
 ];
 
 export class DebugView {
-  private container: HTMLElement;
+  private container!: HTMLElement;
   private isVisible = false;
   private diceRenderer: DiceRenderer;
   private scene: GameScene;

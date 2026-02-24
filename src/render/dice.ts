@@ -218,8 +218,8 @@ export class DiceRenderer {
 
     // Import meshes using SceneLoader (dice-box approach)
     const result = await SceneLoader.ImportMeshAsync(
-      null, // Load all meshes
-      null, // No base URL
+      "", // Load all meshes
+      "", // No base URL
       "data:" + JSON.stringify(this.geometryData), // Pass JSON as data URI
       this.scene
     );
@@ -234,7 +234,9 @@ export class DiceRenderer {
       // Store as template mesh (disabled, used for instancing)
       mesh.setEnabled(false);
       mesh.isPickable = false;
-      mesh.freezeNormals();
+      if ((mesh as Mesh).freezeNormals) {
+        (mesh as Mesh).freezeNormals();
+      }
 
       // Shrink colliders slightly (dice-box approach)
       if (mesh.name.includes("collider")) {
@@ -1038,32 +1040,36 @@ export class DiceRenderer {
     // Update materialDark textures
     if (this.materialDark) {
       if (this.materialDark.diffuseTexture) {
-        this.materialDark.diffuseTexture.uScale = scaleU;
-        this.materialDark.diffuseTexture.vScale = scaleV;
-        this.materialDark.diffuseTexture.uOffset = offsetU;
-        this.materialDark.diffuseTexture.vOffset = offsetV;
+        const diffuseTex = this.materialDark.diffuseTexture as Texture;
+        diffuseTex.uScale = scaleU;
+        diffuseTex.vScale = scaleV;
+        diffuseTex.uOffset = offsetU;
+        diffuseTex.vOffset = offsetV;
       }
       if (this.materialDark.bumpTexture) {
-        this.materialDark.bumpTexture.uScale = scaleU;
-        this.materialDark.bumpTexture.vScale = scaleV;
-        this.materialDark.bumpTexture.uOffset = offsetU;
-        this.materialDark.bumpTexture.vOffset = offsetV;
+        const bumpTex = this.materialDark.bumpTexture as Texture;
+        bumpTex.uScale = scaleU;
+        bumpTex.vScale = scaleV;
+        bumpTex.uOffset = offsetU;
+        bumpTex.vOffset = offsetV;
       }
     }
 
     // Update materialLight textures (if different from materialDark)
     if (this.materialLight && this.materialLight !== this.materialDark) {
       if (this.materialLight.diffuseTexture) {
-        this.materialLight.diffuseTexture.uScale = scaleU;
-        this.materialLight.diffuseTexture.vScale = scaleV;
-        this.materialLight.diffuseTexture.uOffset = offsetU;
-        this.materialLight.diffuseTexture.vOffset = offsetV;
+        const diffuseTex = this.materialLight.diffuseTexture as Texture;
+        diffuseTex.uScale = scaleU;
+        diffuseTex.vScale = scaleV;
+        diffuseTex.uOffset = offsetU;
+        diffuseTex.vOffset = offsetV;
       }
       if (this.materialLight.bumpTexture) {
-        this.materialLight.bumpTexture.uScale = scaleU;
-        this.materialLight.bumpTexture.vScale = scaleV;
-        this.materialLight.bumpTexture.uOffset = offsetU;
-        this.materialLight.bumpTexture.vOffset = offsetV;
+        const bumpTex = this.materialLight.bumpTexture as Texture;
+        bumpTex.uScale = scaleU;
+        bumpTex.vScale = scaleV;
+        bumpTex.uOffset = offsetU;
+        bumpTex.vOffset = offsetV;
       }
     }
   }
