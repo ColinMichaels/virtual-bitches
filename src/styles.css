@@ -288,6 +288,41 @@ h1, h2, h3, h4, h5, h6 {
   transform: rotate(90deg) scale(0.95);
 }
 
+/* Leaderboard Button - Top Right (below settings) */
+#leaderboard-btn {
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  padding: 12px;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+#leaderboard-btn svg {
+  width: 24px;
+  height: 24px;
+  color: #fff;
+}
+
+#leaderboard-btn:hover {
+  background: rgba(255, 193, 7, 0.8);
+  border-color: #ffc107;
+  transform: scale(1.1);
+}
+
+#leaderboard-btn:active {
+  transform: scale(0.95);
+}
+
 /* Camera Controls - Bottom Left */
 #camera-controls {
   position: absolute;
@@ -1281,6 +1316,20 @@ button.danger:hover:not(:disabled) {
     height: 20px;
   }
 
+  /* Leaderboard Button - Smaller on tablet */
+  #leaderboard-btn {
+    top: 60px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+    padding: 8px;
+  }
+
+  #leaderboard-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+
   /* Camera Controls - Horizontal layout at bottom */
   #camera-controls {
     bottom: 8px;
@@ -1468,6 +1517,20 @@ button.danger:hover:not(:disabled) {
     font-size: 12px;
   }
 
+  /* Leaderboard Button - Smallest on mobile */
+  #leaderboard-btn {
+    top: 45px;
+    right: 5px;
+    width: 36px;
+    height: 36px;
+    padding: 6px;
+  }
+
+  #leaderboard-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
   .die-2d .points {
     font-size: 7px;
   }
@@ -1482,7 +1545,7 @@ button.danger:hover:not(:disabled) {
 
   /* Camera Controls */
   #camera-controls {
-    bottom: 5px;
+    bottom: 65px;
     left: 5px;
     right: 5px;
     padding: 6px;
@@ -1497,7 +1560,7 @@ button.danger:hover:not(:disabled) {
 
   /* Action Button */
   #controls {
-    bottom: 55px;
+    bottom: 120px;
     left: 5px;
     right: 5px;
     width: calc(100% - 10px);

@@ -33,3 +33,5 @@ lerna-debug.log*
 # Cache
 .cache/
 .parcel-cache/
+
+/dice-box/
