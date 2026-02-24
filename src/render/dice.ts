@@ -16,6 +16,7 @@ import {
   ShaderMaterial,
   Color3,
   Vector3,
+  Quaternion,
   Animation,
   CubicEase,
   EasingFunction,
@@ -117,6 +118,7 @@ export class DiceRenderer {
   // Geometry data with collider face maps
   private geometryData: any = null;
   private geometryLoaded = false;
+  private loadedMeshFile: string | null = null;
 
   // Debug mode tracking
   private debugMeshes = new Map<string, Mesh>();
@@ -248,6 +250,7 @@ export class DiceRenderer {
     }
 
     this.geometryData = await response.json();
+    this.loadedMeshFile = themeConfig.meshFile;
 
     // Strip physics properties to avoid "Physics not enabled" errors
     this.geometryData.physicsEnabled = false;
@@ -280,6 +283,43 @@ export class DiceRenderer {
       mesh.isPickable = false;
       if ((mesh as Mesh).freezeNormals) {
         (mesh as Mesh).freezeNormals();
+      }
+
+      // Apply per-die settings from theme config (overrides geometry file)
+      const dieKind = mesh.name.replace("_collider", "") as DieKind;
+      const perDieSettings = themeConfig.perDieSettings?.[dieKind];
+
+      if (perDieSettings && !mesh.name.includes("collider")) {
+        // Apply position offset (overrides geometry file)
+        if (perDieSettings.positionOffset) {
+          mesh.position.set(
+            perDieSettings.positionOffset[0],
+            perDieSettings.positionOffset[1],
+            perDieSettings.positionOffset[2]
+          );
+          log.debug(`Applied position offset to ${mesh.name}:`, perDieSettings.positionOffset);
+        }
+
+        // Apply rotation (overrides geometry file)
+        if (perDieSettings.rotationQuaternion) {
+          mesh.rotationQuaternion = new Quaternion(
+            perDieSettings.rotationQuaternion[0],
+            perDieSettings.rotationQuaternion[1],
+            perDieSettings.rotationQuaternion[2],
+            perDieSettings.rotationQuaternion[3]
+          );
+          log.debug(`Applied rotation to ${mesh.name}:`, perDieSettings.rotationQuaternion);
+        }
+
+        // Apply scaling (overrides geometry file)
+        if (perDieSettings.scaling) {
+          mesh.scaling.set(
+            perDieSettings.scaling[0],
+            perDieSettings.scaling[1],
+            perDieSettings.scaling[2]
+          );
+          log.debug(`Applied scaling to ${mesh.name}:`, perDieSettings.scaling);
+        }
       }
 
       // Shrink colliders slightly (dice-box approach)
@@ -558,6 +598,11 @@ export class DiceRenderer {
       return this.createPlaceholderDie(die);
     }
 
+    // Reset position to origin (template has position offset from geometry file)
+    // The actual die position will be set by the game engine
+    instance.position = Vector3.Zero();
+    instance.rotation = Vector3.Zero();
+
     instance.setEnabled(true);
     instance.isPickable = true; // Enable clicking for selection
     log.debug(`Cloned mesh for ${die.def.kind}:`, die.id);
@@ -570,14 +615,19 @@ export class DiceRenderer {
     // Check if this die type should use fallback theme material
     const currentTheme = themeManager.getCurrentThemeConfig();
     let materialToUse: Material | null;
+    let themeConfigForOverrides: any = currentTheme; // Track which theme config to use for overrides
 
     // Determine which material variant to use (light or dark)
     const useLight = this.isDebugMode ? this.debugUseLightMaterial : false;
 
-    if (currentTheme?.useFallbackFor?.includes(die.def.kind) && currentTheme.fallbackTheme) {
+    const usingFallback = currentTheme?.useFallbackFor?.includes(die.def.kind) && currentTheme.fallbackTheme;
+
+    if (usingFallback) {
       const fallbackMaterials = this.materialCache.get(currentTheme.fallbackTheme);
       if (fallbackMaterials) {
         materialToUse = useLight ? fallbackMaterials.light : fallbackMaterials.dark;
+        // Use fallback theme config for overrides, not the current theme
+        themeConfigForOverrides = themeManager.getThemeConfig(currentTheme.fallbackTheme);
         log.debug(`Using fallback theme "${currentTheme.fallbackTheme}" ${useLight ? 'light' : 'dark'} material for ${die.def.kind}`);
       } else {
         materialToUse = useLight ? this.materialLight : this.materialDark;
@@ -588,8 +638,60 @@ export class DiceRenderer {
 
     log.debug(`Creating ${die.def.kind} with ${useLight ? 'light' : 'dark'} material`);
 
-    // Use the appropriate material (primary or fallback, light or dark)
-    instance.material = materialToUse;
+    // Check if this die needs per-die texture overrides from the appropriate theme config
+    const perDieOverrides = themeConfigForOverrides?.material?.perDieOverrides?.[die.def.kind];
+
+    if (perDieOverrides && materialToUse) {
+      // Clone the material for this specific die so we can apply custom texture settings
+      const customMaterial = materialToUse.clone(`${die.id}-material`);
+
+      // For ShaderMaterial, copy texture cache reference to the cloned material
+      if (!(customMaterial instanceof StandardMaterial)) {
+        const originalTextures = this.textureCache.get(materialToUse);
+        if (originalTextures) {
+          this.textureCache.set(customMaterial, originalTextures);
+        }
+      }
+
+      // Apply per-die texture overrides
+      if (perDieOverrides.textureScale || perDieOverrides.textureOffset) {
+        log.debug(`Applying per-die overrides for ${die.def.kind}:`, perDieOverrides);
+
+        // Get textures from the material (works for both StandardMaterial and ShaderMaterial)
+        const textures: any[] = [];
+
+        if (customMaterial instanceof StandardMaterial) {
+          if (customMaterial.diffuseTexture) textures.push(customMaterial.diffuseTexture);
+          if (customMaterial.bumpTexture) textures.push(customMaterial.bumpTexture);
+        } else {
+          // ShaderMaterial - get from texture cache
+          const cachedTextures = this.textureCache.get(customMaterial);
+          if (cachedTextures) {
+            if (cachedTextures.diffuse) textures.push(cachedTextures.diffuse);
+            if (cachedTextures.bump) textures.push(cachedTextures.bump);
+          }
+        }
+
+        // Apply scale/offset to all textures
+        textures.forEach(texture => {
+          if (perDieOverrides.textureScale) {
+            texture.uScale = perDieOverrides.textureScale.u;
+            texture.vScale = perDieOverrides.textureScale.v;
+          }
+          if (perDieOverrides.textureOffset) {
+            texture.uOffset = perDieOverrides.textureOffset.u;
+            texture.vOffset = perDieOverrides.textureOffset.v;
+          }
+        });
+
+        log.debug(`Applied overrides to ${textures.length} textures for ${die.def.kind}`);
+      }
+
+      instance.material = customMaterial;
+    } else {
+      // Use the shared material (primary or fallback, light or dark)
+      instance.material = materialToUse;
+    }
 
     // Apply size scaling - dice-box models are VERY small, need significant scaling
     const size = DIE_SIZES[die.def.kind];
@@ -1148,31 +1250,149 @@ export class DiceRenderer {
    * Handle theme change - reload materials and update all dice
    */
   private async onThemeChanged(): Promise<void> {
-    log.info("Theme changed, reloading materials...");
+    log.info("Theme changed, reloading...");
 
-    // Dispose old materials
+    const currentTheme = themeManager.getCurrentThemeConfig();
+    const newMeshFile = currentTheme?.meshFile;
+
+    // Check if we need to reload geometry (different mesh file)
+    const needsGeometryReload = this.loadedMeshFile &&
+                                 newMeshFile &&
+                                 this.loadedMeshFile !== newMeshFile;
+
+    if (needsGeometryReload) {
+      log.info(`Mesh file changed from ${this.loadedMeshFile} to ${newMeshFile}, reloading geometry...`);
+
+      // Dispose ALL existing dice meshes
+      this.meshes.forEach((mesh) => {
+        mesh.dispose();
+      });
+      this.meshes.clear();
+
+      // Dispose template meshes
+      this.templateMeshes.forEach((mesh) => {
+        mesh.dispose();
+      });
+      this.templateMeshes.clear();
+
+      // Clear rotation cache (it's geometry-specific)
+      this.rotationCache.clear();
+
+      // Reload geometry
+      await this.loadGeometry();
+
+      // Rebuild rotation cache
+      await this.buildRotationCache();
+    }
+
+    // Dispose old per-die materials first
+    this.meshes.forEach((mesh) => {
+      if (mesh.material) {
+        // Only dispose if it's a cloned material (contains die ID in name)
+        if (mesh.material.name && (mesh.material.name.includes('d4-') ||
+            mesh.material.name.includes('d6-') || mesh.material.name.includes('d8-') ||
+            mesh.material.name.includes('d10-') || mesh.material.name.includes('d12-') ||
+            mesh.material.name.includes('d20-'))) {
+          mesh.material.dispose();
+        }
+      }
+    });
+
+    // Dispose shared materials
     this.materialLight?.dispose();
     this.materialDark?.dispose();
+
+    // Clear material cache for fallback themes
+    this.materialCache.forEach((materials) => {
+      materials.light?.dispose();
+      if (materials.dark !== materials.light) {
+        materials.dark?.dispose();
+      }
+    });
+    this.materialCache.clear();
 
     // Reload materials with new theme
     await this.createMaterials();
 
     // Update all existing dice with new materials
+    // We need to rebuild each die's material considering fallback and per-die overrides
     this.meshes.forEach((mesh, dieId) => {
-      const color = this.dieColors.get(dieId);
-      if (color && this.materialDark) {
-        // Clone material for this die
-        const material = this.materialDark.clone(`${dieId}-material`);
-        const colorObj = Color3.FromHexString(color);
+      // Extract die kind from die ID (format: "d6-0", "d8-1", etc.)
+      const dieKindMatch = dieId.match(/^(d\d+)/);
+      if (!dieKindMatch) {
+        log.warn(`Could not determine die kind from ID: ${dieId}`);
+        return;
+      }
+      const dieKind = dieKindMatch[1] as DieKind;
 
-        // Tint the texture with the die color
-        material.diffuseColor = new Color3(
-          0.5 + colorObj.r * 0.5,
-          0.5 + colorObj.g * 0.5,
-          0.5 + colorObj.b * 0.5
-        );
+      // Determine which material to use (with fallback logic)
+      let materialToUse: Material | null;
+      let themeConfigForOverrides: any = currentTheme;
+      const useLight = this.isDebugMode ? this.debugUseLightMaterial : false;
+      const usingFallback = currentTheme?.useFallbackFor?.includes(dieKind) && currentTheme.fallbackTheme;
 
-        mesh.material = material;
+      if (usingFallback) {
+        const fallbackMaterials = this.materialCache.get(currentTheme.fallbackTheme);
+        if (fallbackMaterials) {
+          materialToUse = useLight ? fallbackMaterials.light : fallbackMaterials.dark;
+          themeConfigForOverrides = themeManager.getThemeConfig(currentTheme.fallbackTheme);
+        } else {
+          materialToUse = useLight ? this.materialLight : this.materialDark;
+        }
+      } else {
+        materialToUse = useLight ? this.materialLight : this.materialDark;
+      }
+
+      // Ensure mesh scaling is correct (might get corrupted during material changes)
+      const size = DIE_SIZES[dieKind];
+      const scaleFactor = size * 10;
+      mesh.scaling.set(scaleFactor, scaleFactor, scaleFactor);
+
+      // Check for per-die overrides
+      const perDieOverrides = themeConfigForOverrides?.material?.perDieOverrides?.[dieKind];
+
+      if (perDieOverrides && materialToUse) {
+        // Clone material and apply overrides
+        const customMaterial = materialToUse.clone(`${dieId}-material`);
+
+        // For ShaderMaterial, copy texture cache reference to the cloned material
+        if (!(customMaterial instanceof StandardMaterial)) {
+          const originalTextures = this.textureCache.get(materialToUse);
+          if (originalTextures) {
+            this.textureCache.set(customMaterial, originalTextures);
+          }
+        }
+
+        if (perDieOverrides.textureScale || perDieOverrides.textureOffset) {
+          const textures: any[] = [];
+
+          if (customMaterial instanceof StandardMaterial) {
+            if (customMaterial.diffuseTexture) textures.push(customMaterial.diffuseTexture);
+            if (customMaterial.bumpTexture) textures.push(customMaterial.bumpTexture);
+          } else {
+            const cachedTextures = this.textureCache.get(customMaterial);
+            if (cachedTextures) {
+              if (cachedTextures.diffuse) textures.push(cachedTextures.diffuse);
+              if (cachedTextures.bump) textures.push(cachedTextures.bump);
+            }
+          }
+
+          textures.forEach(texture => {
+            if (perDieOverrides.textureScale) {
+              texture.uScale = perDieOverrides.textureScale.u;
+              texture.vScale = perDieOverrides.textureScale.v;
+            }
+            if (perDieOverrides.textureOffset) {
+              texture.uOffset = perDieOverrides.textureOffset.u;
+              texture.vOffset = perDieOverrides.textureOffset.v;
+            }
+          });
+        }
+
+        mesh.material = customMaterial;
+      } else {
+        // Use shared material
+        mesh.material = materialToUse;
       }
     });
 
