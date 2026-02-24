@@ -6,6 +6,7 @@ import { SplashScreen } from "./ui/splash.js";
 import { SettingsModal } from "./ui/settings.js";
 import { LeaderboardModal } from "./ui/leaderboard.js";
 import { RulesModal } from "./ui/rules.js";
+import { DebugView } from "./ui/debugView.js";
 import { notificationService } from "./ui/notifications.js";
 import { createGame, reduce, generateShareURL, deserializeActions, replay } from "./game/state.js";
 import { GameState, Action } from "./engine/types.js";
@@ -25,6 +26,7 @@ class Game {
   private paused = false;
   private settingsModal: SettingsModal;
   private leaderboardModal: LeaderboardModal;
+  private debugView: DebugView;
   private gameStartTime: number;
   private selectedDieIndex = 0; // For keyboard navigation
 
@@ -37,6 +39,7 @@ class Game {
   private viewLeaderboardBtn: HTMLButtonElement;
   private settingsGearBtn: HTMLButtonElement;
   private leaderboardBtn: HTMLButtonElement;
+  private debugViewBtn: HTMLButtonElement;
 
   constructor() {
     // Parse URL for replay
@@ -58,7 +61,7 @@ class Game {
     this.scene = new GameScene(canvas);
     this.diceRenderer = new DiceRenderer(this.scene.scene);
     this.hud = new HUD();
-    this.diceRow = new DiceRow((dieId) => this.handleDieClick(dieId), this.diceRenderer);
+    this.diceRow = new DiceRow((dieId) => this.handleDieClick(dieId), this.diceRenderer as any);
 
     // UI elements
     this.actionBtn = document.getElementById("action-btn") as HTMLButtonElement;
@@ -71,10 +74,22 @@ class Game {
     this.settingsGearBtn = document.getElementById("settings-gear-btn") as HTMLButtonElement;
 
     this.leaderboardBtn = document.getElementById("leaderboard-btn") as HTMLButtonElement;
+    this.debugViewBtn = document.getElementById("debug-view-btn") as HTMLButtonElement;
+
+    // Temp test button for dice testing
+    const testNewGameBtn = document.getElementById("test-new-game-btn") as HTMLButtonElement;
+    if (testNewGameBtn) {
+      testNewGameBtn.addEventListener("click", () => this.startNewGame());
+    }
 
     // Initialize modals (shared with splash)
     this.settingsModal = settingsModal;
     this.leaderboardModal = leaderboardModal;
+
+    // Initialize debug view
+    this.debugView = new DebugView(this.diceRenderer, this.scene, (isDebugMode) => {
+      this.handleDebugModeToggle(isDebugMode);
+    });
 
     // Handle settings modal close to unpause game
     this.settingsModal.setOnClose(() => {
@@ -163,6 +178,12 @@ class Game {
       this.leaderboardModal.show();
     });
 
+    // Debug view button
+    this.debugViewBtn.addEventListener("click", () => {
+      audioService.playSfx("click");
+      this.debugView.show();
+    });
+
     // Camera controls
     const cameraButtons = document.querySelectorAll(".camera-btn");
     cameraButtons.forEach((btn) => {
@@ -246,6 +267,34 @@ class Game {
     }
 
     this.updateUI();
+  }
+
+  private handleDebugModeToggle(isDebugMode: boolean) {
+    // Hide game UI when debug mode is active
+    const hudEl = document.getElementById("hud");
+    const diceRowEl = document.getElementById("dice-row");
+    const controlsEl = document.getElementById("controls");
+    const cameraControlsEl = document.getElementById("camera-controls");
+
+    if (isDebugMode) {
+      // Hide game UI
+      if (hudEl) hudEl.style.display = "none";
+      if (diceRowEl) diceRowEl.style.display = "none";
+      if (controlsEl) controlsEl.style.display = "none";
+      if (cameraControlsEl) cameraControlsEl.style.display = "none";
+
+      // Clear game dice from scene
+      this.diceRenderer.clearDice();
+    } else {
+      // Restore game UI
+      if (hudEl) hudEl.style.display = "block";
+      if (diceRowEl) diceRowEl.style.display = "flex";
+      if (controlsEl) controlsEl.style.display = "flex";
+      if (cameraControlsEl) cameraControlsEl.style.display = "flex";
+
+      // Restore game state - updateUI will handle re-rendering dice if needed
+      this.updateUI();
+    }
   }
 
   private setupDiceSelection() {

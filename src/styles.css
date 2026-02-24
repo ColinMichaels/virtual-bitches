@@ -1695,3 +1695,184 @@ button.danger:hover:not(:disabled) {
     padding: 20px 30px;
   }
 }
+
+/* Debug View - Side Panel */
+.debug-view {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 320px;
+  height: 100vh;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.debug-panel {
+  background: rgba(0, 0, 0, 0.92);
+  backdrop-filter: blur(10px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  border-left: 2px solid rgba(233, 69, 96, 0.5);
+  pointer-events: all;
+  overflow-y: auto;
+}
+
+.debug-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid rgba(233, 69, 96, 0.5);
+}
+
+.debug-header h2 {
+  font-size: 22px;
+  color: #e94560;
+  margin: 0;
+}
+
+.debug-close-btn {
+  background: rgba(233, 69, 96, 0.2);
+  border: 1px solid rgba(233, 69, 96, 0.5);
+  color: #e94560;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.debug-close-btn:hover {
+  background: rgba(233, 69, 96, 0.4);
+}
+
+.debug-die-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.debug-nav-btn {
+  padding: 8px 12px;
+  background: #4a5c7a;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.debug-nav-btn:hover {
+  background: #5a6c8a;
+  transform: scale(1.05);
+}
+
+.debug-die-info {
+  flex: 1;
+  text-align: center;
+}
+
+.debug-die-info h3 {
+  font-size: 18px;
+  color: #e94560;
+  margin: 0 0 5px 0;
+}
+
+.debug-die-info p {
+  font-size: 12px;
+  color: #aaa;
+  margin: 0;
+}
+
+.debug-values {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.debug-value-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 50px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(233, 69, 96, 0.3);
+  border-radius: 6px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #e94560;
+  transition: all 0.2s;
+}
+
+.debug-value-label:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(233, 69, 96, 0.5);
+}
+
+.debug-instructions {
+  background: rgba(233, 69, 96, 0.1);
+  border: 1px solid rgba(233, 69, 96, 0.3);
+  border-radius: 8px;
+  padding: 15px;
+  margin-top: auto;
+}
+
+.debug-instructions p {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  color: #e94560;
+  font-weight: 600;
+}
+
+.debug-instructions ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: #bbb;
+  line-height: 1.6;
+}
+
+.debug-instructions li {
+  margin-bottom: 5px;
+}
+
+/* Responsive adjustments for debug view */
+@media (max-width: 768px) {
+  .debug-view {
+    width: 100%;
+    bottom: 0;
+    right: 0;
+    height: auto;
+    max-height: 50vh;
+  }
+
+  .debug-panel {
+    border-left: none;
+    border-top: 2px solid rgba(233, 69, 96, 0.5);
+  }
+
+  .debug-values {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .debug-value-label {
+    height: 40px;
+    font-size: 16px;
+  }
+}

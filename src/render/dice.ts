@@ -1,20 +1,29 @@
+/**
+ * Dice rendering system for BISCUITS
+ * Complete rebuild using dice-box approach and assets
+ *
+ * @see https://github.com/3d-dice/dice-box
+ * @see https://github.com/3d-dice/dice-themes
+ * @license MIT (dice-box), CC0 (dice-themes)
+ */
+
 import {
   Scene,
   Mesh,
-  MeshBuilder,
   StandardMaterial,
   Color3,
   Vector3,
-  Vector4,
   Animation,
   CubicEase,
   EasingFunction,
-  DynamicTexture,
   ShadowGenerator,
   HighlightLayer,
+  Texture,
+  Ray,
 } from "@babylonjs/core";
+import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
+import "@babylonjs/loaders/glTF";
 import { DieState, DieKind } from "../engine/types.js";
-import { scoreDie } from "../engine/rules.js";
 
 const DIE_SIZES: Record<DieKind, number> = {
   d4: 1.2,
@@ -25,24 +34,23 @@ const DIE_SIZES: Record<DieKind, number> = {
   d20: 1.4,
 };
 
-// Individual die colors - glossy plastic dice
-// Individual die colors - muted palette for better pip/text visibility
+// Individual die colors - muted palette for better visibility
 const DIE_COLORS: Color3[] = [
-  Color3.FromHexString("#2a2a2a"), // Dark gray d6 (was black)
-  Color3.FromHexString("#3d5a4a"), // Muted green d6
-  Color3.FromHexString("#4a5c7a"), // Muted blue d6
-  Color3.FromHexString("#b8a062"), // Muted gold d6 (was bright yellow)
-  Color3.FromHexString("#8f6f7e"), // Muted pink d6
-  Color3.FromHexString("#7a3d3d"), // Muted red d6
-  Color3.FromHexString("#8a4a4a"), // Muted red d6 #2
-  Color3.FromHexString("#c4b399"), // Muted cream d6
-  Color3.FromHexString("#c8c8c8"), // Light gray d6 (was white)
-  Color3.FromHexString("#2a2a2a"), // Dark gray d6 #2 (was black)
-  Color3.FromHexString("#6b5139"), // Muted brown d6
-  Color3.FromHexString("#2a2a2a"), // Dark gray d6 #3 (was black)
-  Color3.FromHexString("#5a6470"), // Muted blue-gray d10
-  Color3.FromHexString("#7a3d3d"), // Muted red d12
-  Color3.FromHexString("#6b5688"), // Muted purple d20
+  Color3.FromHexString("#2a2a2a"), // Dark gray
+  Color3.FromHexString("#3d5a4a"), // Muted green
+  Color3.FromHexString("#4a5c7a"), // Muted blue
+  Color3.FromHexString("#b8a062"), // Muted gold
+  Color3.FromHexString("#8f6f7e"), // Muted pink
+  Color3.FromHexString("#7a3d3d"), // Muted red
+  Color3.FromHexString("#8a4a4a"), // Muted red #2
+  Color3.FromHexString("#c4b399"), // Muted cream
+  Color3.FromHexString("#c8c8c8"), // Light gray
+  Color3.FromHexString("#2a2a2a"), // Dark gray #2
+  Color3.FromHexString("#6b5139"), // Muted brown
+  Color3.FromHexString("#2a2a2a"), // Dark gray #3
+  Color3.FromHexString("#5a6470"), // Muted blue-gray
+  Color3.FromHexString("#7a3d3d"), // Muted red
+  Color3.FromHexString("#6b5688"), // Muted purple
 ];
 
 export class DiceRenderer {
@@ -51,7 +59,22 @@ export class DiceRenderer {
   private shadowGenerator: ShadowGenerator | null = null;
   private highlightLayer: HighlightLayer;
   private colorIndex = 0;
-  private dieColors = new Map<string, string>(); // Track hex color per die ID
+  private dieColors = new Map<string, string>();
+
+  // Template meshes (for instancing)
+  private templateMeshes = new Map<string, Mesh>();
+
+  // Materials with light/dark texture variants
+  private materialLight: StandardMaterial | null = null;
+  private materialDark: StandardMaterial | null = null;
+
+  // Geometry data with collider face maps
+  private geometryData: any = null;
+  private geometryLoaded = false;
+
+  // Debug mode tracking
+  private debugMeshes = new Map<string, Mesh>();
+  private isDebugMode = false;
 
   constructor(private scene: Scene) {
     const generators = this.scene.lights
@@ -63,313 +86,386 @@ export class DiceRenderer {
     this.highlightLayer = new HighlightLayer("highlight", this.scene);
     this.highlightLayer.blurHorizontalSize = 1.0;
     this.highlightLayer.blurVerticalSize = 1.0;
+
+    // Initialize asynchronously
+    this.initializeAsync();
   }
 
-  createDie(die: DieState): Mesh {
-    const size = DIE_SIZES[die.def.kind];
-    let mesh: Mesh;
+  private async initializeAsync(): Promise<void> {
+    try {
+      // Load geometry data from dice-box
+      await this.loadGeometry();
 
-    // Create geometry based on die type - using actual polyhedra
-    switch (die.def.kind) {
-      case "d4":
-        // Tetrahedron (4 sides)
-        mesh = MeshBuilder.CreatePolyhedron(
-          die.id,
-          { type: 0, size: size * 0.9 },
-          this.scene
-        );
-        break;
-      case "d6":
-        // Cube (6 sides) with custom UV mapping for texture atlas
-        // faceUV maps each face to a section of our 3x2 texture atlas
-        // Atlas layout: [1,2,3 / 4,5,6]
-        const faceUV = [];
-        // Standard Babylon cube face order: front, back, right, left, top, bottom
-        // Map to die faces: 1, 6, 2, 5, 3, 4 (standard opposite convention)
-        const faceMap = [1, 6, 2, 5, 3, 4];
+      // Create materials with textures
+      await this.createMaterials();
 
-        for (const faceValue of faceMap) {
-          const col = (faceValue - 1) % 3;
-          const row = Math.floor((faceValue - 1) / 3);
-          const u1 = col / 3;
-          const v1 = row / 2;
-          const u2 = (col + 1) / 3;
-          const v2 = (row + 1) / 2;
-          faceUV.push(new Vector4(u1, v1, u2, v2));
-        }
+      this.geometryLoaded = true;
+      console.log("✅ Dice-box rendering system initialized");
+    } catch (error) {
+      console.error("❌ Failed to initialize dice-box renderer:", error);
+      this.geometryLoaded = false;
+    }
+  }
 
-        mesh = MeshBuilder.CreateBox(
-          die.id,
-          {
-            size: size,
-            faceUV: faceUV,
-            wrap: true
-          },
-          this.scene
-        );
-        break;
-      case "d8":
-        // Octahedron (8 sides)
-        mesh = MeshBuilder.CreatePolyhedron(
-          die.id,
-          { type: 1, size: size * 0.8 },
-          this.scene
-        );
-        break;
-      case "d10":
-        // Pentagonal trapezohedron approximation using cylinder with 10 faces
-        mesh = MeshBuilder.CreateCylinder(
-          die.id,
-          {
-            height: size * 0.8,  // More compact - closer to 1:1 ratio
-            diameterTop: size * 0.6,  // Slightly wider for better proportions
-            diameterBottom: size * 0.6,
-            tessellation: 5
-          },
-          this.scene
-        );
-        break;
-      case "d12":
-        // Dodecahedron (12 sides)
-        mesh = MeshBuilder.CreatePolyhedron(
-          die.id,
-          { type: 3, size: size * 0.7 },
-          this.scene
-        );
-        break;
-      case "d20":
-        // Icosahedron (20 sides)
-        mesh = MeshBuilder.CreatePolyhedron(
-          die.id,
-          { type: 2, size: size * 0.7 },
-          this.scene
-        );
-        break;
-      default:
-        mesh = MeshBuilder.CreateBox(
-          die.id,
-          { size: size },
-          this.scene
-        );
+  /**
+   * Load dice geometry using dice-box format
+   * Uses SceneLoader to import .babylon JSON format
+   */
+  private async loadGeometry(): Promise<void> {
+    const response = await fetch("/src/assets/textures/smooth-pip/smoothDice.json");
+    if (!response.ok) {
+      throw new Error(`Failed to load geometry: ${response.statusText}`);
     }
 
-    // Apply glossy plastic material with individual color
-    const mat = new StandardMaterial(`${die.id}-mat`, this.scene);
+    this.geometryData = await response.json();
 
-    // Get color for this die
+    // Strip physics properties to avoid "Physics not enabled" errors
+    this.geometryData.physicsEnabled = false;
+    if (this.geometryData.meshes) {
+      this.geometryData.meshes.forEach((mesh: any) => {
+        delete mesh.physicsImpostor;
+        delete mesh.physicsMass;
+        delete mesh.physicsFriction;
+        delete mesh.physicsRestitution;
+      });
+    }
+
+    // Import meshes using SceneLoader (dice-box approach)
+    const result = await SceneLoader.ImportMeshAsync(
+      null, // Load all meshes
+      null, // No base URL
+      "data:" + JSON.stringify(this.geometryData), // Pass JSON as data URI
+      this.scene
+    );
+
+    // Process imported meshes
+    result.meshes.forEach((mesh) => {
+      if (mesh.name === "__root__") {
+        mesh.dispose();
+        return;
+      }
+
+      // Store as template mesh (disabled, used for instancing)
+      mesh.setEnabled(false);
+      mesh.isPickable = false;
+      mesh.freezeNormals();
+
+      // Shrink colliders slightly (dice-box approach)
+      if (mesh.name.includes("collider")) {
+        mesh.scaling.scaleInPlace(0.9);
+      }
+
+      this.templateMeshes.set(mesh.name, mesh as Mesh);
+      console.log(`📦 Loaded template: ${mesh.name}`);
+    });
+
+    // Store collider face map for value detection
+    this.scene.metadata = this.scene.metadata || {};
+    this.scene.metadata.colliderFaceMap = this.geometryData.colliderFaceMap;
+  }
+
+  /**
+   * Create materials with light/dark texture variants
+   * Following dice-box approach: two materials for readability
+   */
+  private async createMaterials(): Promise<void> {
+    // Choose theme: 'diceOfRolling' (standard) or 'default' (color overlay)
+    const useTheme = "diceOfRolling"; // Change to "default" for color overlay mode
+
+    if (useTheme === "diceOfRolling") {
+      await this.createStandardMaterial();
+    } else {
+      await this.createColorMaterial();
+    }
+  }
+
+  /**
+   * Create standard material (diceOfRolling style)
+   * Uses texture atlas with all colors baked in
+   */
+  private async createStandardMaterial(): Promise<void> {
+    const basePath = "/src/assets/textures/diceOfRolling";
+    console.log("🎨 Loading standard material from:", basePath);
+
+    const diffuseTexture = new Texture(`${basePath}/diffuse.jpg`, this.scene);
+    const normalMap = new Texture(`${basePath}/normal.png`, this.scene);
+    const specularMap = new Texture(`${basePath}/specularity.jpg`, this.scene);
+
+    await new Promise<void>((resolve) => {
+      let loadedCount = 0;
+      const checkLoaded = () => {
+        loadedCount++;
+        if (loadedCount === 3) resolve();
+      };
+      diffuseTexture.onLoadObservable.addOnce(checkLoaded);
+      normalMap.onLoadObservable.addOnce(checkLoaded);
+      specularMap.onLoadObservable.addOnce(checkLoaded);
+    });
+
+    console.log("✅ Standard material textures loaded");
+
+    this.materialDark = new StandardMaterial("dice-material", this.scene);
+    this.materialDark.diffuseTexture = diffuseTexture;
+    this.materialDark.bumpTexture = normalMap;
+    this.materialDark.bumpTexture.level = 0.5;
+    this.materialDark.specularTexture = specularMap;
+    this.materialDark.specularColor = new Color3(0.5, 0.5, 0.5);
+    this.materialDark.specularPower = 64;
+
+    this.materialLight = this.materialDark;
+  }
+
+  /**
+   * Create color material (default/smooth-pip style)
+   * Uses transparent texture overlay on colored dice body
+   */
+  private async createColorMaterial(): Promise<void> {
+    const basePath = "/src/assets/textures/default";
+    console.log("🎨 Loading color material from:", basePath);
+
+    const diffuseLight = new Texture(`${basePath}/diffuse-light-rgba.png`, this.scene);
+    diffuseLight.hasAlpha = true;
+    const diffuseDark = new Texture(`${basePath}/diffuse-dark-rgba.png`, this.scene);
+    diffuseDark.hasAlpha = true;
+    const normalMap = new Texture(`${basePath}/normal.png`, this.scene);
+    const specularMap = new Texture(`${basePath}/specular.jpg`, this.scene);
+
+    await new Promise<void>((resolve) => {
+      let loadedCount = 0;
+      const checkLoaded = () => {
+        loadedCount++;
+        if (loadedCount === 4) resolve();
+      };
+      diffuseLight.onLoadObservable.addOnce(checkLoaded);
+      diffuseDark.onLoadObservable.addOnce(checkLoaded);
+      normalMap.onLoadObservable.addOnce(checkLoaded);
+      specularMap.onLoadObservable.addOnce(checkLoaded);
+    });
+
+    console.log("✅ Color material textures loaded");
+
+    // Material for DARK dice (uses light numbers on dark background)
+    this.materialDark = new StandardMaterial("dice-material-dark", this.scene);
+    this.materialDark.opacityTexture = diffuseLight; // Use opacity for transparent overlay
+    this.materialDark.bumpTexture = normalMap;
+    this.materialDark.bumpTexture.level = 0.5;
+    this.materialDark.specularTexture = specularMap;
+    this.materialDark.specularColor = new Color3(0.8, 0.8, 0.8);
+    this.materialDark.specularPower = 64;
+
+    // Material for LIGHT dice (uses dark numbers on light background)
+    this.materialLight = new StandardMaterial("dice-material-light", this.scene);
+    this.materialLight.opacityTexture = diffuseDark;
+    this.materialLight.bumpTexture = normalMap;
+    this.materialLight.bumpTexture.level = 0.5;
+    this.materialLight.specularTexture = specularMap;
+    this.materialLight.specularColor = new Color3(0.8, 0.8, 0.8);
+    this.materialLight.specularPower = 64;
+  }
+
+  /**
+   * Create a die instance from template mesh
+   * Uses dice-box instancing approach for performance
+   */
+  createDie(die: DieState): Mesh {
+    // Wait for geometry to load if not ready
+    if (!this.geometryLoaded || !this.materialLight || !this.materialDark) {
+      console.warn("⚠️ Geometry not loaded yet, using placeholder");
+      return this.createPlaceholderDie(die);
+    }
+
+    // Get template mesh
+    const templateName = die.def.kind;
+    const template = this.templateMeshes.get(templateName);
+
+    if (!template) {
+      console.warn(`⚠️ No template for ${die.def.kind}, using placeholder`);
+      return this.createPlaceholderDie(die);
+    }
+
+    // IMPORTANT: Clone mesh instead of creating instance
+    // Instances cannot have individual materials - they share the template's material
+    // We need separate materials per die for different colors
+    const instance = template.clone(die.id, null, false, false) as Mesh;
+
+    if (!instance) {
+      console.error(`❌ Failed to clone mesh for ${die.def.kind}`);
+      return this.createPlaceholderDie(die);
+    }
+
+    instance.setEnabled(true);
+    console.log(`✅ Cloned mesh for ${die.def.kind}:`, die.id);
+
+    // Get die color
     const color = DIE_COLORS[this.colorIndex % DIE_COLORS.length];
-
-    // Store the hex color for this die (for HUD matching)
     const hexColor = this.colorToHex(color);
     this.dieColors.set(die.id, hexColor);
-
     this.colorIndex++;
 
-    mat.diffuseColor = color;
-    mat.specularColor = new Color3(1, 1, 1); // Bright specular highlights
-    mat.specularPower = 128; // Very glossy plastic
+    console.log(`🎲 Creating ${die.def.kind}, color:`, color);
 
-    mesh.material = mat;
+    // Clone material for this die
+    const material = this.materialDark!.clone(`${die.id}-material`);
 
-    // Add value label (pips for d6, numerals for others)
-    this.addValueLabel(mesh, die);
+    // Tint the texture atlas with the die color
+    // Use a subtle tint to preserve the texture's details
+    material.diffuseColor = new Color3(
+      0.5 + color.r * 0.5,
+      0.5 + color.g * 0.5,
+      0.5 + color.b * 0.5
+    );
+
+    // Debug: log material state
+    console.log(`Material diffuseColor:`, material.diffuseColor);
+    console.log(`Material diffuseTexture:`, material.diffuseTexture ? 'loaded' : 'missing');
+    console.log(`Material bumpTexture:`, material.bumpTexture ? 'loaded' : 'missing');
+
+    instance.material = material;
+
+    // Apply size scaling - dice-box models are VERY small, need significant scaling
+    const size = DIE_SIZES[die.def.kind];
+    const scaleFactor = size * 10; // Multiply by 10 for proper size
+    instance.scaling = new Vector3(scaleFactor, scaleFactor, scaleFactor);
 
     // Enable shadows
-    mesh.receiveShadows = true;
+    instance.receiveShadows = true;
     if (this.shadowGenerator) {
-      this.shadowGenerator.addShadowCaster(mesh);
+      this.shadowGenerator.addShadowCaster(instance);
     }
 
     // Store reference
+    this.meshes.set(die.id, instance);
+
+    console.log(`🎲 Created ${die.def.kind} successfully`);
+
+    return instance;
+  }
+
+  /**
+   * Get rotation (Euler angles) to show the specified value face-up
+   * Based on standard die orientations
+   */
+  private getRotationForValue(dieKind: string, value: number): Vector3 {
+    // D6 rotations (cube)
+    // Empirically determined from debug view
+    if (dieKind === "d6") {
+      const d6Rotations: Record<number, Vector3> = {
+        1: new Vector3(Math.PI, 0, 0),         // face 1 on top
+        2: new Vector3(-Math.PI / 2, 0, 0),    // face 2 on top
+        3: new Vector3(0, 0, -Math.PI / 2),    // face 3 on top
+        4: new Vector3(0, 0, Math.PI / 2),     // face 4 on top
+        5: new Vector3(Math.PI / 2, 0, 0),     // face 5 on top
+        6: new Vector3(0, 0, 0),               // face 6 on top
+      };
+      return d6Rotations[value] || new Vector3(0, 0, 0);
+    }
+
+    // D8 rotations (octahedron)
+    // Empirically determined rotation mapping for all 8 faces
+    if (dieKind === "d8") {
+      const faceTilt = 0.615; // ~35 degrees for proper face-flat orientation
+
+      // All 8 rotations mapped to their faces:
+      const rotationToFace = [
+        new Vector3(faceTilt, 0, Math.PI / 4),              // rotation 0 → face 1
+        new Vector3(-faceTilt, 0, -Math.PI / 4),            // rotation 1 → face 5
+        new Vector3(faceTilt, 0, -Math.PI / 4),             // rotation 2 → face 4
+        new Vector3(-faceTilt, 0, Math.PI / 4),             // rotation 3 → face 8
+        new Vector3(faceTilt, 0, 3 * Math.PI / 4),          // rotation 4 → face 2
+        new Vector3(-faceTilt, 0, -3 * Math.PI / 4),        // rotation 5 → face 6
+        new Vector3(faceTilt, 0, -3 * Math.PI / 4),         // rotation 6 → face 3
+        new Vector3(-faceTilt, 0, 3 * Math.PI / 4),         // rotation 7 → face 7
+      ];
+
+      // Map desired face value to correct rotation index
+      const valueToRotationIndex: Record<number, number> = {
+        1: 0,  // face 1 → use rotation 0
+        2: 4,  // face 2 → use rotation 4
+        3: 6,  // face 3 → use rotation 6
+        4: 2,  // face 4 → use rotation 2
+        5: 1,  // face 5 → use rotation 1
+        6: 5,  // face 6 → use rotation 5
+        7: 7,  // face 7 → use rotation 7
+        8: 3,  // face 8 → use rotation 3
+      };
+
+      const rotationIndex = valueToRotationIndex[value] ?? 0;
+      return rotationToFace[rotationIndex];
+    }
+
+    // D10/D100 rotations (pentagonal trapezohedron)
+    if (dieKind === "d10" || dieKind === "d100") {
+      const angleStep = (Math.PI * 2) / 10;
+      return new Vector3(
+        Math.PI / 6,
+        angleStep * (value % 10),
+        0
+      );
+    }
+
+    // D12 rotations (dodecahedron)
+    if (dieKind === "d12") {
+      const angleStep = (Math.PI * 2) / 12;
+      return new Vector3(
+        Math.PI / 5,
+        angleStep * (value - 1),
+        0
+      );
+    }
+
+    // D20 rotations (icosahedron)
+    if (dieKind === "d20") {
+      const angleStep = (Math.PI * 2) / 20;
+      return new Vector3(
+        Math.PI / 3,
+        angleStep * (value - 1),
+        0
+      );
+    }
+
+    // D4 - tetrahedral (special case, number is usually on bottom edges)
+    if (dieKind === "d4") {
+      const angleStep = (Math.PI * 2) / 3;
+      return new Vector3(
+        -Math.PI / 3,
+        angleStep * (value - 1),
+        0
+      );
+    }
+
+    // Default
+    return new Vector3(0, 0, 0);
+  }
+
+  /**
+   * Fallback: create placeholder die if geometry not loaded
+   */
+  private createPlaceholderDie(die: DieState): Mesh {
+    const mesh = MeshBuilder.CreateBox(die.id, { size: 1 }, this.scene);
+
+    const mat = new StandardMaterial(`${die.id}-mat`, this.scene);
+    const color = DIE_COLORS[this.colorIndex % DIE_COLORS.length];
+    mat.diffuseColor = color;
+    mat.specularColor = new Color3(1, 1, 1);
+    mat.specularPower = 128;
+
+    mesh.material = mat;
     this.meshes.set(die.id, mesh);
+    this.colorIndex++;
 
     return mesh;
-  }
-
-  private addValueLabel(mesh: Mesh, die: DieState) {
-    if (die.value === 0) return;
-
-    const mat = mesh.material as StandardMaterial;
-
-    if (die.def.kind === "d6") {
-      // For d6, create texture atlas with all 6 faces
-      // Layout: 3x2 grid (faces 1-6)
-      const texture = this.createD6Texture(mat.diffuseColor);
-      mat.diffuseTexture = texture;
-    } else {
-      // For polyhedral dice (d8, d10, d12, d20), show rolled value
-      const texture = this.createPolyhedralTexture(die, mat.diffuseColor);
-      mat.diffuseTexture = texture;
-      mat.emissiveTexture = texture;
-      mat.emissiveColor = new Color3(0.2, 0.2, 0.2);
-    }
-  }
-
-  private createD6Texture(baseColor: Color3): DynamicTexture {
-    // Create 3x2 grid for cube faces: standard die layout
-    // Top row: 1, 2, 3
-    // Bottom row: 4, 5, 6
-    const texture = new DynamicTexture("d6-atlas", { width: 1536, height: 1024 }, this.scene, false);
-    const ctx = texture.getContext() as CanvasRenderingContext2D;
-
-    const faceSize = 512;
-    const r = Math.floor(baseColor.r * 255);
-    const g = Math.floor(baseColor.g * 255);
-    const b = Math.floor(baseColor.b * 255);
-
-    // Draw all 6 faces
-    for (let i = 1; i <= 6; i++) {
-      const col = (i - 1) % 3;
-      const row = Math.floor((i - 1) / 3);
-      const x = col * faceSize;
-      const y = row * faceSize;
-
-      // Fill face background
-      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-      ctx.fillRect(x, y, faceSize, faceSize);
-
-      // Draw pips for this face
-      ctx.save();
-      ctx.translate(x, y);
-      this.drawPipsOnFace(ctx, i, faceSize);
-      ctx.restore();
-    }
-
-    texture.update();
-    return texture;
-  }
-
-  private createPolyhedralTexture(die: DieState, baseColor: Color3): DynamicTexture {
-    // Create texture with rolled value displayed on all faces
-    const texture = new DynamicTexture(`${die.id}-texture`, { width: 512, height: 512 }, this.scene, false);
-    const ctx = texture.getContext() as CanvasRenderingContext2D;
-
-    const r = Math.floor(baseColor.r * 255);
-    const g = Math.floor(baseColor.g * 255);
-    const b = Math.floor(baseColor.b * 255);
-    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-    ctx.fillRect(0, 0, 512, 512);
-
-    // For d10, display "0" instead of "10" (standard d10 convention)
-    const displayValue = die.def.kind === "d10" && die.value === 10 ? 0 : die.value;
-    this.drawEngravedNumeral(ctx, displayValue, "#F5F0E8");
-
-    texture.update();
-    return texture;
-  }
-
-  private drawPipsOnFace(ctx: CanvasRenderingContext2D, value: number, faceSize: number) {
-    const center = faceSize / 2;
-    const offset = faceSize * 0.235;
-    const pipRadius = faceSize * 0.098;
-
-    const positions: Record<number, Array<[number, number]>> = {
-      1: [[center, center]],
-      2: [[center - offset, center - offset], [center + offset, center + offset]],
-      3: [[center - offset, center - offset], [center, center], [center + offset, center + offset]],
-      4: [
-        [center - offset, center - offset],
-        [center + offset, center - offset],
-        [center - offset, center + offset],
-        [center + offset, center + offset],
-      ],
-      5: [
-        [center - offset, center - offset],
-        [center + offset, center - offset],
-        [center, center],
-        [center - offset, center + offset],
-        [center + offset, center + offset],
-      ],
-      6: [
-        [center - offset, center - offset * 1.1],
-        [center - offset, center],
-        [center - offset, center + offset * 1.1],
-        [center + offset, center - offset * 1.1],
-        [center + offset, center],
-        [center + offset, center + offset * 1.1],
-      ],
-    };
-
-    const pips = positions[value] || [];
-
-    // Draw pips with concave effect
-    pips.forEach(([x, y]) => {
-      // Draw base bright white pip
-      ctx.fillStyle = "#ffffff";
-      ctx.beginPath();
-      ctx.arc(x, y, pipRadius, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  }
-
-  private drawPips(ctx: CanvasRenderingContext2D, value: number, color: string) {
-    // Legacy function - use drawPipsOnFace instead
-    const center = 256;
-    const offset = 120;
-    const pipRadius = 50;
-
-    const positions: Record<number, Array<[number, number]>> = {
-      1: [[center, center]],
-      2: [[center - offset, center - offset], [center + offset, center + offset]],
-      3: [[center - offset, center - offset], [center, center], [center + offset, center + offset]],
-      4: [
-        [center - offset, center - offset],
-        [center + offset, center - offset],
-        [center - offset, center + offset],
-        [center + offset, center + offset],
-      ],
-      5: [
-        [center - offset, center - offset],
-        [center + offset, center - offset],
-        [center, center],
-        [center - offset, center + offset],
-        [center + offset, center + offset],
-      ],
-      6: [
-        [center - offset, center - 130],
-        [center - offset, center],
-        [center - offset, center + 130],
-        [center + offset, center - 130],
-        [center + offset, center],
-        [center + offset, center + 130],
-      ],
-    };
-
-    const pips = positions[value] || [];
-
-    // Draw each pip (filled circle)
-    pips.forEach(([x, y]) => {
-      // Main pip in white
-      ctx.fillStyle = "#ffffff";
-      ctx.beginPath();
-      ctx.arc(x, y, pipRadius, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  }
-
-  private drawEngravedNumeral(ctx: CanvasRenderingContext2D, value: number, color: string) {
-    // Draw numeral in white for better visibility
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = "bold 320px Arial, sans-serif";
-
-    // Main numeral in white
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(value.toString(), 256, 256);
   }
 
   updateDie(die: DieState) {
     const mesh = this.meshes.get(die.id);
     if (!mesh) return;
 
-    this.addValueLabel(mesh, die);
-
     // Update selection state
     if (mesh.material instanceof StandardMaterial) {
       if (this.selectedMeshes.has(die.id)) {
         mesh.material.emissiveColor = new Color3(1, 1, 0.3);
       } else {
-        mesh.material.emissiveColor = new Color3(0.1, 0.1, 0.1);
+        mesh.material.emissiveColor = new Color3(0, 0, 0);
       }
     }
   }
@@ -385,10 +481,8 @@ export class DiceRenderer {
     if (!mesh) return;
 
     if (selected) {
-      // Add golden glow around selected die
       this.highlightLayer.addMesh(mesh, new Color3(1, 0.8, 0));
     } else {
-      // Remove glow from deselected die
       this.highlightLayer.removeMesh(mesh);
     }
   }
@@ -415,33 +509,23 @@ export class DiceRenderer {
       const offsetX = (col - cols / 2) * spacing;
       const offsetZ = (row - Math.floor(activeDice.length / cols) / 2) * spacing;
 
-      // Add random position variation
       const randomX = offsetX + (Math.random() - 0.5) * 1.5;
       const randomZ = offsetZ + (Math.random() - 0.5) * 1.5;
 
-      // Animate from above - adjust landing height based on die type
       const startY = 15;
-      let endY = 0.6; // Default for d6
-
-      // Raise d8 and d12 so they don't sink into the table
-      if (die.def.kind === "d8") {
-        endY = 0.8;
-      } else if (die.def.kind === "d12") {
-        endY = 0.9;
-      } else if (die.def.kind === "d4") {
-        endY = 0.7;
-      } else if (die.def.kind === "d20") {
-        endY = 0.95;
-      }
+      const endY = 0.6;
 
       mesh.position = new Vector3(randomX, startY, randomZ);
 
-      // Get correct face-up rotation based on die value
-      const faceRotation = this.getFaceUpRotation(die.def.kind, die.value);
+      // Calculate rotation to show the rolled value face-up
+      const baseRotation = this.getRotationForValue(die.def.kind, die.value);
+
+      // Add random Y-axis rotation for natural variation
+      const randomYRotation = Math.random() * Math.PI * 2;
       const finalRotation = new Vector3(
-        faceRotation.x,
-        Math.random() * Math.PI * 2, // Y: random spin for variety
-        faceRotation.z
+        baseRotation.x,
+        baseRotation.y + randomYRotation,
+        baseRotation.z
       );
 
       const startRotation = new Vector3(
@@ -451,10 +535,9 @@ export class DiceRenderer {
       );
       mesh.rotation = startRotation;
 
-      // Varying animation speed for more natural look
-      const animDuration = 30 + Math.random() * 10; // 30-40 frames
+      const animDuration = 30 + Math.random() * 10;
 
-      // Drop animation with bounce
+      // Drop animation
       const dropAnim = new Animation(
         `${die.id}-drop`,
         "position.y",
@@ -465,13 +548,13 @@ export class DiceRenderer {
 
       dropAnim.setKeys([
         { frame: 0, value: startY },
-        { frame: animDuration * 0.7, value: endY - 0.1 }, // Slight dip below surface
-        { frame: animDuration * 0.85, value: endY + 0.3 }, // First bounce
-        { frame: animDuration * 0.95, value: endY + 0.1 }, // Small bounce
-        { frame: animDuration, value: endY }, // Settle
+        { frame: animDuration * 0.7, value: endY - 0.1 },
+        { frame: animDuration * 0.85, value: endY + 0.3 },
+        { frame: animDuration * 0.95, value: endY + 0.1 },
+        { frame: animDuration, value: endY },
       ]);
 
-      // Rotation animation - chaotic tumbling then settle
+      // Rotation animation
       const rotAnim = new Animation(
         `${die.id}-rotate`,
         "rotation",
@@ -480,7 +563,6 @@ export class DiceRenderer {
         Animation.ANIMATIONLOOPMODE_CONSTANT
       );
 
-      // Mid-air chaotic rotation
       const midRotation = new Vector3(
         startRotation.x + (Math.random() - 0.5) * Math.PI * 4,
         startRotation.y + (Math.random() - 0.5) * Math.PI * 6,
@@ -489,8 +571,8 @@ export class DiceRenderer {
 
       rotAnim.setKeys([
         { frame: 0, value: startRotation },
-        { frame: animDuration * 0.25, value: midRotation }, // Wild tumbling mid-air
-        { frame: animDuration, value: finalRotation }, // Settle to correct face
+        { frame: animDuration * 0.25, value: midRotation },
+        { frame: animDuration, value: finalRotation },
       ]);
 
       const ease = new CubicEase();
@@ -504,7 +586,6 @@ export class DiceRenderer {
       });
     });
 
-    // Increase timeout to account for varying animation durations
     setTimeout(onComplete, 1000);
   }
 
@@ -515,61 +596,41 @@ export class DiceRenderer {
       return;
     }
 
-    // Count how many dice are already scored (not counting the ones we're about to score)
     const alreadyScored = dice.filter((d) => d.scored && !selected.has(d.id)).length;
 
-    // Grid layout configuration for scored area
-    const gridCols = 3; // 3 dice per row
-    const gridRows = 4; // 4 rows before stacking
-    const maxGridDice = gridCols * gridRows; // 12 dice in grid
-    const spacingX = 1.5; // Space between dice columns
-    const spacingZ = 1.5; // Space between dice rows
-    const baseX = 12; // X position of scored area (moved right to scoring section)
-    const baseZ = -3; // Starting Z position
-    const baseY = 0.6; // Ground level
+    const gridCols = 3;
+    const gridRows = 4;
+    const maxGridDice = gridCols * gridRows;
+    const spacingX = 1.5;
+    const spacingZ = 1.5;
+    const baseX = 12;
+    const baseZ = -3;
+    const baseY = 0.6;
 
     toScore.forEach((die, i) => {
       const mesh = this.meshes.get(die.id);
       if (!mesh) return;
 
-      // Remove highlight glow when scoring
       this.highlightLayer.removeMesh(mesh);
 
-      // Calculate position based on total scored count
       const totalIndex = alreadyScored + i;
-
       let targetX: number, targetY: number, targetZ: number;
 
       if (totalIndex < maxGridDice) {
-        // Grid layout - spread in both X and Z dimensions
         const row = Math.floor(totalIndex / gridCols);
         const col = totalIndex % gridCols;
-
-        // Center the grid by offsetting based on number of columns
         const offsetX = (col - (gridCols - 1) / 2) * spacingX;
 
         targetX = baseX + offsetX;
         targetY = baseY;
-        targetZ = baseZ + (row * spacingZ);
+        targetZ = baseZ + row * spacingZ;
       } else {
-        // Stack vertically when grid is full (in center of grid)
         const stackIndex = totalIndex - maxGridDice;
-        const stackSpacing = 1.3;
-
         targetX = baseX;
-        targetY = baseY + (stackIndex * stackSpacing);
-        targetZ = baseZ + (1.5 * spacingZ); // Center of grid
+        targetY = baseY + stackIndex * 1.3;
+        targetZ = baseZ + 1.5 * spacingZ;
       }
 
-      // Get face-up rotation for the die's value
-      const faceRotation = this.getFaceUpRotation(die.def.kind, die.value);
-      const targetRotation = new Vector3(
-        faceRotation.x,
-        0, // No Y rotation for scored dice
-        faceRotation.z
-      );
-
-      // Slide to scored area
       const moveAnim = new Animation(
         `${die.id}-score`,
         "position",
@@ -583,21 +644,22 @@ export class DiceRenderer {
         { frame: 20, value: new Vector3(targetX, targetY, targetZ) },
       ]);
 
-      // Rotate to face-up position
-      const rotateAnim = new Animation(
-        `${die.id}-score-rotate`,
+      // Reset rotation to clean orientation while keeping value face-up
+      const baseRotation = this.getRotationForValue(die.def.kind, die.value);
+      const rotAnim = new Animation(
+        `${die.id}-score-rot`,
         "rotation",
         60,
         Animation.ANIMATIONTYPE_VECTOR3,
         Animation.ANIMATIONLOOPMODE_CONSTANT
       );
 
-      rotateAnim.setKeys([
+      rotAnim.setKeys([
         { frame: 0, value: mesh.rotation.clone() },
-        { frame: 20, value: targetRotation },
+        { frame: 20, value: baseRotation },
       ]);
 
-      mesh.animations = [moveAnim, rotateAnim];
+      mesh.animations = [moveAnim, rotAnim];
       this.scene.beginAnimation(mesh, 0, 20, false);
     });
 
@@ -613,84 +675,118 @@ export class DiceRenderer {
   }
 
   clearDice(): void {
-    // Dispose all meshes
     this.meshes.forEach((mesh) => {
       mesh.dispose();
     });
-
-    // Clear all maps
     this.meshes.clear();
     this.dieColors.clear();
-
-    // Reset color index
     this.colorIndex = 0;
   }
 
+  private colorToHex(color: Color3): string {
+    const r = Math.floor(color.r * 255)
+      .toString(16)
+      .padStart(2, "0");
+    const g = Math.floor(color.g * 255)
+      .toString(16)
+      .padStart(2, "0");
+    const b = Math.floor(color.b * 255)
+      .toString(16)
+      .padStart(2, "0");
+    return `#${r}${g}${b}`;
+  }
+
   /**
-   * Calculate rotation needed to show specific face value pointing up
-   * For d6: Maps face values 1-6 to rotations that show that face on top
+   * Create debug dice showing all face values for a specific die type
+   * Used by the debug view for rotation testing
    */
-  private getFaceUpRotation(kind: DieKind, value: number): Vector3 {
-    switch (kind) {
-      case "d6":
-        // Babylon.js cube faces with our faceUV mapping:
-        // faceMap: [1, 6, 2, 5, 3, 4] maps to cube faces [front, back, right, left, top, bottom]
-        // Default orientation: face 3 on top, face 4 on bottom
-        // Based on testing: 5 is correct at (0, 0, Math.PI / 2)
-        // Working backwards from observed results to find correct rotations
-        const d6Rotations: Record<number, Vector3> = {
-          1: new Vector3(-Math.PI, 0, 0),            // Correct
-          2: new Vector3(0, 0, -Math.PI / 2),        // Right -> top
-          3: new Vector3(Math.PI / 2, 0, 0),         // Swapped with 6
-          4: new Vector3(-Math.PI / 2, 0, 0),        // Correct
-          5: new Vector3(0, 0, Math.PI / 2),         // Correct
-          6: new Vector3(0, 0, 0),                    // Swapped with 3
-        };
-        return d6Rotations[value] || new Vector3(0, 0, 0);
+  createDebugDice(dieKind: DieKind, faceCount: number): void {
+    if (!this.geometryLoaded) {
+      console.warn("⚠️ Geometry not loaded yet for debug dice");
+      return;
+    }
 
-      // For polyhedra, keep flat for now (would need face normal calculations)
-        // For d8 and d12, add slight tilt so they look like they landed on a face
-      case "d8":
-        // Octahedron - tilt to rest on one triangular face
-        return new Vector3(
-            Math.PI / 8 + (Math.random() - 0.5) * 0.2,
-            0,
-            Math.PI / 8 + (Math.random() - 0.5) * 0.2
-        );
+    this.isDebugMode = true;
 
-      case "d12":
-        // Dodecahedron - tilt to rest on one pentagonal face
-        return new Vector3(
-            Math.PI / 6 + (Math.random() - 0.5) * 0.3,
-            0,
-            Math.PI / 7 + (Math.random() - 0.5) * 0.3
-        );
+    // Grid layout parameters - adjust spacing based on die type
+    const spacing = DIE_SIZES[dieKind] * 2.5;
+    const columns = Math.min(faceCount, 10); // Max 10 per row
+    const startX = -(columns - 1) * spacing / 2;
+    const startZ = faceCount > 10 ? spacing : 0;
 
-      case "d4":
-        // Tetrahedron - point up
-        return new Vector3(-Math.PI / 3, 0, 0);
+    // Row offset for different die types (stagger vertically)
+    const dieTypeOffsets: Record<DieKind, number> = {
+      d4: 12,
+      d6: 8,
+      d8: 4,
+      d10: 0,
+      d12: -4,
+      d20: -8,
+    };
+    const rowOffset = dieTypeOffsets[dieKind];
 
-      case "d10":
-      case "d20":
-      default:
-        // Keep relatively flat for d10 and d20
-        return new Vector3(
-            (Math.random() - 0.5) * 0.3,
-            0,
-            (Math.random() - 0.5) * 0.3
-        );
+    for (let value = 1; value <= faceCount; value++) {
+      // For d10, display 0-9 instead of 1-10
+      const displayValue = dieKind === "d10" ? (value === 10 ? 0 : value) : value;
+
+      // Calculate grid position
+      const col = (value - 1) % columns;
+      const row = Math.floor((value - 1) / columns);
+      const x = startX + col * spacing;
+      const z = startZ - row * spacing * 1.2 + rowOffset;
+      const y = 2; // Elevated above ground
+
+      // Create die at position with specific rotation
+      const dieId = `debug_${dieKind}_${displayValue}`;
+      const die: DieState = {
+        id: dieId,
+        def: { kind: dieKind, sides: faceCount },
+        value: displayValue,
+        inPlay: true,
+        scored: false,
+      };
+
+      // Create the die
+      const mesh = this.createDie(die);
+
+      // Set position
+      mesh.position = new Vector3(x, y, z);
+
+      // Get rotation for this value (no random Y-axis for debug)
+      const rotation = this.getRotationForValue(dieKind, displayValue);
+
+      // Apply rotation directly without animation
+      mesh.rotation = rotation;
+      this.debugMeshes.set(dieId, mesh);
     }
   }
 
-  private colorToHex(color: Color3): string {
-    const r = Math.floor(color.r * 255).toString(16).padStart(2, '0');
-    const g = Math.floor(color.g * 255).toString(16).padStart(2, '0');
-    const b = Math.floor(color.b * 255).toString(16).padStart(2, '0');
-    return `#${r}${g}${b}`;
+  /**
+   * Clear all debug dice from the scene
+   */
+  clearDebugDice(): void {
+    this.debugMeshes.forEach((mesh, id) => {
+      mesh.dispose();
+      this.meshes.delete(id);
+    });
+    this.debugMeshes.clear();
+    this.isDebugMode = false;
   }
 
   dispose() {
     this.meshes.forEach((mesh) => mesh.dispose());
     this.meshes.clear();
+
+    // Dispose template meshes
+    this.templateMeshes.forEach((mesh) => mesh.dispose());
+    this.templateMeshes.clear();
+
+    // Dispose materials
+    this.materialLight?.dispose();
+    this.materialDark?.dispose();
+
+    // Dispose debug meshes
+    this.debugMeshes.forEach((mesh) => mesh.dispose());
+    this.debugMeshes.clear();
   }
 }
