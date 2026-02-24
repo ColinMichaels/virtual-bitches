@@ -141,10 +141,14 @@ class Game {
 
     // Setup tutorial
     tutorialModal.setOnComplete(() => {
-      // After tutorial, update hint mode in case Easy Mode was enabled
+      // After tutorial, update hint mode based on actual difficulty setting
       const settings = settingsService.getSettings();
       const hintsEnabled = shouldShowHints({ difficulty: settings.game.difficulty, variant: "classic" });
       this.diceRow.setHintMode(hintsEnabled);
+
+      // Update game state mode to match settings
+      this.state.mode.difficulty = settings.game.difficulty;
+
       this.updateUI();
     });
 
