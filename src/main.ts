@@ -140,7 +140,7 @@ class Game {
       events.forEach((event) => document.removeEventListener(event, handler));
     };
 
-    events.forEach((event) => document.addEventListener(event, handler, { once: true }));
+    events.forEach((event) => document.addEventListener(event, handler, { once: true, passive: true }));
   }
 
   private generateSeed(): string {
