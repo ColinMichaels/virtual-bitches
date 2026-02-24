@@ -45,9 +45,10 @@ export async function loadDiceGeometry(): Promise<DiceGeometryFile> {
     return geometryData;
   }
 
-  const response = await fetch("./src/assets/textures/smooth-pip/smoothDice.json");
+  const basePath = import.meta.env.BASE_URL || './';
+  const response = await fetch(`${basePath}assets/themes/diceOfRolling/smoothDice.json`);
   if (!response.ok) {
-    throw new Error(`Failed to load dice geometry: ${response.statusText}`);
+    throw new Error(`Failed to load geometry: ${response.statusText}`);
   }
 
   geometryData = await response.json();

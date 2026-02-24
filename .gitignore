@@ -5,6 +5,9 @@ node_modules/
 dist/
 *.local
 
+# Generated assets (copied during build)
+public/rules.md
+
 # Logs
 logs
 *.log

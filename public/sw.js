@@ -115,8 +115,15 @@ async function cacheFirst(request) {
   } catch (error) {
     console.error('[SW] Fetch failed:', error);
 
+    // Silently fail for missing icons (they're optional)
+    const url = new URL(request.url);
+    if (url.pathname.includes('icon-') || url.pathname.includes('screenshot-')) {
+      console.log('[SW] Icon/screenshot not found, skipping gracefully');
+      return new Response('', { status: 404 });
+    }
+
     // Return offline fallback if available
-    const fallback = await caches.match('/index.html');
+    const fallback = await caches.match('./index.html');
     if (fallback) {
       return fallback;
     }

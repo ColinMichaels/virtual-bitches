@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:dev": "vite --mode development",
-    "build": "tsc && vite build",
-    "build:dev": "tsc && vite build --mode development",
-    "build:prod": "tsc && vite build --mode production",
+    "copy:assets": "cp src/content/rules.md public/rules.md",
+    "dev": "npm run copy:assets && vite",
+    "dev:dev": "npm run copy:assets && vite --mode development",
+    "build": "npm run copy:assets && tsc && vite build",
+    "build:dev": "npm run copy:assets && tsc && vite build --mode development",
+    "build:prod": "npm run copy:assets && tsc && vite build --mode production",
     "preview": "vite preview",
     "test": "tsx src/engine/rules.test.ts",
     "deploy": "npm run build && npx gh-pages -d dist"
@@ -21,6 +22,7 @@
     "gh-pages": "^6.3.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "vite-plugin-static-copy": "^3.2.0"
   }
 }

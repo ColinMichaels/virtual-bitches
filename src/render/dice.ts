@@ -338,7 +338,8 @@ export class DiceRenderer {
    * Load materials for a specific theme configuration
    */
   private async loadMaterialsForTheme(themeConfig: any, isFallback: boolean = false): Promise<void> {
-    const themePath = `/assets/themes/${themeConfig.systemName}`;
+    const baseUrl = import.meta.env.BASE_URL || './';
+    const themePath = `${baseUrl}assets/themes/${themeConfig.systemName}`;
 
     if (themeConfig.material.type === 'standard') {
       await this.createStandardMaterialForTheme(themeConfig, themePath, isFallback);

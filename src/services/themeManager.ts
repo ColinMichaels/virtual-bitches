@@ -341,7 +341,8 @@ class ThemeManager {
    * @returns Path to current theme folder
    */
   getCurrentThemePath(): string {
-    return `/assets/themes/${this.currentTheme}`;
+    const basePath = import.meta.env.BASE_URL || './';
+    return `${basePath}assets/themes/${this.currentTheme}`;
   }
 
   /**
@@ -351,7 +352,8 @@ class ThemeManager {
    * @returns Path to theme folder
    */
   getThemePath(themeName: string): string {
-    return `/assets/themes/${themeName}`;
+    const basePath = import.meta.env.BASE_URL || './';
+    return `${basePath}assets/themes/${themeName}`;
   }
 
   /**
