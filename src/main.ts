@@ -12,6 +12,8 @@ import { createGame, reduce, generateShareURL, deserializeActions, replay } from
 import { GameState, Action } from "./engine/types.js";
 import { PointerEventTypes } from "@babylonjs/core";
 import { audioService } from "./services/audio.js";
+import { hapticsService } from "./services/haptics.js";
+import { pwaService } from "./services/pwa.js";
 import { scoreHistoryService } from "./services/score-history.js";
 import { environment } from "@env";
 import { settingsService } from "./services/settings.js";
@@ -43,7 +45,6 @@ class Game {
   private viewLeaderboardBtn: HTMLButtonElement;
   private settingsGearBtn: HTMLButtonElement;
   private leaderboardBtn: HTMLButtonElement;
-  private debugViewBtn: HTMLButtonElement;
 
   constructor() {
     // Parse URL for replay
@@ -78,13 +79,6 @@ class Game {
     this.settingsGearBtn = document.getElementById("settings-gear-btn") as HTMLButtonElement;
 
     this.leaderboardBtn = document.getElementById("leaderboard-btn") as HTMLButtonElement;
-    this.debugViewBtn = document.getElementById("debug-view-btn") as HTMLButtonElement;
-
-    // Temp test button for dice testing
-    const testNewGameBtn = document.getElementById("test-new-game-btn") as HTMLButtonElement;
-    if (testNewGameBtn) {
-      testNewGameBtn.addEventListener("click", () => this.startNewGame());
-    }
 
     // Initialize modals (shared with splash)
     this.settingsModal = settingsModal;
@@ -151,41 +145,41 @@ class Game {
     // Multipurpose action button - handles both roll and score
     this.actionBtn.addEventListener("click", () => {
       audioService.playSfx("click");
+      hapticsService.buttonPress();
       this.handleAction();
     });
 
     // Deselect all button
     this.deselectBtn.addEventListener("click", () => {
       audioService.playSfx("click");
+      hapticsService.buttonPress();
       this.handleDeselectAll();
     });
 
     this.newGameBtn.addEventListener("click", () => {
       audioService.playSfx("click");
+      hapticsService.buttonPress();
       this.handleNewGame();
     });
 
     this.viewLeaderboardBtn.addEventListener("click", () => {
       audioService.playSfx("click");
+      hapticsService.buttonPress();
       this.leaderboardModal.show();
     });
 
     // Settings gear button
     this.settingsGearBtn.addEventListener("click", () => {
       audioService.playSfx("click");
+      hapticsService.buttonPress();
       this.togglePause();
     });
 
     // Leaderboard button
     this.leaderboardBtn.addEventListener("click", () => {
       audioService.playSfx("click");
+      hapticsService.buttonPress();
       this.leaderboardModal.show();
-    });
-
-    // Debug view button
-    this.debugViewBtn.addEventListener("click", () => {
-      audioService.playSfx("click");
-      this.debugView.show();
     });
 
     // Camera controls
@@ -193,6 +187,7 @@ class Game {
     cameraButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         audioService.playSfx("click");
+        hapticsService.buttonPress();
         const view = btn.getAttribute("data-view") as "default" | "top" | "side" | "front";
         this.scene.setCameraView(view);
       });
@@ -251,10 +246,26 @@ class Game {
         }
       }
 
-      // 'D' key - deselect all (when dice are selected)
-      if (e.code === "KeyD" && this.state.status === "ROLLED" && this.state.selected.size > 0 && !this.animating && !this.paused) {
+      // 'X' key - deselect all (when dice are selected)
+      if (e.code === "KeyX" && this.state.status === "ROLLED" && this.state.selected.size > 0 && !this.animating && !this.paused) {
         e.preventDefault();
         this.handleDeselectAll();
+      }
+
+      // 'N' key - new game
+      if (e.code === "KeyN" && !this.animating) {
+        e.preventDefault();
+        audioService.playSfx("click");
+        hapticsService.buttonPress();
+        this.startNewGame();
+      }
+
+      // 'D' key - debug view
+      if (e.code === "KeyD" && !this.animating) {
+        e.preventDefault();
+        audioService.playSfx("click");
+        hapticsService.buttonPress();
+        this.debugView.show();
       }
     });
   }
@@ -320,17 +331,20 @@ class Game {
     if (this.state.status === "READY") {
       notificationService.show("Roll First!", "warning");
       audioService.playSfx("click");
+      hapticsService.invalid();
       return;
     }
 
     if (this.state.status === "COMPLETE") {
       notificationService.show("Game Over!", "warning");
       audioService.playSfx("click");
+      hapticsService.invalid();
       return;
     }
 
     if (die && die.inPlay && !die.scored && this.state.status === "ROLLED") {
       audioService.playSfx("select");
+      hapticsService.select();
       this.dispatch({ t: "TOGGLE_SELECT", dieId });
     }
   }
@@ -390,7 +404,7 @@ class Game {
       // Show notification about keyboard controls on first use
       const hasSeenKeyboardHint = sessionStorage.getItem("keyboardHintShown");
       if (!hasSeenKeyboardHint) {
-        notificationService.show("← → to navigate, Enter to select, D to deselect all", "info");
+        notificationService.show("← → to navigate, Enter to select, X to deselect | N=New Game, D=Debug", "info");
         sessionStorage.setItem("keyboardHintShown", "true");
       }
     }
@@ -402,6 +416,7 @@ class Game {
     // Invalid action reminder
     if (this.state.status === "ROLLED") {
       notificationService.show("Score Dice First!", "warning");
+      hapticsService.invalid();
       return;
     }
 
@@ -410,8 +425,9 @@ class Game {
     this.animating = true;
     this.dispatch({ t: "ROLL" });
 
-    // Play roll sound
+    // Play roll sound and haptic feedback
     audioService.playSfx("roll");
+    hapticsService.roll();
 
     this.diceRenderer.animateRoll(this.state.dice, () => {
       this.animating = false;
@@ -437,8 +453,9 @@ class Game {
     const scoredDice = this.state.dice.filter((d) => selected.has(d.id));
     const points = scoredDice.reduce((sum, die) => sum + (die.def.sides - die.value), 0);
 
-    // Play score sound
+    // Play score sound and haptic feedback
     audioService.playSfx("score");
+    hapticsService.score();
 
     this.diceRenderer.animateScore(this.state.dice, selected, () => {
       this.animating = false;
@@ -553,8 +570,9 @@ class Game {
   }
 
   private showGameOver() {
-    // Play game over sound
+    // Play game over sound and haptic feedback
     audioService.playSfx("gameOver");
+    hapticsService.gameComplete();
 
     // Celebrate game completion with particles
     this.scene.celebrateSuccess("complete");

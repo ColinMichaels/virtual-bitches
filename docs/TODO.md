@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Evening)
+**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Keyboard Shortcuts & Mobile UX Complete)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -63,6 +63,62 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ---
 
 ## 🟡 Medium Priority
+
+### Recently Completed (Session 2026-02-24)
+
+#### UI Cleanup - Keyboard Shortcuts
+- **Status**: ✅ COMPLETE
+- **Changes**:
+  - Removed "New Game" and "Debug View" buttons from UI
+  - Added keyboard shortcuts: **N** for New Game, **D** for Debug View
+  - Changed deselect shortcut from **D** to **X** to avoid conflict
+  - Updated all documentation and tutorials with new shortcuts
+- **Result**: Cleaner UI with keyboard-first control scheme
+- **Files Modified**:
+  - `index.html` - Removed button elements
+  - `src/main.ts` - Added keyboard handlers, removed button listeners
+  - `src/ui/tutorial.ts` - Updated controls documentation
+
+#### Mobile/Touch UX Enhancements
+- **Status**: ✅ COMPLETE
+- **Implemented Features**:
+  - **Touch Target Sizes**: All interactive elements now meet 44px minimum (Apple/Android guidelines)
+    - Settings/Leaderboard buttons: 36-40px → 44px
+    - Camera controls: 32-38px → 44px
+    - Dice touch targets: 42-48px → 46-50px
+    - Increased spacing between elements (5-8px gaps)
+  - **Touch Visual Feedback**: Added `:active` states with scale transforms
+    - Buttons, dice, camera controls all have touch feedback
+    - `-webkit-tap-highlight-color: transparent` to prevent default highlight
+  - **Passive Event Listeners**: Touch events marked as `passive: true` for better scroll performance
+  - **iOS Safe Area Support**:
+    - Added `viewport-fit=cover` to meta tag
+    - Implemented `env(safe-area-inset-*)` for all edges
+    - All UI elements respect iPhone notches and home indicators
+  - **Haptic Feedback**:
+    - Created `src/services/haptics.ts` with Vibration API
+    - Patterns: light, medium, heavy, selection, success, warning, error
+    - Integrated throughout game (rolls, selections, scores, buttons)
+    - Settings toggle (auto-hides on unsupported devices)
+  - **PWA Support**:
+    - Created `public/manifest.json` with app metadata
+    - Created `public/sw.js` with service worker for offline caching
+    - Implemented `src/services/pwa.ts` for install prompts and updates
+    - Install banner with 7-day dismissal cooldown
+    - App shortcuts (New Game, Leaderboard)
+    - Offline play capability
+- **Files Created**:
+  - `src/services/haptics.ts`
+  - `src/services/pwa.ts`
+  - `public/manifest.json`
+  - `public/sw.js`
+- **Files Modified**:
+  - `src/styles.css` (touch targets, active states, PWA UI, safe area support)
+  - `src/main.ts` (haptic integration)
+  - `src/ui/settings.ts` (haptics toggle)
+  - `src/services/settings.ts` (haptics setting)
+  - `index.html` (PWA meta tags, manifest link)
+- **Result**: Native-like mobile experience with haptics, offline support, and touch-optimized UI
 
 ### In-Progress Work
 

@@ -5,6 +5,7 @@
 
 import { settingsService, Settings } from "../services/settings.js";
 import { audioService } from "../services/audio.js";
+import { hapticsService } from "../services/haptics.js";
 import { ThemeSwitcher } from "./themeSwitcher.js";
 
 export class SettingsModal {
@@ -58,6 +59,13 @@ export class SettingsModal {
             <label>
               <input type="checkbox" id="music-enabled" ${this.settings.audio.musicEnabled ? "checked" : ""}>
               Enable Music
+            </label>
+          </div>
+
+          <div class="setting-row" ${hapticsService.isSupported() ? '' : 'style="display:none;"'}>
+            <label>
+              <input type="checkbox" id="haptics-enabled" ${this.settings.haptics !== false ? "checked" : ""}>
+              Enable Haptic Feedback
             </label>
           </div>
         </div>
@@ -189,6 +197,18 @@ export class SettingsModal {
         audioService.stopMusic();
       }
     });
+
+    // Haptics enabled (only if supported)
+    if (hapticsService.isSupported()) {
+      const hapticsEnabled = document.getElementById("haptics-enabled") as HTMLInputElement;
+      hapticsEnabled?.addEventListener("change", () => {
+        hapticsService.setEnabled(hapticsEnabled.checked);
+        if (hapticsEnabled.checked) {
+          hapticsService.buttonPress(); // Test vibration
+        }
+        audioService.playSfx("click");
+      });
+    }
 
     // Graphics quality
     const graphicsQuality = document.getElementById("graphics-quality") as HTMLSelectElement;

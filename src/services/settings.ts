@@ -39,6 +39,7 @@ export interface Settings {
   display: DisplaySettings;
   controls: ControlSettings;
   game: GameSettings;
+  haptics?: boolean; // Optional for backwards compatibility
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -65,6 +66,7 @@ const DEFAULT_SETTINGS: Settings = {
     add2ndD10: false,
     d100Mode: false,
   },
+  haptics: true,
 };
 
 const STORAGE_KEY = "biscuits-settings";
@@ -147,6 +149,15 @@ export class SettingsService {
    */
   updateControls(controls: Partial<ControlSettings>): void {
     this.settings.controls = { ...this.settings.controls, ...controls };
+    this.saveSettings();
+    this.notifyListeners();
+  }
+
+  /**
+   * Update haptics setting
+   */
+  updateHaptics(enabled: boolean): void {
+    this.settings.haptics = enabled;
     this.saveSettings();
     this.notifyListeners();
   }
