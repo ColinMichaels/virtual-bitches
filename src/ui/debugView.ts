@@ -7,6 +7,9 @@ import { DiceRenderer } from "../render/dice.js";
 import { GameScene } from "../render/scene.js";
 import { DieKind } from "../engine/types.js";
 import { themeManager } from "../services/themeManager.js";
+import { logger } from "../utils/logger.js";
+
+const log = logger.create('DebugView');
 
 const DICE_CONFIG: Array<{ kind: DieKind; faces: number; label: string }> = [
   { kind: "d4", faces: 4, label: "D4 (4 faces)" },
@@ -24,6 +27,7 @@ export class DebugView {
   private scene: GameScene;
   private onToggle: (isDebugMode: boolean) => void;
   private currentDieIndex = 2; // Start with d8 (index 2)
+  private useLightMaterial = false; // Toggle between dark/light material variants
 
   constructor(diceRenderer: DiceRenderer, scene: GameScene, onToggle: (isDebugMode: boolean) => void) {
     this.diceRenderer = diceRenderer;
@@ -70,6 +74,14 @@ export class DebugView {
           </div>
 
           <div class="debug-control-group">
+            <label>Material Variant</label>
+            <select id="debug-material-variant" class="debug-material-variant">
+              <option value="dark">Dark (light pips)</option>
+              <option value="light">Light (dark pips)</option>
+            </select>
+          </div>
+
+          <div class="debug-control-group">
             <label>Scale U: <span id="scale-u-value">1.9</span></label>
             <input type="range" id="scale-u-slider" min="0.5" max="3.0" step="0.01" value="1.9">
           </div>
@@ -90,6 +102,14 @@ export class DebugView {
           </div>
 
           <button id="debug-save-btn" class="debug-save-btn">Save to Console</button>
+          <button id="debug-reset-btn" class="debug-reset-btn">Reset to Theme Defaults</button>
+        </div>
+
+        <div class="debug-info">
+          <h3>Current Theme Info</h3>
+          <div id="debug-theme-info">
+            <!-- Theme info will be populated here -->
+          </div>
         </div>
 
         <div class="debug-instructions">
@@ -100,7 +120,9 @@ export class DebugView {
             <li>Use ← → buttons to switch dice types</li>
             <li>Adjust texture sliders to fix mapping</li>
             <li>Click "Save to Console" to log values</li>
+            <li>Click "Reset" to restore theme defaults</li>
           </ul>
+          <p><strong>Tip:</strong> For d10/d12/d20 with smooth-pip theme, you'll see the fallback smooth theme with numbers instead of pips.</p>
         </div>
       </div>
     `;
@@ -112,6 +134,7 @@ export class DebugView {
     document.getElementById("debug-prev-btn")?.addEventListener("click", () => this.previousDie());
     document.getElementById("debug-next-btn")?.addEventListener("click", () => this.nextDie());
     document.getElementById("debug-save-btn")?.addEventListener("click", () => this.saveTextureSettings());
+    document.getElementById("debug-reset-btn")?.addEventListener("click", () => this.resetToThemeDefaults());
 
     // Theme selector
     document.getElementById("debug-theme-select")?.addEventListener("change", (e) => {
@@ -121,6 +144,13 @@ export class DebugView {
       this.loadThemeTextureSettings();
       // Re-render dice after theme change
       setTimeout(() => this.renderCurrentDie(), 500);
+    });
+
+    // Material variant selector
+    document.getElementById("debug-material-variant")?.addEventListener("change", (e) => {
+      this.useLightMaterial = (e.target as HTMLSelectElement).value === "light";
+      // Re-render dice with new material variant
+      this.renderCurrentDie();
     });
 
     // Populate theme dropdown
@@ -165,8 +195,13 @@ export class DebugView {
     const offsetU = parseFloat((document.getElementById("offset-u-slider") as HTMLInputElement).value);
     const offsetV = parseFloat((document.getElementById("offset-v-slider") as HTMLInputElement).value);
 
-    // Update the dice renderer's texture mapping
-    this.diceRenderer.updateTextureMapping(scaleU, scaleV, offsetU, offsetV);
+    // Get current die kind to update only its materials
+    const currentDie = DICE_CONFIG[this.currentDieIndex];
+
+    log.debug(`Debug view updating texture mapping for ${currentDie.kind}: scale(${scaleU}, ${scaleV}) offset(${offsetU}, ${offsetV})`);
+
+    // Update the dice renderer's texture mapping for current die only
+    this.diceRenderer.updateTextureMapping(scaleU, scaleV, offsetU, offsetV, currentDie.kind);
   }
 
   private saveTextureSettings(): void {
@@ -174,18 +209,38 @@ export class DebugView {
     const scaleV = parseFloat((document.getElementById("scale-v-slider") as HTMLInputElement).value);
     const offsetU = parseFloat((document.getElementById("offset-u-slider") as HTMLInputElement).value);
     const offsetV = parseFloat((document.getElementById("offset-v-slider") as HTMLInputElement).value);
-    const currentTheme = themeManager.getCurrentTheme();
 
-    console.log(`=== Texture Mapping Settings for ${currentTheme} ===`);
-    console.log(`"textureScale": {`);
-    console.log(`  "u": ${scaleU},`);
-    console.log(`  "v": ${scaleV}`);
-    console.log(`},`);
-    console.log(`"textureOffset": {`);
-    console.log(`  "u": ${offsetU},`);
-    console.log(`  "v": ${offsetV}`);
-    console.log(`}`);
-    console.log("================================");
+    const currentThemeConfig = themeManager.getCurrentThemeConfig();
+    if (!currentThemeConfig) return;
+
+    // Get current die kind
+    const currentDie = DICE_CONFIG[this.currentDieIndex];
+
+    // Determine which theme config is being edited
+    let themeName = currentThemeConfig.name;
+    let themeSystemName = currentThemeConfig.systemName;
+    if (currentThemeConfig.useFallbackFor?.includes(currentDie.kind) && currentThemeConfig.fallbackTheme) {
+      const fallbackConfig = themeManager.getThemeConfig(currentThemeConfig.fallbackTheme);
+      if (fallbackConfig) {
+        themeName = fallbackConfig.name;
+        themeSystemName = fallbackConfig.systemName;
+      }
+    }
+
+    log.info(`=== Texture Mapping Settings ===`);
+    log.info(`Theme: ${themeName} (${themeSystemName})`);
+    log.info(`Current Die: ${currentDie.kind}`);
+    log.info(`File: public/assets/themes/${themeSystemName}/theme.config.json`);
+    log.info(`\nAdd to material config:`);
+    log.info(`"textureScale": {`);
+    log.info(`  "u": ${scaleU},`);
+    log.info(`  "v": ${scaleV}`);
+    log.info(`},`);
+    log.info(`"textureOffset": {`);
+    log.info(`  "u": ${offsetU},`);
+    log.info(`  "v": ${offsetV}`);
+    log.info(`}`);
+    log.info("================================");
   }
 
   private populateThemeDropdown(): void {
@@ -201,8 +256,21 @@ export class DebugView {
   }
 
   private loadThemeTextureSettings(): void {
-    const themeConfig = themeManager.getCurrentThemeConfig();
-    if (!themeConfig) return;
+    const currentThemeConfig = themeManager.getCurrentThemeConfig();
+    if (!currentThemeConfig) return;
+
+    // Get current die kind
+    const currentDie = DICE_CONFIG[this.currentDieIndex];
+
+    // Determine which theme config to use (primary or fallback)
+    let themeConfig = currentThemeConfig;
+    if (currentThemeConfig.useFallbackFor?.includes(currentDie.kind) && currentThemeConfig.fallbackTheme) {
+      const fallbackConfig = themeManager.getThemeConfig(currentThemeConfig.fallbackTheme);
+      if (fallbackConfig) {
+        themeConfig = fallbackConfig;
+        log.debug(`Loading texture settings from fallback theme: ${fallbackConfig.name}`);
+      }
+    }
 
     // Get texture scale and offset from theme config (or use defaults)
     const textureScale = (themeConfig.material as any).textureScale || { u: 1.0, v: 1.0 };
@@ -234,7 +302,58 @@ export class DebugView {
     // Apply the settings to the renderer
     this.updateTextureMapping();
 
-    console.log(`📐 Loaded texture settings for ${themeConfig.name}:`, textureScale, textureOffset);
+    log.debug(`Loaded texture settings for ${themeConfig.name}:`, textureScale, textureOffset);
+  }
+
+  private resetToThemeDefaults(): void {
+    log.info("Resetting to theme defaults");
+    this.loadThemeTextureSettings();
+  }
+
+  private updateThemeInfo(): void {
+    const currentThemeConfig = themeManager.getCurrentThemeConfig();
+    const infoEl = document.getElementById("debug-theme-info");
+    if (!currentThemeConfig || !infoEl) return;
+
+    const currentDie = DICE_CONFIG[this.currentDieIndex];
+
+    // Determine which theme config is being used (primary or fallback)
+    let themeConfig = currentThemeConfig;
+    if (currentThemeConfig.useFallbackFor?.includes(currentDie.kind) && currentThemeConfig.fallbackTheme) {
+      const fallbackConfig = themeManager.getThemeConfig(currentThemeConfig.fallbackTheme);
+      if (fallbackConfig) {
+        themeConfig = fallbackConfig;
+      }
+    }
+
+    let info = `<p><strong>Theme:</strong> ${currentThemeConfig.name}</p>`;
+    info += `<p><strong>Material Type:</strong> ${themeConfig.material.type}</p>`;
+
+    // Check if current die uses fallback
+    if (currentThemeConfig.useFallbackFor?.includes(currentDie.kind)) {
+      info += `<p><strong>⚠️ Using Fallback:</strong> ${currentThemeConfig.fallbackTheme}</p>`;
+      info += `<p><em>This die type uses fallback theme textures</em></p>`;
+    } else {
+      info += `<p><strong>Fallback:</strong> ${currentThemeConfig.fallbackTheme || 'None'}</p>`;
+    }
+
+    infoEl.innerHTML = info;
+
+    // Show/hide material variant selector based on material type
+    this.updateMaterialVariantVisibility(themeConfig.material.type);
+  }
+
+  private updateMaterialVariantVisibility(materialType: string): void {
+    const variantControl = document.getElementById("debug-material-variant")?.parentElement;
+    if (!variantControl) return;
+
+    // Only show material variant selector for color materials
+    // Standard materials have textures baked in, so no light/dark variants
+    if (materialType === 'color') {
+      variantControl.style.display = 'block';
+    } else {
+      variantControl.style.display = 'none';
+    }
   }
 
   show(): void {
@@ -247,6 +366,9 @@ export class DebugView {
 
     // Load current theme's texture settings
     this.loadThemeTextureSettings();
+
+    // Update theme info display
+    this.updateThemeInfo();
 
     // Render current die type
     this.renderCurrentDie();
@@ -300,7 +422,13 @@ export class DebugView {
       }
     }
 
-    // Create 3D dice in scene
-    this.diceRenderer.createDebugDice(config.kind, config.faces);
+    // Load texture settings for this die (may be different theme if fallback)
+    this.loadThemeTextureSettings();
+
+    // Update theme info for current die
+    this.updateThemeInfo();
+
+    // Create 3D dice in scene with selected material variant
+    this.diceRenderer.createDebugDice(config.kind, config.faces, this.useLightMaterial);
   }
 }

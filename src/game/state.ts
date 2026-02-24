@@ -11,6 +11,16 @@ import { GameState, Action, GameConfig, DieState } from "../engine/types.js";
 
 /**
  * Create initial game state
+ *
+ * @param seed - Random seed for deterministic gameplay (used for replay/sharing)
+ * @param config - Optional game configuration (add d20, d4, etc.)
+ * @returns New game state in READY status
+ *
+ * @example
+ * ```ts
+ * const game = createGame("my-seed-123");
+ * const gameWithD20 = createGame("my-seed-123", { addD20: true });
+ * ```
  */
 export function createGame(seed: string, config: GameConfig = {}): GameState {
   const pool = buildDicePool(config);
@@ -29,6 +39,22 @@ export function createGame(seed: string, config: GameConfig = {}): GameState {
 
 /**
  * Game reducer - pure state transitions
+ *
+ * Applies an action to the current state and returns a new state.
+ * This is a pure function - it never mutates the input state.
+ * All actions are logged in actionLog for replay functionality.
+ *
+ * @param state - Current game state
+ * @param action - Action to apply (ROLL, TOGGLE_SELECT, SCORE_SELECTED)
+ * @returns New game state after applying action
+ *
+ * @example
+ * ```ts
+ * let state = createGame("seed");
+ * state = reduce(state, { t: "ROLL" });
+ * state = reduce(state, { t: "TOGGLE_SELECT", dieId: "d6-0" });
+ * state = reduce(state, { t: "SCORE_SELECTED" });
+ * ```
  */
 export function reduce(state: GameState, action: Action): GameState {
   const newState = { ...state, actionLog: [...state.actionLog, action] };
@@ -99,6 +125,24 @@ export function reduce(state: GameState, action: Action): GameState {
 
 /**
  * Replay a game from seed + action log
+ *
+ * Deterministically replays all actions from a game to reconstruct its final state.
+ * Used for sharing games and verifying replay URLs.
+ *
+ * @param seed - Random seed from the original game
+ * @param actions - Array of actions to replay
+ * @param config - Game configuration (must match original game)
+ * @returns Final game state after replaying all actions
+ *
+ * @example
+ * ```ts
+ * const actions = [
+ *   { t: "ROLL" },
+ *   { t: "TOGGLE_SELECT", dieId: "d6-0" },
+ *   { t: "SCORE_SELECTED" }
+ * ];
+ * const finalState = replay("seed-123", actions);
+ * ```
  */
 export function replay(
   seed: string,
@@ -114,11 +158,25 @@ export function replay(
 
 /**
  * Serialize action log for sharing
+ *
+ * Encodes actions as a base64 URL-safe string for sharing via query parameters.
+ *
+ * @param actions - Array of actions to serialize
+ * @returns Base64-encoded action log
  */
 export function serializeActions(actions: Action[]): string {
   return btoa(JSON.stringify(actions));
 }
 
+/**
+ * Deserialize action log from shared URL
+ *
+ * Decodes a base64 action log back into Action array.
+ * Returns empty array if decoding fails.
+ *
+ * @param encoded - Base64-encoded action log
+ * @returns Array of actions, or empty array on error
+ */
 export function deserializeActions(encoded: string): Action[] {
   try {
     return JSON.parse(atob(encoded));
@@ -128,7 +186,19 @@ export function deserializeActions(encoded: string): Action[] {
 }
 
 /**
- * Generate shareable URL
+ * Generate shareable URL for current game
+ *
+ * Creates a URL containing seed + action log that can be shared
+ * to allow others to replay this exact game.
+ *
+ * @param state - Current game state
+ * @returns Full URL with seed and log query parameters
+ *
+ * @example
+ * ```ts
+ * const url = generateShareURL(gameState);
+ * // => "https://example.com?seed=123&log=W3sidCI6IlJPTEwifV0="
+ * ```
  */
 export function generateShareURL(state: GameState): string {
   const url = new URL(window.location.href);

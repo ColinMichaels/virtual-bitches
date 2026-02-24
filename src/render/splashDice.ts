@@ -7,7 +7,9 @@
 import {
   Scene,
   Mesh,
+  Material,
   StandardMaterial,
+  ShaderMaterial,
   Color3,
   Vector3,
   Texture,
@@ -15,6 +17,10 @@ import {
 import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
 import "@babylonjs/loaders/glTF";
 import { themeManager } from "../services/themeManager.js";
+import { logger } from "../utils/logger.js";
+import { createColorMaterial } from "./colorMaterial.js";
+
+const log = logger.create('SplashDiceRenderer');
 
 const DIE_SIZES: Record<string, number> = {
   d4: 1.3,
@@ -39,10 +45,13 @@ const DIE_COLORS = [
 export class SplashDiceRenderer {
   private templateMeshes = new Map<string, Mesh>();
   private diceMeshes: Mesh[] = [];
-  private material: StandardMaterial | null = null;
+  private material: StandardMaterial | ShaderMaterial | null = null;
   private geometryLoaded = false;
   private unsubscribeTheme?: () => void;
   private initPromise: Promise<void>;
+
+  // Material cache for fallback themes (themeName -> material)
+  private materialCache = new Map<string, StandardMaterial | ShaderMaterial>();
 
   constructor(private scene: Scene) {
     // Subscribe to theme changes
@@ -58,9 +67,9 @@ export class SplashDiceRenderer {
       await this.loadGeometry();
       await this.createMaterial();
       this.geometryLoaded = true;
-      console.log("✅ Splash dice renderer initialized");
+      log.info("Splash dice renderer initialized");
     } catch (error) {
-      console.error("❌ Failed to initialize splash dice renderer:", error);
+      log.error("Failed to initialize splash dice renderer:", error);
       this.geometryLoaded = false;
     }
   }
@@ -75,7 +84,7 @@ export class SplashDiceRenderer {
     }
 
     const geometryPath = `${themeManager.getCurrentThemePath()}/${themeConfig.meshFile}`;
-    console.log(`📦 Loading splash geometry from: ${geometryPath}`);
+    log.debug(`Loading splash geometry from: ${geometryPath}`);
 
     const response = await fetch(geometryPath);
     if (!response.ok) {
@@ -122,16 +131,37 @@ export class SplashDiceRenderer {
 
   /**
    * Create material using current theme
+   * Also loads fallback theme materials if configured
    */
   private async createMaterial(): Promise<void> {
     const themeConfig = themeManager.getCurrentThemeConfig();
     if (!themeConfig) {
-      console.error("❌ No theme config available for splash");
+      log.error("No theme config available for splash");
       return;
     }
 
-    const basePath = themeManager.getCurrentThemePath();
-    console.log("🎨 Loading splash material from:", basePath);
+    // Clear material cache
+    this.materialCache.clear();
+
+    // Load primary theme material
+    await this.loadMaterialForTheme(themeConfig, false);
+
+    // Load fallback theme material if configured
+    if (themeConfig.fallbackTheme) {
+      const fallbackConfig = themeManager.getThemeConfig(themeConfig.fallbackTheme);
+      if (fallbackConfig) {
+        log.info(`Loading fallback splash material: ${fallbackConfig.name}`);
+        await this.loadMaterialForTheme(fallbackConfig, true);
+      }
+    }
+  }
+
+  /**
+   * Load material for a specific theme
+   */
+  private async loadMaterialForTheme(themeConfig: any, isFallback: boolean): Promise<void> {
+    const basePath = `/assets/themes/${themeConfig.systemName}`;
+    log.info(`Loading splash material from: ${basePath}`);
 
     // Load textures based on theme type
     if (themeConfig.material.type === 'standard') {
@@ -172,17 +202,41 @@ export class SplashDiceRenderer {
         }
       });
 
-      this.material = new StandardMaterial("splash-dice-material", this.scene);
-      this.material.diffuseTexture = diffuseTexture;
-      this.material.bumpTexture = normalMap;
-      this.material.bumpTexture.level = themeConfig.material.bumpLevel || 0.5;
-      if (specularMap) {
-        this.material.specularTexture = specularMap;
+      // Apply texture scale/offset from theme config
+      const textureScale = (themeConfig.material as any).textureScale;
+      if (textureScale) {
+        diffuseTexture.uScale = textureScale.u || 1;
+        diffuseTexture.vScale = textureScale.v || 1;
+        normalMap.uScale = textureScale.u || 1;
+        normalMap.vScale = textureScale.v || 1;
       }
-      this.material.specularColor = new Color3(0.5, 0.5, 0.5);
-      this.material.specularPower = themeConfig.material.specularPower || 64;
+
+      const textureOffset = (themeConfig.material as any).textureOffset;
+      if (textureOffset) {
+        diffuseTexture.uOffset = textureOffset.u || 0;
+        diffuseTexture.vOffset = textureOffset.v || 0;
+        normalMap.uOffset = textureOffset.u || 0;
+        normalMap.vOffset = textureOffset.v || 0;
+      }
+
+      const materialName = isFallback ? `splash-dice-material-${themeConfig.systemName}` : "splash-dice-material";
+      const material = new StandardMaterial(materialName, this.scene);
+      material.diffuseTexture = diffuseTexture;
+      material.bumpTexture = normalMap;
+      material.bumpTexture.level = themeConfig.material.bumpLevel || 0.5;
+      if (specularMap) {
+        material.specularTexture = specularMap;
+      }
+      material.specularColor = new Color3(0.5, 0.5, 0.5);
+      material.specularPower = themeConfig.material.specularPower || 64;
+
+      if (isFallback) {
+        this.materialCache.set(themeConfig.systemName, material);
+      } else {
+        this.material = material;
+      }
     } else {
-      // Color material type
+      // Color material type - use custom shader material
       const diffuseConfig = themeConfig.material.diffuseTexture as { light: string; dark: string };
       const diffuseLight = new Texture(
         `${basePath}/${diffuseConfig.light}`,
@@ -190,7 +244,6 @@ export class SplashDiceRenderer {
         undefined,
         true // invertY
       );
-      diffuseLight.hasAlpha = true;
       const normalMap = new Texture(
         `${basePath}/${themeConfig.material.bumpTexture}`,
         this.scene,
@@ -222,19 +275,49 @@ export class SplashDiceRenderer {
         }
       });
 
-      this.material = new StandardMaterial("splash-dice-material", this.scene);
-      // Use diffuseTexture directly - matches dice-box approach
-      this.material.diffuseTexture = diffuseLight;
-      this.material.bumpTexture = normalMap;
-      this.material.bumpTexture.level = themeConfig.material.bumpLevel || 0.5;
-      if (specularMap) {
-        this.material.specularTexture = specularMap;
+      // Apply texture scale/offset from theme config
+      const textureScale = (themeConfig.material as any).textureScale;
+      if (textureScale) {
+        diffuseLight.uScale = textureScale.u || 1;
+        diffuseLight.vScale = textureScale.v || 1;
+        normalMap.uScale = textureScale.u || 1;
+        normalMap.vScale = textureScale.v || 1;
       }
-      this.material.specularColor = new Color3(0.8, 0.8, 0.8);
-      this.material.specularPower = themeConfig.material.specularPower || 64;
+
+      const textureOffset = (themeConfig.material as any).textureOffset;
+      if (textureOffset) {
+        diffuseLight.uOffset = textureOffset.u || 0;
+        diffuseLight.vOffset = textureOffset.v || 0;
+        normalMap.uOffset = textureOffset.u || 0;
+        normalMap.vOffset = textureOffset.v || 0;
+      }
+
+      // Use custom shader material for proper color blending
+      // Dark base color + light pip textures for good contrast
+      const darkBaseColor = new Color3(0.2, 0.2, 0.2);
+      const materialName = isFallback ? `splash-dice-color-material-${themeConfig.systemName}` : "splash-dice-color-material";
+      const material = createColorMaterial(
+        materialName,
+        this.scene,
+        {
+          baseColor: darkBaseColor,
+          diffuseTexture: diffuseLight,
+          bumpTexture: normalMap,
+          bumpLevel: themeConfig.material.bumpLevel || 0.5,
+          specularTexture: specularMap || undefined,
+          specularPower: themeConfig.material.specularPower || 64,
+          specularColor: new Color3(0.8, 0.8, 0.8),
+        }
+      ) as any;
+
+      if (isFallback) {
+        this.materialCache.set(themeConfig.systemName, material);
+      } else {
+        this.material = material;
+      }
     }
 
-    console.log("✅ Splash material loaded");
+    log.info("Splash material loaded");
   }
 
   /**
@@ -245,7 +328,7 @@ export class SplashDiceRenderer {
     await this.initPromise;
 
     if (!this.geometryLoaded || !this.material) {
-      console.warn("⚠️ Geometry not loaded yet for splash dice");
+      log.warn("Geometry not loaded yet for splash dice");
       return;
     }
 
@@ -256,7 +339,7 @@ export class SplashDiceRenderer {
       const template = this.templateMeshes.get(dieType);
 
       if (!template) {
-        console.warn(`⚠️ No template for ${dieType}`);
+        log.warn(`No template for ${dieType}`);
         continue;
       }
 
@@ -284,14 +367,33 @@ export class SplashDiceRenderer {
       const scaleFactor = size * 10;
       die.scaling = new Vector3(scaleFactor, scaleFactor, scaleFactor);
 
-      // Clone material with color tint
+      // Determine which material to use (primary or fallback)
+      const currentTheme = themeManager.getCurrentThemeConfig();
+      let materialToUse = this.material;
+
+      if (currentTheme?.useFallbackFor?.includes(dieType) && currentTheme.fallbackTheme) {
+        const fallbackMaterial = this.materialCache.get(currentTheme.fallbackTheme);
+        if (fallbackMaterial) {
+          materialToUse = fallbackMaterial;
+          log.debug(`Splash die ${dieType} using fallback material: ${currentTheme.fallbackTheme}`);
+        }
+      }
+
+      // Clone material with color tint (only for StandardMaterial)
       const baseColor = Color3.FromHexString(DIE_COLORS[i % DIE_COLORS.length]);
-      const mat = this.material.clone(`splash-mat-${i}`);
-      mat.diffuseColor = new Color3(
-        0.5 + baseColor.r * 0.5,
-        0.5 + baseColor.g * 0.5,
-        0.5 + baseColor.b * 0.5
-      );
+      const mat = materialToUse!.clone(`splash-mat-${i}`) as StandardMaterial | ShaderMaterial;
+
+      // Only apply diffuse color tint for StandardMaterial
+      if (mat instanceof StandardMaterial) {
+        mat.diffuseColor = new Color3(
+          0.5 + baseColor.r * 0.5,
+          0.5 + baseColor.g * 0.5,
+          0.5 + baseColor.b * 0.5
+        );
+      }
+      // For ShaderMaterial (color materials), the base color is already set
+      // No need to tint as it would override the shader's baseColor uniform
+
       die.material = mat;
 
       // Random rotation speeds
@@ -331,14 +433,14 @@ export class SplashDiceRenderer {
       this.diceMeshes.push(die);
     }
 
-    console.log(`✅ Created ${count} splash dice`);
+    log.info(`Created ${count} splash dice`);
   }
 
   /**
    * Handle theme change
    */
   private async onThemeChanged(): Promise<void> {
-    console.log("🔄 Theme changed for splash dice...");
+    log.info("Theme changed for splash dice...");
 
     // Dispose old material
     this.material?.dispose();
@@ -350,18 +452,23 @@ export class SplashDiceRenderer {
     this.diceMeshes.forEach((die, index) => {
       if (this.material) {
         const baseColor = Color3.FromHexString(DIE_COLORS[index % DIE_COLORS.length]);
-        const mat = this.material.clone(`splash-mat-${index}`);
-        mat.diffuseColor = new Color3(
-          0.5 + baseColor.r * 0.5,
-          0.5 + baseColor.g * 0.5,
-          0.5 + baseColor.b * 0.5
-        );
+        const mat = this.material.clone(`splash-mat-${index}`) as StandardMaterial | ShaderMaterial;
+
+        // Only apply diffuse color tint for StandardMaterial
+        if (mat instanceof StandardMaterial) {
+          mat.diffuseColor = new Color3(
+            0.5 + baseColor.r * 0.5,
+            0.5 + baseColor.g * 0.5,
+            0.5 + baseColor.b * 0.5
+          );
+        }
+
         die.material?.dispose();
         die.material = mat;
       }
     });
 
-    console.log("✅ Splash dice theme updated");
+    log.info("Splash dice theme updated");
   }
 
   /**

@@ -15,6 +15,10 @@ import {
   Texture,
   Color4,
 } from "@babylonjs/core";
+import { registerCustomShaders } from "./shaders.js";
+
+// Register custom shaders once at module load
+registerCustomShaders();
 
 export class GameScene {
   engine: Engine;

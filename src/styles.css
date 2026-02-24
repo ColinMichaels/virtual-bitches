@@ -22,6 +22,11 @@ h1, h2, h3, h4, h5, h6 {
   width: 100vw;
   height: 100vh;
   position: relative;
+  /* iOS safe area support */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 #renderCanvas {
@@ -34,8 +39,8 @@ h1, h2, h3, h4, h5, h6 {
 /* Left Sidebar HUD */
 #hud {
   position: absolute;
-  top: 20px;
-  left: 20px;
+  top: max(20px, env(safe-area-inset-top));
+  left: max(20px, env(safe-area-inset-left));
   background: rgba(0,0,0,0.7);
   padding: 20px;
   border-radius: 8px;
@@ -102,6 +107,11 @@ h1, h2, h3, h4, h5, h6 {
   position: relative;
   display: inline-block;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.die-wrapper:active .die-2d {
+  transform: scale(0.95);
 }
 
 .die-2d {
@@ -256,8 +266,8 @@ h1, h2, h3, h4, h5, h6 {
 /* Settings Gear Button - Top Right */
 #settings-gear-btn {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  top: max(20px, env(safe-area-inset-top));
+  right: max(20px, env(safe-area-inset-right));
   width: 50px;
   height: 50px;
   padding: 12px;
@@ -291,8 +301,8 @@ h1, h2, h3, h4, h5, h6 {
 /* Leaderboard Button - Top Right (below settings) */
 #leaderboard-btn {
   position: absolute;
-  top: 80px;
-  right: 20px;
+  top: max(80px, calc(env(safe-area-inset-top) + 60px));
+  right: max(20px, env(safe-area-inset-right));
   width: 50px;
   height: 50px;
   padding: 12px;
@@ -326,8 +336,8 @@ h1, h2, h3, h4, h5, h6 {
 /* Camera Controls - Bottom Left */
 #camera-controls {
   position: absolute;
-  bottom: 20px;
-  left: 20px;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  left: max(20px, env(safe-area-inset-left));
   background: rgba(0,0,0,0.7);
   padding: 12px;
   border-radius: 8px;
@@ -377,13 +387,14 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .camera-btn:active {
-  transform: translateY(0);
+  transform: scale(0.95);
+  background: rgba(255,255,255,0.3);
 }
 
 /* Bottom Controls */
 #controls {
   position: absolute;
-  bottom: 20px;
+  bottom: max(20px, env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -412,6 +423,10 @@ button:hover:not(:disabled) {
   transform: translateY(-2px);
 }
 
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -423,6 +438,10 @@ button.primary {
 
 button.primary:hover:not(:disabled) {
   background: #c23652;
+}
+
+button.primary:active:not(:disabled) {
+  background: #a82e44;
 }
 
 button.secondary {
@@ -607,6 +626,10 @@ button.danger:hover:not(:disabled) {
   min-width: 160px;
   font-size: 18px;
   padding: 16px 32px;
+}
+
+.splash-btn:active {
+  transform: scale(0.97);
 }
 
 /* Modal Base Styles */
@@ -1055,6 +1078,10 @@ button.danger:hover:not(:disabled) {
   color: #eee;
 }
 
+.tab-btn:active {
+  transform: scale(0.97);
+}
+
 .tab-btn.active {
   color: #4a9eff;
   border-bottom-color: #4a9eff;
@@ -1265,7 +1292,7 @@ button.danger:hover:not(:disabled) {
     display: none !important;
   }
 
-  /* Dice Row - Below HUD, smaller dice */
+  /* Dice Row - Below HUD, touch-friendly dice */
   #dice-row {
     top: 32px; /* Below compact HUD */
     left: 3px;
@@ -1274,13 +1301,13 @@ button.danger:hover:not(:disabled) {
     max-width: calc(100% - 6px);
     width: calc(100% - 6px);
     padding: 6px;
-    gap: 4px;
+    gap: 6px;
     justify-content: space-evenly;
   }
 
   .die-wrapper .die-2d {
-    width: 48px;
-    height: 48px;
+    width: 50px;
+    height: 50px;
   }
 
   .die-wrapper .kind {
@@ -1302,32 +1329,32 @@ button.danger:hover:not(:disabled) {
     font-size: 8px;
   }
 
-  /* Settings Button - Smaller */
+  /* Settings Button - Touch-friendly 44px minimum */
   #settings-gear-btn {
     top: 10px;
     right: 10px;
-    width: 40px;
-    height: 40px;
-    padding: 8px;
+    width: 44px;
+    height: 44px;
+    padding: 10px;
   }
 
   #settings-gear-btn svg {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
   }
 
-  /* Leaderboard Button - Smaller on tablet */
+  /* Leaderboard Button - Touch-friendly 44px minimum */
   #leaderboard-btn {
-    top: 60px;
+    top: 62px;
     right: 10px;
-    width: 40px;
-    height: 40px;
-    padding: 8px;
+    width: 44px;
+    height: 44px;
+    padding: 10px;
   }
 
   #leaderboard-btn svg {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
   }
 
   /* Camera Controls - Horizontal layout at bottom */
@@ -1347,12 +1374,12 @@ button.danger:hover:not(:disabled) {
 
   .camera-buttons {
     display: flex;
-    gap: 6px;
+    gap: 8px;
   }
 
   .camera-btn {
-    width: 38px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
     flex-shrink: 0;
   }
 
@@ -1488,7 +1515,7 @@ button.danger:hover:not(:disabled) {
     display: none !important;
   }
 
-  /* Dice Row - Compact, smaller dice */
+  /* Dice Row - Compact, touch-friendly dice */
   #dice-row {
     top: 26px; /* Below compact HUD */
     left: 2px;
@@ -1496,13 +1523,13 @@ button.danger:hover:not(:disabled) {
     max-width: calc(100% - 4px);
     width: calc(100% - 4px);
     padding: 5px;
-    gap: 3px;
+    gap: 5px;
     justify-content: space-evenly;
   }
 
   .die-wrapper .die-2d {
-    width: 42px;
-    height: 42px;
+    width: 46px;
+    height: 46px;
   }
 
   .die-wrapper .kind {
@@ -1517,30 +1544,36 @@ button.danger:hover:not(:disabled) {
     font-size: 12px;
   }
 
-  /* Leaderboard Button - Smallest on mobile */
+  /* Leaderboard Button - Touch-friendly 44px minimum */
   #leaderboard-btn {
-    top: 45px;
+    top: 51px;
     right: 5px;
-    width: 36px;
-    height: 36px;
-    padding: 6px;
+    width: 44px;
+    height: 44px;
+    padding: 10px;
   }
 
   #leaderboard-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 24px;
+    height: 24px;
   }
 
   .die-2d .points {
     font-size: 7px;
   }
 
-  /* Settings Button */
+  /* Settings Button - Touch-friendly 44px minimum */
   #settings-gear-btn {
     top: 5px;
     right: 5px;
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
+    padding: 10px;
+  }
+
+  #settings-gear-btn svg {
+    width: 24px;
+    height: 24px;
   }
 
   /* Camera Controls */
@@ -1552,9 +1585,13 @@ button.danger:hover:not(:disabled) {
     max-width: calc(100vw - 10px);
   }
 
+  .camera-buttons {
+    gap: 8px;
+  }
+
   .camera-btn {
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
     flex-shrink: 0;
   }
 
@@ -1652,15 +1689,32 @@ button.danger:hover:not(:disabled) {
 
 
   .die-wrapper .die-2d {
-    width: 35px;
-    height: 35px;
+    width: 44px;
+    height: 44px;
   }
 
   #settings-gear-btn {
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
     top: 5px;
     right: 5px;
+    padding: 10px;
+  }
+
+  #settings-gear-btn svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  #leaderboard-btn {
+    width: 44px;
+    height: 44px;
+    padding: 10px;
+  }
+
+  #leaderboard-btn svg {
+    width: 24px;
+    height: 24px;
   }
 
   #camera-controls {
@@ -1669,9 +1723,13 @@ button.danger:hover:not(:disabled) {
     padding: 4px;
   }
 
+  .camera-buttons {
+    gap: 8px;
+  }
+
   .camera-btn {
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
   }
 
   #controls {

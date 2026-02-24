@@ -1,0 +1,30 @@
+{
+  "name": "Smooth Pip",
+  "systemName": "smooth-pip",
+  "author": "Frank Ali",
+  "version": 1,
+  "meshFile": "smoothDice.json",
+  "material": {
+    "type": "color",
+    "diffuseTexture": {
+      "light": "pips-light-rgba.png",
+      "dark": "pips-dark-rgba.png"
+    },
+    "bumpTexture": "pips-normal-rgba.png",
+    "diffuseLevel": 1.0,
+    "bumpLevel": 0.75,
+    "specularPower": 32,
+    "textureScale": {
+      "u": 2.0,
+      "v": 2.0
+    },
+    "textureOffset": {
+      "u": 0.0,
+      "v": 0.0
+    }
+  },
+  "diceAvailable": ["d4", "d6", "d8", "d10", "d12", "d20"],
+  "fallbackTheme": "smooth",
+  "useFallbackFor": ["d4", "d8", "d10", "d12", "d20"],
+  "description": "Simple pip texture for d6 only. All other dice use smooth theme with numbers."
+}

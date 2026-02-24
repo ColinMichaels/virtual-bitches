@@ -3,6 +3,10 @@
  * Manages game settings and persists them to localStorage
  */
 
+import { logger } from "../utils/logger.js";
+
+const log = logger.create('SettingsService');
+
 export interface AudioSettings {
   masterVolume: number; // 0-1
   sfxVolume: number; // 0-1
@@ -85,7 +89,7 @@ export class SettingsService {
         return this.mergeWithDefaults(parsed);
       }
     } catch (error) {
-      console.warn("Failed to load settings:", error);
+      log.warn("Failed to load settings:", error);
     }
     return { ...DEFAULT_SETTINGS };
   }
@@ -109,7 +113,7 @@ export class SettingsService {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
     } catch (error) {
-      console.error("Failed to save settings:", error);
+      log.error("Failed to save settings:", error);
     }
   }
 
