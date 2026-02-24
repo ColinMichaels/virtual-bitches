@@ -1,28 +1,205 @@
 {
-	"name": "Default Colors",
-	"systemName": "default",
-	"author": "Frank Ali",
-	"version": 0.2,
-	"meshFile": "default.json",
-	"material": {
-		"type": "color",
-		"diffuseTexture": {
-			"light": "diffuse-light.png",
-			"dark": "diffuse-dark.png"
-		},
-		"diffuseLevel": 1,
-		"bumpTexture": "normal.png",
-		"bumpLevel": 0.5,
-		"specularTexture": "specular.jpg",
-		"specularPower": 1,
-		"textureScale": {
-			"u": 1.9,
-			"v": 1.9
-		},
-		"textureOffset": {
-			"u": 0.05,
-			"v": 0.05
-		}
-	},
-	"diceAvailable": ["d4","d6","d8","d10","d12","d20","d100"]
+  "name": "Default Colors",
+  "systemName": "default",
+  "author": "Frank Ali",
+  "version": 0.2,
+  "meshFile": "default.json",
+  "material": {
+    "type": "color",
+    "diffuseTexture": {
+      "light": "diffuse-light.png",
+      "dark": "diffuse-dark.png"
+    },
+    "diffuseLevel": 1,
+    "bumpTexture": "normal.png",
+    "bumpLevel": 0.5,
+    "specularTexture": "specular.jpg",
+    "specularPower": 1,
+    "textureScale": {
+      "u": 1.0,
+      "v": 1.0
+    },
+    "textureOffset": {
+      "u": 0.0,
+      "v": 0.0
+    }
+  },
+  "diceAvailable": [
+    "d4",
+    "d6",
+    "d8",
+    "d10",
+    "d12",
+    "d20",
+    "d100"
+  ],
+  "perDieSettings": {
+    "d4": {
+      "positionOffset": [
+        -0.9,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.1,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    },
+    "d6": {
+      "positionOffset": [
+        -0.6,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.1,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    },
+    "d8": {
+      "positionOffset": [
+        -0.3,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.1,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    },
+    "d10": {
+      "positionOffset": [
+        0,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.1,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    },
+    "d12": {
+      "positionOffset": [
+        0.3,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.1,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    },
+    "d20": {
+      "positionOffset": [
+        0.6,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.1,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    },
+    "d100": {
+      "positionOffset": [
+        0,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.1,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    }
+  },
+  "physicsEnabled": true,
+  "gravity": [
+    0,
+    -9.81,
+    0
+  ]
 }
