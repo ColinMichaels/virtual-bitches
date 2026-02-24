@@ -22,7 +22,6 @@ import {
   Texture,
   Ray,
 } from "@babylonjs/core";
-import { CustomMaterial } from "@babylonjs/materials/custom/customMaterial";
 import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
 import "@babylonjs/loaders/glTF";
 import { DieState, DieKind } from "../engine/types.js";
@@ -55,6 +54,38 @@ const DIE_COLORS: Color3[] = [
   Color3.FromHexString("#7a3d3d"), // Muted red
   Color3.FromHexString("#6b5688"), // Muted purple
 ];
+
+// Animation constants
+const ANIMATION_DURATION_FRAMES = 80;
+const ANIMATION_SPEED = 0.45;
+const ROLL_COMPLETE_DELAY_MS = 1000;
+const SCORE_ANIMATION_DELAY_MS = 400;
+
+// Physics constants
+const DROP_START_HEIGHT = 15;
+const DROP_END_HEIGHT = 0.6;
+const COLLIDER_SCALE_FACTOR = 0.9;
+const RANDOM_POSITION_SPREAD = 1.5;
+
+// Rotation detection constants
+const RAYCAST_UP_DOT_THRESHOLD = 0.35; // ~69 degrees tolerance for d10/d12
+const D8_FACE_TILT_RADIANS = 0.615; // ~35 degrees for proper face-flat orientation
+const MAX_ROTATION_ATTEMPTS_INITIAL = 2000;
+const MAX_ROTATION_ATTEMPTS_RETRY = 3000;
+const DEFAULT_MAX_ROTATION_ATTEMPTS = 500;
+
+// Material constants
+const DEFAULT_BUMP_LEVEL = 0.5;
+const DEFAULT_SPECULAR_POWER = 64;
+const SPECULAR_COLOR_LIGHT = new Color3(0.8, 0.8, 0.8);
+const SPECULAR_COLOR_DARK = new Color3(0.5, 0.5, 0.5);
+const WHITE_COLOR = new Color3(1, 1, 1);
+const BLACK_COLOR = new Color3(0, 0, 0);
+const SELECTION_GLOW_COLOR = new Color3(1, 0.8, 0);
+const SELECTION_EMISSIVE_COLOR = new Color3(1, 1, 0.3);
+
+// Color conversion constant
+const RGB_MAX_VALUE = 255;
 
 export class DiceRenderer {
   private meshes = new Map<string, Mesh>();
@@ -158,15 +189,15 @@ export class DiceRenderer {
       for (let value = 1; value <= maxValue; value++) {
         const displayValue = kind === "d10" ? (value % 10) : value;
         console.log(`  Searching for ${kind} value ${displayValue}...`);
-        const rotation = this.findRotationForValue(testMesh, kind, displayValue, 2000);
+        const rotation = this.findRotationForValue(testMesh, kind, displayValue, MAX_ROTATION_ATTEMPTS_INITIAL);
 
         if (rotation) {
           cache.set(displayValue, rotation);
           console.log(`  ✓ ${kind} value ${displayValue}: FOUND`);
         } else {
           // Try again with more lenient detection
-          console.warn(`  ⚠️ ${kind} value ${displayValue}: NOT FOUND after 2000 attempts, retrying with lenient detection...`);
-          const rotation2 = this.findRotationForValue(testMesh, kind, displayValue, 3000);
+          console.warn(`  ⚠️ ${kind} value ${displayValue}: NOT FOUND after ${MAX_ROTATION_ATTEMPTS_INITIAL} attempts, retrying with lenient detection...`);
+          const rotation2 = this.findRotationForValue(testMesh, kind, displayValue, MAX_ROTATION_ATTEMPTS_RETRY);
           if (rotation2) {
             cache.set(displayValue, rotation2);
             console.log(`  ✓ ${kind} value ${displayValue}: FOUND (lenient)`);
@@ -240,7 +271,7 @@ export class DiceRenderer {
 
       // Shrink colliders slightly (dice-box approach)
       if (mesh.name.includes("collider")) {
-        mesh.scaling.scaleInPlace(0.9);
+        mesh.scaling.scaleInPlace(COLLIDER_SCALE_FACTOR);
       }
 
       this.templateMeshes.set(mesh.name, mesh as Mesh);
@@ -309,13 +340,13 @@ export class DiceRenderer {
     this.materialDark = new StandardMaterial("dice-material", this.scene);
     this.materialDark.diffuseTexture = diffuseTexture;
     this.materialDark.bumpTexture = normalMap;
-    this.materialDark.bumpTexture.level = themeConfig.material.bumpLevel || 0.5;
+    this.materialDark.bumpTexture.level = themeConfig.material.bumpLevel || DEFAULT_BUMP_LEVEL;
 
     if (specularMap) {
       this.materialDark.specularTexture = specularMap;
     }
-    this.materialDark.specularColor = new Color3(0.5, 0.5, 0.5);
-    this.materialDark.specularPower = themeConfig.material.specularPower || 64;
+    this.materialDark.specularColor = SPECULAR_COLOR_DARK;
+    this.materialDark.specularPower = themeConfig.material.specularPower || DEFAULT_SPECULAR_POWER;
 
     this.materialLight = this.materialDark;
   }
@@ -385,15 +416,15 @@ export class DiceRenderer {
     // Simplified approach: just use white base material with texture overlay
     // No custom colors for now - focus on getting the texture mapping right first
     this.materialDark = new StandardMaterial("dice-material-white", this.scene);
-    this.materialDark.diffuseColor = new Color3(1, 1, 1); // White base
+    this.materialDark.diffuseColor = WHITE_COLOR;
     this.materialDark.diffuseTexture = diffuseLight;
     this.materialDark.bumpTexture = normalMap;
-    this.materialDark.bumpTexture.level = themeConfig.material.bumpLevel || 0.5;
+    this.materialDark.bumpTexture.level = themeConfig.material.bumpLevel || DEFAULT_BUMP_LEVEL;
     if (specularMap) {
       this.materialDark.specularTexture = specularMap;
     }
-    this.materialDark.specularColor = new Color3(0.8, 0.8, 0.8);
-    this.materialDark.specularPower = themeConfig.material.specularPower || 64;
+    this.materialDark.specularColor = SPECULAR_COLOR_LIGHT;
+    this.materialDark.specularPower = themeConfig.material.specularPower || DEFAULT_SPECULAR_POWER;
 
     // Use the same white material for both light and dark (just focusing on getting it to work)
     this.materialLight = this.materialDark;
@@ -483,8 +514,8 @@ export class DiceRenderer {
       const upDot = Vector3.Dot(normal, new Vector3(0, 1, 0));
 
       // Fine-tuned threshold for d10/d12
-      // 0.35 = ~69 degrees tolerance (sweet spot between flatness and finding all values)
-      if (upDot > 0.35) {
+      // RAYCAST_UP_DOT_THRESHOLD = ~69 degrees tolerance (sweet spot between flatness and finding all values)
+      if (upDot > RAYCAST_UP_DOT_THRESHOLD) {
         // Additional check: the hit point should be above the mesh center
         const hitPoint = pickInfo.pickedPoint;
         if (hitPoint) {
@@ -517,7 +548,7 @@ export class DiceRenderer {
    * Try multiple random rotations to find one that shows the desired value
    * Uses raycast detection to verify the face
    */
-  private findRotationForValue(mesh: Mesh, dieKind: string, targetValue: number, maxAttempts: number = 500): Vector3 | null {
+  private findRotationForValue(mesh: Mesh, dieKind: string, targetValue: number, maxAttempts: number = DEFAULT_MAX_ROTATION_ATTEMPTS): Vector3 | null {
     // For d10 and d12, use raycast-based detection with random rotations
     // Generate random rotations and test which face lands up
 
@@ -578,7 +609,7 @@ export class DiceRenderer {
     // D8 rotations (octahedron)
     // Empirically determined rotation mapping for all 8 faces
     if (dieKind === "d8") {
-      const faceTilt = 0.615; // ~35 degrees for proper face-flat orientation
+      const faceTilt = D8_FACE_TILT_RADIANS;
 
       // All 8 rotations mapped to their faces:
       const rotationToFace = [
@@ -685,9 +716,9 @@ export class DiceRenderer {
     // Update selection state
     if (mesh.material instanceof StandardMaterial) {
       if (this.selectedMeshes.has(die.id)) {
-        mesh.material.emissiveColor = new Color3(1, 1, 0.3);
+        mesh.material.emissiveColor = SELECTION_EMISSIVE_COLOR;
       } else {
-        mesh.material.emissiveColor = new Color3(0, 0, 0);
+        mesh.material.emissiveColor = BLACK_COLOR;
       }
     }
   }
@@ -703,7 +734,7 @@ export class DiceRenderer {
     if (!mesh) return;
 
     if (selected) {
-      this.highlightLayer.addMesh(mesh, new Color3(1, 0.8, 0));
+      this.highlightLayer.addMesh(mesh, SELECTION_GLOW_COLOR);
     } else {
       this.highlightLayer.removeMesh(mesh);
     }
@@ -731,11 +762,11 @@ export class DiceRenderer {
       const offsetX = (col - cols / 2) * spacing;
       const offsetZ = (row - Math.floor(activeDice.length / cols) / 2) * spacing;
 
-      const randomX = offsetX + (Math.random() - 0.5) * 1.5;
-      const randomZ = offsetZ + (Math.random() - 0.5) * 1.5;
+      const randomX = offsetX + (Math.random() - 0.5) * RANDOM_POSITION_SPREAD;
+      const randomZ = offsetZ + (Math.random() - 0.5) * RANDOM_POSITION_SPREAD;
 
-      const startY = 15;
-      const endY = 0.6;
+      const startY = DROP_START_HEIGHT;
+      const endY = DROP_END_HEIGHT;
 
       mesh.position = new Vector3(randomX, startY, randomZ);
 
@@ -803,12 +834,12 @@ export class DiceRenderer {
       rotAnim.setEasingFunction(ease);
 
       mesh.animations = [dropAnim, rotAnim];
-      this.scene.beginAnimation(mesh, 0, animDuration, false, 0.45, () => {
+      this.scene.beginAnimation(mesh, 0, animDuration, false, ANIMATION_SPEED, () => {
         this.updateDie(die);
       });
     });
 
-    setTimeout(onComplete, 1000);
+    setTimeout(onComplete, ROLL_COMPLETE_DELAY_MS);
   }
 
   animateScore(dice: DieState[], selected: Set<string>, onComplete: () => void) {
@@ -827,7 +858,7 @@ export class DiceRenderer {
     const spacingZ = 1.5;
     const baseX = 12;
     const baseZ = -3;
-    const baseY = 0.6;
+    const baseY = DROP_END_HEIGHT;
 
     toScore.forEach((die, i) => {
       const mesh = this.meshes.get(die.id);
@@ -885,7 +916,7 @@ export class DiceRenderer {
       this.scene.beginAnimation(mesh, 0, 20, false);
     });
 
-    setTimeout(onComplete, 400);
+    setTimeout(onComplete, SCORE_ANIMATION_DELAY_MS);
   }
 
   getMesh(dieId: string): Mesh | undefined {
@@ -906,13 +937,13 @@ export class DiceRenderer {
   }
 
   private colorToHex(color: Color3): string {
-    const r = Math.floor(color.r * 255)
+    const r = Math.floor(color.r * RGB_MAX_VALUE)
       .toString(16)
       .padStart(2, "0");
-    const g = Math.floor(color.g * 255)
+    const g = Math.floor(color.g * RGB_MAX_VALUE)
       .toString(16)
       .padStart(2, "0");
-    const b = Math.floor(color.b * 255)
+    const b = Math.floor(color.b * RGB_MAX_VALUE)
       .toString(16)
       .padStart(2, "0");
     return `#${r}${g}${b}`;

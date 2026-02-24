@@ -54,7 +54,7 @@ class ThemeManager {
 
     for (const themeName of themeNames) {
       try {
-        const configPath = `/src/assets/textures/${themeName}/theme.config.json`;
+        const configPath = `/assets/themes/${themeName}/theme.config.json`;
         const response = await fetch(configPath);
 
         if (response.ok) {
@@ -133,14 +133,14 @@ class ThemeManager {
    * Get base path for current theme assets
    */
   getCurrentThemePath(): string {
-    return `/src/assets/textures/${this.currentTheme}`;
+    return `/assets/themes/${this.currentTheme}`;
   }
 
   /**
    * Get base path for specific theme assets
    */
   getThemePath(themeName: string): string {
-    return `/src/assets/textures/${themeName}`;
+    return `/assets/themes/${themeName}`;
   }
 
   /**
