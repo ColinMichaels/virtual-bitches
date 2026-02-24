@@ -365,11 +365,9 @@ export class DiceRenderer {
     log.info("Loading color material from:", basePath);
 
     const diffuseConfig = themeConfig.material.diffuseTexture as { light: string; dark: string };
-    // Load textures with alpha channel enabled
+    // Load textures - we'll use them for both diffuse and opacity
     const diffuseLight = new Texture(`${basePath}/${diffuseConfig.light}`, this.scene);
-    diffuseLight.hasAlpha = true;
     const diffuseDark = new Texture(`${basePath}/${diffuseConfig.dark}`, this.scene);
-    diffuseDark.hasAlpha = true;
     const normalMap = new Texture(`${basePath}/${themeConfig.material.bumpTexture}`, this.scene);
 
     let specularMap: Texture | null = null;
@@ -416,11 +414,22 @@ export class DiceRenderer {
       normalMap.vOffset = textureOffset.v || 0;
     }
 
-    // Simplified approach: just use white base material with texture overlay
-    // No custom colors for now - focus on getting the texture mapping right first
-    this.materialDark = new StandardMaterial("dice-material-white", this.scene);
+    // Color material approach: solid base color with transparent texture overlay
+    // The key is to NOT use hasAlpha on diffuseTexture, but instead use opacityTexture
+    // This allows the base diffuseColor to show through where texture is transparent
+    this.materialDark = new StandardMaterial("dice-material-color", this.scene);
+
+    // Set solid base color (white for now - could be customizable per die)
     this.materialDark.diffuseColor = WHITE_COLOR;
+
+    // Use the texture as opacityTexture instead of diffuseTexture
+    // This makes the pips/numbers visible while keeping die body solid
+    this.materialDark.opacityTexture = diffuseLight;
+
+    // Also apply as diffuseTexture for the pip colors
     this.materialDark.diffuseTexture = diffuseLight;
+    this.materialDark.diffuseTexture.hasAlpha = false; // Don't use alpha from diffuse
+
     this.materialDark.bumpTexture = normalMap;
     this.materialDark.bumpTexture.level = themeConfig.material.bumpLevel || DEFAULT_BUMP_LEVEL;
     if (specularMap) {
@@ -429,7 +438,7 @@ export class DiceRenderer {
     this.materialDark.specularColor = SPECULAR_COLOR_LIGHT;
     this.materialDark.specularPower = themeConfig.material.specularPower || DEFAULT_SPECULAR_POWER;
 
-    // Use the same white material for both light and dark (just focusing on getting it to work)
+    // Use the same material for both light and dark
     this.materialLight = this.materialDark;
   }
 

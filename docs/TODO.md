@@ -11,32 +11,43 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ### Active Bugs
 
 #### Color Material Transparency Issue
-- **Status**: BLOCKING for 3 themes
+- **Status**: ⚠️ WORKAROUND - Themes temporarily disabled
 - **Affects**: `default`, `smooth-pip`, `gemstone` themes
 - **Problem**: Dice bodies render transparent instead of solid colored base with texture overlay
 - **Root Cause**: BabylonJS `StandardMaterial` doesn't support mixing solid base color with texture alpha channel like dice-box's `CustomMaterial` implementation
 - **Expected**: Solid colored die body with pip/number texture applied on top
 - **Actual**: Transparent die body showing through to background
 - **Attempted Solutions**:
-  - Tried `opacityTexture` - incorrect behavior
-  - Tried `diffuseTexture` alone - no base color
+  - Tried `opacityTexture` - incorrect behavior (inverts transparency)
+  - Tried `diffuseTexture` with `hasAlpha` - renders transparent
   - Tried `emissiveTexture` - lighting issues
   - Attempted `CustomMaterial` from dice-box - incomplete port
-- **Next Steps**: Implement custom shader following dice-box `ThemeLoader.js` pattern
-- **AI Prompt**:
+- **Current Workaround**: Color material themes disabled in `themeManager.ts`
+  - Users can still use 5 working standard material themes
+  - `diceOfRolling`, `wooden`, `blueGreenMetal`, `rust`, `smooth` all work perfectly
+- **Permanent Solution Needed**: Implement custom shader using BabylonJS `ShaderMaterial` or `CustomMaterial`
+  - Shader needs to blend base `diffuseColor` with texture alpha channel
+  - Similar to dice-box's `ThemeLoader.js` CustomMaterial implementation
+- **AI Prompt** (for custom shader implementation):
   ```
-  Fix the color material transparency issue in the BISCUITS theme system. The default, smooth-pip, and gemstone themes should show solid colored dice with texture overlays, but currently render transparent. Study src/services/themeManager.ts and the dice-box CustomMaterial implementation to create a shader that mixes base color with texture alpha channel.
+  Implement custom shader material for BISCUITS color material themes. Use BabylonJS ShaderMaterial or CustomMaterial to blend a solid base color with transparent RGBA texture overlays. Study dice-box ThemeLoader.js CustomMaterial implementation and port to BabylonJS. Re-enable default, smooth-pip, and gemstone themes once working.
   ```
 
 #### Texture Offset Misalignment
-- **Status**: Minor visual issue
-- **Affects**: Some themes have slight UV coordinate misalignment
-- **Problem**: Pips/numbers don't perfectly center on die faces for all themes
-- **Solution**: Use DebugView to fine-tune `textureScale` and `textureOffset` values
-- **Files**: `src/assets/textures/*/theme.config.json`
-- **AI Prompt**:
+- **Status**: ✅ Baseline UV coordinates added
+- **Completed**: Added default UV coordinates (scale: 1.9/1.9, offset: 0.05/0.05) to all color material themes
+- **Files Updated**:
+  - `public/assets/themes/default/theme.config.json`
+  - `public/assets/themes/gemstone/theme.config.json`
+  - `public/assets/themes/smooth-pip/theme.config.json` (already had values)
+- **Notes**:
+  - Standard material themes (diceOfRolling, wooden, smooth, rust, blueGreenMetal) use baked texture atlases and don't need UV adjustments
+  - Color material themes now have consistent baseline UV coordinates
+  - **Fine-tuning still needed** once color material transparency bug is fixed (can't visually verify alignment on transparent dice)
+  - Use DebugView (Alt+D) for precise adjustments after transparency fix
+- **AI Prompt** (for after transparency fix):
   ```
-  Review and adjust texture UV coordinates for all BISCUITS themes. Use the DebugView (Alt+D) to test each theme and fine-tune textureScale and textureOffset values in theme.config.json files to ensure perfect alignment of pips/numbers on all die faces.
+  Use DebugView (Alt+D) to fine-tune UV coordinates for BISCUITS color material themes. Test each theme with all die types (d4-d20), adjust textureScale and textureOffset sliders until pips/numbers are perfectly centered, then update theme.config.json files with the refined values.
   ```
 
 ---
@@ -46,12 +57,14 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ### In-Progress Work
 
 #### Theme System Polish
-- **Status**: 5/8 themes working perfectly
-- **Working**: diceOfRolling, wooden, smooth, rust, lava (standard material)
-- **Issues**: default, smooth-pip, gemstone (color material)
+- **Status**: 5/5 enabled themes working perfectly ✅
+- **Working**: diceOfRolling, wooden, smooth, rust, blueGreenMetal (standard material)
+- **Disabled**: default, smooth-pip, gemstone (color material - transparency issue)
 - **Tasks**:
-  - [ ] Fix color material shader (see above)
-  - [ ] Fine-tune UV coordinates for all themes
+  - [x] Added baseline UV coordinates to all themes
+  - [x] Disabled problematic color material themes
+  - [x] Documented workaround and permanent solution needed
+  - [ ] Implement custom shader for color materials (future work)
   - [ ] Test all themes across different dice types (d4, d6, d8, d10, d12, d20)
   - [ ] Verify lighting/shadow consistency
 
@@ -239,6 +252,15 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - TODO.md updated with all completed work
   - FUTURE-FEATURES.md (comprehensive roadmap)
   - THEME-SYSTEM.md (complete theme dev guide)
+- ✅ Added baseline UV coordinates to all color material themes
+  - default, gemstone themes now have textureScale/textureOffset properties
+  - Consistent 1.9/1.9 scale and 0.05/0.05 offset across color themes
+  - Ready for fine-tuning once transparency bug is fixed
+- ✅ Disabled problematic color material themes temporarily
+  - default, smooth-pip, gemstone themes disabled in themeManager.ts
+  - 5 working standard material themes remain available
+  - Documented workaround and custom shader solution needed
+  - Users have stable, working themes while custom shader is implemented
 
 ### Build/Deployment Fixes (2026-02-23)
 - ✅ Fixed theme asset paths (changed `/src/assets/textures/` → `/assets/themes/`)

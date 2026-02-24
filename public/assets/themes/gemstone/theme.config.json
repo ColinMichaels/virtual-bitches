@@ -13,7 +13,16 @@
     },
     "bumpTexture": "normal.png",
     "diffuseLevel": 1,
-    "bumpLevel": 0.5
+    "bumpLevel": 0.5,
+    "specularPower": 32,
+    "textureScale": {
+      "u": 1.9,
+      "v": 1.9
+    },
+    "textureOffset": {
+      "u": 0.05,
+      "v": 0.05
+    }
   },
   "d4FaceDown": false,
   "diceAvailable": ["d4","d6","d8","d10","d12","d20","d100"]

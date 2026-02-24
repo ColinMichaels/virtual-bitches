@@ -68,12 +68,17 @@ type ThemeChangeListener = (themeName: string) => void;
 /**
  * Available theme names
  * Add new themes here when adding to public/assets/themes/
+ *
+ * NOTE: Color material themes (default, smooth-pip, gemstone) are temporarily
+ * disabled due to transparency rendering issues. They need custom shader implementation
+ * to properly blend base colors with alpha-channel textures.
+ * See TODO.md "Color Material Transparency Issue" for details.
  */
 const AVAILABLE_THEMES = [
   'diceOfRolling',
-  'default',
-  'smooth-pip',
-  'gemstone',
+  // 'default',      // DISABLED: Color material transparency issue
+  // 'smooth-pip',   // DISABLED: Color material transparency issue
+  // 'gemstone',     // DISABLED: Color material transparency issue
   'wooden',
   'blueGreenMetal',
   'rust',
