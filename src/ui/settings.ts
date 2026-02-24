@@ -5,10 +5,13 @@
 
 import { settingsService, Settings } from "../services/settings.js";
 import { audioService } from "../services/audio.js";
+import { hapticsService } from "../services/haptics.js";
+import { ThemeSwitcher } from "./themeSwitcher.js";
 
 export class SettingsModal {
   private container: HTMLElement;
   private settings: Settings;
+  private themeSwitcher: ThemeSwitcher;
   private onClose: (() => void) | null = null;
   private onNewGame: (() => void) | null = null;
   private onHowToPlay: (() => void) | null = null;
@@ -58,6 +61,13 @@ export class SettingsModal {
               Enable Music
             </label>
           </div>
+
+          <div class="setting-row" ${hapticsService.isSupported() ? '' : 'style="display:none;"'}>
+            <label>
+              <input type="checkbox" id="haptics-enabled" ${this.settings.haptics !== false ? "checked" : ""}>
+              Enable Haptic Feedback
+            </label>
+          </div>
         </div>
 
         <div class="settings-section">
@@ -78,6 +88,9 @@ export class SettingsModal {
               Enable Shadows
             </label>
           </div>
+        </div>
+
+        <div class="settings-section" id="theme-switcher-container">
         </div>
 
         <div class="settings-section">
@@ -123,6 +136,14 @@ export class SettingsModal {
     `;
 
     document.body.appendChild(this.container);
+
+    // Create and add theme switcher
+    this.themeSwitcher = new ThemeSwitcher();
+    const themeSwitcherContainer = this.container.querySelector("#theme-switcher-container");
+    if (themeSwitcherContainer) {
+      themeSwitcherContainer.appendChild(this.themeSwitcher.getElement());
+    }
+
     this.setupEventListeners();
   }
 
@@ -176,6 +197,18 @@ export class SettingsModal {
         audioService.stopMusic();
       }
     });
+
+    // Haptics enabled (only if supported)
+    if (hapticsService.isSupported()) {
+      const hapticsEnabled = document.getElementById("haptics-enabled") as HTMLInputElement;
+      hapticsEnabled?.addEventListener("change", () => {
+        hapticsService.setEnabled(hapticsEnabled.checked);
+        if (hapticsEnabled.checked) {
+          hapticsService.buttonPress(); // Test vibration
+        }
+        audioService.playSfx("click");
+      });
+    }
 
     // Graphics quality
     const graphicsQuality = document.getElementById("graphics-quality") as HTMLSelectElement;
@@ -267,12 +300,6 @@ export class SettingsModal {
       this.hide();
     });
 
-    // Close on escape key
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this.container.style.display !== "none") {
-        this.hide();
-      }
-    });
   }
 
   /**
@@ -335,6 +362,13 @@ export class SettingsModal {
     if (this.onClose) {
       this.onClose();
     }
+  }
+
+  /**
+   * Check if settings modal is visible
+   */
+  isVisible(): boolean {
+    return this.container.style.display === "flex";
   }
 
   /**

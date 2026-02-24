@@ -15,6 +15,10 @@ import {
   Texture,
   Color4,
 } from "@babylonjs/core";
+import { registerCustomShaders } from "./shaders.js";
+
+// Register custom shaders once at module load
+registerCustomShaders();
 
 export class GameScene {
   engine: Engine;
@@ -298,7 +302,7 @@ export class GameScene {
     scoredArea.material = scoredMat;
   }
 
-  setCameraView(view: "default" | "top" | "side" | "front") {
+  setCameraView(view: "default" | "top" | "side" | "front" | "debug") {
     switch (view) {
       case "top":
         // Top-down view
@@ -318,12 +322,20 @@ export class GameScene {
         this.camera.beta = Math.PI / 2.5;
         this.camera.radius = 25;
         break;
+      case "debug":
+        // Debug view - wide view to see all dice types
+        this.camera.alpha = -Math.PI / 2;
+        this.camera.beta = Math.PI / 4;
+        this.camera.radius = 35;
+        this.camera.target = new Vector3(0, 2, 0);
+        break;
       case "default":
       default:
         // Reset to default view
         this.camera.alpha = this.defaultCameraState.alpha;
         this.camera.beta = this.defaultCameraState.beta;
         this.camera.radius = this.defaultCameraState.radius;
+        this.camera.target = new Vector3(0, 0, 0);
         break;
     }
   }

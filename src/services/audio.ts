@@ -4,6 +4,9 @@
  */
 
 import { settingsService } from "./settings.js";
+import { logger } from "../utils/logger.js";
+
+const log = logger.create('AudioService');
 
 export type SoundEffect = "roll" | "select" | "score" | "click" | "gameOver";
 
@@ -50,9 +53,9 @@ export class AudioService {
       // Generate procedural sound effects
       await this.generateSoundEffects();
 
-      console.log("Audio system initialized");
+      log.info("Audio system initialized");
     } catch (error) {
-      console.error("Failed to initialize audio:", error);
+      log.error("Failed to initialize audio:", error);
     }
   }
 
@@ -212,7 +215,7 @@ export class AudioService {
       this.musicSource.start(0);
       this.musicPlaying = true;
     } catch (error) {
-      console.error("Failed to play music:", error);
+      log.error("Failed to play music:", error);
     }
   }
 

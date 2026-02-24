@@ -5,6 +5,9 @@
 
 import { Action } from "../engine/types.js";
 import { environment } from "@env";
+import { logger } from "../utils/logger.js";
+
+const log = logger.create('ScoreHistoryService');
 
 export interface GameScore {
   id: string; // UUID
@@ -50,7 +53,7 @@ export class ScoreHistoryService {
         return JSON.parse(stored);
       }
     } catch (error) {
-      console.error("Failed to load score history:", error);
+      log.error("Failed to load score history:", error);
     }
     return [];
   }
@@ -66,7 +69,7 @@ export class ScoreHistoryService {
         .slice(0, MAX_STORED_SCORES);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
     } catch (error) {
-      console.error("Failed to save score history:", error);
+      log.error("Failed to save score history:", error);
     }
   }
 
@@ -178,7 +181,7 @@ export class ScoreHistoryService {
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch (error) {
-      console.error("Failed to clear score history:", error);
+      log.error("Failed to clear score history:", error);
     }
   }
 

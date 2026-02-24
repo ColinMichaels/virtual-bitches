@@ -80,4 +80,23 @@ Perfect dice are usually worth banking right away because the game gets more dan
 ---
 
 ## One-line teach
-**“Roll everything, take at least one die out each time, score the difference from perfect, and try to finish with the lowest total.”**
+**"Roll everything, take at least one die out each time, score the difference from perfect, and try to finish with the lowest total."**
+
+---
+
+## Keyboard Controls
+
+### Game Controls
+- **Space** — Roll / Score selected dice
+- **ESC** — Open settings & pause game
+- **← →** — Navigate through dice (keyboard selection)
+- **Enter** — Select/deselect focused die
+- **X** — Deselect all selected dice
+
+### Shortcuts
+- **N** — Start new game
+- **D** — Open debug view (theme testing)
+
+### Mouse Controls
+- **Click dice** — Select/deselect
+- **Click buttons** — Roll, score, or access menus

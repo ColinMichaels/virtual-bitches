@@ -3,6 +3,10 @@
  * Manages game settings and persists them to localStorage
  */
 
+import { logger } from "../utils/logger.js";
+
+const log = logger.create('SettingsService');
+
 export interface AudioSettings {
   masterVolume: number; // 0-1
   sfxVolume: number; // 0-1
@@ -35,6 +39,7 @@ export interface Settings {
   display: DisplaySettings;
   controls: ControlSettings;
   game: GameSettings;
+  haptics?: boolean; // Optional for backwards compatibility
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -61,6 +66,7 @@ const DEFAULT_SETTINGS: Settings = {
     add2ndD10: false,
     d100Mode: false,
   },
+  haptics: true,
 };
 
 const STORAGE_KEY = "biscuits-settings";
@@ -85,7 +91,7 @@ export class SettingsService {
         return this.mergeWithDefaults(parsed);
       }
     } catch (error) {
-      console.warn("Failed to load settings:", error);
+      log.warn("Failed to load settings:", error);
     }
     return { ...DEFAULT_SETTINGS };
   }
@@ -109,7 +115,7 @@ export class SettingsService {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
     } catch (error) {
-      console.error("Failed to save settings:", error);
+      log.error("Failed to save settings:", error);
     }
   }
 
@@ -143,6 +149,15 @@ export class SettingsService {
    */
   updateControls(controls: Partial<ControlSettings>): void {
     this.settings.controls = { ...this.settings.controls, ...controls };
+    this.saveSettings();
+    this.notifyListeners();
+  }
+
+  /**
+   * Update haptics setting
+   */
+  updateHaptics(enabled: boolean): void {
+    this.settings.haptics = enabled;
     this.saveSettings();
     this.notifyListeners();
   }

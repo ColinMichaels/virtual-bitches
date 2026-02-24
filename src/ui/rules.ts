@@ -5,6 +5,9 @@
 
 import { marked } from "marked";
 import { audioService } from "../services/audio.js";
+import { logger } from "../utils/logger.js";
+
+const log = logger.create('RulesModal');
 
 export class RulesModal {
   private container: HTMLElement;
@@ -40,7 +43,7 @@ export class RulesModal {
       this.rulesContent = await marked.parse(markdown);
       this.renderRules();
     } catch (error) {
-      console.error("Failed to load rules:", error);
+      log.error("Failed to load rules:", error);
       this.rulesContent = "<p>Failed to load rules. Please try again.</p>";
       this.renderRules();
     }
@@ -67,12 +70,6 @@ export class RulesModal {
       this.hide();
     });
 
-    // Close on escape key
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this.container.style.display === "flex") {
-        this.hide();
-      }
-    });
   }
 
   show(): void {
@@ -81,5 +78,9 @@ export class RulesModal {
 
   hide(): void {
     this.container.style.display = "none";
+  }
+
+  isVisible(): boolean {
+    return this.container.style.display === "flex";
   }
 }

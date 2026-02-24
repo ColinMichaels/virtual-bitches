@@ -6,14 +6,21 @@ import { SplashScreen } from "./ui/splash.js";
 import { SettingsModal } from "./ui/settings.js";
 import { LeaderboardModal } from "./ui/leaderboard.js";
 import { RulesModal } from "./ui/rules.js";
+import { DebugView } from "./ui/debugView.js";
 import { notificationService } from "./ui/notifications.js";
 import { createGame, reduce, generateShareURL, deserializeActions, replay } from "./game/state.js";
 import { GameState, Action } from "./engine/types.js";
 import { PointerEventTypes } from "@babylonjs/core";
 import { audioService } from "./services/audio.js";
+import { hapticsService } from "./services/haptics.js";
+import { pwaService } from "./services/pwa.js";
 import { scoreHistoryService } from "./services/score-history.js";
 import { environment } from "@env";
 import { settingsService } from "./services/settings.js";
+import { themeManager } from "./services/themeManager.js";
+import { logger } from "./utils/logger.js";
+
+const log = logger.create('Game');
 
 class Game {
   private state: GameState;
@@ -25,6 +32,7 @@ class Game {
   private paused = false;
   private settingsModal: SettingsModal;
   private leaderboardModal: LeaderboardModal;
+  private debugView: DebugView;
   private gameStartTime: number;
   private selectedDieIndex = 0; // For keyboard navigation
 
@@ -36,6 +44,7 @@ class Game {
   private newGameBtn: HTMLButtonElement;
   private viewLeaderboardBtn: HTMLButtonElement;
   private settingsGearBtn: HTMLButtonElement;
+  private leaderboardBtn: HTMLButtonElement;
 
   constructor() {
     // Parse URL for replay
@@ -57,7 +66,7 @@ class Game {
     this.scene = new GameScene(canvas);
     this.diceRenderer = new DiceRenderer(this.scene.scene);
     this.hud = new HUD();
-    this.diceRow = new DiceRow((dieId) => this.handleDieClick(dieId), this.diceRenderer);
+    this.diceRow = new DiceRow((dieId) => this.handleDieClick(dieId), this.diceRenderer as any);
 
     // UI elements
     this.actionBtn = document.getElementById("action-btn") as HTMLButtonElement;
@@ -69,9 +78,16 @@ class Game {
     this.viewLeaderboardBtn = document.getElementById("view-leaderboard-btn") as HTMLButtonElement;
     this.settingsGearBtn = document.getElementById("settings-gear-btn") as HTMLButtonElement;
 
+    this.leaderboardBtn = document.getElementById("leaderboard-btn") as HTMLButtonElement;
+
     // Initialize modals (shared with splash)
     this.settingsModal = settingsModal;
     this.leaderboardModal = leaderboardModal;
+
+    // Initialize debug view
+    this.debugView = new DebugView(this.diceRenderer, this.scene, (isDebugMode) => {
+      this.handleDebugModeToggle(isDebugMode);
+    });
 
     // Handle settings modal close to unpause game
     this.settingsModal.setOnClose(() => {
@@ -118,7 +134,7 @@ class Game {
       events.forEach((event) => document.removeEventListener(event, handler));
     };
 
-    events.forEach((event) => document.addEventListener(event, handler, { once: true }));
+    events.forEach((event) => document.addEventListener(event, handler, { once: true, passive: true }));
   }
 
   private generateSeed(): string {
@@ -129,29 +145,41 @@ class Game {
     // Multipurpose action button - handles both roll and score
     this.actionBtn.addEventListener("click", () => {
       audioService.playSfx("click");
+      hapticsService.buttonPress();
       this.handleAction();
     });
 
     // Deselect all button
     this.deselectBtn.addEventListener("click", () => {
       audioService.playSfx("click");
+      hapticsService.buttonPress();
       this.handleDeselectAll();
     });
 
     this.newGameBtn.addEventListener("click", () => {
       audioService.playSfx("click");
+      hapticsService.buttonPress();
       this.handleNewGame();
     });
 
     this.viewLeaderboardBtn.addEventListener("click", () => {
       audioService.playSfx("click");
+      hapticsService.buttonPress();
       this.leaderboardModal.show();
     });
 
     // Settings gear button
     this.settingsGearBtn.addEventListener("click", () => {
       audioService.playSfx("click");
+      hapticsService.buttonPress();
       this.togglePause();
+    });
+
+    // Leaderboard button
+    this.leaderboardBtn.addEventListener("click", () => {
+      audioService.playSfx("click");
+      hapticsService.buttonPress();
+      this.leaderboardModal.show();
     });
 
     // Camera controls
@@ -159,6 +187,7 @@ class Game {
     cameraButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         audioService.playSfx("click");
+        hapticsService.buttonPress();
         const view = btn.getAttribute("data-view") as "default" | "top" | "side" | "front";
         this.scene.setCameraView(view);
       });
@@ -167,9 +196,19 @@ class Game {
     // Keyboard shortcuts
     window.addEventListener("keydown", (e) => {
       // ESC key - toggle pause/settings
+      // ESC key - close modals or toggle pause/settings
       if (e.code === "Escape") {
         e.preventDefault();
-        this.togglePause();
+
+        // Check if any modal is open and close it first
+        if (rulesModal.isVisible()) {
+          rulesModal.hide();
+        } else if (this.leaderboardModal.isVisible()) {
+          this.leaderboardModal.hide();
+        } else {
+          // No other modals open, toggle settings/pause
+          this.togglePause();
+        }
       }
 
       // Space key - multipurpose action (roll or score)
@@ -207,10 +246,26 @@ class Game {
         }
       }
 
-      // 'D' key - deselect all (when dice are selected)
-      if (e.code === "KeyD" && this.state.status === "ROLLED" && this.state.selected.size > 0 && !this.animating && !this.paused) {
+      // 'X' key - deselect all (when dice are selected)
+      if (e.code === "KeyX" && this.state.status === "ROLLED" && this.state.selected.size > 0 && !this.animating && !this.paused) {
         e.preventDefault();
         this.handleDeselectAll();
+      }
+
+      // 'N' key - new game
+      if (e.code === "KeyN" && !this.animating) {
+        e.preventDefault();
+        audioService.playSfx("click");
+        hapticsService.buttonPress();
+        this.startNewGame();
+      }
+
+      // 'D' key - debug view
+      if (e.code === "KeyD" && !this.animating) {
+        e.preventDefault();
+        audioService.playSfx("click");
+        hapticsService.buttonPress();
+        this.debugView.show();
       }
     });
   }
@@ -227,6 +282,34 @@ class Game {
     }
 
     this.updateUI();
+  }
+
+  private handleDebugModeToggle(isDebugMode: boolean) {
+    // Hide game UI when debug mode is active
+    const hudEl = document.getElementById("hud");
+    const diceRowEl = document.getElementById("dice-row");
+    const controlsEl = document.getElementById("controls");
+    const cameraControlsEl = document.getElementById("camera-controls");
+
+    if (isDebugMode) {
+      // Hide game UI
+      if (hudEl) hudEl.style.display = "none";
+      if (diceRowEl) diceRowEl.style.display = "none";
+      if (controlsEl) controlsEl.style.display = "none";
+      if (cameraControlsEl) cameraControlsEl.style.display = "none";
+
+      // Clear game dice from scene
+      this.diceRenderer.clearDice();
+    } else {
+      // Restore game UI
+      if (hudEl) hudEl.style.display = "block";
+      if (diceRowEl) diceRowEl.style.display = "flex";
+      if (controlsEl) controlsEl.style.display = "flex";
+      if (cameraControlsEl) cameraControlsEl.style.display = "flex";
+
+      // Restore game state - updateUI will handle re-rendering dice if needed
+      this.updateUI();
+    }
   }
 
   private setupDiceSelection() {
@@ -248,17 +331,20 @@ class Game {
     if (this.state.status === "READY") {
       notificationService.show("Roll First!", "warning");
       audioService.playSfx("click");
+      hapticsService.invalid();
       return;
     }
 
     if (this.state.status === "COMPLETE") {
       notificationService.show("Game Over!", "warning");
       audioService.playSfx("click");
+      hapticsService.invalid();
       return;
     }
 
     if (die && die.inPlay && !die.scored && this.state.status === "ROLLED") {
       audioService.playSfx("select");
+      hapticsService.select();
       this.dispatch({ t: "TOGGLE_SELECT", dieId });
     }
   }
@@ -318,7 +404,7 @@ class Game {
       // Show notification about keyboard controls on first use
       const hasSeenKeyboardHint = sessionStorage.getItem("keyboardHintShown");
       if (!hasSeenKeyboardHint) {
-        notificationService.show("← → to navigate, Enter to select, D to deselect all", "info");
+        notificationService.show("← → to navigate, Enter to select, X to deselect | N=New Game, D=Debug", "info");
         sessionStorage.setItem("keyboardHintShown", "true");
       }
     }
@@ -330,6 +416,7 @@ class Game {
     // Invalid action reminder
     if (this.state.status === "ROLLED") {
       notificationService.show("Score Dice First!", "warning");
+      hapticsService.invalid();
       return;
     }
 
@@ -338,8 +425,9 @@ class Game {
     this.animating = true;
     this.dispatch({ t: "ROLL" });
 
-    // Play roll sound
+    // Play roll sound and haptic feedback
     audioService.playSfx("roll");
+    hapticsService.roll();
 
     this.diceRenderer.animateRoll(this.state.dice, () => {
       this.animating = false;
@@ -365,8 +453,9 @@ class Game {
     const scoredDice = this.state.dice.filter((d) => selected.has(d.id));
     const points = scoredDice.reduce((sum, die) => sum + (die.def.sides - die.value), 0);
 
-    // Play score sound
+    // Play score sound and haptic feedback
     audioService.playSfx("score");
+    hapticsService.score();
 
     this.diceRenderer.animateScore(this.state.dice, selected, () => {
       this.animating = false;
@@ -481,8 +570,9 @@ class Game {
   }
 
   private showGameOver() {
-    // Play game over sound
+    // Play game over sound and haptic feedback
     audioService.playSfx("gameOver");
+    hapticsService.gameComplete();
 
     // Celebrate game completion with particles
     this.scene.celebrateSuccess("complete");
@@ -506,18 +596,34 @@ class Game {
     notificationService.show(`🎮 Game Complete! Final Score: ${this.state.score}`, "success");
 
     this.finalScoreEl.textContent = this.state.score.toString();
+    // Display player's rank
+    const rankEl = document.getElementById("rank-display")!;
+    const stats = scoreHistoryService.getStats();
+    if (rank) {
+      const totalGames = stats.totalGames;
+      const rankEmoji = rank === 1 ? "🏆" : rank <= 3 ? "🥉" : "📊";
+      rankEl.innerHTML = `<p style="font-size: 1.2em; opacity: 0.8; margin: 10px 0;">${rankEmoji} Rank #${rank} of ${totalGames} games</p>`;
+
+      // Add special message for personal best
+      if (this.state.score === stats.bestScore) {
+        rankEl.innerHTML += `<p style="color: gold; font-weight: bold; margin: 5px 0;">🎉 NEW PERSONAL BEST!</p>`;
+      }
+    } else {
+      rankEl.innerHTML = `<p style="opacity: 0.8; margin: 10px 0;">🎮 First game!</p>`;
+    }
+
     const shareURL = generateShareURL(this.state);
-    this.shareLinkEl.textContent = shareURL;
+    if (this.shareLinkEl) {
+      this.shareLinkEl.textContent = shareURL;
+    }
 
     // Setup seed action buttons
     this.setupSeedActions(shareURL);
 
     this.gameOverEl.classList.add("show");
 
-    if (environment.debug) {
-      console.log("Game Over - Score saved:", savedScore);
-      console.log("Your rank:", rank);
-    }
+    log.debug("Game Over - Score saved:", savedScore);
+    log.debug("Your rank:", rank);
   }
 
   private setupSeedActions(shareURL: string) {
@@ -553,27 +659,63 @@ class Game {
   }
 }
 
-// Initialize modals (shared across screens)
-const settingsModal = new SettingsModal();
-const leaderboardModal = new LeaderboardModal();
-const rulesModal = new RulesModal();
+// Initialize theme manager first, then create everything else
+let settingsModal: SettingsModal;
+let leaderboardModal: LeaderboardModal;
+let rulesModal: RulesModal;
+let splash: SplashScreen;
 
-// Show splash screen first
-const splash = new SplashScreen(
-  () => {
-    // On start game
-    new Game();
-  },
-  () => {
-    // On settings
-    settingsModal.show();
-  },
-  () => {
-    // On leaderboard
-    leaderboardModal.show();
-  },
-  () => {
-    // On rules
-    rulesModal.show();
-  }
-);
+themeManager.initialize().then(() => {
+  log.info("Theme manager initialized successfully");
+
+  // Now create modals after theme manager is ready
+  settingsModal = new SettingsModal();
+  leaderboardModal = new LeaderboardModal();
+  rulesModal = new RulesModal();
+
+  // Create splash screen after theme manager is ready
+  splash = new SplashScreen(
+    () => {
+      // On start game
+      new Game();
+    },
+    () => {
+      // On settings
+      settingsModal.show();
+    },
+    () => {
+      // On leaderboard
+      leaderboardModal.show();
+    },
+    () => {
+      // On rules
+      rulesModal.show();
+    }
+  );
+}).catch((error) => {
+  log.error("Failed to initialize theme manager:", error);
+
+  // Create modals and splash anyway even if theme loading failed
+  settingsModal = new SettingsModal();
+  leaderboardModal = new LeaderboardModal();
+  rulesModal = new RulesModal();
+
+  splash = new SplashScreen(
+    () => {
+      // On start game
+      new Game();
+    },
+    () => {
+      // On settings
+      settingsModal.show();
+    },
+    () => {
+      // On leaderboard
+      leaderboardModal.show();
+    },
+    () => {
+      // On rules
+      rulesModal.show();
+    }
+  );
+});

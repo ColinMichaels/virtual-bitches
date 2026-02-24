@@ -24,10 +24,10 @@ export class TutorialModal {
       title: "Controls",
       content: `
         <strong>Mouse:</strong> Click dice to select them<br>
-        <strong>Keyboard:</strong> ← → to navigate, Enter to select<br>
+        <strong>Keyboard:</strong> ← → to navigate, Enter to select, X to deselect<br>
         <strong>Space:</strong> Roll / Score selected dice<br>
         <strong>ESC:</strong> Settings & pause<br>
-        <strong>D:</strong> Deselect all
+        <strong>Shortcuts:</strong> N for New Game, D for Debug View
       `,
       image: "⌨️"
     },
