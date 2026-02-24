@@ -76,6 +76,9 @@ export class DiceRenderer {
   private debugMeshes = new Map<string, Mesh>();
   private isDebugMode = false;
 
+  // Rotation cache for raycast-detected rotations (d10, d12)
+  private rotationCache = new Map<string, Map<number, Vector3>>();
+
   constructor(private scene: Scene) {
     const generators = this.scene.lights
       .map((light) => light.getShadowGenerator())
@@ -99,12 +102,76 @@ export class DiceRenderer {
       // Create materials with textures
       await this.createMaterials();
 
+      // Build rotation cache for d10 and d12 using raycast detection
+      await this.buildRotationCache();
+
       this.geometryLoaded = true;
       console.log("✅ Dice-box rendering system initialized");
     } catch (error) {
       console.error("❌ Failed to initialize dice-box renderer:", error);
       this.geometryLoaded = false;
     }
+  }
+
+  /**
+   * Build rotation cache for d10 and d12 by finding rotations that work
+   */
+  private async buildRotationCache(): Promise<void> {
+    console.log("🔍 Building rotation cache for d10 and d12...");
+
+    const diceToCache: Array<{ kind: DieKind; maxValue: number }> = [
+      { kind: "d10", maxValue: 10 },
+      { kind: "d12", maxValue: 12 },
+    ];
+
+    for (const { kind, maxValue } of diceToCache) {
+      const cache = new Map<number, Vector3>();
+
+      // Use the COLLIDER mesh for raycasting, not the visual mesh
+      const colliderName = `${kind}_collider`;
+      const template = this.templateMeshes.get(colliderName) || this.templateMeshes.get(kind);
+
+      if (!template) {
+        console.warn(`⚠️ No template for ${kind}, skipping cache`);
+        continue;
+      }
+
+      console.log(`  Using template: ${template.name}`);
+
+      // Create a temporary mesh for testing
+      const testMesh = template.clone(`test_${kind}`, null, false, false) as Mesh;
+      testMesh.setEnabled(true);
+      testMesh.position = new Vector3(0, 10, 0);
+
+      // For each face value, find a rotation that works
+      for (let value = 1; value <= maxValue; value++) {
+        const displayValue = kind === "d10" ? (value % 10) : value;
+        console.log(`  Searching for ${kind} value ${displayValue}...`);
+        const rotation = this.findRotationForValue(testMesh, kind, displayValue, 2000);
+
+        if (rotation) {
+          cache.set(displayValue, rotation);
+          console.log(`  ✓ ${kind} value ${displayValue}: FOUND`);
+        } else {
+          // Try again with more lenient detection
+          console.warn(`  ⚠️ ${kind} value ${displayValue}: NOT FOUND after 2000 attempts, retrying with lenient detection...`);
+          const rotation2 = this.findRotationForValue(testMesh, kind, displayValue, 3000);
+          if (rotation2) {
+            cache.set(displayValue, rotation2);
+            console.log(`  ✓ ${kind} value ${displayValue}: FOUND (lenient)`);
+          } else {
+            console.error(`  ❌ ${kind} value ${displayValue}: FAILED - using fallback`);
+            // Use a random rotation as fallback
+            cache.set(displayValue, new Vector3(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2));
+          }
+        }
+      }
+
+      testMesh.dispose();
+      this.rotationCache.set(kind, cache);
+    }
+
+    console.log("✅ Rotation cache built");
   }
 
   /**
@@ -294,6 +361,7 @@ export class DiceRenderer {
     }
 
     instance.setEnabled(true);
+    instance.isPickable = true; // Enable clicking for selection
     console.log(`✅ Cloned mesh for ${die.def.kind}:`, die.id);
 
     // Get die color
@@ -339,6 +407,100 @@ export class DiceRenderer {
     console.log(`🎲 Created ${die.def.kind} successfully`);
 
     return instance;
+  }
+
+  /**
+   * Detect which face is pointing up using raycast
+   * Returns the face index from the collider geometry
+   * Only accepts faces that are relatively horizontal (not on edge/vertex)
+   */
+  private detectUpwardFace(mesh: Mesh): number | null {
+    // Cast ray downward from directly above the die's center
+    const rayOrigin = mesh.position.add(new Vector3(0, 5, 0));
+    const rayDirection = new Vector3(0, -1, 0); // Straight down
+    const ray = new Ray(rayOrigin, rayDirection, 10);
+
+    // Pick the mesh with the ray
+    const pickInfo = ray.intersectsMesh(mesh);
+
+    if (pickInfo.hit && pickInfo.faceId !== undefined && pickInfo.getNormal(true)) {
+      const normal = pickInfo.getNormal(true)!;
+
+      // Check if the face is relatively horizontal (normal pointing up)
+      const upDot = Vector3.Dot(normal, new Vector3(0, 1, 0));
+
+      // Fine-tuned threshold for d10/d12
+      // 0.35 = ~69 degrees tolerance (sweet spot between flatness and finding all values)
+      if (upDot > 0.35) {
+        // Additional check: the hit point should be above the mesh center
+        const hitPoint = pickInfo.pickedPoint;
+        if (hitPoint) {
+          const heightDiff = hitPoint.y - mesh.position.y;
+          // The hit should be elevated above center
+          if (heightDiff > 0) {
+            return pickInfo.faceId;
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Get the die value from a collider face index using colliderFaceMap
+   */
+  private getFaceValueFromCollider(dieKind: string, faceId: number): number | null {
+    const colliderFaceMap = this.scene.metadata?.colliderFaceMap;
+    if (!colliderFaceMap || !colliderFaceMap[dieKind]) {
+      return null;
+    }
+
+    const faceValue = colliderFaceMap[dieKind][faceId.toString()];
+    return faceValue !== undefined ? faceValue : null;
+  }
+
+  /**
+   * Try multiple random rotations to find one that shows the desired value
+   * Uses raycast detection to verify the face
+   */
+  private findRotationForValue(mesh: Mesh, dieKind: string, targetValue: number, maxAttempts: number = 500): Vector3 | null {
+    // For d10 and d12, use raycast-based detection with random rotations
+    // Generate random rotations and test which face lands up
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Generate random rotation
+      const testRotation = new Vector3(
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2
+      );
+
+      // Apply rotation to mesh temporarily
+      const originalRotation = mesh.rotation.clone();
+      mesh.rotation = testRotation;
+
+      // Force mesh to recompute world matrix
+      mesh.computeWorldMatrix(true);
+
+      // Detect which face is up
+      const faceId = this.detectUpwardFace(mesh);
+      if (faceId !== null) {
+        const faceValue = this.getFaceValueFromCollider(dieKind, faceId);
+
+        if (faceValue === targetValue) {
+          // Found a rotation that shows the target value!
+          console.log(`    Found rotation for ${dieKind} value ${targetValue} after ${attempt + 1} attempts`);
+          mesh.rotation = originalRotation; // Restore original
+          return testRotation;
+        }
+      }
+
+      // Restore original rotation for next attempt
+      mesh.rotation = originalRotation;
+    }
+
+    return null; // Couldn't find a suitable rotation
   }
 
   /**
@@ -393,24 +555,31 @@ export class DiceRenderer {
       return rotationToFace[rotationIndex];
     }
 
-    // D10/D100 rotations (pentagonal trapezohedron)
+    // D10/D100 rotations - use cached raycast-detected rotations
     if (dieKind === "d10" || dieKind === "d100") {
-      const angleStep = (Math.PI * 2) / 10;
-      return new Vector3(
-        Math.PI / 6,
-        angleStep * (value % 10),
-        0
-      );
+      const displayValue = value % 10;
+      const cache = this.rotationCache.get("d10");
+
+      if (cache && cache.has(displayValue)) {
+        return cache.get(displayValue)!;
+      }
+
+      // Fallback if cache miss
+      console.warn(`⚠️ No cached rotation for d10 value ${displayValue}`);
+      return new Vector3(0, 0, 0);
     }
 
-    // D12 rotations (dodecahedron)
+    // D12 rotations - use cached raycast-detected rotations
     if (dieKind === "d12") {
-      const angleStep = (Math.PI * 2) / 12;
-      return new Vector3(
-        Math.PI / 5,
-        angleStep * (value - 1),
-        0
-      );
+      const cache = this.rotationCache.get("d12");
+
+      if (cache && cache.has(value)) {
+        return cache.get(value)!;
+      }
+
+      // Fallback if cache miss
+      console.warn(`⚠️ No cached rotation for d12 value ${value}`);
+      return new Vector3(0, 0, 0);
     }
 
     // D20 rotations (icosahedron)
