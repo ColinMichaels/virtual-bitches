@@ -7,6 +7,9 @@ import { DiceRenderer } from "../render/dice.js";
 import { GameScene } from "../render/scene.js";
 import { DieKind } from "../engine/types.js";
 import { themeManager } from "../services/themeManager.js";
+import { logger } from "../utils/logger.js";
+
+const log = logger.create('DebugView');
 
 const DICE_CONFIG: Array<{ kind: DieKind; faces: number; label: string }> = [
   { kind: "d4", faces: 4, label: "D4 (4 faces)" },
@@ -176,16 +179,16 @@ export class DebugView {
     const offsetV = parseFloat((document.getElementById("offset-v-slider") as HTMLInputElement).value);
     const currentTheme = themeManager.getCurrentTheme();
 
-    console.log(`=== Texture Mapping Settings for ${currentTheme} ===`);
-    console.log(`"textureScale": {`);
-    console.log(`  "u": ${scaleU},`);
-    console.log(`  "v": ${scaleV}`);
-    console.log(`},`);
-    console.log(`"textureOffset": {`);
-    console.log(`  "u": ${offsetU},`);
-    console.log(`  "v": ${offsetV}`);
-    console.log(`}`);
-    console.log("================================");
+    log.info(`=== Texture Mapping Settings for ${currentTheme} ===`);
+    log.info(`"textureScale": {`);
+    log.info(`  "u": ${scaleU},`);
+    log.info(`  "v": ${scaleV}`);
+    log.info(`},`);
+    log.info(`"textureOffset": {`);
+    log.info(`  "u": ${offsetU},`);
+    log.info(`  "v": ${offsetV}`);
+    log.info(`}`);
+    log.info("================================");
   }
 
   private populateThemeDropdown(): void {
@@ -234,7 +237,7 @@ export class DebugView {
     // Apply the settings to the renderer
     this.updateTextureMapping();
 
-    console.log(`📐 Loaded texture settings for ${themeConfig.name}:`, textureScale, textureOffset);
+    log.debug(`Loaded texture settings for ${themeConfig.name}:`, textureScale, textureOffset);
   }
 
   show(): void {

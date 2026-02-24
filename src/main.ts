@@ -16,6 +16,9 @@ import { scoreHistoryService } from "./services/score-history.js";
 import { environment } from "@env";
 import { settingsService } from "./services/settings.js";
 import { themeManager } from "./services/themeManager.js";
+import { logger } from "./utils/logger.js";
+
+const log = logger.create('Game');
 
 class Game {
   private state: GameState;
@@ -601,10 +604,8 @@ class Game {
 
     this.gameOverEl.classList.add("show");
 
-    if (environment.debug) {
-      console.log("Game Over - Score saved:", savedScore);
-      console.log("Your rank:", rank);
-    }
+    log.debug("Game Over - Score saved:", savedScore);
+    log.debug("Your rank:", rank);
   }
 
   private setupSeedActions(shareURL: string) {
@@ -647,7 +648,7 @@ let rulesModal: RulesModal;
 let splash: SplashScreen;
 
 themeManager.initialize().then(() => {
-  console.log("✅ Theme manager initialized");
+  log.info("Theme manager initialized successfully");
 
   // Now create modals after theme manager is ready
   settingsModal = new SettingsModal();
@@ -674,7 +675,7 @@ themeManager.initialize().then(() => {
     }
   );
 }).catch((error) => {
-  console.error("❌ Failed to initialize theme manager:", error);
+  log.error("Failed to initialize theme manager:", error);
 
   // Create modals and splash anyway even if theme loading failed
   settingsModal = new SettingsModal();

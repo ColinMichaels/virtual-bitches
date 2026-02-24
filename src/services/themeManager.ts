@@ -20,6 +20,11 @@
  * ```
  */
 
+import { logger } from '../utils/logger.js';
+
+// Create module-specific logger
+const log = logger.create('ThemeManager');
+
 /**
  * Configuration structure for a dice theme
  */
@@ -113,7 +118,7 @@ class ThemeManager {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    console.log('🎨 Initializing ThemeManager...');
+    log.info('Initializing...');
 
     // Load all available themes in parallel
     const loadPromises = AVAILABLE_THEMES.map(themeName =>
@@ -127,9 +132,9 @@ class ThemeManager {
       const themeName = AVAILABLE_THEMES[index];
       if (result.status === 'fulfilled' && result.value) {
         this.availableThemes.set(themeName, result.value);
-        console.log(`  ✓ Loaded theme: ${result.value.name} (${themeName})`);
+        log.debug(`Loaded theme: ${result.value.name} (${themeName})`);
       } else {
-        console.warn(`  ⚠️ Failed to load theme ${themeName}:`,
+        log.warn(`Failed to load theme ${themeName}:`,
           result.status === 'rejected' ? result.reason : 'Unknown error');
       }
     });
@@ -143,16 +148,16 @@ class ThemeManager {
     if (!this.availableThemes.has(this.currentTheme)) {
       if (this.availableThemes.has(DEFAULT_THEME)) {
         this.currentTheme = DEFAULT_THEME;
-        console.warn(`  ⚠️ Saved theme not available, falling back to ${DEFAULT_THEME}`);
+        log.warn(`Saved theme not available, falling back to ${DEFAULT_THEME}`);
       } else {
         this.currentTheme = Array.from(this.availableThemes.keys())[0];
-        console.warn(`  ⚠️ Default theme not available, using ${this.currentTheme}`);
+        log.warn(`Default theme not available, using ${this.currentTheme}`);
       }
     }
 
     this.initialized = true;
-    console.log(`✅ ThemeManager initialized with ${this.availableThemes.size}/${AVAILABLE_THEMES.length} themes`);
-    console.log(`   Current theme: ${this.currentTheme}`);
+    log.info(`Initialized with ${this.availableThemes.size}/${AVAILABLE_THEMES.length} themes`);
+    log.debug(`Current theme: ${this.currentTheme}`);
   }
 
   /**
@@ -183,12 +188,12 @@ class ThemeManager {
         const isLastAttempt = attempt === MAX_RETRY_ATTEMPTS - 1;
 
         if (isLastAttempt) {
-          console.error(`Failed to load theme ${themeName} after ${MAX_RETRY_ATTEMPTS} attempts:`, error);
+          log.error(`Failed to load theme ${themeName} after ${MAX_RETRY_ATTEMPTS} attempts:`, error);
           return null;
         }
 
         // Wait before retry
-        console.warn(`Retry loading ${themeName} (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS})`);
+        log.debug(`Retry loading ${themeName} (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS})`);
         await this.delay(RETRY_DELAY_MS);
       }
     }
@@ -282,7 +287,7 @@ class ThemeManager {
    */
   setTheme(themeName: string): boolean {
     if (!this.availableThemes.has(themeName)) {
-      console.warn(`⚠️ Theme "${themeName}" not available`);
+      log.warn(`Theme "${themeName}" not available`);
       return false;
     }
 
@@ -290,7 +295,7 @@ class ThemeManager {
       return true; // Already set
     }
 
-    console.log(`🎨 Switching theme: ${this.currentTheme} → ${themeName}`);
+    log.info(`Switching theme: ${this.currentTheme} → ${themeName}`);
     this.currentTheme = themeName;
     this.saveThemeToStorage();
     this.notifyListeners();
@@ -351,7 +356,7 @@ class ThemeManager {
       try {
         listener(this.currentTheme);
       } catch (error) {
-        console.error('Error in theme change listener:', error);
+        log.error('Error in theme change listener:', error);
       }
     });
   }
@@ -364,9 +369,10 @@ class ThemeManager {
       const saved = localStorage.getItem('biscuits-theme');
       if (saved) {
         this.currentTheme = saved;
+        log.debug(`Loaded saved theme from storage: ${saved}`);
       }
     } catch (error) {
-      console.warn('Failed to load theme from storage:', error);
+      log.warn('Failed to load theme from storage:', error);
     }
   }
 
@@ -376,8 +382,9 @@ class ThemeManager {
   private saveThemeToStorage(): void {
     try {
       localStorage.setItem('biscuits-theme', this.currentTheme);
+      log.debug(`Saved theme to storage: ${this.currentTheme}`);
     } catch (error) {
-      console.warn('Failed to save theme to storage:', error);
+      log.warn('Failed to save theme to storage:', error);
     }
   }
 }

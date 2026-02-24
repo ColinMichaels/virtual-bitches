@@ -15,6 +15,9 @@ import {
 import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
 import "@babylonjs/loaders/glTF";
 import { themeManager } from "../services/themeManager.js";
+import { logger } from "../utils/logger.js";
+
+const log = logger.create('SplashDiceRenderer');
 
 const DIE_SIZES: Record<string, number> = {
   d4: 1.3,
@@ -58,9 +61,9 @@ export class SplashDiceRenderer {
       await this.loadGeometry();
       await this.createMaterial();
       this.geometryLoaded = true;
-      console.log("✅ Splash dice renderer initialized");
+      log.info("Splash dice renderer initialized");
     } catch (error) {
-      console.error("❌ Failed to initialize splash dice renderer:", error);
+      log.error("Failed to initialize splash dice renderer:", error);
       this.geometryLoaded = false;
     }
   }
@@ -75,7 +78,7 @@ export class SplashDiceRenderer {
     }
 
     const geometryPath = `${themeManager.getCurrentThemePath()}/${themeConfig.meshFile}`;
-    console.log(`📦 Loading splash geometry from: ${geometryPath}`);
+    log.debug(`Loading splash geometry from: ${geometryPath}`);
 
     const response = await fetch(geometryPath);
     if (!response.ok) {
@@ -126,12 +129,12 @@ export class SplashDiceRenderer {
   private async createMaterial(): Promise<void> {
     const themeConfig = themeManager.getCurrentThemeConfig();
     if (!themeConfig) {
-      console.error("❌ No theme config available for splash");
+      log.error("No theme config available for splash");
       return;
     }
 
     const basePath = themeManager.getCurrentThemePath();
-    console.log("🎨 Loading splash material from:", basePath);
+    log.info("Loading splash material from:", basePath);
 
     // Load textures based on theme type
     if (themeConfig.material.type === 'standard') {
@@ -234,7 +237,7 @@ export class SplashDiceRenderer {
       this.material.specularPower = themeConfig.material.specularPower || 64;
     }
 
-    console.log("✅ Splash material loaded");
+    log.info("Splash material loaded");
   }
 
   /**
@@ -245,7 +248,7 @@ export class SplashDiceRenderer {
     await this.initPromise;
 
     if (!this.geometryLoaded || !this.material) {
-      console.warn("⚠️ Geometry not loaded yet for splash dice");
+      log.warn("Geometry not loaded yet for splash dice");
       return;
     }
 
@@ -256,7 +259,7 @@ export class SplashDiceRenderer {
       const template = this.templateMeshes.get(dieType);
 
       if (!template) {
-        console.warn(`⚠️ No template for ${dieType}`);
+        log.warn(`No template for ${dieType}`);
         continue;
       }
 
@@ -331,14 +334,14 @@ export class SplashDiceRenderer {
       this.diceMeshes.push(die);
     }
 
-    console.log(`✅ Created ${count} splash dice`);
+    log.info(`Created ${count} splash dice`);
   }
 
   /**
    * Handle theme change
    */
   private async onThemeChanged(): Promise<void> {
-    console.log("🔄 Theme changed for splash dice...");
+    log.info("Theme changed for splash dice...");
 
     // Dispose old material
     this.material?.dispose();
@@ -361,7 +364,7 @@ export class SplashDiceRenderer {
       }
     });
 
-    console.log("✅ Splash dice theme updated");
+    log.info("Splash dice theme updated");
   }
 
   /**

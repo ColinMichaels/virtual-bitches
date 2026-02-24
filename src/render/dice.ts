@@ -26,6 +26,9 @@ import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
 import "@babylonjs/loaders/glTF";
 import { DieState, DieKind } from "../engine/types.js";
 import { themeManager } from "../services/themeManager.js";
+import { logger } from "../utils/logger.js";
+
+const log = logger.create('DiceRenderer');
 
 const DIE_SIZES: Record<DieKind, number> = {
   d4: 1.2,
@@ -148,9 +151,9 @@ export class DiceRenderer {
       await this.buildRotationCache();
 
       this.geometryLoaded = true;
-      console.log("✅ Dice-box rendering system initialized");
+      log.info("Dice-box rendering system initialized");
     } catch (error) {
-      console.error("❌ Failed to initialize dice-box renderer:", error);
+      log.error("Failed to initialize dice-box renderer:", error);
       this.geometryLoaded = false;
     }
   }
@@ -159,7 +162,7 @@ export class DiceRenderer {
    * Build rotation cache for d10 and d12 by finding rotations that work
    */
   private async buildRotationCache(): Promise<void> {
-    console.log("🔍 Building rotation cache for d10 and d12...");
+    log.debug("Building rotation cache for d10 and d12...");
 
     const diceToCache: Array<{ kind: DieKind; maxValue: number }> = [
       { kind: "d10", maxValue: 10 },
@@ -174,11 +177,11 @@ export class DiceRenderer {
       const template = this.templateMeshes.get(colliderName) || this.templateMeshes.get(kind);
 
       if (!template) {
-        console.warn(`⚠️ No template for ${kind}, skipping cache`);
+        log.warn(`No template for ${kind}, skipping cache`);
         continue;
       }
 
-      console.log(`  Using template: ${template.name}`);
+      log.debug(`Using template: ${template.name}`);
 
       // Create a temporary mesh for testing
       const testMesh = template.clone(`test_${kind}`, null, false, false) as Mesh;
@@ -188,21 +191,21 @@ export class DiceRenderer {
       // For each face value, find a rotation that works
       for (let value = 1; value <= maxValue; value++) {
         const displayValue = kind === "d10" ? (value % 10) : value;
-        console.log(`  Searching for ${kind} value ${displayValue}...`);
+        log.debug(`Searching for ${kind} value ${displayValue}...`);
         const rotation = this.findRotationForValue(testMesh, kind, displayValue, MAX_ROTATION_ATTEMPTS_INITIAL);
 
         if (rotation) {
           cache.set(displayValue, rotation);
-          console.log(`  ✓ ${kind} value ${displayValue}: FOUND`);
+          log.debug(`${kind} value ${displayValue}: FOUND`);
         } else {
           // Try again with more lenient detection
-          console.warn(`  ⚠️ ${kind} value ${displayValue}: NOT FOUND after ${MAX_ROTATION_ATTEMPTS_INITIAL} attempts, retrying with lenient detection...`);
+          log.warn(`${kind} value ${displayValue}: NOT FOUND after ${MAX_ROTATION_ATTEMPTS_INITIAL} attempts, retrying...`);
           const rotation2 = this.findRotationForValue(testMesh, kind, displayValue, MAX_ROTATION_ATTEMPTS_RETRY);
           if (rotation2) {
             cache.set(displayValue, rotation2);
-            console.log(`  ✓ ${kind} value ${displayValue}: FOUND (lenient)`);
+            log.debug(`${kind} value ${displayValue}: FOUND (lenient)`);
           } else {
-            console.error(`  ❌ ${kind} value ${displayValue}: FAILED - using fallback`);
+            log.error(`${kind} value ${displayValue}: FAILED - using fallback`);
             // Use a random rotation as fallback
             cache.set(displayValue, new Vector3(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2));
           }
@@ -213,7 +216,7 @@ export class DiceRenderer {
       this.rotationCache.set(kind, cache);
     }
 
-    console.log("✅ Rotation cache built");
+    log.debug("Rotation cache built successfully");
   }
 
   /**
@@ -227,7 +230,7 @@ export class DiceRenderer {
     }
 
     const geometryPath = `${themeManager.getCurrentThemePath()}/${themeConfig.meshFile}`;
-    console.log(`📦 Loading geometry from: ${geometryPath}`);
+    log.debug(`Loading geometry from: ${geometryPath}`);
 
     const response = await fetch(geometryPath);
     if (!response.ok) {
@@ -275,7 +278,7 @@ export class DiceRenderer {
       }
 
       this.templateMeshes.set(mesh.name, mesh as Mesh);
-      console.log(`📦 Loaded template: ${mesh.name}`);
+      log.debug(`Loaded template: ${mesh.name}`);
     });
 
     // Store collider face map for value detection
@@ -290,11 +293,11 @@ export class DiceRenderer {
   private async createMaterials(): Promise<void> {
     const themeConfig = themeManager.getCurrentThemeConfig();
     if (!themeConfig) {
-      console.error("❌ No theme config available");
+      log.error("No theme config available");
       return;
     }
 
-    console.log(`🎨 Loading materials for theme: ${themeConfig.name}`);
+    log.info(`Loading materials for theme: ${themeConfig.name}`);
 
     if (themeConfig.material.type === 'standard') {
       await this.createStandardMaterial();
@@ -310,7 +313,7 @@ export class DiceRenderer {
   private async createStandardMaterial(): Promise<void> {
     const basePath = themeManager.getCurrentThemePath();
     const themeConfig = themeManager.getCurrentThemeConfig()!;
-    console.log("🎨 Loading standard material from:", basePath);
+    log.info("Loading standard material from:", basePath);
 
     const diffuseTexture = new Texture(`${basePath}/${themeConfig.material.diffuseTexture}`, this.scene);
     const normalMap = new Texture(`${basePath}/${themeConfig.material.bumpTexture}`, this.scene);
@@ -335,7 +338,7 @@ export class DiceRenderer {
       }
     });
 
-    console.log("✅ Standard material textures loaded");
+    log.info("Standard material textures loaded");
 
     this.materialDark = new StandardMaterial("dice-material", this.scene);
     this.materialDark.diffuseTexture = diffuseTexture;
@@ -359,7 +362,7 @@ export class DiceRenderer {
   private async createColorMaterial(): Promise<void> {
     const basePath = themeManager.getCurrentThemePath();
     const themeConfig = themeManager.getCurrentThemeConfig()!;
-    console.log("🎨 Loading color material from:", basePath);
+    log.info("Loading color material from:", basePath);
 
     const diffuseConfig = themeConfig.material.diffuseTexture as { light: string; dark: string };
     // Load textures with alpha channel enabled
@@ -389,7 +392,7 @@ export class DiceRenderer {
       }
     });
 
-    console.log("✅ Color material textures loaded");
+    log.info("Color material textures loaded");
 
     // Apply texture scaling if specified (for themes with different texture sizes)
     const textureScale = (themeConfig.material as any).textureScale;
@@ -437,7 +440,7 @@ export class DiceRenderer {
   createDie(die: DieState): Mesh {
     // Wait for geometry to load if not ready
     if (!this.geometryLoaded || !this.materialLight || !this.materialDark) {
-      console.warn("⚠️ Geometry not loaded yet, using placeholder");
+      log.warn("Geometry not loaded yet, using placeholder");
       return this.createPlaceholderDie(die);
     }
 
@@ -446,7 +449,7 @@ export class DiceRenderer {
     const template = this.templateMeshes.get(templateName);
 
     if (!template) {
-      console.warn(`⚠️ No template for ${die.def.kind}, using placeholder`);
+      log.warn(`No template for ${die.def.kind}, using placeholder`);
       return this.createPlaceholderDie(die);
     }
 
@@ -456,20 +459,20 @@ export class DiceRenderer {
     const instance = template.clone(die.id, null, false, false) as Mesh;
 
     if (!instance) {
-      console.error(`❌ Failed to clone mesh for ${die.def.kind}`);
+      log.error(`Failed to clone mesh for ${die.def.kind}`);
       return this.createPlaceholderDie(die);
     }
 
     instance.setEnabled(true);
     instance.isPickable = true; // Enable clicking for selection
-    console.log(`✅ Cloned mesh for ${die.def.kind}:`, die.id);
+    log.debug(`Cloned mesh for ${die.def.kind}:`, die.id);
 
     // For now, just use white material directly - no custom colors per die
     // Store white color for UI purposes
     const hexColor = "#ffffff";
     this.dieColors.set(die.id, hexColor);
 
-    console.log(`🎲 Creating ${die.def.kind} with white material`);
+    log.debug(`Creating ${die.def.kind} with white material`);
 
     // Use the shared white material directly (no cloning, no color customization)
     instance.material = this.materialDark;
@@ -488,7 +491,7 @@ export class DiceRenderer {
     // Store reference
     this.meshes.set(die.id, instance);
 
-    console.log(`🎲 Created ${die.def.kind} successfully`);
+    log.debug(`Created ${die.def.kind} successfully`);
 
     return instance;
   }
@@ -574,7 +577,7 @@ export class DiceRenderer {
 
         if (faceValue === targetValue) {
           // Found a rotation that shows the target value!
-          console.log(`    Found rotation for ${dieKind} value ${targetValue} after ${attempt + 1} attempts`);
+          log.debug(`Found rotation for ${dieKind} value ${targetValue} after ${attempt + 1} attempts`);
           mesh.rotation = originalRotation; // Restore original
           return testRotation;
         }
@@ -649,7 +652,7 @@ export class DiceRenderer {
       }
 
       // Fallback if cache miss
-      console.warn(`⚠️ No cached rotation for d10 value ${displayValue}`);
+      log.warn(`No cached rotation for d10 value ${displayValue}`);
       return new Vector3(0, 0, 0);
     }
 
@@ -662,7 +665,7 @@ export class DiceRenderer {
       }
 
       // Fallback if cache miss
-      console.warn(`⚠️ No cached rotation for d12 value ${value}`);
+      log.warn(`No cached rotation for d12 value ${value}`);
       return new Vector3(0, 0, 0);
     }
 
@@ -955,7 +958,7 @@ export class DiceRenderer {
    */
   createDebugDice(dieKind: DieKind, faceCount: number): void {
     if (!this.geometryLoaded) {
-      console.warn("⚠️ Geometry not loaded yet for debug dice");
+      log.warn("Geometry not loaded yet for debug dice");
       return;
     }
 
@@ -1030,7 +1033,7 @@ export class DiceRenderer {
    * Handle theme change - reload materials and update all dice
    */
   private async onThemeChanged(): Promise<void> {
-    console.log("🔄 Theme changed, reloading materials...");
+    log.info("Theme changed, reloading materials...");
 
     // Dispose old materials
     this.materialLight?.dispose();
@@ -1058,7 +1061,7 @@ export class DiceRenderer {
       }
     });
 
-    console.log("✅ Theme updated for all dice");
+    log.info("Theme updated for all dice");
   }
 
   /**
@@ -1066,7 +1069,7 @@ export class DiceRenderer {
    * Updates scale and offset for all textures on current materials
    */
   updateTextureMapping(scaleU: number, scaleV: number, offsetU: number, offsetV: number): void {
-    console.log(`🎨 Updating texture mapping: scale(${scaleU}, ${scaleV}) offset(${offsetU}, ${offsetV})`);
+    log.debug(`Updating texture mapping: scale(${scaleU}, ${scaleV}) offset(${offsetU}, ${offsetV})`);
 
     // Update materialDark textures
     if (this.materialDark) {

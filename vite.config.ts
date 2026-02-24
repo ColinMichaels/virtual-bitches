@@ -14,8 +14,10 @@ import { resolve } from "path";
  * texture loaders due to side effects. This is a known limitation.
  */
 export default defineConfig(({ mode }) => {
+  const isProduction = mode === "production";
+
   // Determine which environment file to use
-  const envFile = mode === "production"
+  const envFile = isProduction
     ? "environment.prod.ts"
     : mode === "development"
     ? "environment.dev.ts"
@@ -25,6 +27,9 @@ export default defineConfig(({ mode }) => {
     base: "./",
     build: {
       target: "es2022",
+      // Generate source maps for production debugging
+      // 'hidden' doesn't include source map reference in bundle but generates .map files
+      sourcemap: isProduction ? "hidden" : true,
       rollupOptions: {
         output: {
           // Separate large dependencies into their own chunks for better caching

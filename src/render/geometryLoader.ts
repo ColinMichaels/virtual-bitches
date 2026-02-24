@@ -8,6 +8,9 @@
 
 import { Scene, Mesh, VertexData } from "@babylonjs/core";
 import { DieKind } from "../engine/types.js";
+import { logger } from "../utils/logger.js";
+
+const log = logger.create('GeometryLoader');
 
 interface BabylonMeshData {
   name: string;
@@ -66,17 +69,17 @@ export function createMeshFromGeometry(
   );
 
   if (!meshData) {
-    console.warn(`❌ No geometry data found for ${dieKind}`);
+    log.warn(`No geometry data found for ${dieKind}`);
     return null;
   }
 
   // Validate mesh data
   if (!meshData.positions || !meshData.indices || !meshData.normals) {
-    console.warn(`❌ Invalid geometry data for ${dieKind}`);
+    log.warn(`Invalid geometry data for ${dieKind}`);
     return null;
   }
 
-  console.log(`✅ Creating mesh for ${dieKind} with ${meshData.positions.length / 3} vertices, UVs: ${meshData.uvs ? meshData.uvs.length / 2 : 0}`);
+  log.debug(`Creating mesh for ${dieKind} with ${meshData.positions.length / 3} vertices, UVs: ${meshData.uvs ? meshData.uvs.length / 2 : 0}`);
 
   // Create mesh
   const mesh = new Mesh(name, scene);
