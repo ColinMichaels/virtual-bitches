@@ -7,7 +7,7 @@
     "dev:dev": "vite --mode development",
     "build": "tsc && vite build",
     "build:dev": "tsc && vite build --mode development",
-    "build:prod": "tsc && vite build --mode production",  
+    "build:prod": "tsc && vite build --mode production",
     "preview": "vite preview",
     "test": "tsx src/engine/rules.test.ts",
     "deploy": "npm run build && npx gh-pages -d dist"
@@ -15,6 +15,7 @@
   "dependencies": {
     "@babylonjs/core": "^7.0.0",
     "@babylonjs/loaders": "^7.0.0",
+    "@babylonjs/materials": "^7.54.3",
     "marked": "^17.0.3"
   },
   "devDependencies": {

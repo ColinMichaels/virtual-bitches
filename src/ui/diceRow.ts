@@ -1,6 +1,7 @@
 import { GameState, DieState } from "../engine/types.js";
 import { scoreDie } from "../engine/rules.js";
 import { DiceRenderer } from "../render/dice.js";
+import { themeManager } from "../services/themeManager.js";
 
 export class DiceRow {
   private container: HTMLElement;
@@ -44,10 +45,35 @@ export class DiceRow {
     const el = document.createElement("div");
     el.className = `die-2d ${die.def.kind} ${selected ? "selected" : ""}`;
 
-    // Get the color from the 3D renderer to match
+    // Get the die's color from the 3D renderer
     const dieColor = this.diceRenderer.getDieColor(die.id);
-    if (dieColor) {
-      el.style.background = dieColor;
+
+    // Get theme texture for background
+    const themePath = themeManager.getCurrentThemePath();
+    const themeConfig = themeManager.getCurrentThemeConfig();
+
+    if (themeConfig) {
+      let textureUrl = '';
+
+      if (themeConfig.material.type === 'standard') {
+        // Use the main diffuse texture for standard materials
+        textureUrl = `${themePath}/${themeConfig.material.diffuseTexture}`;
+      } else {
+        // Use the light texture for color materials
+        const diffuseConfig = themeConfig.material.diffuseTexture as { light: string; dark: string };
+        textureUrl = `${themePath}/${diffuseConfig.light}`;
+      }
+
+      // Set background image with stretched texture
+      el.style.backgroundImage = `url(${textureUrl})`;
+      el.style.backgroundSize = '6000%';
+      el.style.backgroundPosition = 'center';
+
+      // Add color tint overlay using background-blend-mode
+      if (dieColor) {
+        el.style.backgroundColor = dieColor;
+        el.style.backgroundBlendMode = 'multiply';
+      }
     }
 
     // Rolled value (centered)
@@ -67,7 +93,7 @@ export class DiceRow {
     // Create badge outside of clipped die
     const kind = document.createElement("div");
     kind.className = "kind";
-    kind.textContent = die.def.sides.toString(); // Just the number (6, 8, 10, etc.)
+    kind.textContent = die.def.sides.toString();
 
     wrapper.appendChild(el);
     wrapper.appendChild(kind);
