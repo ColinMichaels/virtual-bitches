@@ -161,8 +161,10 @@ export class TutorialModal {
     // Handle spotlight and action waiting
     if (step.spotlight) {
       this.showSpotlight(step.spotlight);
+      this.positionModalAwayFrom(step.spotlight);
     } else {
       this.hideSpotlight();
+      this.resetModalPosition();
     }
 
     if (step.waitForAction) {
@@ -204,6 +206,39 @@ export class TutorialModal {
 
   private hideSpotlight(): void {
     this.spotlightOverlay.style.display = "none";
+  }
+
+  private positionModalAwayFrom(selector: string): void {
+    const targetEl = document.querySelector(selector);
+    if (!targetEl) return;
+
+    const rect = targetEl.getBoundingClientRect();
+    const modalContent = this.container.querySelector('.tutorial-content') as HTMLElement;
+    if (!modalContent) return;
+
+    // If target is in the upper half, position modal below it
+    // If target is in the lower half, position modal above it
+    const viewportHeight = window.innerHeight;
+    const targetMiddle = rect.top + rect.height / 2;
+
+    if (targetMiddle < viewportHeight / 2) {
+      // Target is in upper half - position modal below
+      this.container.style.alignItems = 'flex-start';
+      this.container.style.paddingTop = `${rect.bottom + 20}px`;
+      this.container.style.paddingBottom = '40px';
+    } else {
+      // Target is in lower half - position modal above
+      this.container.style.alignItems = 'flex-end';
+      this.container.style.paddingTop = '40px';
+      this.container.style.paddingBottom = `${viewportHeight - rect.top + 20}px`;
+    }
+  }
+
+  private resetModalPosition(): void {
+    // Reset to default centered position
+    this.container.style.alignItems = 'flex-start';
+    this.container.style.paddingTop = '40px';
+    this.container.style.paddingBottom = '40px';
   }
 
   /**

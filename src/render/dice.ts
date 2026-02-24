@@ -626,7 +626,7 @@ export class DiceRenderer {
 
     const usingFallback = currentTheme?.useFallbackFor?.includes(die.def.kind) && currentTheme.fallbackTheme;
 
-    if (usingFallback) {
+    if (usingFallback && currentTheme?.fallbackTheme) {
       const fallbackMaterials = this.materialCache.get(currentTheme.fallbackTheme);
       if (fallbackMaterials) {
         materialToUse = useLight ? fallbackMaterials.light : fallbackMaterials.dark;
@@ -650,7 +650,7 @@ export class DiceRenderer {
       const customMaterial = materialToUse.clone(`${die.id}-material`);
 
       // For ShaderMaterial, copy texture cache reference to the cloned material
-      if (!(customMaterial instanceof StandardMaterial)) {
+      if (!(customMaterial instanceof StandardMaterial) && materialToUse instanceof ShaderMaterial && customMaterial instanceof ShaderMaterial) {
         const originalTextures = this.textureCache.get(materialToUse);
         if (originalTextures) {
           this.textureCache.set(customMaterial, originalTextures);
@@ -667,7 +667,7 @@ export class DiceRenderer {
         if (customMaterial instanceof StandardMaterial) {
           if (customMaterial.diffuseTexture) textures.push(customMaterial.diffuseTexture);
           if (customMaterial.bumpTexture) textures.push(customMaterial.bumpTexture);
-        } else {
+        } else if (customMaterial instanceof ShaderMaterial) {
           // ShaderMaterial - get from texture cache
           const cachedTextures = this.textureCache.get(customMaterial);
           if (cachedTextures) {
@@ -987,7 +987,7 @@ export class DiceRenderer {
     }
 
     const detectedValue = this.getFaceValueFromCollider(die.def.kind, result.faceId);
-    const expectedValue = die.def.kind === 'd10' || die.def.kind === 'd100' ? die.value % 10 : die.value;
+    const expectedValue = die.def.kind === 'd10' ? die.value % 10 : die.value;
 
     if (detectedValue !== expectedValue) {
       log.warn(`[Validation] ${die.def.kind} value ${die.value}: Face mismatch - expected ${expectedValue}, detected ${detectedValue}, stability: ${result.stabilityScore.toFixed(3)}`);
@@ -1373,7 +1373,7 @@ export class DiceRenderer {
       const useLight = this.isDebugMode ? this.debugUseLightMaterial : false;
       const usingFallback = currentTheme?.useFallbackFor?.includes(dieKind) && currentTheme.fallbackTheme;
 
-      if (usingFallback) {
+      if (usingFallback && currentTheme?.fallbackTheme) {
         const fallbackMaterials = this.materialCache.get(currentTheme.fallbackTheme);
         if (fallbackMaterials) {
           materialToUse = useLight ? fallbackMaterials.light : fallbackMaterials.dark;
@@ -1398,7 +1398,7 @@ export class DiceRenderer {
         const customMaterial = materialToUse.clone(`${dieId}-material`);
 
         // For ShaderMaterial, copy texture cache reference to the cloned material
-        if (!(customMaterial instanceof StandardMaterial)) {
+        if (!(customMaterial instanceof StandardMaterial) && materialToUse instanceof ShaderMaterial && customMaterial instanceof ShaderMaterial) {
           const originalTextures = this.textureCache.get(materialToUse);
           if (originalTextures) {
             this.textureCache.set(customMaterial, originalTextures);
@@ -1411,7 +1411,7 @@ export class DiceRenderer {
           if (customMaterial instanceof StandardMaterial) {
             if (customMaterial.diffuseTexture) textures.push(customMaterial.diffuseTexture);
             if (customMaterial.bumpTexture) textures.push(customMaterial.bumpTexture);
-          } else {
+          } else if (customMaterial instanceof ShaderMaterial) {
             const cachedTextures = this.textureCache.get(customMaterial);
             if (cachedTextures) {
               if (cachedTextures.diffuse) textures.push(cachedTextures.diffuse);
