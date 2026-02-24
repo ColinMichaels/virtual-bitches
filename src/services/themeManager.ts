@@ -202,7 +202,7 @@ class ThemeManager {
   private async loadThemeConfig(themeName: string): Promise<ThemeConfig | null> {
     for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
       try {
-        const configPath = `/assets/themes/${themeName}/theme.config.json`;
+        const configPath = `./assets/themes/${themeName}/theme.config.json`;
         const response = await fetch(configPath);
 
         if (!response.ok) {
