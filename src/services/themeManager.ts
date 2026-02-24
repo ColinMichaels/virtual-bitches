@@ -1,27 +1,88 @@
 /**
  * Theme Manager Service
  * Manages dice themes and notifies renderers when theme changes
+ *
+ * @example
+ * ```ts
+ * // Initialize themes
+ * await themeManager.initialize();
+ *
+ * // Get current theme
+ * const theme = themeManager.getCurrentThemeConfig();
+ *
+ * // Switch theme
+ * themeManager.setTheme('wooden');
+ *
+ * // Listen for changes
+ * const unsubscribe = themeManager.onThemeChange((themeName) => {
+ *   console.log('Theme changed to:', themeName);
+ * });
+ * ```
  */
 
+/**
+ * Configuration structure for a dice theme
+ */
 export interface ThemeConfig {
+  /** Display name shown in UI */
   name: string;
+  /** Internal system name (folder name) */
   systemName: string;
+  /** Theme creator */
   author: string;
+  /** Theme version number */
   version: number;
+  /** Mesh file name (e.g., smoothDice.json) */
   meshFile: string;
+  /** Material configuration */
   material: {
+    /** Material type: standard (baked textures) or color (base color + overlay) */
     type: 'standard' | 'color';
+    /** Diffuse/color texture path or light/dark variants */
     diffuseTexture?: string | { light: string; dark: string };
+    /** Normal map texture path */
     bumpTexture?: string;
+    /** Specular map texture path */
     specularTexture?: string;
+    /** Diffuse brightness multiplier (0-2) */
     diffuseLevel?: number;
+    /** Normal map intensity (0-2) */
     bumpLevel?: number;
+    /** Specular shininess (1-128) */
     specularPower?: number;
   };
+  /** Supported die types (d4, d6, d8, d10, d12, d20, d100) */
   diceAvailable: string[];
 }
 
+/**
+ * Callback function invoked when theme changes
+ */
 type ThemeChangeListener = (themeName: string) => void;
+
+/**
+ * Available theme names
+ * Add new themes here when adding to public/assets/themes/
+ */
+const AVAILABLE_THEMES = [
+  'diceOfRolling',
+  'default',
+  'smooth-pip',
+  'gemstone',
+  'wooden',
+  'blueGreenMetal',
+  'rust',
+  'smooth',
+] as const;
+
+/** Default fallback theme if none load successfully */
+const DEFAULT_THEME = 'diceOfRolling';
+
+/** Maximum retry attempts for failed theme loads */
+const MAX_RETRY_ATTEMPTS = 2;
+
+/** Delay between retry attempts (ms) */
+const RETRY_DELAY_MS = 500;
 
 class ThemeManager {
   private static instance: ThemeManager;
@@ -43,42 +104,129 @@ class ThemeManager {
 
   /**
    * Initialize theme manager by loading all available themes
+   *
+   * Loads theme configurations with retry logic for network failures.
+   * If all themes fail to load, falls back to default theme.
+   *
+   * @throws {Error} If no themes can be loaded at all
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
     console.log('🎨 Initializing ThemeManager...');
 
-    // Load all available themes from assets/textures directory
-    const themeNames = ['diceOfRolling', 'default', 'smooth-pip', 'gemstone', 'wooden', 'blueGreenMetal', 'rust', 'smooth'];
+    // Load all available themes in parallel
+    const loadPromises = AVAILABLE_THEMES.map(themeName =>
+      this.loadThemeConfig(themeName)
+    );
 
-    for (const themeName of themeNames) {
-      try {
-        const configPath = `/assets/themes/${themeName}/theme.config.json`;
-        const response = await fetch(configPath);
+    const results = await Promise.allSettled(loadPromises);
 
-        if (response.ok) {
-          const config: ThemeConfig = await response.json();
-          this.availableThemes.set(themeName, config);
-          console.log(`  ✓ Loaded theme: ${config.name} (${themeName})`);
-        }
-      } catch (error) {
-        console.warn(`  ⚠️ Failed to load theme ${themeName}:`, error);
+    // Process results
+    results.forEach((result, index) => {
+      const themeName = AVAILABLE_THEMES[index];
+      if (result.status === 'fulfilled' && result.value) {
+        this.availableThemes.set(themeName, result.value);
+        console.log(`  ✓ Loaded theme: ${result.value.name} (${themeName})`);
+      } else {
+        console.warn(`  ⚠️ Failed to load theme ${themeName}:`,
+          result.status === 'rejected' ? result.reason : 'Unknown error');
+      }
+    });
+
+    // Ensure we loaded at least one theme
+    if (this.availableThemes.size === 0) {
+      throw new Error('Failed to load any themes. Check network connection and theme assets.');
+    }
+
+    // Ensure current theme is valid, fallback to default or first available
+    if (!this.availableThemes.has(this.currentTheme)) {
+      if (this.availableThemes.has(DEFAULT_THEME)) {
+        this.currentTheme = DEFAULT_THEME;
+        console.warn(`  ⚠️ Saved theme not available, falling back to ${DEFAULT_THEME}`);
+      } else {
+        this.currentTheme = Array.from(this.availableThemes.keys())[0];
+        console.warn(`  ⚠️ Default theme not available, using ${this.currentTheme}`);
       }
     }
 
-    // Ensure current theme is valid
-    if (!this.availableThemes.has(this.currentTheme)) {
-      this.currentTheme = themeNames[0];
-    }
-
     this.initialized = true;
-    console.log(`✅ ThemeManager initialized with ${this.availableThemes.size} themes`);
+    console.log(`✅ ThemeManager initialized with ${this.availableThemes.size}/${AVAILABLE_THEMES.length} themes`);
     console.log(`   Current theme: ${this.currentTheme}`);
   }
 
   /**
+   * Load a single theme configuration with retry logic
+   *
+   * @param themeName - Name of theme to load
+   * @returns Theme configuration or null if load fails
+   */
+  private async loadThemeConfig(themeName: string): Promise<ThemeConfig | null> {
+    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+      try {
+        const configPath = `/assets/themes/${themeName}/theme.config.json`;
+        const response = await fetch(configPath);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const config: ThemeConfig = await response.json();
+
+        // Basic validation
+        if (!this.validateThemeConfig(config)) {
+          throw new Error('Invalid theme configuration structure');
+        }
+
+        return config;
+      } catch (error) {
+        const isLastAttempt = attempt === MAX_RETRY_ATTEMPTS - 1;
+
+        if (isLastAttempt) {
+          console.error(`Failed to load theme ${themeName} after ${MAX_RETRY_ATTEMPTS} attempts:`, error);
+          return null;
+        }
+
+        // Wait before retry
+        console.warn(`Retry loading ${themeName} (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS})`);
+        await this.delay(RETRY_DELAY_MS);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Validate theme configuration structure
+   *
+   * @param config - Theme config to validate
+   * @returns True if valid, false otherwise
+   */
+  private validateThemeConfig(config: any): config is ThemeConfig {
+    return (
+      config &&
+      typeof config.name === 'string' &&
+      typeof config.systemName === 'string' &&
+      typeof config.meshFile === 'string' &&
+      config.material &&
+      (config.material.type === 'standard' || config.material.type === 'color') &&
+      Array.isArray(config.diceAvailable)
+    );
+  }
+
+  /**
+   * Delay helper for retry logic
+   *
+   * @param ms - Milliseconds to delay
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
    * Get current theme name
+   *
+   * @returns Current theme system name
    */
   getCurrentTheme(): string {
     return this.currentTheme;
@@ -86,6 +234,8 @@ class ThemeManager {
 
   /**
    * Get current theme configuration
+   *
+   * @returns Current theme config or null if not loaded
    */
   getCurrentThemeConfig(): ThemeConfig | null {
     return this.availableThemes.get(this.currentTheme) || null;
@@ -93,6 +243,9 @@ class ThemeManager {
 
   /**
    * Get theme configuration by name
+   *
+   * @param themeName - System name of theme
+   * @returns Theme config or null if not found
    */
   getThemeConfig(themeName: string): ThemeConfig | null {
     return this.availableThemes.get(themeName) || null;
@@ -100,6 +253,8 @@ class ThemeManager {
 
   /**
    * Get all available themes
+   *
+   * @returns Array of theme names and configurations
    */
   getAvailableThemes(): Array<{ name: string; config: ThemeConfig }> {
     const themes: Array<{ name: string; config: ThemeConfig }> = [];
@@ -111,6 +266,19 @@ class ThemeManager {
 
   /**
    * Set current theme
+   *
+   * Changes the active theme and notifies all listeners.
+   * Persists selection to localStorage.
+   *
+   * @param themeName - System name of theme to activate
+   * @returns True if theme was set, false if theme not available
+   *
+   * @example
+   * ```ts
+   * if (themeManager.setTheme('wooden')) {
+   *   console.log('Theme changed successfully');
+   * }
+   * ```
    */
   setTheme(themeName: string): boolean {
     if (!this.availableThemes.has(themeName)) {
@@ -131,6 +299,8 @@ class ThemeManager {
 
   /**
    * Get base path for current theme assets
+   *
+   * @returns Path to current theme folder
    */
   getCurrentThemePath(): string {
     return `/assets/themes/${this.currentTheme}`;
@@ -138,6 +308,9 @@ class ThemeManager {
 
   /**
    * Get base path for specific theme assets
+   *
+   * @param themeName - System name of theme
+   * @returns Path to theme folder
    */
   getThemePath(themeName: string): string {
     return `/assets/themes/${themeName}`;
@@ -145,6 +318,21 @@ class ThemeManager {
 
   /**
    * Subscribe to theme changes
+   *
+   * Registers a callback to be invoked whenever the theme changes.
+   *
+   * @param listener - Callback function receiving new theme name
+   * @returns Unsubscribe function to remove the listener
+   *
+   * @example
+   * ```ts
+   * const unsubscribe = themeManager.onThemeChange((themeName) => {
+   *   console.log('Theme changed to:', themeName);
+   * });
+   *
+   * // Later, to stop listening:
+   * unsubscribe();
+   * ```
    */
   onThemeChange(listener: ThemeChangeListener): () => void {
     this.listeners.add(listener);
