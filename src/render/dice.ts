@@ -11,7 +11,9 @@ import {
   Scene,
   Mesh,
   MeshBuilder,
+  Material,
   StandardMaterial,
+  ShaderMaterial,
   Color3,
   Vector3,
   Animation,
@@ -27,6 +29,7 @@ import "@babylonjs/loaders/glTF";
 import { DieState, DieKind } from "../engine/types.js";
 import { themeManager } from "../services/themeManager.js";
 import { logger } from "../utils/logger.js";
+import { createColorMaterial } from "./colorMaterial.js";
 
 const log = logger.create('DiceRenderer');
 
@@ -104,6 +107,9 @@ export class DiceRenderer {
   // Materials with light/dark texture variants
   private materialLight: StandardMaterial | null = null;
   private materialDark: StandardMaterial | null = null;
+
+  // Material cache for fallback themes (themeName -> { light, dark })
+  private materialCache = new Map<string, { light: StandardMaterial | ShaderMaterial; dark: StandardMaterial | ShaderMaterial }>();
 
   // Geometry data with collider face maps
   private geometryData: any = null;
@@ -289,6 +295,7 @@ export class DiceRenderer {
   /**
    * Create materials with light/dark texture variants
    * Following dice-box approach: two materials for readability
+   * Also loads fallback theme materials if configured
    */
   private async createMaterials(): Promise<void> {
     const themeConfig = themeManager.getCurrentThemeConfig();
@@ -299,10 +306,40 @@ export class DiceRenderer {
 
     log.info(`Loading materials for theme: ${themeConfig.name}`);
 
+    // Clear material cache
+    this.materialCache.clear();
+
+    // Load primary theme materials
+    await this.loadMaterialsForTheme(themeConfig);
+
+    // Store primary materials in cache
+    if (this.materialLight && this.materialDark) {
+      this.materialCache.set(themeConfig.systemName, {
+        light: this.materialLight,
+        dark: this.materialDark
+      });
+    }
+
+    // Load fallback theme materials if configured
+    if (themeConfig.fallbackTheme) {
+      const fallbackConfig = themeManager.getThemeConfig(themeConfig.fallbackTheme);
+      if (fallbackConfig) {
+        log.info(`Loading fallback theme materials: ${fallbackConfig.name}`);
+        await this.loadMaterialsForTheme(fallbackConfig, true);
+      }
+    }
+  }
+
+  /**
+   * Load materials for a specific theme configuration
+   */
+  private async loadMaterialsForTheme(themeConfig: any, isFallback: boolean = false): Promise<void> {
+    const themePath = `/assets/themes/${themeConfig.systemName}`;
+
     if (themeConfig.material.type === 'standard') {
-      await this.createStandardMaterial();
+      await this.createStandardMaterialForTheme(themeConfig, themePath, isFallback);
     } else {
-      await this.createColorMaterial();
+      await this.createColorMaterialForTheme(themeConfig, themePath, isFallback);
     }
   }
 
@@ -310,9 +347,7 @@ export class DiceRenderer {
    * Create standard material (diceOfRolling style)
    * Uses texture atlas with all colors baked in
    */
-  private async createStandardMaterial(): Promise<void> {
-    const basePath = themeManager.getCurrentThemePath();
-    const themeConfig = themeManager.getCurrentThemeConfig()!;
+  private async createStandardMaterialForTheme(themeConfig: any, basePath: string, isFallback: boolean): Promise<void> {
     log.info("Loading standard material from:", basePath);
 
     const diffuseTexture = new Texture(`${basePath}/${themeConfig.material.diffuseTexture}`, this.scene);
@@ -340,18 +375,29 @@ export class DiceRenderer {
 
     log.info("Standard material textures loaded");
 
-    this.materialDark = new StandardMaterial("dice-material", this.scene);
-    this.materialDark.diffuseTexture = diffuseTexture;
-    this.materialDark.bumpTexture = normalMap;
-    this.materialDark.bumpTexture.level = themeConfig.material.bumpLevel || DEFAULT_BUMP_LEVEL;
+    const materialName = isFallback ? `dice-material-${themeConfig.systemName}` : "dice-material";
+    const material = new StandardMaterial(materialName, this.scene);
+    material.diffuseTexture = diffuseTexture;
+    material.bumpTexture = normalMap;
+    material.bumpTexture.level = themeConfig.material.bumpLevel || DEFAULT_BUMP_LEVEL;
 
     if (specularMap) {
-      this.materialDark.specularTexture = specularMap;
+      material.specularTexture = specularMap;
     }
-    this.materialDark.specularColor = SPECULAR_COLOR_DARK;
-    this.materialDark.specularPower = themeConfig.material.specularPower || DEFAULT_SPECULAR_POWER;
+    material.specularColor = SPECULAR_COLOR_DARK;
+    material.specularPower = themeConfig.material.specularPower || DEFAULT_SPECULAR_POWER;
 
-    this.materialLight = this.materialDark;
+    if (isFallback) {
+      // Store in cache for fallback dice
+      this.materialCache.set(themeConfig.systemName, {
+        light: material,
+        dark: material
+      });
+    } else {
+      // Set as primary materials
+      this.materialDark = material;
+      this.materialLight = material;
+    }
   }
 
   /**
@@ -359,9 +405,7 @@ export class DiceRenderer {
    * Uses transparent texture overlay on colored dice body
    * Following dice-box approach: mix diffuse color with texture alpha
    */
-  private async createColorMaterial(): Promise<void> {
-    const basePath = themeManager.getCurrentThemePath();
-    const themeConfig = themeManager.getCurrentThemeConfig()!;
+  private async createColorMaterialForTheme(themeConfig: any, basePath: string, isFallback: boolean): Promise<void> {
     log.info("Loading color material from:", basePath);
 
     const diffuseConfig = themeConfig.material.diffuseTexture as { light: string; dark: string };
@@ -414,32 +458,55 @@ export class DiceRenderer {
       normalMap.vOffset = textureOffset.v || 0;
     }
 
-    // Color material approach: solid base color with transparent texture overlay
-    // The key is to NOT use hasAlpha on diffuseTexture, but instead use opacityTexture
-    // This allows the base diffuseColor to show through where texture is transparent
-    this.materialDark = new StandardMaterial("dice-material-color", this.scene);
+    // Use custom shader material for proper color blending
+    // Key insight: Use DARK base color with LIGHT pip textures for contrast
+    // Dark die body (dark gray/black) + light pips (white) = good readability
 
-    // Set solid base color (white for now - could be customizable per die)
-    this.materialDark.diffuseColor = WHITE_COLOR;
+    const materialNamePrefix = isFallback ? `dice-color-material-${themeConfig.systemName}` : "dice-color-material";
 
-    // Use the texture as opacityTexture instead of diffuseTexture
-    // This makes the pips/numbers visible while keeping die body solid
-    this.materialDark.opacityTexture = diffuseLight;
+    // Create dark material: dark base color + light pips
+    const darkBaseColor = new Color3(0.2, 0.2, 0.2); // Dark gray die body
+    const materialDark = createColorMaterial(
+      `${materialNamePrefix}-dark`,
+      this.scene,
+      {
+        baseColor: darkBaseColor,
+        diffuseTexture: diffuseLight, // Light pips on dark body
+        bumpTexture: normalMap,
+        bumpLevel: themeConfig.material.bumpLevel || DEFAULT_BUMP_LEVEL,
+        specularTexture: specularMap || undefined,
+        specularPower: themeConfig.material.specularPower || DEFAULT_SPECULAR_POWER,
+        specularColor: SPECULAR_COLOR_LIGHT,
+      }
+    ) as any; // Cast to any to work with StandardMaterial type
 
-    // Also apply as diffuseTexture for the pip colors
-    this.materialDark.diffuseTexture = diffuseLight;
-    this.materialDark.diffuseTexture.hasAlpha = false; // Don't use alpha from diffuse
+    // Create light material: light base color + dark pips
+    const lightBaseColor = new Color3(0.9, 0.9, 0.9); // Light gray die body
+    const materialLight = createColorMaterial(
+      `${materialNamePrefix}-light`,
+      this.scene,
+      {
+        baseColor: lightBaseColor,
+        diffuseTexture: diffuseDark, // Dark pips on light body
+        bumpTexture: normalMap,
+        bumpLevel: themeConfig.material.bumpLevel || DEFAULT_BUMP_LEVEL,
+        specularTexture: specularMap || undefined,
+        specularPower: themeConfig.material.specularPower || DEFAULT_SPECULAR_POWER,
+        specularColor: SPECULAR_COLOR_DARK,
+      }
+    ) as any;
 
-    this.materialDark.bumpTexture = normalMap;
-    this.materialDark.bumpTexture.level = themeConfig.material.bumpLevel || DEFAULT_BUMP_LEVEL;
-    if (specularMap) {
-      this.materialDark.specularTexture = specularMap;
+    if (isFallback) {
+      // Store in cache for fallback dice
+      this.materialCache.set(themeConfig.systemName, {
+        light: materialLight,
+        dark: materialDark
+      });
+    } else {
+      // Set as primary materials
+      this.materialDark = materialDark;
+      this.materialLight = materialLight;
     }
-    this.materialDark.specularColor = SPECULAR_COLOR_LIGHT;
-    this.materialDark.specularPower = themeConfig.material.specularPower || DEFAULT_SPECULAR_POWER;
-
-    // Use the same material for both light and dark
-    this.materialLight = this.materialDark;
   }
 
   /**
@@ -481,10 +548,22 @@ export class DiceRenderer {
     const hexColor = "#ffffff";
     this.dieColors.set(die.id, hexColor);
 
-    log.debug(`Creating ${die.def.kind} with white material`);
+    // Check if this die type should use fallback theme material
+    const currentTheme = themeManager.getCurrentThemeConfig();
+    let materialToUse: Material | null = this.materialDark;
 
-    // Use the shared white material directly (no cloning, no color customization)
-    instance.material = this.materialDark;
+    if (currentTheme?.useFallbackFor?.includes(die.def.kind) && currentTheme.fallbackTheme) {
+      const fallbackMaterials = this.materialCache.get(currentTheme.fallbackTheme);
+      if (fallbackMaterials) {
+        materialToUse = fallbackMaterials.dark;
+        log.debug(`Using fallback theme "${currentTheme.fallbackTheme}" material for ${die.def.kind}`);
+      }
+    }
+
+    log.debug(`Creating ${die.def.kind} with material`);
+
+    // Use the appropriate material (primary or fallback)
+    instance.material = materialToUse;
 
     // Apply size scaling - dice-box models are VERY small, need significant scaling
     const size = DIE_SIZES[die.def.kind];

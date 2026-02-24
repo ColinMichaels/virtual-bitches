@@ -58,6 +58,39 @@ export interface ThemeConfig {
   };
   /** Supported die types (d4, d6, d8, d10, d12, d20, d100) */
   diceAvailable: string[];
+  /** Fallback theme for dice types not covered by this theme's textures */
+  fallbackTheme?: string;
+  /** Dice types that should use fallback (e.g., ["d10", "d12", "d20"] for pip-only themes) */
+  useFallbackFor?: string[];
+  /** UI customization options (optional) */
+  ui?: {
+    /** Background color for game board (hex string) */
+    backgroundColor?: string;
+    /** Game board/table surface color (hex string) */
+    boardColor?: string;
+    /** Base die colors for color material themes (hex strings) */
+    diceColors?: {
+      /** Dark dice color (used with light pips) */
+      dark?: string;
+      /** Light dice color (used with dark pips) */
+      light?: string;
+    };
+    /** Accent color for UI elements (hex string) */
+    accentColor?: string;
+    /** Custom color palette for UI elements */
+    colorSet?: {
+      /** Primary UI color */
+      primary?: string;
+      /** Secondary UI color */
+      secondary?: string;
+      /** Success/positive color */
+      success?: string;
+      /** Warning color */
+      warning?: string;
+      /** Error/danger color */
+      error?: string;
+    };
+  };
 }
 
 /**
@@ -68,17 +101,12 @@ type ThemeChangeListener = (themeName: string) => void;
 /**
  * Available theme names
  * Add new themes here when adding to public/assets/themes/
- *
- * NOTE: Color material themes (default, smooth-pip, gemstone) are temporarily
- * disabled due to transparency rendering issues. They need custom shader implementation
- * to properly blend base colors with alpha-channel textures.
- * See TODO.md "Color Material Transparency Issue" for details.
  */
 const AVAILABLE_THEMES = [
   'diceOfRolling',
-  // 'default',      // DISABLED: Color material transparency issue
-  // 'smooth-pip',   // DISABLED: Color material transparency issue
-  // 'gemstone',     // DISABLED: Color material transparency issue
+  'default',
+  'smooth-pip',
+  'gemstone',
   'wooden',
   'blueGreenMetal',
   'rust',
@@ -391,6 +419,101 @@ class ThemeManager {
     } catch (error) {
       log.warn('Failed to save theme to storage:', error);
     }
+  }
+
+  /**
+   * Get theme config for a specific die type, with fallback support
+   *
+   * If the current theme specifies a fallback for certain die types,
+   * this will return the fallback theme's config for those dice.
+   *
+   * @param dieKind - Die type (d4, d6, d8, d10, d12, d20)
+   * @returns Theme config to use for this die type
+   */
+  getThemeConfigForDie(dieKind: string): ThemeConfig | null {
+    const currentConfig = this.getCurrentThemeConfig();
+    if (!currentConfig) return null;
+
+    // Check if this die type should use fallback
+    if (currentConfig.useFallbackFor?.includes(dieKind) && currentConfig.fallbackTheme) {
+      const fallbackConfig = this.availableThemes.get(currentConfig.fallbackTheme);
+      if (fallbackConfig) {
+        log.debug(`Using fallback theme "${currentConfig.fallbackTheme}" for ${dieKind}`);
+        return fallbackConfig;
+      }
+      log.warn(`Fallback theme "${currentConfig.fallbackTheme}" not available for ${dieKind}`);
+    }
+
+    return currentConfig;
+  }
+
+  /**
+   * Get UI customization options for current theme
+   *
+   * @returns UI configuration object or default values
+   */
+  getUIConfig(): ThemeConfig['ui'] {
+    const config = this.getCurrentThemeConfig();
+    return config?.ui || {};
+  }
+
+  /**
+   * Get background color for current theme
+   *
+   * @param defaultColor - Fallback color if not specified in theme
+   * @returns Hex color string
+   */
+  getBackgroundColor(defaultColor: string = '#1a1a2e'): string {
+    return this.getUIConfig()?.backgroundColor || defaultColor;
+  }
+
+  /**
+   * Get board/table color for current theme
+   *
+   * @param defaultColor - Fallback color if not specified in theme
+   * @returns Hex color string
+   */
+  getBoardColor(defaultColor: string = '#16213e'): string {
+    return this.getUIConfig()?.boardColor || defaultColor;
+  }
+
+  /**
+   * Get dice colors for color material themes
+   *
+   * @returns Object with dark and light dice colors
+   */
+  getDiceColors(): { dark: string; light: string } {
+    const colors = this.getUIConfig()?.diceColors;
+    return {
+      dark: colors?.dark || '#333333',
+      light: colors?.light || '#e5e5e5',
+    };
+  }
+
+  /**
+   * Get accent color for UI elements
+   *
+   * @param defaultColor - Fallback color if not specified in theme
+   * @returns Hex color string
+   */
+  getAccentColor(defaultColor: string = '#0f3460'): string {
+    return this.getUIConfig()?.accentColor || defaultColor;
+  }
+
+  /**
+   * Get complete color set for UI elements
+   *
+   * @returns Color palette object with fallback defaults
+   */
+  getColorSet(): Required<NonNullable<ThemeConfig['ui']>['colorSet']> {
+    const colorSet = this.getUIConfig()?.colorSet;
+    return {
+      primary: colorSet?.primary || '#0f3460',
+      secondary: colorSet?.secondary || '#533483',
+      success: colorSet?.success || '#2ecc71',
+      warning: colorSet?.warning || '#f39c12',
+      error: colorSet?.error || '#e74c3c',
+    };
   }
 }
 

@@ -8,6 +8,7 @@ import {
   Scene,
   Mesh,
   StandardMaterial,
+  ShaderMaterial,
   Color3,
   Vector3,
   Texture,
@@ -16,6 +17,7 @@ import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
 import "@babylonjs/loaders/glTF";
 import { themeManager } from "../services/themeManager.js";
 import { logger } from "../utils/logger.js";
+import { createColorMaterial } from "./colorMaterial.js";
 
 const log = logger.create('SplashDiceRenderer');
 
@@ -185,7 +187,7 @@ export class SplashDiceRenderer {
       this.material.specularColor = new Color3(0.5, 0.5, 0.5);
       this.material.specularPower = themeConfig.material.specularPower || 64;
     } else {
-      // Color material type
+      // Color material type - use custom shader material
       const diffuseConfig = themeConfig.material.diffuseTexture as { light: string; dark: string };
       const diffuseLight = new Texture(
         `${basePath}/${diffuseConfig.light}`,
@@ -193,7 +195,6 @@ export class SplashDiceRenderer {
         undefined,
         true // invertY
       );
-      diffuseLight.hasAlpha = true;
       const normalMap = new Texture(
         `${basePath}/${themeConfig.material.bumpTexture}`,
         this.scene,
@@ -225,16 +226,22 @@ export class SplashDiceRenderer {
         }
       });
 
-      this.material = new StandardMaterial("splash-dice-material", this.scene);
-      // Use diffuseTexture directly - matches dice-box approach
-      this.material.diffuseTexture = diffuseLight;
-      this.material.bumpTexture = normalMap;
-      this.material.bumpTexture.level = themeConfig.material.bumpLevel || 0.5;
-      if (specularMap) {
-        this.material.specularTexture = specularMap;
-      }
-      this.material.specularColor = new Color3(0.8, 0.8, 0.8);
-      this.material.specularPower = themeConfig.material.specularPower || 64;
+      // Use custom shader material for proper color blending
+      // Dark base color + light pip textures for good contrast
+      const darkBaseColor = new Color3(0.2, 0.2, 0.2);
+      this.material = createColorMaterial(
+        "splash-dice-color-material",
+        this.scene,
+        {
+          baseColor: darkBaseColor,
+          diffuseTexture: diffuseLight,
+          bumpTexture: normalMap,
+          bumpLevel: themeConfig.material.bumpLevel || 0.5,
+          specularTexture: specularMap || undefined,
+          specularPower: themeConfig.material.specularPower || 64,
+          specularColor: new Color3(0.8, 0.8, 0.8),
+        }
+      ) as any;
     }
 
     log.info("Splash material loaded");

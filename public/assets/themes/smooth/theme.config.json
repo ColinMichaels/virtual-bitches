@@ -6,11 +6,8 @@
   "meshName": "smoothDice",
   "meshFile": "smoothDice.json",
   "material": {
-    "type": "color",
-    "diffuseTexture": {
-      "light": "diffuse-light.png",
-      "dark": "diffuse-dark.png"
-    },
+    "type": "standard",
+    "diffuseTexture": "diffuse-light.png",
     "diffuseLevel": 1,
     "bumpTexture": "normal.png",
     "bumpLevel": 1
