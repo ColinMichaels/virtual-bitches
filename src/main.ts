@@ -586,7 +586,8 @@ class Game {
       this.state.seed,
       this.state.actionLog,
       gameDuration,
-      this.state.rollIndex
+      this.state.rollIndex,
+      this.state.mode
     );
 
     // Get rank

@@ -3,7 +3,7 @@
  * Manages local score history and statistics
  */
 
-import { Action } from "../engine/types.js";
+import { Action, GameMode } from "../engine/types.js";
 import { environment } from "@env";
 import { logger } from "../utils/logger.js";
 
@@ -17,6 +17,7 @@ export interface GameScore {
   actionLog: Action[]; // For replay
   duration: number; // Game length in ms
   rollCount: number;
+  mode: GameMode; // Game mode (difficulty + variant)
   playerName?: string; // Optional player identification
   synced: boolean; // Track if uploaded to backend
 }
@@ -82,6 +83,7 @@ export class ScoreHistoryService {
     actionLog: Action[],
     duration: number,
     rollCount: number,
+    mode: GameMode,
     playerName?: string
   ): GameScore {
     const gameScore: GameScore = {
@@ -92,6 +94,7 @@ export class ScoreHistoryService {
       actionLog,
       duration,
       rollCount,
+      mode,
       playerName,
       synced: false,
     };

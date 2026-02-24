@@ -7,22 +7,25 @@ import {
   isGameComplete,
   scoreDie,
 } from "../engine/rules.js";
-import { GameState, Action, GameConfig, DieState } from "../engine/types.js";
+import { GameState, Action, GameConfig, DieState, GameMode } from "../engine/types.js";
+import { DEFAULT_MODE } from "../engine/modes.js";
 
 /**
  * Create initial game state
  *
  * @param seed - Random seed for deterministic gameplay (used for replay/sharing)
  * @param config - Optional game configuration (add d20, d4, etc.)
+ * @param mode - Game mode (difficulty + variant), defaults to Normal/Classic
  * @returns New game state in READY status
  *
  * @example
  * ```ts
  * const game = createGame("my-seed-123");
  * const gameWithD20 = createGame("my-seed-123", { addD20: true });
+ * const easyGame = createGame("my-seed-123", {}, EASY_MODE);
  * ```
  */
-export function createGame(seed: string, config: GameConfig = {}): GameState {
+export function createGame(seed: string, config: GameConfig = {}, mode: GameMode = DEFAULT_MODE): GameState {
   const pool = buildDicePool(config);
   const dice = initializeDice(pool);
 
@@ -34,6 +37,7 @@ export function createGame(seed: string, config: GameConfig = {}): GameState {
     selected: new Set(),
     seed,
     actionLog: [],
+    mode,
   };
 }
 
@@ -132,6 +136,7 @@ export function reduce(state: GameState, action: Action): GameState {
  * @param seed - Random seed from the original game
  * @param actions - Array of actions to replay
  * @param config - Game configuration (must match original game)
+ * @param mode - Game mode (must match original game)
  * @returns Final game state after replaying all actions
  *
  * @example
@@ -147,9 +152,10 @@ export function reduce(state: GameState, action: Action): GameState {
 export function replay(
   seed: string,
   actions: Action[],
-  config: GameConfig = {}
+  config: GameConfig = {},
+  mode: GameMode = DEFAULT_MODE
 ): GameState {
-  let state = createGame(seed, config);
+  let state = createGame(seed, config, mode);
   for (const action of actions) {
     state = reduce(state, action);
   }

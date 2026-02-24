@@ -9,6 +9,9 @@ export class HUD {
   private selectedInfoEl: HTMLElement;
   private selectedCountEl: HTMLElement;
   private selectedPointsEl: HTMLElement;
+  private hudDetailsEl: HTMLElement;
+  private toggleBtn: HTMLElement;
+  private isCollapsed: boolean;
 
   constructor() {
     this.rollCountEl = document.getElementById("roll-count")!;
@@ -17,6 +20,32 @@ export class HUD {
     this.selectedInfoEl = document.getElementById("selected-info")!;
     this.selectedCountEl = document.getElementById("selected-count")!;
     this.selectedPointsEl = document.getElementById("selected-points")!;
+    this.hudDetailsEl = document.getElementById("hud-details")!;
+    this.toggleBtn = document.getElementById("hud-toggle-btn")!;
+
+    // Load collapsed state from localStorage (default collapsed on first load)
+    const savedState = localStorage.getItem('hudCollapsed');
+    this.isCollapsed = savedState === null ? true : savedState === 'true';
+    this.applyCollapsedState();
+
+    // Setup toggle
+    this.toggleBtn.addEventListener('click', () => this.toggleDetails());
+  }
+
+  private toggleDetails() {
+    this.isCollapsed = !this.isCollapsed;
+    this.applyCollapsedState();
+    localStorage.setItem('hudCollapsed', String(this.isCollapsed));
+  }
+
+  private applyCollapsedState() {
+    if (this.isCollapsed) {
+      this.hudDetailsEl.classList.add('collapsed');
+      this.toggleBtn.classList.remove('expanded');
+    } else {
+      this.hudDetailsEl.classList.remove('collapsed');
+      this.toggleBtn.classList.add('expanded');
+    }
   }
 
   update(state: GameState) {

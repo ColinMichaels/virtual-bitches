@@ -20,24 +20,34 @@
 <div id="app">
     <canvas id="renderCanvas"></canvas>
 
-    <div id="dice-row"></div>
+    <div id="unified-hud">
+        <div id="stats-bar">
+            <div class="stat-compact">
+                <span class="stat-label-compact">Roll</span>
+                <span class="stat-value-compact" id="roll-count">0</span>
+            </div>
+            <div class="stat-compact">
+                <span class="stat-label-compact">Score</span>
+                <span class="stat-value-compact" id="score">0</span>
+            </div>
+        </div>
 
-    <div id="hud">
-        <div class="stat">
-            <div class="stat-label">Roll</div>
-            <div class="stat-value" id="roll-count">0</div>
-        </div>
-        <div class="stat">
-            <div class="stat-label">Score</div>
-            <div class="stat-value" id="score">0</div>
-        </div>
-        <div id="dice-pool">
-            <div class="stat-label">Remaining</div>
-            <div id="pool-list"></div>
-        </div>
-        <div id="selected-info" style="display:none;">
-            <div><strong>Selected:</strong> <span id="selected-count">0</span></div>
-            <div><strong>Points:</strong> <span id="selected-points">0</span></div>
+        <div id="dice-row"></div>
+
+        <button id="hud-toggle-btn" title="Toggle Details">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </button>
+
+        <div id="hud-details" class="collapsed">
+            <div id="dice-pool">
+                <span class="stat-label">Remaining:</span>
+                <div id="pool-list"></div>
+            </div>
+            <div id="selected-info" style="display:none;">
+                <div><strong>Selected:</strong> <span id="selected-count">0</span> <strong>Points:</strong> <span id="selected-points">0</span></div>
+            </div>
         </div>
     </div>
 

@@ -36,71 +36,159 @@ h1, h2, h3, h4, h5, h6 {
   touch-action: none;
 }
 
-/* Left Sidebar HUD */
-#hud {
+/* Unified HUD - Full Width at Top */
+#unified-hud {
   position: absolute;
-  top: max(20px, env(safe-area-inset-top));
-  left: max(20px, env(safe-area-inset-left));
-  background: rgba(0,0,0,0.7);
-  padding: 20px;
-  border-radius: 8px;
-  min-width: 200px;
+  top: max(10px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  right: max(10px, env(safe-area-inset-right));
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  z-index: 50;
 }
 
-.stat {
-  margin: 8px 0;
+#stats-bar {
+  display: flex;
+  gap: 24px;
+  padding: 10px 20px;
+  background: rgba(0,0,0,0.8);
+  border-radius: 8px 8px 0 0;
+  align-items: center;
 }
 
-.stat-label {
-  font-size: 12px;
+.stat-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-label-compact {
+  font-size: 11px;
   opacity: 0.7;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
-.stat-value {
-  font-size: 24px;
+.stat-value-compact {
+  font-size: 20px;
   font-weight: 700;
   color: #e94560;
 }
 
-#dice-pool {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255,255,255,0.2);
-}
-
-.die-count {
-  display: flex;
-  justify-content: space-between;
-  margin: 4px 0;
-  font-size: 14px;
-}
-
-#selected-info {
-  margin-top: 16px;
-  padding: 12px;
-  background: rgba(233, 69, 96, 0.2);
-  border-radius: 4px;
-  font-size: 14px;
-}
-
-/* Top Center - 2D Dice Row */
+/* Dice Row - Full width, part of unified HUD */
 #dice-row {
-  position: absolute;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
+  position: relative;
   display: flex;
   gap: 8px;
   padding: 12px;
   background: #06013b;
   background: linear-gradient(64deg, rgb(60, 54, 54) 0%, rgba(49, 49, 117, 1) 42%, rgba(71, 71, 71, 1) 100%);
   box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-  border-radius: 8px;
+  border-radius: 0;
   flex-wrap: wrap;
-  max-width: 80%;
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 84px;
+}
+
+/* Die type divider - separates different die types */
+.die-type-divider {
+  width: 2px;
+  height: 50px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(255, 255, 255, 0.3) 20%,
+    rgba(255, 255, 255, 0.3) 80%,
+    transparent
+  );
+  margin: auto 8px;
+  align-self: center;
+}
+
+/* Toggle button for HUD details */
+#hud-toggle-btn {
+  background: rgba(0,0,0,0.8);
+  border: none;
+  padding: 4px 16px;
+  cursor: pointer;
+  border-radius: 0 0 8px 8px;
+  transition: all 0.2s;
+  color: #fff;
+  display: flex;
+  align-items: center;
   justify-content: center;
+}
+
+#hud-toggle-btn svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s;
+}
+
+#hud-toggle-btn:hover {
+  background: rgba(233, 69, 96, 0.8);
+}
+
+/* HUD Details - Collapsible section */
+#hud-details {
+  background: rgba(0,0,0,0.9);
+  padding: 12px 20px;
+  border-radius: 0 0 8px 8px;
+  max-height: 300px;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, padding 0.3s, opacity 0.3s;
+  opacity: 1;
+  width: 100%;
+}
+
+#hud-details.collapsed {
+  max-height: 0;
+  padding: 0 20px;
+  opacity: 0;
+}
+
+/* Rotate chevron when expanded */
+#hud-toggle-btn.expanded svg {
+  transform: rotate(180deg);
+}
+
+#dice-pool {
+  margin-bottom: 12px;
+}
+
+#dice-pool .stat-label {
+  font-size: 11px;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+#pool-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.die-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+#selected-info {
+  padding: 10px;
+  background: rgba(233, 69, 96, 0.3);
+  border-radius: 4px;
+  font-size: 13px;
+  text-align: center;
 }
 
 .die-wrapper {
@@ -212,6 +300,32 @@ h1, h2, h3, h4, h5, h6 {
   text-shadow: 0 1px 3px rgba(0,0,0,1);
   padding: 2px 8px;
   border-radius: 3px;
+  transition: color 0.3s, text-shadow 0.3s, background 0.3s;
+}
+
+/* Hint system - point value colors */
+/* Best choice - gold highlight */
+.die-2d .points.hint-best {
+  color: #FFD700;
+  background: rgba(255, 215, 0, 0.2);
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.8),
+               0 0 12px rgba(255, 215, 0, 0.5),
+               0 1px 3px rgba(0,0,0,1);
+  font-weight: 700;
+}
+
+/* Good choice - light blue */
+.die-2d .points.hint-good {
+  color: #87CEEB;
+  background: rgba(135, 206, 235, 0.2);
+  text-shadow: 0 0 6px rgba(135, 206, 235, 0.6),
+               0 1px 3px rgba(0,0,0,1);
+}
+
+/* Normal/poor choice - default white */
+.die-2d .points.hint-normal {
+  color: #ffffff;
+  opacity: 0.9;
 }
 
 .die-wrapper .kind {
@@ -264,10 +378,11 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Settings Gear Button - Top Right */
+/* Settings and Leaderboard Buttons - Bottom Right (grouped together) */
 #settings-gear-btn {
   position: absolute;
-  top: max(20px, env(safe-area-inset-top));
-  right: max(20px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  right: max(80px, calc(env(safe-area-inset-right) + 60px));
   width: 50px;
   height: 50px;
   padding: 12px;
@@ -298,10 +413,9 @@ h1, h2, h3, h4, h5, h6 {
   transform: rotate(90deg) scale(0.95);
 }
 
-/* Leaderboard Button - Top Right (below settings) */
 #leaderboard-btn {
   position: absolute;
-  top: max(80px, calc(env(safe-area-inset-top) + 60px));
+  bottom: max(20px, env(safe-area-inset-bottom));
   right: max(20px, env(safe-area-inset-right));
   width: 50px;
   height: 50px;
@@ -1254,55 +1368,60 @@ button.danger:hover:not(:disabled) {
 
 /* Tablet Portrait and Below (768px) */
 @media screen and (max-width: 768px) {
-  /* HUD - Ultra compact single row at very top */
-  #hud {
-    top: 3px;
-    left: 3px;
-    right: 55px; /* Leave space for settings button */
-    padding: 4px 8px;
-    min-width: unset;
-    font-size: 11px;
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    justify-content: flex-start;
-    flex-wrap: nowrap;
+  /* Unified HUD - Full width on mobile */
+  #unified-hud {
+    top: max(5px, env(safe-area-inset-top));
+    left: max(5px, env(safe-area-inset-left));
+    right: max(5px, env(safe-area-inset-right));
   }
 
-  .stat {
-    margin: 0;
-    display: flex;
-    align-items: baseline;
-    gap: 4px;
-    white-space: nowrap;
+  #stats-bar {
+    gap: 16px;
+    padding: 6px 12px;
+    font-size: 10px;
   }
 
-  .stat-label {
+  .stat-compact {
+    gap: 6px;
+  }
+
+  .stat-label-compact {
     font-size: 9px;
   }
 
-  .stat-value {
+  .stat-value-compact {
     font-size: 16px;
-    font-weight: 700;
   }
 
-  /* Hide dice pool and selected info on mobile */
-  #dice-pool,
-  #selected-info {
-    display: none !important;
+  /* HUD Details - Start collapsed on mobile */
+  #hud-details {
+    padding: 10px 16px;
   }
 
-  /* Dice Row - Below HUD, touch-friendly dice */
+  #hud-details.collapsed {
+    padding: 0 16px;
+  }
+
+  #hud-toggle-btn {
+    padding: 3px 12px;
+  }
+
+  #hud-toggle-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Dice Row - Touch-friendly dice */
   #dice-row {
-    top: 32px; /* Below compact HUD */
-    left: 3px;
-    right: 3px;
-    transform: none;
-    max-width: calc(100% - 6px);
-    width: calc(100% - 6px);
     padding: 6px;
     gap: 6px;
-    justify-content: space-evenly;
+  }
+
+  /* Die type divider - mobile */
+  .die-type-divider {
+    width: 1px;
+    height: 40px;
+    margin: auto 4px;
   }
 
   .die-wrapper .die-2d {
@@ -1326,13 +1445,14 @@ button.danger:hover:not(:disabled) {
   }
 
   .die-2d .points {
-    font-size: 8px;
+    font-size: 9px;
   }
 
   /* Settings Button - Touch-friendly 44px minimum */
+  /* Settings and Leaderboard moved to bottom right on mobile */
   #settings-gear-btn {
-    top: 10px;
-    right: 10px;
+    bottom: 10px;
+    right: 62px;
     width: 44px;
     height: 44px;
     padding: 10px;
@@ -1343,9 +1463,8 @@ button.danger:hover:not(:disabled) {
     height: 24px;
   }
 
-  /* Leaderboard Button - Touch-friendly 44px minimum */
   #leaderboard-btn {
-    top: 62px;
+    bottom: 10px;
     right: 10px;
     width: 44px;
     height: 44px;
@@ -1546,7 +1665,7 @@ button.danger:hover:not(:disabled) {
 
   /* Leaderboard Button - Touch-friendly 44px minimum */
   #leaderboard-btn {
-    top: 51px;
+    bottom: 5px;
     right: 5px;
     width: 44px;
     height: 44px;
@@ -1562,10 +1681,9 @@ button.danger:hover:not(:disabled) {
     font-size: 7px;
   }
 
-  /* Settings Button - Touch-friendly 44px minimum */
   #settings-gear-btn {
-    top: 5px;
-    right: 5px;
+    bottom: 5px;
+    right: 56px;
     width: 44px;
     height: 44px;
     padding: 10px;
@@ -1696,8 +1814,8 @@ button.danger:hover:not(:disabled) {
   #settings-gear-btn {
     width: 44px;
     height: 44px;
-    top: 5px;
-    right: 5px;
+    bottom: 5px;
+    right: 56px;
     padding: 10px;
   }
 
@@ -1709,6 +1827,8 @@ button.danger:hover:not(:disabled) {
   #leaderboard-btn {
     width: 44px;
     height: 44px;
+    bottom: 5px;
+    right: 5px;
     padding: 10px;
   }
 
