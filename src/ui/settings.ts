@@ -7,6 +7,7 @@ import { settingsService, Settings } from "../services/settings.js";
 import { audioService } from "../services/audio.js";
 import { hapticsService } from "../services/haptics.js";
 import { ThemeSwitcher } from "./themeSwitcher.js";
+import { GameDifficulty } from "../engine/types.js";
 
 export class SettingsModal {
   private container: HTMLElement;
@@ -15,6 +16,7 @@ export class SettingsModal {
   private onClose: (() => void) | null = null;
   private onNewGame: (() => void) | null = null;
   private onHowToPlay: (() => void) | null = null;
+  private checkGameInProgress: (() => boolean) | null = null;
 
   constructor() {
     this.settings = settingsService.getSettings();
@@ -94,8 +96,26 @@ export class SettingsModal {
         </div>
 
         <div class="settings-section">
+          <h3>Game Mode</h3>
+          <p class="setting-description">Changes apply to new games only</p>
+
+          <div class="setting-row">
+            <label for="game-difficulty">Difficulty</label>
+            <select id="game-difficulty">
+              <option value="easy" ${this.settings.game.difficulty === "easy" ? "selected" : ""}>Easy (Hints + More Help)</option>
+              <option value="normal" ${this.settings.game.difficulty === "normal" ? "selected" : ""}>Normal (Standard Rules)</option>
+              <option value="hard" ${this.settings.game.difficulty === "hard" ? "selected" : ""}>Hard (No Hints, Strict)</option>
+            </select>
+          </div>
+
+          <div class="setting-row difficulty-info">
+            <p id="difficulty-info-text" class="setting-description"></p>
+          </div>
+        </div>
+
+        <div class="settings-section">
           <h3>Game Variants</h3>
-          <p class="setting-description">These variants will apply to new games only</p>
+          <p class="setting-description">Customize your dice pool</p>
 
           <div class="setting-row">
             <label>
@@ -145,6 +165,7 @@ export class SettingsModal {
     }
 
     this.setupEventListeners();
+    this.updateDifficultyInfo();
   }
 
   /**
@@ -226,21 +247,86 @@ export class SettingsModal {
       audioService.playSfx("click");
     });
 
+    // Game Difficulty
+    const gameDifficulty = document.getElementById("game-difficulty") as HTMLSelectElement;
+    gameDifficulty.addEventListener("change", () => {
+      // Check if game is in progress
+      if (this.checkGameInProgress && this.checkGameInProgress()) {
+        const confirmed = confirm(
+          "Changing difficulty will start a new game. Your current progress will be lost. Continue?"
+        );
+        if (!confirmed) {
+          // Revert the dropdown to previous value
+          gameDifficulty.value = this.settings.game.difficulty;
+          return;
+        }
+      }
+
+      settingsService.updateGame({
+        difficulty: gameDifficulty.value as GameDifficulty
+      });
+      this.updateDifficultyInfo();
+      audioService.playSfx("click");
+
+      // Start new game if one was in progress
+      if (this.checkGameInProgress && this.checkGameInProgress()) {
+        this.hide();
+        if (this.onNewGame) {
+          this.onNewGame();
+        }
+      }
+    });
+
     // Game Variants
     const variantD20 = document.getElementById("variant-d20") as HTMLInputElement;
     variantD20.addEventListener("change", () => {
+      if (this.checkGameInProgress && this.checkGameInProgress()) {
+        const confirmed = confirm(
+          "Changing dice variants will start a new game. Your current progress will be lost. Continue?"
+        );
+        if (!confirmed) {
+          variantD20.checked = this.settings.game.addD20;
+          return;
+        }
+      }
       settingsService.updateGame({ addD20: variantD20.checked });
       audioService.playSfx("click");
+      if (this.checkGameInProgress && this.checkGameInProgress() && this.onNewGame) {
+        this.hide();
+        this.onNewGame();
+      }
     });
 
     const variantD4 = document.getElementById("variant-d4") as HTMLInputElement;
     variantD4.addEventListener("change", () => {
+      if (this.checkGameInProgress && this.checkGameInProgress()) {
+        const confirmed = confirm(
+          "Changing dice variants will start a new game. Your current progress will be lost. Continue?"
+        );
+        if (!confirmed) {
+          variantD4.checked = this.settings.game.addD4;
+          return;
+        }
+      }
       settingsService.updateGame({ addD4: variantD4.checked });
       audioService.playSfx("click");
+      if (this.checkGameInProgress && this.checkGameInProgress() && this.onNewGame) {
+        this.hide();
+        this.onNewGame();
+      }
     });
 
     const variant2ndD10 = document.getElementById("variant-2nd-d10") as HTMLInputElement;
     variant2ndD10.addEventListener("change", () => {
+      if (this.checkGameInProgress && this.checkGameInProgress()) {
+        const confirmed = confirm(
+          "Changing dice variants will start a new game. Your current progress will be lost. Continue?"
+        );
+        if (!confirmed) {
+          variant2ndD10.checked = this.settings.game.add2ndD10;
+          return;
+        }
+      }
       settingsService.updateGame({ add2ndD10: variant2ndD10.checked });
       audioService.playSfx("click");
       // If d100 mode is enabled but 2nd d10 is now disabled, disable d100 mode
@@ -248,10 +334,23 @@ export class SettingsModal {
         settingsService.updateGame({ d100Mode: false });
         (document.getElementById("variant-d100") as HTMLInputElement).checked = false;
       }
+      if (this.checkGameInProgress && this.checkGameInProgress() && this.onNewGame) {
+        this.hide();
+        this.onNewGame();
+      }
     });
 
     const variantD100 = document.getElementById("variant-d100") as HTMLInputElement;
     variantD100.addEventListener("change", () => {
+      if (this.checkGameInProgress && this.checkGameInProgress()) {
+        const confirmed = confirm(
+          "Changing dice variants will start a new game. Your current progress will be lost. Continue?"
+        );
+        if (!confirmed) {
+          variantD100.checked = this.settings.game.d100Mode;
+          return;
+        }
+      }
       // d100 mode requires 2nd d10
       if (variantD100.checked && !this.settings.game.add2ndD10) {
         settingsService.updateGame({ add2ndD10: true });
@@ -259,6 +358,10 @@ export class SettingsModal {
       }
       settingsService.updateGame({ d100Mode: variantD100.checked });
       audioService.playSfx("click");
+      if (this.checkGameInProgress && this.checkGameInProgress() && this.onNewGame) {
+        this.hide();
+        this.onNewGame();
+      }
     });
 
     // How to Play button
@@ -343,6 +446,29 @@ export class SettingsModal {
       this.settings.game.add2ndD10;
     (document.getElementById("variant-d100") as HTMLInputElement).checked =
       this.settings.game.d100Mode;
+
+    // Update difficulty
+    (document.getElementById("game-difficulty") as HTMLSelectElement).value =
+      this.settings.game.difficulty;
+    this.updateDifficultyInfo();
+  }
+
+  /**
+   * Update difficulty description
+   */
+  private updateDifficultyInfo(): void {
+    const infoText = document.getElementById("difficulty-info-text");
+    if (!infoText) return;
+
+    const difficulty = (document.getElementById("game-difficulty") as HTMLSelectElement).value as GameDifficulty;
+
+    const descriptions = {
+      easy: "✨ Shows hints highlighting best scoring choices. Future updates will add undo/redo options.",
+      normal: "🎲 Standard BISCUITS rules. No hints or special assistance.",
+      hard: "🔥 Coming soon: Stricter rules and no hints. For experienced players only."
+    };
+
+    infoText.textContent = descriptions[difficulty];
   }
 
   /**
@@ -390,5 +516,12 @@ export class SettingsModal {
    */
   setOnHowToPlay(callback: () => void): void {
     this.onHowToPlay = callback;
+  }
+
+  /**
+   * Set callback to check if game is in progress
+   */
+  setCheckGameInProgress(callback: () => boolean): void {
+    this.checkGameInProgress = callback;
   }
 }

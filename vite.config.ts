@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import { resolve } from "path";
+import { viteStaticCopy } from "vite-plugin-static-copy";
 
 /**
  * Vite configuration for BISCUITS
@@ -25,6 +26,17 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: "./",
+    plugins: [
+      viteStaticCopy({
+        targets: [
+          {
+            src: "src/content/rules.md",
+            dest: ".",
+          },
+        ],
+      }),
+    ],
+    publicDir: "public",
     build: {
       target: "es2022",
       // Generate source maps for production debugging

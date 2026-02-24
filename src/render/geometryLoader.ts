@@ -6,8 +6,9 @@
  * @license CC0 (Creative Commons Zero)
  */
 
-import { Scene, Mesh, VertexData } from "@babylonjs/core";
+import { Scene, Mesh, VertexData, Quaternion, Vector3 } from "@babylonjs/core";
 import { DieKind } from "../engine/types.js";
+import { ThemeConfig } from "../services/themeManager.js";
 import { logger } from "../utils/logger.js";
 
 const log = logger.create('GeometryLoader');
@@ -15,12 +16,14 @@ const log = logger.create('GeometryLoader');
 interface BabylonMeshData {
   name: string;
   id: string;
+  position?: [number, number, number];
+  rotationQuaternion?: [number, number, number, number];
+  scaling?: [number, number, number];
   positions: number[];
   indices: number[];
   normals: number[];
   uvs?: number[];
   tangents?: number[];
-  scaling?: [number, number, number];
 }
 
 interface DiceGeometryFile {
@@ -45,9 +48,10 @@ export async function loadDiceGeometry(): Promise<DiceGeometryFile> {
     return geometryData;
   }
 
-  const response = await fetch("./src/assets/textures/smooth-pip/smoothDice.json");
+  const basePath = import.meta.env.BASE_URL || './';
+  const response = await fetch(`${basePath}assets/themes/diceOfRolling/smoothDice.json`);
   if (!response.ok) {
-    throw new Error(`Failed to load dice geometry: ${response.statusText}`);
+    throw new Error(`Failed to load geometry: ${response.statusText}`);
   }
 
   geometryData = await response.json();
@@ -56,12 +60,18 @@ export async function loadDiceGeometry(): Promise<DiceGeometryFile> {
 
 /**
  * Create a mesh from imported geometry data
+ * @param name - Mesh name
+ * @param dieKind - Type of die (d4, d6, etc.)
+ * @param scene - Babylon scene
+ * @param geometryData - Loaded geometry file data
+ * @param themeConfig - Optional theme config with per-die overrides
  */
 export function createMeshFromGeometry(
   name: string,
   dieKind: DieKind,
   scene: Scene,
-  geometryData: DiceGeometryFile
+  geometryData: DiceGeometryFile,
+  themeConfig?: ThemeConfig
 ): Mesh | null {
   // Find the visual mesh (not the collider)
   const meshData = geometryData.meshes.find(
@@ -97,8 +107,45 @@ export function createMeshFromGeometry(
   // Apply vertex data to mesh
   vertexData.applyToMesh(mesh);
 
-  // Apply scaling from geometry data if available
-  if (meshData.scaling) {
+  // Get per-die settings from theme config if available
+  const perDieSettings = themeConfig?.perDieSettings?.[dieKind];
+
+  // Apply position (theme config overrides geometry data)
+  if (perDieSettings?.positionOffset) {
+    mesh.position.set(
+      perDieSettings.positionOffset[0],
+      perDieSettings.positionOffset[1],
+      perDieSettings.positionOffset[2]
+    );
+  } else if (meshData.position) {
+    mesh.position.set(meshData.position[0], meshData.position[1], meshData.position[2]);
+  }
+
+  // Apply rotation (theme config overrides geometry data)
+  if (perDieSettings?.rotationQuaternion) {
+    mesh.rotationQuaternion = new Quaternion(
+      perDieSettings.rotationQuaternion[0],
+      perDieSettings.rotationQuaternion[1],
+      perDieSettings.rotationQuaternion[2],
+      perDieSettings.rotationQuaternion[3]
+    );
+  } else if (meshData.rotationQuaternion) {
+    mesh.rotationQuaternion = new Quaternion(
+      meshData.rotationQuaternion[0],
+      meshData.rotationQuaternion[1],
+      meshData.rotationQuaternion[2],
+      meshData.rotationQuaternion[3]
+    );
+  }
+
+  // Apply scaling (theme config overrides geometry data)
+  if (perDieSettings?.scaling) {
+    mesh.scaling.set(
+      perDieSettings.scaling[0],
+      perDieSettings.scaling[1],
+      perDieSettings.scaling[2]
+    );
+  } else if (meshData.scaling) {
     mesh.scaling.set(meshData.scaling[0], meshData.scaling[1], meshData.scaling[2]);
   }
 

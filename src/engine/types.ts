@@ -32,6 +32,32 @@ export type DieState = {
 };
 
 /**
+ * Game difficulty levels
+ * - easy: Shows hints, allows undo, more forgiving
+ * - normal: Standard gameplay
+ * - hard: No hints, no undo, strict rules
+ */
+export type GameDifficulty = "easy" | "normal" | "hard";
+
+/**
+ * Game variants
+ * - classic: Standard 3-roll BISCUITS
+ * - timeAttack: Race against the clock
+ * - d4Mode: All dice replaced with d4s
+ */
+export type GameVariant = "classic" | "timeAttack" | "d4Mode";
+
+/**
+ * Complete game mode definition
+ */
+export type GameMode = {
+  /** Difficulty level */
+  difficulty: GameDifficulty;
+  /** Game variant */
+  variant: GameVariant;
+};
+
+/**
  * Game status values
  * - READY: waiting for player to roll
  * - ROLLED: dice have been rolled, waiting for player to score
@@ -58,6 +84,8 @@ export type GameState = {
   seed: string;
   /** Complete log of all actions (for replay/sharing) */
   actionLog: Action[];
+  /** Game mode (difficulty + variant) */
+  mode: GameMode;
 };
 
 /**

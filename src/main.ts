@@ -6,10 +6,11 @@ import { SplashScreen } from "./ui/splash.js";
 import { SettingsModal } from "./ui/settings.js";
 import { LeaderboardModal } from "./ui/leaderboard.js";
 import { RulesModal } from "./ui/rules.js";
+import { TutorialModal } from "./ui/tutorial.js";
 import { DebugView } from "./ui/debugView.js";
 import { notificationService } from "./ui/notifications.js";
-import { createGame, reduce, generateShareURL, deserializeActions, replay } from "./game/state.js";
-import { GameState, Action } from "./engine/types.js";
+import { createGame, reduce, generateShareURL, deserializeActions, replay, undo, canUndo } from "./game/state.js";
+import { GameState, Action, GameDifficulty } from "./engine/types.js";
 import { PointerEventTypes } from "@babylonjs/core";
 import { audioService } from "./services/audio.js";
 import { hapticsService } from "./services/haptics.js";
@@ -19,6 +20,7 @@ import { environment } from "@env";
 import { settingsService } from "./services/settings.js";
 import { themeManager } from "./services/themeManager.js";
 import { logger } from "./utils/logger.js";
+import { shouldShowHints, isUndoAllowed } from "./engine/modes.js";
 
 const log = logger.create('Game');
 
@@ -38,6 +40,7 @@ class Game {
 
   private actionBtn: HTMLButtonElement;
   private deselectBtn: HTMLButtonElement;
+  private undoBtn: HTMLButtonElement;
   private gameOverEl: HTMLElement;
   private finalScoreEl: HTMLElement;
   private shareLinkEl: HTMLElement;
@@ -52,13 +55,20 @@ class Game {
     const seed = params.get("seed") || this.generateSeed();
     const logEncoded = params.get("log");
 
+    // Get settings for mode configuration
+    const settings = settingsService.getSettings();
+    const mode = {
+      difficulty: settings.game.difficulty,
+      variant: "classic" as const,
+    };
+
     if (logEncoded) {
       // Replay mode
       const actions = deserializeActions(logEncoded);
       this.state = replay(seed, actions);
     } else {
       // New game
-      this.state = createGame(seed);
+      this.state = createGame(seed, {}, mode);
     }
 
     // Initialize rendering
@@ -68,9 +78,14 @@ class Game {
     this.hud = new HUD();
     this.diceRow = new DiceRow((dieId) => this.handleDieClick(dieId), this.diceRenderer as any);
 
+    // Set initial hint mode based on game mode
+    const hintsEnabled = shouldShowHints(this.state.mode);
+    this.diceRow.setHintMode(hintsEnabled);
+
     // UI elements
     this.actionBtn = document.getElementById("action-btn") as HTMLButtonElement;
     this.deselectBtn = document.getElementById("deselect-btn") as HTMLButtonElement;
+    this.undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
     this.gameOverEl = document.getElementById("game-over")!;
     this.finalScoreEl = document.getElementById("final-score")!;
     this.shareLinkEl = document.getElementById("share-link")!;
@@ -108,10 +123,42 @@ class Game {
       rulesModal.show();
     });
 
+    // Provide callback to check if game is in progress
+    this.settingsModal.setCheckGameInProgress(() => {
+      return this.isGameInProgress();
+    });
+
+    // Listen to settings changes to update hint mode
+    settingsService.onChange((settings) => {
+      const hintsEnabled = shouldShowHints(this.state.mode);
+      this.diceRow.setHintMode(hintsEnabled);
+    });
+
+    // Handle mode changes from HUD dropdown
+    this.hud.setOnModeChange((difficulty) => {
+      this.handleModeChange(difficulty);
+    });
+
+    // Setup tutorial
+    tutorialModal.setOnComplete(() => {
+      // After tutorial, update hint mode in case Easy Mode was enabled
+      const settings = settingsService.getSettings();
+      const hintsEnabled = shouldShowHints({ difficulty: settings.game.difficulty, variant: "classic" });
+      this.diceRow.setHintMode(hintsEnabled);
+      this.updateUI();
+    });
+
     this.setupControls();
     this.setupDiceSelection();
     this.initializeAudio();
     this.updateUI();
+
+    // Show tutorial if this is first time
+    if (tutorialModal.shouldShow()) {
+      // Enable hints during tutorial practice
+      this.diceRow.setHintMode(true);
+      tutorialModal.show();
+    }
 
     // Track game start time
     this.gameStartTime = Date.now();
@@ -141,6 +188,39 @@ class Game {
     return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   }
 
+  private isGameInProgress(): boolean {
+    // Game is in progress if:
+    // - Not complete AND
+    // - (Rolls have been made OR dice have been scored)
+    return this.state.status !== "COMPLETE" &&
+           (this.state.rollIndex > 0 || this.state.score > 0);
+  }
+
+  private handleModeChange(difficulty: GameDifficulty) {
+    // Check if game is in progress
+    if (this.isGameInProgress()) {
+      const confirmed = confirm(
+        `Switch to ${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} mode? This will start a new game and your current progress will be lost.`
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    // Update settings
+    settingsService.updateGame({ difficulty });
+
+    // Start new game if one was in progress
+    if (this.isGameInProgress()) {
+      this.startNewGame();
+    } else {
+      // Just update hint mode if no game in progress
+      const hintsEnabled = shouldShowHints(this.state.mode);
+      this.diceRow.setHintMode(hintsEnabled);
+      this.updateUI();
+    }
+  }
+
   private setupControls() {
     // Multipurpose action button - handles both roll and score
     this.actionBtn.addEventListener("click", () => {
@@ -154,6 +234,13 @@ class Game {
       audioService.playSfx("click");
       hapticsService.buttonPress();
       this.handleDeselectAll();
+    });
+
+    // Undo button (Easy Mode only)
+    this.undoBtn.addEventListener("click", () => {
+      audioService.playSfx("click");
+      hapticsService.buttonPress();
+      this.handleUndo();
     });
 
     this.newGameBtn.addEventListener("click", () => {
@@ -346,6 +433,11 @@ class Game {
       audioService.playSfx("select");
       hapticsService.select();
       this.dispatch({ t: "TOGGLE_SELECT", dieId });
+
+      // Notify tutorial of select action
+      if (tutorialModal.isActive()) {
+        tutorialModal.onPlayerAction('select');
+      }
     }
   }
 
@@ -392,6 +484,38 @@ class Game {
     notificationService.show("Deselected All", "info");
   }
 
+  private handleUndo() {
+    if (this.paused || this.animating) return;
+    if (!isUndoAllowed(this.state.mode) || !canUndo(this.state)) return;
+
+    // Get config for replay
+    const settings = settingsService.getSettings();
+    const config = {
+      addD20: settings.game.addD20,
+      addD4: settings.game.addD4,
+      add2ndD10: settings.game.add2ndD10,
+      d100Mode: settings.game.d100Mode,
+    };
+
+    // Undo last scoring action
+    const newState = undo(this.state, config);
+    if (newState !== this.state) {
+      this.state = newState;
+
+      // Update 3D renderer to match new state
+      // Need to restore any dice that were scored and clear selections
+      this.state.dice.forEach((die) => {
+        if (die.inPlay && !die.scored && die.value > 0) {
+          // Dice should be visible and unselected after undo
+          this.diceRenderer.setSelected(die.id, this.state.selected.has(die.id));
+        }
+      });
+
+      this.updateUI();
+      notificationService.show("Score undone - reselect dice", "info");
+    }
+  }
+
   private highlightFocusedDie(dieId: string) {
     // Remove focus from all dice
     const allDiceElements = document.querySelectorAll(".die-wrapper");
@@ -436,6 +560,11 @@ class Game {
 
       // Show notification after roll completes
       notificationService.show("Roll Complete!", "info");
+
+      // Notify tutorial of roll action
+      if (tutorialModal.isActive()) {
+        tutorialModal.onPlayerAction('roll');
+      }
     });
   }
 
@@ -472,6 +601,11 @@ class Game {
     });
 
     this.dispatch({ t: "SCORE_SELECTED" });
+
+    // Notify tutorial of score action
+    if (tutorialModal.isActive()) {
+      tutorialModal.onPlayerAction('score');
+    }
   }
 
   private handleNewGame() {
@@ -521,7 +655,18 @@ class Game {
       add2ndD10: settings.game.add2ndD10,
       d100Mode: settings.game.d100Mode,
     };
-    this.state = createGame(seed, config);
+
+    // Create mode based on difficulty setting
+    const mode = {
+      difficulty: settings.game.difficulty,
+      variant: "classic" as const,
+    };
+
+    this.state = createGame(seed, config, mode);
+
+    // Update hint mode based on new game mode
+    const hintsEnabled = shouldShowHints(this.state.mode);
+    this.diceRow.setHintMode(hintsEnabled);
 
     // Clear all dice from renderer
     this.diceRenderer.clearDice();
@@ -567,6 +712,15 @@ class Game {
       this.actionBtn.disabled = true;
       this.deselectBtn.style.display = "none";
     }
+
+    // Update undo button (only visible in Easy Mode after scoring)
+    // Show undo when: Easy Mode + player has scored at least once + ready for next roll or still in rolled state
+    if (isUndoAllowed(this.state.mode) && canUndo(this.state) && (this.state.status === "READY" || this.state.status === "ROLLED")) {
+      this.undoBtn.style.display = "inline-block";
+      this.undoBtn.disabled = this.animating || this.paused;
+    } else {
+      this.undoBtn.style.display = "none";
+    }
   }
 
   private showGameOver() {
@@ -586,7 +740,8 @@ class Game {
       this.state.seed,
       this.state.actionLog,
       gameDuration,
-      this.state.rollIndex
+      this.state.rollIndex,
+      this.state.mode
     );
 
     // Get rank
@@ -663,6 +818,7 @@ class Game {
 let settingsModal: SettingsModal;
 let leaderboardModal: LeaderboardModal;
 let rulesModal: RulesModal;
+let tutorialModal: TutorialModal;
 let splash: SplashScreen;
 
 themeManager.initialize().then(() => {
@@ -672,6 +828,7 @@ themeManager.initialize().then(() => {
   settingsModal = new SettingsModal();
   leaderboardModal = new LeaderboardModal();
   rulesModal = new RulesModal();
+  tutorialModal = new TutorialModal();
 
   // Create splash screen after theme manager is ready
   splash = new SplashScreen(
@@ -699,6 +856,7 @@ themeManager.initialize().then(() => {
   settingsModal = new SettingsModal();
   leaderboardModal = new LeaderboardModal();
   rulesModal = new RulesModal();
+  tutorialModal = new TutorialModal();
 
   splash = new SplashScreen(
     () => {

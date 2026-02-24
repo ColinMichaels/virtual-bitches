@@ -4,6 +4,7 @@
  */
 
 import { logger } from "../utils/logger.js";
+import { GameDifficulty } from "../engine/types.js";
 
 const log = logger.create('SettingsService');
 
@@ -32,6 +33,7 @@ export interface GameSettings {
   addD4: boolean;
   add2ndD10: boolean;
   d100Mode: boolean;
+  difficulty: GameDifficulty;
 }
 
 export interface Settings {
@@ -65,6 +67,7 @@ const DEFAULT_SETTINGS: Settings = {
     addD4: false,
     add2ndD10: false,
     d100Mode: false,
+    difficulty: "normal",
   },
   haptics: true,
 };

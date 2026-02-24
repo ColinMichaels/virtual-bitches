@@ -16,6 +16,7 @@ import {
   ShaderMaterial,
   Color3,
   Vector3,
+  Quaternion,
   Animation,
   CubicEase,
   EasingFunction,
@@ -71,14 +72,16 @@ const SCORE_ANIMATION_DELAY_MS = 400;
 const DROP_START_HEIGHT = 15;
 const DROP_END_HEIGHT = 0.6;
 const COLLIDER_SCALE_FACTOR = 0.9;
-const RANDOM_POSITION_SPREAD = 1.5;
+const RANDOM_POSITION_SPREAD = 2.5; // Increased from 1.5 for more randomization
 
 // Rotation detection constants
-const RAYCAST_UP_DOT_THRESHOLD = 0.35; // ~69 degrees tolerance for d10/d12
+const RAYCAST_UP_DOT_THRESHOLD = 0.35; // ~69 degrees tolerance for finding faces during cache building
+const STABLE_ROTATION_THRESHOLD = 0.95; // ~18 degrees - require nearly horizontal for final cached rotations
 const D8_FACE_TILT_RADIANS = 0.615; // ~35 degrees for proper face-flat orientation
 const MAX_ROTATION_ATTEMPTS_INITIAL = 2000;
 const MAX_ROTATION_ATTEMPTS_RETRY = 3000;
 const DEFAULT_MAX_ROTATION_ATTEMPTS = 500;
+const ROTATION_CANDIDATES_PER_VALUE = 5; // Try to find multiple stable rotations per value
 
 // Material constants
 const DEFAULT_BUMP_LEVEL = 0.5;
@@ -117,6 +120,7 @@ export class DiceRenderer {
   // Geometry data with collider face maps
   private geometryData: any = null;
   private geometryLoaded = false;
+  private loadedMeshFile: string | null = null;
 
   // Debug mode tracking
   private debugMeshes = new Map<string, Mesh>();
@@ -169,14 +173,16 @@ export class DiceRenderer {
   }
 
   /**
-   * Build rotation cache for d10 and d12 by finding rotations that work
+   * Build rotation cache for d8, d10, d12, and d20 by finding stable rotations via raycasting
    */
   private async buildRotationCache(): Promise<void> {
-    log.debug("Building rotation cache for d10 and d12...");
+    log.debug("Building rotation cache for d8, d10, d12, and d20...");
 
     const diceToCache: Array<{ kind: DieKind; maxValue: number }> = [
+      { kind: "d8", maxValue: 8 },
       { kind: "d10", maxValue: 10 },
       { kind: "d12", maxValue: 12 },
+      { kind: "d20", maxValue: 20 },
     ];
 
     for (const { kind, maxValue } of diceToCache) {
@@ -202,15 +208,15 @@ export class DiceRenderer {
       for (let value = 1; value <= maxValue; value++) {
         const displayValue = kind === "d10" ? (value % 10) : value;
         log.debug(`Searching for ${kind} value ${displayValue}...`);
-        const rotation = this.findRotationForValue(testMesh, kind, displayValue, MAX_ROTATION_ATTEMPTS_INITIAL);
+        const rotation = this.findRotationForValue(testMesh, kind, displayValue, MAX_ROTATION_ATTEMPTS_INITIAL, true);
 
         if (rotation) {
           cache.set(displayValue, rotation);
           log.debug(`${kind} value ${displayValue}: FOUND`);
         } else {
-          // Try again with more lenient detection
-          log.warn(`${kind} value ${displayValue}: NOT FOUND after ${MAX_ROTATION_ATTEMPTS_INITIAL} attempts, retrying...`);
-          const rotation2 = this.findRotationForValue(testMesh, kind, displayValue, MAX_ROTATION_ATTEMPTS_RETRY);
+          // Try again with more attempts and lenient stability requirement
+          log.warn(`${kind} value ${displayValue}: NOT FOUND with stable threshold after ${MAX_ROTATION_ATTEMPTS_INITIAL} attempts, retrying with lenient...`);
+          const rotation2 = this.findRotationForValue(testMesh, kind, displayValue, MAX_ROTATION_ATTEMPTS_RETRY, false);
           if (rotation2) {
             cache.set(displayValue, rotation2);
             log.debug(`${kind} value ${displayValue}: FOUND (lenient)`);
@@ -248,6 +254,7 @@ export class DiceRenderer {
     }
 
     this.geometryData = await response.json();
+    this.loadedMeshFile = themeConfig.meshFile;
 
     // Strip physics properties to avoid "Physics not enabled" errors
     this.geometryData.physicsEnabled = false;
@@ -280,6 +287,43 @@ export class DiceRenderer {
       mesh.isPickable = false;
       if ((mesh as Mesh).freezeNormals) {
         (mesh as Mesh).freezeNormals();
+      }
+
+      // Apply per-die settings from theme config (overrides geometry file)
+      const dieKind = mesh.name.replace("_collider", "") as DieKind;
+      const perDieSettings = themeConfig.perDieSettings?.[dieKind];
+
+      if (perDieSettings && !mesh.name.includes("collider")) {
+        // Apply position offset (overrides geometry file)
+        if (perDieSettings.positionOffset) {
+          mesh.position.set(
+            perDieSettings.positionOffset[0],
+            perDieSettings.positionOffset[1],
+            perDieSettings.positionOffset[2]
+          );
+          log.debug(`Applied position offset to ${mesh.name}:`, perDieSettings.positionOffset);
+        }
+
+        // Apply rotation (overrides geometry file)
+        if (perDieSettings.rotationQuaternion) {
+          mesh.rotationQuaternion = new Quaternion(
+            perDieSettings.rotationQuaternion[0],
+            perDieSettings.rotationQuaternion[1],
+            perDieSettings.rotationQuaternion[2],
+            perDieSettings.rotationQuaternion[3]
+          );
+          log.debug(`Applied rotation to ${mesh.name}:`, perDieSettings.rotationQuaternion);
+        }
+
+        // Apply scaling (overrides geometry file)
+        if (perDieSettings.scaling) {
+          mesh.scaling.set(
+            perDieSettings.scaling[0],
+            perDieSettings.scaling[1],
+            perDieSettings.scaling[2]
+          );
+          log.debug(`Applied scaling to ${mesh.name}:`, perDieSettings.scaling);
+        }
       }
 
       // Shrink colliders slightly (dice-box approach)
@@ -338,7 +382,8 @@ export class DiceRenderer {
    * Load materials for a specific theme configuration
    */
   private async loadMaterialsForTheme(themeConfig: any, isFallback: boolean = false): Promise<void> {
-    const themePath = `/assets/themes/${themeConfig.systemName}`;
+    const baseUrl = import.meta.env.BASE_URL || './';
+    const themePath = `${baseUrl}assets/themes/${themeConfig.systemName}`;
 
     if (themeConfig.material.type === 'standard') {
       await this.createStandardMaterialForTheme(themeConfig, themePath, isFallback);
@@ -557,6 +602,11 @@ export class DiceRenderer {
       return this.createPlaceholderDie(die);
     }
 
+    // Reset position to origin (template has position offset from geometry file)
+    // The actual die position will be set by the game engine
+    instance.position = Vector3.Zero();
+    instance.rotation = Vector3.Zero();
+
     instance.setEnabled(true);
     instance.isPickable = true; // Enable clicking for selection
     log.debug(`Cloned mesh for ${die.def.kind}:`, die.id);
@@ -569,14 +619,19 @@ export class DiceRenderer {
     // Check if this die type should use fallback theme material
     const currentTheme = themeManager.getCurrentThemeConfig();
     let materialToUse: Material | null;
+    let themeConfigForOverrides: any = currentTheme; // Track which theme config to use for overrides
 
     // Determine which material variant to use (light or dark)
     const useLight = this.isDebugMode ? this.debugUseLightMaterial : false;
 
-    if (currentTheme?.useFallbackFor?.includes(die.def.kind) && currentTheme.fallbackTheme) {
+    const usingFallback = currentTheme?.useFallbackFor?.includes(die.def.kind) && currentTheme.fallbackTheme;
+
+    if (usingFallback && currentTheme?.fallbackTheme) {
       const fallbackMaterials = this.materialCache.get(currentTheme.fallbackTheme);
       if (fallbackMaterials) {
         materialToUse = useLight ? fallbackMaterials.light : fallbackMaterials.dark;
+        // Use fallback theme config for overrides, not the current theme
+        themeConfigForOverrides = themeManager.getThemeConfig(currentTheme.fallbackTheme);
         log.debug(`Using fallback theme "${currentTheme.fallbackTheme}" ${useLight ? 'light' : 'dark'} material for ${die.def.kind}`);
       } else {
         materialToUse = useLight ? this.materialLight : this.materialDark;
@@ -587,8 +642,60 @@ export class DiceRenderer {
 
     log.debug(`Creating ${die.def.kind} with ${useLight ? 'light' : 'dark'} material`);
 
-    // Use the appropriate material (primary or fallback, light or dark)
-    instance.material = materialToUse;
+    // Check if this die needs per-die texture overrides from the appropriate theme config
+    const perDieOverrides = themeConfigForOverrides?.material?.perDieOverrides?.[die.def.kind];
+
+    if (perDieOverrides && materialToUse) {
+      // Clone the material for this specific die so we can apply custom texture settings
+      const customMaterial = materialToUse.clone(`${die.id}-material`);
+
+      // For ShaderMaterial, copy texture cache reference to the cloned material
+      if (!(customMaterial instanceof StandardMaterial) && materialToUse instanceof ShaderMaterial && customMaterial instanceof ShaderMaterial) {
+        const originalTextures = this.textureCache.get(materialToUse);
+        if (originalTextures) {
+          this.textureCache.set(customMaterial, originalTextures);
+        }
+      }
+
+      // Apply per-die texture overrides
+      if (perDieOverrides.textureScale || perDieOverrides.textureOffset) {
+        log.debug(`Applying per-die overrides for ${die.def.kind}:`, perDieOverrides);
+
+        // Get textures from the material (works for both StandardMaterial and ShaderMaterial)
+        const textures: any[] = [];
+
+        if (customMaterial instanceof StandardMaterial) {
+          if (customMaterial.diffuseTexture) textures.push(customMaterial.diffuseTexture);
+          if (customMaterial.bumpTexture) textures.push(customMaterial.bumpTexture);
+        } else if (customMaterial instanceof ShaderMaterial) {
+          // ShaderMaterial - get from texture cache
+          const cachedTextures = this.textureCache.get(customMaterial);
+          if (cachedTextures) {
+            if (cachedTextures.diffuse) textures.push(cachedTextures.diffuse);
+            if (cachedTextures.bump) textures.push(cachedTextures.bump);
+          }
+        }
+
+        // Apply scale/offset to all textures
+        textures.forEach(texture => {
+          if (perDieOverrides.textureScale) {
+            texture.uScale = perDieOverrides.textureScale.u;
+            texture.vScale = perDieOverrides.textureScale.v;
+          }
+          if (perDieOverrides.textureOffset) {
+            texture.uOffset = perDieOverrides.textureOffset.u;
+            texture.vOffset = perDieOverrides.textureOffset.v;
+          }
+        });
+
+        log.debug(`Applied overrides to ${textures.length} textures for ${die.def.kind}`);
+      }
+
+      instance.material = customMaterial;
+    } else {
+      // Use the shared material (primary or fallback, light or dark)
+      instance.material = materialToUse;
+    }
 
     // Apply size scaling - dice-box models are VERY small, need significant scaling
     const size = DIE_SIZES[die.def.kind];
@@ -611,10 +718,10 @@ export class DiceRenderer {
 
   /**
    * Detect which face is pointing up using raycast
-   * Returns the face index from the collider geometry
+   * Returns the face index and stability score from the collider geometry
    * Only accepts faces that are relatively horizontal (not on edge/vertex)
    */
-  private detectUpwardFace(mesh: Mesh): number | null {
+  private detectUpwardFace(mesh: Mesh): { faceId: number; stabilityScore: number } | null {
     // Cast ray downward from directly above the die's center
     const rayOrigin = mesh.position.add(new Vector3(0, 5, 0));
     const rayDirection = new Vector3(0, -1, 0); // Straight down
@@ -638,7 +745,7 @@ export class DiceRenderer {
           const heightDiff = hitPoint.y - mesh.position.y;
           // The hit should be elevated above center
           if (heightDiff > 0) {
-            return pickInfo.faceId;
+            return { faceId: pickInfo.faceId, stabilityScore: upDot };
           }
         }
       }
@@ -661,12 +768,13 @@ export class DiceRenderer {
   }
 
   /**
-   * Try multiple random rotations to find one that shows the desired value
-   * Uses raycast detection to verify the face
+   * Try multiple random rotations to find the most stable one that shows the desired value
+   * Uses raycast detection to verify the face and stability score
    */
-  private findRotationForValue(mesh: Mesh, dieKind: string, targetValue: number, maxAttempts: number = DEFAULT_MAX_ROTATION_ATTEMPTS): Vector3 | null {
-    // For d10 and d12, use raycast-based detection with random rotations
-    // Generate random rotations and test which face lands up
+  private findRotationForValue(mesh: Mesh, dieKind: string, targetValue: number, maxAttempts: number = DEFAULT_MAX_ROTATION_ATTEMPTS, requireStable: boolean = true): Vector3 | null {
+    // Collect multiple candidates and pick the most stable one
+    const candidates: Array<{ rotation: Vector3; stabilityScore: number }> = [];
+    const originalRotation = mesh.rotation.clone();
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       // Generate random rotation
@@ -677,30 +785,52 @@ export class DiceRenderer {
       );
 
       // Apply rotation to mesh temporarily
-      const originalRotation = mesh.rotation.clone();
       mesh.rotation = testRotation;
 
       // Force mesh to recompute world matrix
       mesh.computeWorldMatrix(true);
 
-      // Detect which face is up
-      const faceId = this.detectUpwardFace(mesh);
-      if (faceId !== null) {
-        const faceValue = this.getFaceValueFromCollider(dieKind, faceId);
+      // Detect which face is up with stability score
+      const result = this.detectUpwardFace(mesh);
+      if (result !== null) {
+        const faceValue = this.getFaceValueFromCollider(dieKind, result.faceId);
 
         if (faceValue === targetValue) {
-          // Found a rotation that shows the target value!
-          log.debug(`Found rotation for ${dieKind} value ${targetValue} after ${attempt + 1} attempts`);
-          mesh.rotation = originalRotation; // Restore original
-          return testRotation;
+          // Check stability requirement
+          const meetsStability = !requireStable || result.stabilityScore >= STABLE_ROTATION_THRESHOLD;
+
+          if (meetsStability) {
+            candidates.push({
+              rotation: testRotation.clone(),
+              stabilityScore: result.stabilityScore
+            });
+
+            // Stop early if we found enough stable candidates
+            if (requireStable && candidates.length >= ROTATION_CANDIDATES_PER_VALUE) {
+              break;
+            } else if (!requireStable && candidates.length >= 1) {
+              // If not requiring stable, take first match
+              break;
+            }
+          }
         }
       }
-
-      // Restore original rotation for next attempt
-      mesh.rotation = originalRotation;
     }
 
-    return null; // Couldn't find a suitable rotation
+    // Restore original rotation
+    mesh.rotation = originalRotation;
+
+    if (candidates.length === 0) {
+      return null; // Couldn't find a suitable rotation
+    }
+
+    // Select the most stable rotation (highest upDot score)
+    candidates.sort((a, b) => b.stabilityScore - a.stabilityScore);
+    const best = candidates[0];
+
+    log.debug(`Found ${candidates.length} rotation(s) for ${dieKind} value ${targetValue}, best stability: ${best.stabilityScore.toFixed(3)} ${requireStable ? '(stable)' : '(lenient)'}`);
+
+    return best.rotation;
   }
 
   /**
@@ -722,37 +852,17 @@ export class DiceRenderer {
       return d6Rotations[value] || new Vector3(0, 0, 0);
     }
 
-    // D8 rotations (octahedron)
-    // Empirically determined rotation mapping for all 8 faces
+    // D8 rotations - use cached raycast-detected rotations
     if (dieKind === "d8") {
-      const faceTilt = D8_FACE_TILT_RADIANS;
+      const cache = this.rotationCache.get("d8");
 
-      // All 8 rotations mapped to their faces:
-      const rotationToFace = [
-        new Vector3(faceTilt, 0, Math.PI / 4),              // rotation 0 → face 1
-        new Vector3(-faceTilt, 0, -Math.PI / 4),            // rotation 1 → face 5
-        new Vector3(faceTilt, 0, -Math.PI / 4),             // rotation 2 → face 4
-        new Vector3(-faceTilt, 0, Math.PI / 4),             // rotation 3 → face 8
-        new Vector3(faceTilt, 0, 3 * Math.PI / 4),          // rotation 4 → face 2
-        new Vector3(-faceTilt, 0, -3 * Math.PI / 4),        // rotation 5 → face 6
-        new Vector3(faceTilt, 0, -3 * Math.PI / 4),         // rotation 6 → face 3
-        new Vector3(-faceTilt, 0, 3 * Math.PI / 4),         // rotation 7 → face 7
-      ];
+      if (cache && cache.has(value)) {
+        return cache.get(value)!;
+      }
 
-      // Map desired face value to correct rotation index
-      const valueToRotationIndex: Record<number, number> = {
-        1: 0,  // face 1 → use rotation 0
-        2: 4,  // face 2 → use rotation 4
-        3: 6,  // face 3 → use rotation 6
-        4: 2,  // face 4 → use rotation 2
-        5: 1,  // face 5 → use rotation 1
-        6: 5,  // face 6 → use rotation 5
-        7: 7,  // face 7 → use rotation 7
-        8: 3,  // face 8 → use rotation 3
-      };
-
-      const rotationIndex = valueToRotationIndex[value] ?? 0;
-      return rotationToFace[rotationIndex];
+      // Fallback if cache miss
+      log.warn(`No cached rotation for d8 value ${value}`);
+      return new Vector3(0, 0, 0);
     }
 
     // D10/D100 rotations - use cached raycast-detected rotations
@@ -782,14 +892,17 @@ export class DiceRenderer {
       return new Vector3(0, 0, 0);
     }
 
-    // D20 rotations (icosahedron)
+    // D20 rotations - use cached raycast-detected rotations
     if (dieKind === "d20") {
-      const angleStep = (Math.PI * 2) / 20;
-      return new Vector3(
-        Math.PI / 3,
-        angleStep * (value - 1),
-        0
-      );
+      const cache = this.rotationCache.get("d20");
+
+      if (cache && cache.has(value)) {
+        return cache.get(value)!;
+      }
+
+      // Fallback if cache miss
+      log.warn(`No cached rotation for d20 value ${value}`);
+      return new Vector3(0, 0, 0);
     }
 
     // D4 - tetrahedral (special case, number is usually on bottom edges)
@@ -856,6 +969,35 @@ export class DiceRenderer {
     }
   }
 
+  /**
+   * Validate die rotation after animation completes
+   * Checks if the correct face is up and if the die is stable (flat)
+   */
+  private validateDieRotation(die: DieState, mesh: Mesh): void {
+    // Only validate dice that use raycast-based rotations
+    if (!['d8', 'd10', 'd12', 'd20', 'd100'].includes(die.def.kind)) {
+      return;
+    }
+
+    const result = this.detectUpwardFace(mesh);
+
+    if (result === null) {
+      log.warn(`[Validation] ${die.def.kind} value ${die.value}: No face detected (possible edge landing)`);
+      return;
+    }
+
+    const detectedValue = this.getFaceValueFromCollider(die.def.kind, result.faceId);
+    const expectedValue = die.def.kind === 'd10' ? die.value % 10 : die.value;
+
+    if (detectedValue !== expectedValue) {
+      log.warn(`[Validation] ${die.def.kind} value ${die.value}: Face mismatch - expected ${expectedValue}, detected ${detectedValue}, stability: ${result.stabilityScore.toFixed(3)}`);
+    } else if (result.stabilityScore < STABLE_ROTATION_THRESHOLD) {
+      log.warn(`[Validation] ${die.def.kind} value ${die.value}: Correct face but unstable - stability: ${result.stabilityScore.toFixed(3)} (threshold: ${STABLE_ROTATION_THRESHOLD})`);
+    } else {
+      log.debug(`[Validation] ${die.def.kind} value ${die.value}: ✓ Correct and stable - stability: ${result.stabilityScore.toFixed(3)}`);
+    }
+  }
+
   animateRoll(dice: DieState[], onComplete: () => void) {
     const activeDice = dice.filter((d) => d.inPlay && !d.scored);
     if (activeDice.length === 0) {
@@ -881,7 +1023,8 @@ export class DiceRenderer {
       const randomX = offsetX + (Math.random() - 0.5) * RANDOM_POSITION_SPREAD;
       const randomZ = offsetZ + (Math.random() - 0.5) * RANDOM_POSITION_SPREAD;
 
-      const startY = DROP_START_HEIGHT;
+      // Add variation to drop height for more natural randomness
+      const startY = DROP_START_HEIGHT + (Math.random() - 0.5) * 3;
       const endY = DROP_END_HEIGHT;
 
       mesh.position = new Vector3(randomX, startY, randomZ);
@@ -952,6 +1095,8 @@ export class DiceRenderer {
       mesh.animations = [dropAnim, rotAnim];
       this.scene.beginAnimation(mesh, 0, animDuration, false, ANIMATION_SPEED, () => {
         this.updateDie(die);
+        // Validate die rotation after animation completes
+        this.validateDieRotation(die, mesh);
       });
     });
 
@@ -1147,31 +1292,149 @@ export class DiceRenderer {
    * Handle theme change - reload materials and update all dice
    */
   private async onThemeChanged(): Promise<void> {
-    log.info("Theme changed, reloading materials...");
+    log.info("Theme changed, reloading...");
 
-    // Dispose old materials
+    const currentTheme = themeManager.getCurrentThemeConfig();
+    const newMeshFile = currentTheme?.meshFile;
+
+    // Check if we need to reload geometry (different mesh file)
+    const needsGeometryReload = this.loadedMeshFile &&
+                                 newMeshFile &&
+                                 this.loadedMeshFile !== newMeshFile;
+
+    if (needsGeometryReload) {
+      log.info(`Mesh file changed from ${this.loadedMeshFile} to ${newMeshFile}, reloading geometry...`);
+
+      // Dispose ALL existing dice meshes
+      this.meshes.forEach((mesh) => {
+        mesh.dispose();
+      });
+      this.meshes.clear();
+
+      // Dispose template meshes
+      this.templateMeshes.forEach((mesh) => {
+        mesh.dispose();
+      });
+      this.templateMeshes.clear();
+
+      // Clear rotation cache (it's geometry-specific)
+      this.rotationCache.clear();
+
+      // Reload geometry
+      await this.loadGeometry();
+
+      // Rebuild rotation cache
+      await this.buildRotationCache();
+    }
+
+    // Dispose old per-die materials first
+    this.meshes.forEach((mesh) => {
+      if (mesh.material) {
+        // Only dispose if it's a cloned material (contains die ID in name)
+        if (mesh.material.name && (mesh.material.name.includes('d4-') ||
+            mesh.material.name.includes('d6-') || mesh.material.name.includes('d8-') ||
+            mesh.material.name.includes('d10-') || mesh.material.name.includes('d12-') ||
+            mesh.material.name.includes('d20-'))) {
+          mesh.material.dispose();
+        }
+      }
+    });
+
+    // Dispose shared materials
     this.materialLight?.dispose();
     this.materialDark?.dispose();
+
+    // Clear material cache for fallback themes
+    this.materialCache.forEach((materials) => {
+      materials.light?.dispose();
+      if (materials.dark !== materials.light) {
+        materials.dark?.dispose();
+      }
+    });
+    this.materialCache.clear();
 
     // Reload materials with new theme
     await this.createMaterials();
 
     // Update all existing dice with new materials
+    // We need to rebuild each die's material considering fallback and per-die overrides
     this.meshes.forEach((mesh, dieId) => {
-      const color = this.dieColors.get(dieId);
-      if (color && this.materialDark) {
-        // Clone material for this die
-        const material = this.materialDark.clone(`${dieId}-material`);
-        const colorObj = Color3.FromHexString(color);
+      // Extract die kind from die ID (format: "d6-0", "d8-1", etc.)
+      const dieKindMatch = dieId.match(/^(d\d+)/);
+      if (!dieKindMatch) {
+        log.warn(`Could not determine die kind from ID: ${dieId}`);
+        return;
+      }
+      const dieKind = dieKindMatch[1] as DieKind;
 
-        // Tint the texture with the die color
-        material.diffuseColor = new Color3(
-          0.5 + colorObj.r * 0.5,
-          0.5 + colorObj.g * 0.5,
-          0.5 + colorObj.b * 0.5
-        );
+      // Determine which material to use (with fallback logic)
+      let materialToUse: Material | null;
+      let themeConfigForOverrides: any = currentTheme;
+      const useLight = this.isDebugMode ? this.debugUseLightMaterial : false;
+      const usingFallback = currentTheme?.useFallbackFor?.includes(dieKind) && currentTheme.fallbackTheme;
 
-        mesh.material = material;
+      if (usingFallback && currentTheme?.fallbackTheme) {
+        const fallbackMaterials = this.materialCache.get(currentTheme.fallbackTheme);
+        if (fallbackMaterials) {
+          materialToUse = useLight ? fallbackMaterials.light : fallbackMaterials.dark;
+          themeConfigForOverrides = themeManager.getThemeConfig(currentTheme.fallbackTheme);
+        } else {
+          materialToUse = useLight ? this.materialLight : this.materialDark;
+        }
+      } else {
+        materialToUse = useLight ? this.materialLight : this.materialDark;
+      }
+
+      // Ensure mesh scaling is correct (might get corrupted during material changes)
+      const size = DIE_SIZES[dieKind];
+      const scaleFactor = size * 10;
+      mesh.scaling.set(scaleFactor, scaleFactor, scaleFactor);
+
+      // Check for per-die overrides
+      const perDieOverrides = themeConfigForOverrides?.material?.perDieOverrides?.[dieKind];
+
+      if (perDieOverrides && materialToUse) {
+        // Clone material and apply overrides
+        const customMaterial = materialToUse.clone(`${dieId}-material`);
+
+        // For ShaderMaterial, copy texture cache reference to the cloned material
+        if (!(customMaterial instanceof StandardMaterial) && materialToUse instanceof ShaderMaterial && customMaterial instanceof ShaderMaterial) {
+          const originalTextures = this.textureCache.get(materialToUse);
+          if (originalTextures) {
+            this.textureCache.set(customMaterial, originalTextures);
+          }
+        }
+
+        if (perDieOverrides.textureScale || perDieOverrides.textureOffset) {
+          const textures: any[] = [];
+
+          if (customMaterial instanceof StandardMaterial) {
+            if (customMaterial.diffuseTexture) textures.push(customMaterial.diffuseTexture);
+            if (customMaterial.bumpTexture) textures.push(customMaterial.bumpTexture);
+          } else if (customMaterial instanceof ShaderMaterial) {
+            const cachedTextures = this.textureCache.get(customMaterial);
+            if (cachedTextures) {
+              if (cachedTextures.diffuse) textures.push(cachedTextures.diffuse);
+              if (cachedTextures.bump) textures.push(cachedTextures.bump);
+            }
+          }
+
+          textures.forEach(texture => {
+            if (perDieOverrides.textureScale) {
+              texture.uScale = perDieOverrides.textureScale.u;
+              texture.vScale = perDieOverrides.textureScale.v;
+            }
+            if (perDieOverrides.textureOffset) {
+              texture.uOffset = perDieOverrides.textureOffset.u;
+              texture.vOffset = perDieOverrides.textureOffset.v;
+            }
+          });
+        }
+
+        mesh.material = customMaterial;
+      } else {
+        // Use shared material
+        mesh.material = materialToUse;
       }
     });
 
