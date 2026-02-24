@@ -6,6 +6,7 @@ import { SplashScreen } from "./ui/splash.js";
 import { SettingsModal } from "./ui/settings.js";
 import { LeaderboardModal } from "./ui/leaderboard.js";
 import { RulesModal } from "./ui/rules.js";
+import { TutorialModal } from "./ui/tutorial.js";
 import { DebugView } from "./ui/debugView.js";
 import { notificationService } from "./ui/notifications.js";
 import { createGame, reduce, generateShareURL, deserializeActions, replay, undo, canUndo } from "./game/state.js";
@@ -138,10 +139,26 @@ class Game {
       this.handleModeChange(difficulty);
     });
 
+    // Setup tutorial
+    tutorialModal.setOnComplete(() => {
+      // After tutorial, update hint mode in case Easy Mode was enabled
+      const settings = settingsService.getSettings();
+      const hintsEnabled = shouldShowHints({ difficulty: settings.game.difficulty, variant: "classic" });
+      this.diceRow.setHintMode(hintsEnabled);
+      this.updateUI();
+    });
+
     this.setupControls();
     this.setupDiceSelection();
     this.initializeAudio();
     this.updateUI();
+
+    // Show tutorial if this is first time
+    if (tutorialModal.shouldShow()) {
+      // Enable hints during tutorial practice
+      this.diceRow.setHintMode(true);
+      tutorialModal.show();
+    }
 
     // Track game start time
     this.gameStartTime = Date.now();
@@ -416,6 +433,11 @@ class Game {
       audioService.playSfx("select");
       hapticsService.select();
       this.dispatch({ t: "TOGGLE_SELECT", dieId });
+
+      // Notify tutorial of select action
+      if (tutorialModal.isActive()) {
+        tutorialModal.onPlayerAction('select');
+      }
     }
   }
 
@@ -538,6 +560,11 @@ class Game {
 
       // Show notification after roll completes
       notificationService.show("Roll Complete!", "info");
+
+      // Notify tutorial of roll action
+      if (tutorialModal.isActive()) {
+        tutorialModal.onPlayerAction('roll');
+      }
     });
   }
 
@@ -574,6 +601,11 @@ class Game {
     });
 
     this.dispatch({ t: "SCORE_SELECTED" });
+
+    // Notify tutorial of score action
+    if (tutorialModal.isActive()) {
+      tutorialModal.onPlayerAction('score');
+    }
   }
 
   private handleNewGame() {
@@ -786,6 +818,7 @@ class Game {
 let settingsModal: SettingsModal;
 let leaderboardModal: LeaderboardModal;
 let rulesModal: RulesModal;
+let tutorialModal: TutorialModal;
 let splash: SplashScreen;
 
 themeManager.initialize().then(() => {
@@ -795,6 +828,7 @@ themeManager.initialize().then(() => {
   settingsModal = new SettingsModal();
   leaderboardModal = new LeaderboardModal();
   rulesModal = new RulesModal();
+  tutorialModal = new TutorialModal();
 
   // Create splash screen after theme manager is ready
   splash = new SplashScreen(
@@ -822,6 +856,7 @@ themeManager.initialize().then(() => {
   settingsModal = new SettingsModal();
   leaderboardModal = new LeaderboardModal();
   rulesModal = new RulesModal();
+  tutorialModal = new TutorialModal();
 
   splash = new SplashScreen(
     () => {

@@ -31,7 +31,7 @@ export class DiceRow {
     }
 
     // Calculate hint data if enabled
-    let hintData: Map<string, 'best' | 'good' | 'normal'> | null = null;
+    let hintData: Map<string, 'perfect' | 'best' | 'good' | 'normal'> | null = null;
     if (this.hintMode) {
       hintData = this.calculateHints(activeDice);
     }
