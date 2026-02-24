@@ -23,5 +23,6 @@
       "v": 0.05
     }
   },
-  "diceAvailable": ["d4", "d6", "d8", "d10", "d12", "d20"]
+  "diceAvailable": ["d6"],
+  "useFallbackFor": ["d4", "d8", "d10", "d12", "d20"]
 }

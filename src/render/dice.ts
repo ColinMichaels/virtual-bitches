@@ -111,6 +111,9 @@ export class DiceRenderer {
   // Material cache for fallback themes (themeName -> { light, dark })
   private materialCache = new Map<string, { light: StandardMaterial | ShaderMaterial; dark: StandardMaterial | ShaderMaterial }>();
 
+  // Texture cache for shader materials (material instance -> { diffuse, bump })
+  private textureCache = new WeakMap<ShaderMaterial, { diffuse?: Texture; bump?: Texture }>();
+
   // Geometry data with collider face maps
   private geometryData: any = null;
   private geometryLoaded = false;
@@ -118,6 +121,7 @@ export class DiceRenderer {
   // Debug mode tracking
   private debugMeshes = new Map<string, Mesh>();
   private isDebugMode = false;
+  private debugUseLightMaterial = false;
 
   // Rotation cache for raycast-detected rotations (d10, d12)
   private rotationCache = new Map<string, Map<number, Vector3>>();
@@ -466,8 +470,9 @@ export class DiceRenderer {
 
     // Create dark material: dark base color + light pips
     const darkBaseColor = new Color3(0.2, 0.2, 0.2); // Dark gray die body
+    const darkMaterialName = `${materialNamePrefix}-dark`;
     const materialDark = createColorMaterial(
-      `${materialNamePrefix}-dark`,
+      darkMaterialName,
       this.scene,
       {
         baseColor: darkBaseColor,
@@ -480,10 +485,17 @@ export class DiceRenderer {
       }
     ) as any; // Cast to any to work with StandardMaterial type
 
+    // Store texture references for dark material (for updateTextureMapping)
+    this.textureCache.set(materialDark, {
+      diffuse: diffuseLight,
+      bump: normalMap
+    });
+
     // Create light material: light base color + dark pips
     const lightBaseColor = new Color3(0.9, 0.9, 0.9); // Light gray die body
+    const lightMaterialName = `${materialNamePrefix}-light`;
     const materialLight = createColorMaterial(
-      `${materialNamePrefix}-light`,
+      lightMaterialName,
       this.scene,
       {
         baseColor: lightBaseColor,
@@ -495,6 +507,12 @@ export class DiceRenderer {
         specularColor: SPECULAR_COLOR_DARK,
       }
     ) as any;
+
+    // Store texture references for light material
+    this.textureCache.set(materialLight, {
+      diffuse: diffuseDark,
+      bump: normalMap
+    });
 
     if (isFallback) {
       // Store in cache for fallback dice
@@ -550,19 +568,26 @@ export class DiceRenderer {
 
     // Check if this die type should use fallback theme material
     const currentTheme = themeManager.getCurrentThemeConfig();
-    let materialToUse: Material | null = this.materialDark;
+    let materialToUse: Material | null;
+
+    // Determine which material variant to use (light or dark)
+    const useLight = this.isDebugMode ? this.debugUseLightMaterial : false;
 
     if (currentTheme?.useFallbackFor?.includes(die.def.kind) && currentTheme.fallbackTheme) {
       const fallbackMaterials = this.materialCache.get(currentTheme.fallbackTheme);
       if (fallbackMaterials) {
-        materialToUse = fallbackMaterials.dark;
-        log.debug(`Using fallback theme "${currentTheme.fallbackTheme}" material for ${die.def.kind}`);
+        materialToUse = useLight ? fallbackMaterials.light : fallbackMaterials.dark;
+        log.debug(`Using fallback theme "${currentTheme.fallbackTheme}" ${useLight ? 'light' : 'dark'} material for ${die.def.kind}`);
+      } else {
+        materialToUse = useLight ? this.materialLight : this.materialDark;
       }
+    } else {
+      materialToUse = useLight ? this.materialLight : this.materialDark;
     }
 
-    log.debug(`Creating ${die.def.kind} with material`);
+    log.debug(`Creating ${die.def.kind} with ${useLight ? 'light' : 'dark'} material`);
 
-    // Use the appropriate material (primary or fallback)
+    // Use the appropriate material (primary or fallback, light or dark)
     instance.material = materialToUse;
 
     // Apply size scaling - dice-box models are VERY small, need significant scaling
@@ -1044,13 +1069,14 @@ export class DiceRenderer {
    * Create debug dice showing all face values for a specific die type
    * Used by the debug view for rotation testing
    */
-  createDebugDice(dieKind: DieKind, faceCount: number): void {
+  createDebugDice(dieKind: DieKind, faceCount: number, useLightMaterial: boolean = false): void {
     if (!this.geometryLoaded) {
       log.warn("Geometry not loaded yet for debug dice");
       return;
     }
 
     this.isDebugMode = true;
+    this.debugUseLightMaterial = useLightMaterial;
 
     // Grid layout parameters - adjust spacing based on die type
     const spacing = DIE_SIZES[dieKind] * 2.5;
@@ -1155,44 +1181,93 @@ export class DiceRenderer {
   /**
    * Update texture mapping for live debugging
    * Updates scale and offset for all textures on current materials
+   * @param dieKind Optional - if specified, only updates materials for that specific die type
    */
-  updateTextureMapping(scaleU: number, scaleV: number, offsetU: number, offsetV: number): void {
-    log.debug(`Updating texture mapping: scale(${scaleU}, ${scaleV}) offset(${offsetU}, ${offsetV})`);
+  updateTextureMapping(scaleU: number, scaleV: number, offsetU: number, offsetV: number, dieKind?: DieKind): void {
+    log.debug(`Updating texture mapping: scale(${scaleU}, ${scaleV}) offset(${offsetU}, ${offsetV}) for ${dieKind || 'all dice'}`);
 
-    // Update materialDark textures
-    if (this.materialDark) {
-      if (this.materialDark.diffuseTexture) {
-        const diffuseTex = this.materialDark.diffuseTexture as Texture;
-        diffuseTex.uScale = scaleU;
-        diffuseTex.vScale = scaleV;
-        diffuseTex.uOffset = offsetU;
-        diffuseTex.vOffset = offsetV;
-      }
-      if (this.materialDark.bumpTexture) {
-        const bumpTex = this.materialDark.bumpTexture as Texture;
-        bumpTex.uScale = scaleU;
-        bumpTex.vScale = scaleV;
-        bumpTex.uOffset = offsetU;
-        bumpTex.vOffset = offsetV;
-      }
-    }
+    // Helper to update textures for both StandardMaterial and ShaderMaterial
+    const updateMaterialTextures = (material: Material | null) => {
+      if (!material) return;
 
-    // Update materialLight textures (if different from materialDark)
-    if (this.materialLight && this.materialLight !== this.materialDark) {
-      if (this.materialLight.diffuseTexture) {
-        const diffuseTex = this.materialLight.diffuseTexture as Texture;
-        diffuseTex.uScale = scaleU;
-        diffuseTex.vScale = scaleV;
-        diffuseTex.uOffset = offsetU;
-        diffuseTex.vOffset = offsetV;
+      // For StandardMaterial, access properties directly
+      if (material instanceof StandardMaterial) {
+        if (material.diffuseTexture) {
+          const diffuseTex = material.diffuseTexture as Texture;
+          diffuseTex.uScale = scaleU;
+          diffuseTex.vScale = scaleV;
+          diffuseTex.uOffset = offsetU;
+          diffuseTex.vOffset = offsetV;
+        }
+        if (material.bumpTexture) {
+          const bumpTex = material.bumpTexture as Texture;
+          bumpTex.uScale = scaleU;
+          bumpTex.vScale = scaleV;
+          bumpTex.uOffset = offsetU;
+          bumpTex.vOffset = offsetV;
+        }
       }
-      if (this.materialLight.bumpTexture) {
-        const bumpTex = this.materialLight.bumpTexture as Texture;
-        bumpTex.uScale = scaleU;
-        bumpTex.vScale = scaleV;
-        bumpTex.uOffset = offsetU;
-        bumpTex.vOffset = offsetV;
+      // For ShaderMaterial (color materials), access via texture cache
+      else if (material instanceof ShaderMaterial) {
+        const textures = this.textureCache.get(material);
+        if (textures) {
+          log.debug(`Found textures in cache for ShaderMaterial: ${material.name}`);
+          if (textures.diffuse) {
+            log.debug(`Updating diffuse texture: ${textures.diffuse.name}`);
+            textures.diffuse.uScale = scaleU;
+            textures.diffuse.vScale = scaleV;
+            textures.diffuse.uOffset = offsetU;
+            textures.diffuse.vOffset = offsetV;
+          }
+          if (textures.bump) {
+            log.debug(`Updating bump texture: ${textures.bump.name}`);
+            textures.bump.uScale = scaleU;
+            textures.bump.vScale = scaleV;
+            textures.bump.uOffset = offsetU;
+            textures.bump.vOffset = offsetV;
+          }
+        } else {
+          log.warn(`No textures found in cache for ShaderMaterial: ${material.name}`);
+        }
       }
+    };
+
+    // If a specific die kind is provided, only update materials for that die
+    if (dieKind) {
+      const currentTheme = themeManager.getCurrentThemeConfig();
+
+      // Check if this die uses fallback
+      if (currentTheme?.useFallbackFor?.includes(dieKind) && currentTheme.fallbackTheme) {
+        const fallbackMaterials = this.materialCache.get(currentTheme.fallbackTheme);
+        if (fallbackMaterials) {
+          log.debug(`Updating fallback materials for ${dieKind}`);
+          updateMaterialTextures(fallbackMaterials.dark);
+          if (fallbackMaterials.light !== fallbackMaterials.dark) {
+            updateMaterialTextures(fallbackMaterials.light);
+          }
+        }
+      } else {
+        // Use primary materials
+        log.debug(`Updating primary materials for ${dieKind}`);
+        updateMaterialTextures(this.materialDark);
+        if (this.materialLight !== this.materialDark) {
+          updateMaterialTextures(this.materialLight);
+        }
+      }
+    } else {
+      // Update all materials (legacy behavior)
+      updateMaterialTextures(this.materialDark);
+      if (this.materialLight !== this.materialDark) {
+        updateMaterialTextures(this.materialLight);
+      }
+
+      // Update all cached materials (for fallback themes)
+      this.materialCache.forEach((materials) => {
+        updateMaterialTextures(materials.dark);
+        if (materials.light !== materials.dark) {
+          updateMaterialTextures(materials.light);
+        }
+      });
     }
   }
 
