@@ -28,6 +28,12 @@ import { shouldShowHints, isUndoAllowed } from "./engine/modes.js";
 import { InputController, GameCallbacks } from "./controllers/InputController.js";
 import { GameFlowController } from "./controllers/GameFlowController.js";
 import { GameOverController } from "./controllers/GameOverController.js";
+import { CameraEffectsService } from "./services/cameraEffects.js";
+import { CameraAttackExecutor } from "./chaos/cameraAttackExecutor.js";
+import type { CameraAttackMessage } from "./chaos/types.js";
+import type { ParticleNetworkEvent } from "./services/particleService.js";
+import { MultiplayerNetworkService } from "./multiplayer/networkService.js";
+import { environment } from "@env";
 
 const log = logger.create('Game');
 
@@ -43,10 +49,14 @@ class Game implements GameCallbacks {
   private leaderboardModal: LeaderboardModal;
   private debugView: DebugView;
   private cameraControlsPanel: CameraControlsPanel;
+  private cameraEffects: CameraEffectsService;
+  private cameraAttackExecutor: CameraAttackExecutor;
+  private multiplayerNetwork?: MultiplayerNetworkService;
   private gameStartTime: number;
   private selectedDieIndex = 0; // For keyboard navigation
   private inputController: InputController;
   private gameOverController: GameOverController;
+  private readonly localPlayerId = "local-player";
 
   private actionBtn: HTMLButtonElement;
   private deselectBtn: HTMLButtonElement;
@@ -65,6 +75,38 @@ class Game implements GameCallbacks {
     initParticleService(this.scene.scene);
     registerGameEffects();
     registerChaosEffects();
+    this.cameraEffects = new CameraEffectsService(this.scene);
+    this.cameraAttackExecutor = new CameraAttackExecutor(
+      this.cameraEffects,
+      () => this.localPlayerId
+    );
+
+    this.multiplayerNetwork = new MultiplayerNetworkService({
+      wsUrl: this.getMultiplayerWsUrl(),
+      eventTarget: document,
+    });
+    this.multiplayerNetwork.enableEventBridge();
+    this.multiplayerNetwork.connect();
+
+    document.addEventListener("particle:network:receive", ((event: Event) => {
+      const particleEvent = event as CustomEvent<ParticleNetworkEvent>;
+      if (!particleEvent.detail) return;
+      particleService.handleNetworkEvent(particleEvent.detail);
+    }) as EventListener);
+
+    document.addEventListener("multiplayer:connected", () => {
+      particleService.enableNetworkSync(true);
+    });
+    document.addEventListener("multiplayer:disconnected", () => {
+      particleService.enableNetworkSync(false);
+    });
+
+    // Bridge for upcoming multiplayer chaos attack messages
+    document.addEventListener("chaos:cameraAttack", ((event: Event) => {
+      const attackEvent = event as CustomEvent<CameraAttackMessage>;
+      if (!attackEvent.detail) return;
+      this.cameraAttackExecutor.execute(attackEvent.detail);
+    }) as EventListener);
 
     // Apply display settings from saved preferences
     const settings = settingsService.getSettings();
@@ -201,6 +243,21 @@ class Game implements GameCallbacks {
 
     // Track game start time
     this.gameStartTime = Date.now();
+  }
+
+  private getMultiplayerWsUrl(): string | undefined {
+    if (!environment.features.multiplayer || !environment.wsUrl) {
+      return undefined;
+    }
+
+    // Prevent automatic reconnect loops during normal single-player sessions.
+    // Enable with ?multiplayer=1 when testing networking locally.
+    const query = new URLSearchParams(window.location.search);
+    if (query.get("multiplayer") !== "1") {
+      return undefined;
+    }
+
+    return environment.wsUrl;
   }
 
   // GameCallbacks implementation

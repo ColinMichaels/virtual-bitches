@@ -45,7 +45,7 @@ export interface ICameraService {
   setTier(tier: CameraTier): void;
   canSaveMore(): boolean;
   getMaxSlots(): number;
-  getRemainingSlots(): number | Infinity;
+  getRemainingSlots(): number;
   isFlyingModeUnlocked(): boolean;
   isMachinimaModeUnlocked(): boolean;
   on(event: string, callback: Function): () => void;
@@ -67,6 +67,52 @@ const TIER_LIMITS: Record<CameraTier, number> = {
   premium: Infinity,
 };
 
+function createMemoryStorage(): Storage {
+  const store = new Map<string, string>();
+
+  return {
+    get length() {
+      return store.size;
+    },
+    clear() {
+      store.clear();
+    },
+    getItem(key: string): string | null {
+      return store.has(key) ? (store.get(key) as string) : null;
+    },
+    key(index: number): string | null {
+      const keys = Array.from(store.keys());
+      return keys[index] ?? null;
+    },
+    removeItem(key: string): void {
+      store.delete(key);
+    },
+    setItem(key: string, value: string): void {
+      store.set(key, value);
+    },
+  };
+}
+
+let fallbackStorage: Storage | null = null;
+
+function resolveStorage(storage?: Storage): Storage {
+  if (storage) {
+    return storage;
+  }
+
+  const globalScope = globalThis as typeof globalThis & { localStorage?: Storage };
+  if (globalScope.localStorage) {
+    return globalScope.localStorage;
+  }
+
+  if (!fallbackStorage) {
+    fallbackStorage = createMemoryStorage();
+    log.warn('localStorage unavailable, using in-memory camera storage');
+  }
+
+  return fallbackStorage;
+}
+
 export class CameraService {
   private state: CameraServiceState;
   private listeners: Map<string, Set<Function>> = new Map();
@@ -76,7 +122,7 @@ export class CameraService {
    * @param storage Optional storage implementation (defaults to window.localStorage). Useful for tests.
    */
   constructor(storage?: Storage) {
-    this.storage = storage || localStorage;
+    this.storage = resolveStorage(storage);
     this.state = this.loadState();
     log.info(`Camera service initialized with ${this.state.positions.length} saved positions (${this.state.tier} tier)`);
   }

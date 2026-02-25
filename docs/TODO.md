@@ -28,7 +28,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ `SettingsService` camera schema defaults (`smoothTransitions`, `transitionDuration`, unlock flags)
   - ✅ `CameraService` testability improvements (injectable storage, state validation, explicit `off()` listener removal)
   - ✅ Camera service test suite scaffold (`src/services/cameraService.test.ts`)
-  - ⚠️ Test runtime issue discovered: module-level singleton still references browser `localStorage` during Node import
+  - ✅ Non-browser/runtime-safe storage fallback for `cameraService` singleton
 - **Future Phases**:
   - 🟡 Phase 2: Enhanced Camera (in progress - smooth transitions core done; 10 slots/replay/per-seat still pending)
   - 🔒 Phase 3: Flying Mode (WASD controls, no-clip - Post-Multiplayer)
@@ -50,7 +50,6 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - `src/services/cameraService.test.ts` - Camera service unit-style test script
 - **Result**: Players can save up to 3 camera positions now, and smooth camera transitions are partially implemented at engine/settings level
 - **Immediate Next Work**:
-  - 🔲 Make `cameraService` singleton safe for non-browser test/runtime environments
   - 🔲 Expose camera smooth-transition controls in UI with proper unlock gating
   - 🔲 Complete remaining Phase 2 features (10 slots, replay timeline, per-player seat positions)
 
@@ -321,10 +320,22 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ### Future Features (See FUTURE-FEATURES.md)
 
 #### Camera Attack Integration System 💥📷
-- **Status**: DOCUMENTED (not yet implemented)
+- **Status**: 🟡 PHASE 2 IN PROGRESS (2026-02-25)
 - **Complexity**: Very High
 - **Description**: Weaponized camera manipulation for multiplayer psychological warfare
 - **Documentation**: Complete specification in `docs/CAMERA-ATTACKS-INTEGRATION.md` (1000+ lines)
+- **Implemented Foundation**:
+  - ✅ `CameraEffectsService` runtime (`src/services/cameraEffects.ts`) with shake/spin/zoom/drunk effects
+  - ✅ Drunk vision post-processing pipeline (`src/chaos/effects/postProcessingPipeline.ts`) with blur/double-vision/vignette/blackout hooks
+  - ✅ Effect conflict queue/stacking policy (per-type caps, queued drain, drunk-child reserved stacking lane)
+  - ✅ Effect lifecycle controls (active list, stop, clear) + timing/cleanup handling
+  - ✅ Particle integration hooks for shake/spin/drunk effects
+  - ✅ `CameraAttackExecutor` (`src/chaos/cameraAttackExecutor.ts`) for typed message → camera effect mapping
+  - ✅ Main-thread event bridge (`chaos:cameraAttack`) wired in `src/main.ts`
+  - ✅ Multiplayer WebSocket bridge (`src/multiplayer/networkService.ts`) for camera attack + particle delivery
+  - ✅ Unit-style tests for attack mapping (`src/chaos/cameraAttackExecutor.test.ts`)
+  - ✅ Unit-style tests for network bridge routing (`src/multiplayer/networkService.test.ts`)
+  - ✅ Unit-style tests for camera effect queue/post-processing behavior (`src/services/cameraEffects.test.ts`)
 - **Key Features**:
   - Camera Effects API (shake, spin, zoom, tilt, drunk vision)
   - Drunk Vision system (3 severity levels: Tipsy, Hammered, Blackout)
@@ -339,12 +350,12 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - **Dependencies**:
   - Requires Camera System (Phase 1 ✅ complete)
   - Requires Chaos Gameplay Mechanics infrastructure
-  - Requires Multiplayer system
-  - Requires WebSocket server
-  - BabylonJS Post-Processing pipeline
+  - Requires Multiplayer system for networked attacks
+  - Requires WebSocket server for cross-client attack delivery
+  - BabylonJS Post-Processing pipeline (implemented client-side; tuning pending)
 - **Implementation Timeline**: ~10 weeks (5 phases)
 - **Monetization**: Chaos Pass ($4.99/mo), IAP packs, Battle Pass
-- **Implementation Priority**: Post-Multiplayer (Phase 4+)
+- **Implementation Priority**: Next up is upgrade progression + active effect HUD + control inversion/accessibility safeguards
 
 #### Chaos Gameplay Mechanics System
 - **Status**: DOCUMENTED (not yet implemented)

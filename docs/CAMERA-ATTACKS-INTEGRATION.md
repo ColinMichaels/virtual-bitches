@@ -1,8 +1,8 @@
 # Camera Attack Integration & Upgrade System 🎥💥
 
-**Document Version**: 1.0
-**Last Updated**: 2026-02-24
-**Status**: Design Specification
+**Document Version**: 1.1
+**Last Updated**: 2026-02-25
+**Status**: Phase 2 In Progress (Runtime + Executor + WebSocket + Drunk PostFX + Queue Policy Implemented)
 **Complexity**: Very High
 **Dependencies**: Camera System (Phase 1+), Chaos Gameplay Mechanics, Multiplayer Infrastructure
 
@@ -49,11 +49,22 @@ Traditional game attacks show visual effects ON the screen (overlays, particles,
 
 ✅ **Particle System**: Event-driven particle effects for visual feedback (see PARTICLE-SYSTEM.md)
 
+✅ **New Foundation (2026-02-25)**:
+- `CameraEffectsService` implemented with shake/spin/zoom/drunk runtime effects
+- `CameraAttackExecutor` implemented for typed camera-attack message mapping
+- Event bridge added in `main.ts` (`chaos:cameraAttack` dispatch integration)
+- WebSocket multiplayer bridge implemented (`src/multiplayer/networkService.ts`)
+- Drunk vision post-processing pipeline implemented (`src/chaos/effects/postProcessingPipeline.ts`)
+- Effect conflict queue/stacking policy implemented in `CameraEffectsService` (typed caps + queued drain + child stacking lane)
+- Unit-style executor tests added (`src/chaos/cameraAttackExecutor.test.ts`)
+- Unit-style network bridge tests added (`src/multiplayer/networkService.test.ts`)
+- Camera effects queue/stacking + post-processing tests added (`src/services/cameraEffects.test.ts`)
+
 ❌ **Missing Components**:
-- Camera manipulation API for real-time effects
-- Drunk vision effects (blur, double vision, wobble)
 - Upgrade progression system
-- Integration layer between systems
+- Camera effect HUD (active effects + durations)
+- Control inversion/accessibility safeguards
+- Production multiplayer backend/session integration (auth, rooms, server validation)
 
 ---
 
@@ -1440,13 +1451,14 @@ TOTAL:                          ~$171,000/year
 **Goal**: Camera Effects API + Basic shake/spin
 
 **Tasks**:
-- [ ] Create `CameraEffectsService` class
-- [ ] Implement `shake()` method with intensity scaling
-- [ ] Implement `spin()` method with rotation animation
-- [ ] Extend `GameScene` with camera animation helpers
-- [ ] Add easing functions (ease-in, ease-out, elastic)
-- [ ] Create effect queue system (prevent conflicts)
-- [ ] Unit tests for effect timing and cleanup
+- [x] Create `CameraEffectsService` class
+- [x] Implement `shake()` method with intensity scaling
+- [x] Implement `spin()` method with rotation animation
+- [x] Extend `GameScene` with camera animation helpers
+- [x] Add easing functions (ease-in/out via runtime animation helpers)
+- [x] Create effect queue system (prevent conflicts)
+- [x] Unit tests for effect timing and cleanup
+- [x] Add attack message executor (`CameraAttackExecutor`) + mapping tests
 
 **Deliverables**:
 - Working Screen Shake Level 1
@@ -1459,16 +1471,13 @@ TOTAL:                          ~$171,000/year
 **Goal**: Multi-layered drunk effects with post-processing
 
 **Tasks**:
-- [ ] Integrate BabylonJS `@babylonjs/post-processes`
-- [ ] Create `PostProcessingPipeline` class
-- [ ] Implement blur effect (BlurPostProcess)
-- [ ] Implement vignette (tunnel vision)
-- [ ] Implement chromatic aberration (color split)
-- [ ] Create custom double vision shader
-- [ ] Implement `DrunkVisionEffect` class
-  - [ ] Tipsy mode (light sway + blur)
-  - [ ] Hammered mode (wobble + double vision)
-  - [ ] Blackout mode (spin + periodic blackouts)
+- [x] Integrate BabylonJS post-process classes
+- [x] Create `DrunkVisionPostProcessingPipeline` class
+- [x] Implement blur effect (BlurPostProcess)
+- [x] Implement vignette (tunnel vision)
+- [x] Implement chromatic aberration (color split)
+- [x] Create custom double vision shader
+- [x] Integrate drunk severity profiles (tipsy/hammered/blackout) in `CameraEffectsService`
 - [ ] Add control inversion system
 - [ ] Test on various hardware (performance check)
 
@@ -1598,8 +1607,8 @@ TOTAL:                          ~$171,000/year
 
 | Phase | Duration | Focus | Status |
 |-------|----------|-------|--------|
-| Phase 1 | Weeks 1-2 | Camera Effects API | 📋 Planned |
-| Phase 2 | Weeks 3-4 | Drunk Vision | 📋 Planned |
+| Phase 1 | Weeks 1-2 | Camera Effects API | ✅ Core Complete |
+| Phase 2 | Weeks 3-4 | Drunk Vision | 🟡 In Progress |
 | Phase 3 | Weeks 5-7 | Upgrade System | 📋 Planned |
 | Phase 4 | Week 8 | Integration | 📋 Planned |
 | Phase 5 | Weeks 9-10 | Polish & Gag Effects | 📋 Planned |
@@ -1666,6 +1675,6 @@ We create a system that delivers on the "psychosocial torture" vision while keep
 
 ---
 
-**Document Status**: Design specification complete, ready for development.
+**Document Status**: Active implementation in progress (Phases 1-2 partial complete).
 
-**Next Steps**: Begin Phase 1 implementation (Camera Effects API).
+**Next Steps**: Implement upgrade progression system and active effect HUD/inversion safeguards.
