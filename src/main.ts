@@ -8,6 +8,9 @@ import { LeaderboardModal } from "./ui/leaderboard.js";
 import { RulesModal } from "./ui/rules.js";
 import { TutorialModal } from "./ui/tutorial.js";
 import { DebugView } from "./ui/debugView.js";
+import { AlphaWarningModal } from "./ui/alphaWarning.js";
+import { UpdatesPanel } from "./ui/updates.js";
+import { CameraControlsPanel } from "./ui/cameraControls.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
 import { GameState, Action, GameDifficulty } from "./engine/types.js";
@@ -17,6 +20,9 @@ import { hapticsService } from "./services/haptics.js";
 import { pwaService } from "./services/pwa.js";
 import { settingsService } from "./services/settings.js";
 import { themeManager } from "./services/themeManager.js";
+import { initParticleService, particleService } from "./services/particleService.js";
+import { registerGameEffects } from "./particles/presets/gameEffects.js";
+import { registerChaosEffects } from "./particles/presets/chaosEffects.js";
 import { logger } from "./utils/logger.js";
 import { shouldShowHints, isUndoAllowed } from "./engine/modes.js";
 import { InputController, GameCallbacks } from "./controllers/InputController.js";
@@ -36,6 +42,7 @@ class Game implements GameCallbacks {
   private settingsModal: SettingsModal;
   private leaderboardModal: LeaderboardModal;
   private debugView: DebugView;
+  private cameraControlsPanel: CameraControlsPanel;
   private gameStartTime: number;
   private selectedDieIndex = 0; // For keyboard navigation
   private inputController: InputController;
@@ -53,6 +60,16 @@ class Game implements GameCallbacks {
     const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
     this.scene = new GameScene(canvas);
     this.diceRenderer = new DiceRenderer(this.scene.scene);
+
+    // Initialize particle system
+    initParticleService(this.scene.scene);
+    registerGameEffects();
+    registerChaosEffects();
+
+    // Apply display settings from saved preferences
+    const settings = settingsService.getSettings();
+    particleService.setIntensity(settings.display.particleIntensity);
+    this.scene.updateTableContrast(settings.display.visual.tableContrast);
     this.hud = new HUD();
     this.diceRow = new DiceRow((dieId) => this.handleDieClick(dieId), this.diceRenderer as any);
 
@@ -73,13 +90,48 @@ class Game implements GameCallbacks {
       this.handleDebugModeToggle(isDebugMode);
     });
 
+    // Initialize camera controls panel
+    this.cameraControlsPanel = new CameraControlsPanel();
+    this.cameraControlsPanel.onLoad((position) => {
+      this.scene.setCameraPosition(position);
+      this.cameraControlsPanel.updateCurrentPosition(
+        position.alpha,
+        position.beta,
+        position.radius
+      );
+    });
+
+    // Listen for save/reset requests from camera panel
+    document.addEventListener('camera:requestSave', ((e: CustomEvent) => {
+      const { name } = e.detail;
+      const current = this.scene.getCameraPosition();
+      this.cameraControlsPanel.savePosition(
+        name,
+        current.alpha,
+        current.beta,
+        current.radius,
+        current.target
+      );
+    }) as EventListener);
+
+    document.addEventListener('camera:requestReset', () => {
+      this.scene.setCameraView('default');
+      const current = this.scene.getCameraPosition();
+      this.cameraControlsPanel.updateCurrentPosition(
+        current.alpha,
+        current.beta,
+        current.radius
+      );
+    });
+
     // Initialize controllers
     this.inputController = new InputController(
       this,
       this.scene,
       this.leaderboardModal,
       rulesModal,
-      this.debugView
+      this.debugView,
+      this.cameraControlsPanel
     );
     this.gameOverController = new GameOverController(this.scene);
 
@@ -102,14 +154,24 @@ class Game implements GameCallbacks {
       rulesModal.show();
     });
 
+    // Handle player seat clicks (show multiplayer coming soon notification)
+    this.scene.setPlayerSeatClickHandler((seatIndex: number) => {
+      notificationService.show("Multiplayer Coming Soon!", "info", 3000);
+      audioService.playSfx("click");
+    });
+
     // Provide callback to check if game is in progress
     this.settingsModal.setCheckGameInProgress(() => {
       return GameFlowController.isGameInProgress(this.state);
     });
 
-    // Listen to settings changes to update hint mode
-    settingsService.onChange(() => {
+    // Listen to settings changes to sync mode and update hint mode
+    settingsService.onChange((settings) => {
+      GameFlowController.syncModeWithSettings(this.state);
       GameFlowController.updateHintMode(this.state, this.diceRow);
+      // Apply visual settings in real-time
+      this.scene.updateTableContrast(settings.display.visual.tableContrast);
+      this.updateUI();
     });
 
     // Handle mode changes from HUD dropdown
@@ -119,14 +181,9 @@ class Game implements GameCallbacks {
 
     // Setup tutorial
     tutorialModal.setOnComplete(() => {
-      // After tutorial, update hint mode based on actual difficulty setting
-      const settings = settingsService.getSettings();
-      const hintsEnabled = shouldShowHints({ difficulty: settings.game.difficulty, variant: "classic" });
-      this.diceRow.setHintMode(hintsEnabled);
-
-      // Update game state mode to match settings
-      this.state.mode.difficulty = settings.game.difficulty;
-
+      // After tutorial, sync mode and update hint mode based on actual difficulty setting
+      GameFlowController.syncModeWithSettings(this.state);
+      GameFlowController.updateHintMode(this.state, this.diceRow);
       this.updateUI();
     });
 
@@ -201,20 +258,24 @@ class Game implements GameCallbacks {
 
   private handleModeChange(difficulty: GameDifficulty): void {
     const isInProgress = GameFlowController.isGameInProgress(this.state);
-    const newState = GameFlowController.handleModeChange(this.state, difficulty, isInProgress);
+    const result = GameFlowController.handleModeChange(this.state, difficulty, isInProgress);
 
-    if (newState) {
-      this.state = newState;
+    if (result.newState) {
+      // Game was in progress, starting new game
+      this.state = result.newState;
       GameFlowController.updateHintMode(this.state, this.diceRow);
       GameFlowController.resetForNewGame(this.diceRenderer);
       this.animating = false;
       this.gameStartTime = Date.now();
       this.updateUI();
       notificationService.show("New Game Started!", "success");
-    } else {
-      // User cancelled or just update hint mode
+    } else if (result.modeUpdated) {
+      // Game not in progress, mode was updated in place
       GameFlowController.updateHintMode(this.state, this.diceRow);
       this.updateUI();
+      notificationService.show(`Mode changed to ${difficulty}`, "info");
+    } else {
+      // User cancelled - do nothing
     }
   }
 
@@ -276,14 +337,22 @@ class Game implements GameCallbacks {
       return;
     }
 
-    if (die && die.inPlay && !die.scored && this.state.status === "ROLLED") {
-      audioService.playSfx("select");
-      hapticsService.select();
-      this.dispatch({ t: "TOGGLE_SELECT", dieId });
+    if (this.state.status === "ROLLED") {
+      // Valid die selection
+      if (die && die.inPlay && !die.scored) {
+        audioService.playSfx("select");
+        hapticsService.select();
+        this.dispatch({ t: "TOGGLE_SELECT", dieId });
 
-      // Notify tutorial of select action
-      if (tutorialModal.isActive()) {
-        tutorialModal.onPlayerAction('select');
+        // Notify tutorial of select action
+        if (tutorialModal.isActive()) {
+          tutorialModal.onPlayerAction('select');
+        }
+      } else {
+        // Invalid click - not a selectable die
+        notificationService.show("Select a Die", "warning");
+        audioService.playSfx("click");
+        hapticsService.invalid();
       }
     }
   }
@@ -421,11 +490,11 @@ class Game implements GameCallbacks {
 
       // Show score notification
       if (points === 0) {
-        notificationService.show("🎉 Perfect Roll! +0 Points!", "success");
+        notificationService.show("🎉 Perfect Roll! +0", "success");
         // Celebrate perfect roll with particles
         this.scene.celebrateSuccess("perfect");
       } else {
-        notificationService.show(`+${points} Points!`, "success");
+        notificationService.show(`+${points}`, "success");
       }
     });
 
@@ -469,7 +538,7 @@ class Game implements GameCallbacks {
 
     // Update multipurpose action button
     if (this.state.status === "READY") {
-      this.actionBtn.textContent = "Roll Dice (Space)";
+      this.actionBtn.textContent = "Roll";
       this.actionBtn.disabled = this.animating || this.paused;
       this.actionBtn.className = "primary";
       this.deselectBtn.style.display = "none";
@@ -511,6 +580,8 @@ let leaderboardModal: LeaderboardModal;
 let rulesModal: RulesModal;
 let tutorialModal: TutorialModal;
 let splash: SplashScreen;
+let alphaWarning: AlphaWarningModal;
+let updatesPanel: UpdatesPanel;
 
 themeManager.initialize().then(() => {
   log.info("Theme manager initialized successfully");
@@ -520,6 +591,17 @@ themeManager.initialize().then(() => {
   leaderboardModal = new LeaderboardModal();
   rulesModal = new RulesModal();
   tutorialModal = new TutorialModal();
+
+  // Initialize alpha warning and updates panel
+  alphaWarning = new AlphaWarningModal();
+  updatesPanel = new UpdatesPanel();
+
+  // Show alpha warning on first visit
+  if (!AlphaWarningModal.hasSeenWarning()) {
+    setTimeout(() => {
+      alphaWarning.show();
+    }, 1000); // Show after 1 second delay
+  }
 
   // Create splash screen after theme manager is ready
   splash = new SplashScreen(
@@ -548,6 +630,17 @@ themeManager.initialize().then(() => {
   leaderboardModal = new LeaderboardModal();
   rulesModal = new RulesModal();
   tutorialModal = new TutorialModal();
+
+  // Initialize alpha warning and updates panel (even on error)
+  alphaWarning = new AlphaWarningModal();
+  updatesPanel = new UpdatesPanel();
+
+  // Show alpha warning on first visit
+  if (!AlphaWarningModal.hasSeenWarning()) {
+    setTimeout(() => {
+      alphaWarning.show();
+    }, 1000);
+  }
 
   splash = new SplashScreen(
     () => {
