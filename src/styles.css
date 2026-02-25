@@ -1741,7 +1741,7 @@ button.danger:hover:not(:disabled) {
   }
 
   .stat-label-compact {
-    font-size: 9px;
+    font-size: 10px;
   }
 
   .stat-value-compact {

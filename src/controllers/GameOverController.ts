@@ -85,17 +85,36 @@ export class GameOverController {
   private displayRank(rank: number | null, state: GameState, stats: ReturnType<typeof scoreHistoryService.getStats>): void {
     const rankEl = document.getElementById("rank-display")!;
 
+    // Difficulty badge with emoji
+    const difficultyEmoji = state.mode === "easy" ? "🌱" : state.mode === "normal" ? "⚔️" : "🔥";
+    const difficultyLabel = state.mode.charAt(0).toUpperCase() + state.mode.slice(1);
+    const difficultyColor = state.mode === "easy" ? "#4CAF50" : state.mode === "normal" ? "#2196F3" : "#FF5722";
+
     if (rank) {
       const totalGames = stats.totalGames;
       const rankEmoji = rank === 1 ? "🏆" : rank <= 3 ? "🥉" : "📊";
-      rankEl.innerHTML = `<p style="font-size: 1.2em; opacity: 0.8; margin: 10px 0;">${rankEmoji} Rank #${rank} of ${totalGames} games</p>`;
+      rankEl.innerHTML = `
+        <p style="font-size: 0.9em; opacity: 0.7; margin: 5px 0;">
+          <span style="background: ${difficultyColor}; padding: 2px 8px; border-radius: 4px; font-weight: bold;">
+            ${difficultyEmoji} ${difficultyLabel}
+          </span>
+        </p>
+        <p style="font-size: 1.2em; opacity: 0.8; margin: 10px 0;">${rankEmoji} Rank #${rank} of ${totalGames} games</p>
+      `;
 
       // Add special message for personal best
       if (state.score === stats.bestScore) {
         rankEl.innerHTML += `<p style="color: gold; font-weight: bold; margin: 5px 0;">🎉 NEW PERSONAL BEST!</p>`;
       }
     } else {
-      rankEl.innerHTML = `<p style="opacity: 0.8; margin: 10px 0;">🎮 First game!</p>`;
+      rankEl.innerHTML = `
+        <p style="font-size: 0.9em; opacity: 0.7; margin: 5px 0;">
+          <span style="background: ${difficultyColor}; padding: 2px 8px; border-radius: 4px; font-weight: bold;">
+            ${difficultyEmoji} ${difficultyLabel}
+          </span>
+        </p>
+        <p style="opacity: 0.8; margin: 10px 0;">🎮 First game!</p>
+      `;
     }
   }
 
