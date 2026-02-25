@@ -8,11 +8,13 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 
 ## 🔴 High Priority
 
-### Camera System & Machinima Tools (Phase 1 - COMPLETE)
+### Camera System & Machinima Tools (Phase 1 - COMPLETE) 📷
 - **Status**: ✅ Phase 1 COMPLETE (2026-02-24)
 - **Complexity**: Medium (Phase 1), Very High (Full System)
 - **Description**: Camera position management system with progressive unlocks and machinima tools
-- **Documentation**: Complete specification in `docs/CAMERA-SYSTEM.md` (800+ lines)
+- **Documentation**:
+  - Complete specification in `docs/CAMERA-SYSTEM.md` (800+ lines)
+  - **NEW**: Camera Attack Integration in `docs/CAMERA-ATTACKS-INTEGRATION.md` (1000+ lines)
 - **Phase 1 Implementation**:
   - ✅ CameraService with save/load/import/export (3 slots free tier)
   - ✅ Camera Controls Panel UI with teaser for locked features
@@ -218,6 +220,32 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ## 🟢 Low Priority / Backlog
 
 ### Future Features (See FUTURE-FEATURES.md)
+
+#### Camera Attack Integration System 💥📷
+- **Status**: DOCUMENTED (not yet implemented)
+- **Complexity**: Very High
+- **Description**: Weaponized camera manipulation for multiplayer psychological warfare
+- **Documentation**: Complete specification in `docs/CAMERA-ATTACKS-INTEGRATION.md` (1000+ lines)
+- **Key Features**:
+  - Camera Effects API (shake, spin, zoom, tilt, drunk vision)
+  - Drunk Vision system (3 severity levels: Tipsy, Hammered, Blackout)
+  - 5-level upgrade trees for each attack family
+  - XP progression + Chaos Token economy
+  - Premium "Party Mode" & "Spell Pack" DLC effects
+  - Anti-frustration safeguards (diminishing returns, immunity, rage quit protection)
+- **Attack Families**:
+  - Screen Shake (5 levels: Basic → Aftershock → Earthquake → Tremor → Catastrophe)
+  - Drunk Vision (5 levels: Tipsy → Double Shot → Long Island → Keg Stand → Alcohol Poisoning)
+  - Camera Spin (5 levels: Dizzy Spell → Vertigo → Washing Machine → Blender → Inception)
+- **Dependencies**:
+  - Requires Camera System (Phase 1 ✅ complete)
+  - Requires Chaos Gameplay Mechanics infrastructure
+  - Requires Multiplayer system
+  - Requires WebSocket server
+  - BabylonJS Post-Processing pipeline
+- **Implementation Timeline**: ~10 weeks (5 phases)
+- **Monetization**: Chaos Pass ($4.99/mo), IAP packs, Battle Pass
+- **Implementation Priority**: Post-Multiplayer (Phase 4+)
 
 #### Chaos Gameplay Mechanics System
 - **Status**: DOCUMENTED (not yet implemented)

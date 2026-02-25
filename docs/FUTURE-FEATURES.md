@@ -234,7 +234,9 @@ This document captures future feature ideas, enhancements, and expansion possibi
 ### Chaos Gameplay Mechanics System
 - **Complexity**: Very High
 - **Description**: Multiplayer "psychosocial warfare" mechanics system with player attacks, distractions, and time pressure
-- **Documentation**: See `docs/CHAOS-GAMEPLAY-MECHANICS.md` for complete specification
+- **Documentation**:
+  - See `docs/CHAOS-GAMEPLAY-MECHANICS.md` for complete specification (700+ lines)
+  - **Camera Integration**: See `docs/CAMERA-ATTACKS-INTEGRATION.md` for weaponized camera effects (1000+ lines)
 - **Features**:
   - 50+ attack abilities across 5 categories (Visual, Audio, UI, Dice, Time)
   - Time Attack variants (Countdown, Speed Bonus, Sudden Death, Time Bomb, etc.)

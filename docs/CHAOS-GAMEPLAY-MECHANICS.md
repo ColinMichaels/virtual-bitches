@@ -124,11 +124,14 @@ Chaos Gameplay transforms BISCUITS from a peaceful dice game into a **psychosoci
 
 #### 1. Visual Attacks 👁️
 
+> **📷 Camera System Integration**: Screen effects are now powered by the Camera Attack system. See `docs/CAMERA-ATTACKS-INTEGRATION.md` for complete camera manipulation API, upgrade trees, and drunk vision mechanics.
+
 **Screen Effects**:
 - **Screen Shake** (20 CP, 30s CD)
   - Intensity: Mild to violent camera shake
   - Duration: 2-5 seconds
   - Effect: Makes clicking dice harder
+  - **Upgrade Path**: 5 levels from "Basic Shake" → "Catastrophe" (see CAMERA-ATTACKS-INTEGRATION.md)
 
 - **Dice Fog** (30 CP, 45s CD)
   - Covers dice in thick fog/smoke

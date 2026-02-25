@@ -23,6 +23,8 @@
 
 The BISCUITS Camera System provides players with powerful tools to control, save, and replay camera positions for gameplay recording, competition streaming, and machinima creation. The system uses a **progressive unlock model** where basic features are free, advanced features are earned through gameplay, and professional tools require premium access.
 
+> **⚔️ Multiplayer Integration**: The Camera System also powers **Camera Attack** abilities in multiplayer chaos mode. See `docs/CAMERA-ATTACKS-INTEGRATION.md` for weaponized camera manipulation, drunk vision effects, and attack upgrade trees.
+
 ### Design Philosophy
 
 - **Accessible**: Basic camera controls available to all players
