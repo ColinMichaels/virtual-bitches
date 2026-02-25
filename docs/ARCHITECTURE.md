@@ -23,6 +23,9 @@
 │            UI Components                │  User interaction
 │  (HUD, DiceRow, Modals, Debug View)    │
 ├─────────────────────────────────────────┤
+│          Controllers Layer              │  Orchestration
+│  (Input, GameFlow, GameOver)           │
+├─────────────────────────────────────────┤
 │         Rendering Layer                 │  3D visualization
 │  (Scene, DiceRenderer, SplashDice)     │
 ├─────────────────────────────────────────┤
@@ -93,7 +96,43 @@ User Input → Action → Reducer → New State → UI Update
 
 ---
 
-### 3. Rendering Layer (`src/render/`)
+### 3. Controllers Layer (`src/controllers/`)
+
+**Orchestration layer between UI and game logic** (Added 2025-02-24 in refactoring)
+
+- **`InputController.ts`**: Handles all user input (~326 lines)
+  - Button event listeners (action, deselect, undo, new game)
+  - Keyboard shortcuts (Space, ESC, Arrow keys, Enter, X, N, D)
+  - Mobile menu toggle and interactions
+  - Camera control buttons
+  - Uses callback interface pattern to communicate with Game class
+
+- **`GameFlowController.ts`**: Manages game lifecycle (~130 lines)
+  - `initializeGameState()`: Parse URL parameters or create new game
+  - `createNewGame()`: Create fresh game with current settings
+  - `handleModeChange()`: Handle difficulty changes with confirmation
+  - `updateHintMode()`: Update hint display based on game mode
+  - `resetForNewGame()`: Clear renderer for new game
+  - `isGameInProgress()`: Check if game is in progress
+  - `initializeAudio()`: Initialize audio on first interaction
+  - All static methods (utility pattern)
+
+- **`GameOverController.ts`**: Handles end-game flow (~143 lines)
+  - `showGameOver()`: Display game over screen with score, rank, stats
+  - `displayRank()`: Show player rank and personal best status
+  - `setupSeedActions()`: Setup copy/download buttons for seed sharing
+  - `hide()`: Hide game over modal
+  - Instance-based controller managing DOM elements
+
+**Design Pattern**:
+- InputController uses callback interface for loose coupling
+- GameFlowController uses static methods as it's stateless
+- GameOverController is instance-based for DOM management
+- Reduced main.ts from 954 lines to 570 lines (40% reduction)
+
+---
+
+### 4. Rendering Layer (`src/render/`)
 
 **3D visualization using BabylonJS 7.x**
 
@@ -127,7 +166,7 @@ ThemeManager → Load Geometry/Textures → Create Materials →
 
 ---
 
-### 4. UI Layer (`src/ui/`)
+### 5. UI Layer (`src/ui/`)
 
 **User interface components with vanilla TypeScript**
 
@@ -180,7 +219,7 @@ ThemeManager → Load Geometry/Textures → Create Materials →
 
 ---
 
-### 5. Services Layer (`src/services/`)
+### 6. Services Layer (`src/services/`)
 
 **Singleton services for cross-cutting concerns**
 

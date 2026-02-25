@@ -1,4 +1,16 @@
-# BISCUITS - Push Your Luck Dice Game
+# BISCUITS AKA BITCHES - Push Your Luck Dice Game
+
+```
+ /$$$$$$$  /$$$$$$ /$$$$$$$$ /$$$$$$  /$$   /$$ /$$$$$$$$  /$$$$$$ 
+| $$__  $$|_  $$_/|__  $$__//$$__  $$| $$  | $$| $$_____/ /$$__  $$
+| $$  \ $$  | $$     | $$  | $$  \__/| $$  | $$| $$      | $$  \__/
+| $$$$$$$   | $$     | $$  | $$      | $$$$$$$$| $$$$$   |  $$$$$$ 
+| $$__  $$  | $$     | $$  | $$      | $$__  $$| $$__/    \____  $$
+| $$  \ $$  | $$     | $$  | $$    $$| $$  | $$| $$       /$$  \ $$
+| $$$$$$$/ /$$$$$$   | $$  |  $$$$$$/| $$  | $$| $$$$$$$$|  $$$$$$/
+|_______/ |______/   |__/   \______/ |__/  |__/|________/ \______/ 
+
+```
 
 A 3D browser-based implementation of BISCUITS, a 5-minute push-your-luck dice game where the goal is to achieve the **lowest score**.
 
@@ -65,19 +77,29 @@ Score all 15 dice with the **lowest total score**.
 
 ```
 src/
-├── engine/      # Pure game logic (no rendering dependencies)
-│   ├── rng.ts          # Deterministic RNG
-│   ├── types.ts        # Core data types
-│   ├── rules.ts        # Scoring & validation
-│   └── rules.test.ts   # Unit tests
-├── game/        # State management
-│   └── state.ts        # Reducer & replay logic
-├── render/      # 3D visualization
-│   ├── scene.ts        # Babylon.js scene setup
-│   └── dice.ts         # Dice meshes & animations
-├── ui/          # HUD components
-│   └── hud.ts
-└── main.ts      # App entry point
+├── engine/        # Pure game logic (no rendering dependencies)
+│   ├── rng.ts            # Deterministic RNG
+│   ├── types.ts          # Core data types
+│   ├── rules.ts          # Scoring & validation
+│   └── rules.test.ts     # Unit tests
+├── game/          # State management
+│   └── state.ts          # Reducer & replay logic
+├── controllers/   # Orchestration layer (NEW)
+│   ├── InputController.ts       # User input handling
+│   ├── GameFlowController.ts    # Game lifecycle
+│   └── GameOverController.ts    # End-game flow
+├── render/        # 3D visualization
+│   ├── scene.ts          # Babylon.js scene setup
+│   └── dice.ts           # Dice meshes & animations
+├── ui/            # HUD components
+│   ├── hud.ts            # Game HUD
+│   ├── diceRow.ts        # 2D dice view
+│   └── ...               # Modals, notifications
+├── services/      # Cross-cutting concerns
+│   ├── themeManager.ts   # Theme system
+│   ├── audio.ts          # Audio service
+│   └── settings.ts       # Settings management
+└── main.ts        # App entry point (~570 lines, down from 954)
 ```
 
 ## Deploy
