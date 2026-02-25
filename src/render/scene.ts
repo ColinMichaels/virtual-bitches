@@ -195,10 +195,10 @@ export class GameScene {
     // OCTAGON TABLE - Future-proofed for 8-player multiplayer
     // ============================================
 
-    // Create octagon base/frame (wood outer ring)
+    // Create octagon base/frame (leather border)
     const table = createOctagonMesh(
       "table",
-      { radius: this.tableRadius, height: 1 },
+      { radius: this.tableRadius, height: 1.5 },
       this.scene
     );
     table.position.y = -1;
@@ -206,23 +206,32 @@ export class GameScene {
 
     const mat = new StandardMaterial("tableMat", this.scene);
 
-    // Create gradient texture for wooden table frame
-    const tableTexture = new DynamicTexture("tableTexture", { width: 512, height: 512 }, this.scene, false);
-    const ctx = tableTexture.getContext();
+    // Load leather texture for table border
+    const tableTexture = new Texture(
+      "/assets/game-textures/leatherwrap_texture.jpg",
+      this.scene,
+      undefined,
+      true, // invertY for proper orientation
+      undefined,
+      () => {
+        console.log("[Scene] Leather border texture loaded successfully");
+      },
+      (message, exception) => {
+        console.warn("[Scene] Failed to load leather border texture, using procedural fallback");
+        console.warn("[Scene] Error:", message, exception);
+        this.createFallbackBorderTexture(mat);
+      }
+    );
 
-    // Create subtle radial gradient for wood table effect
-    const gradient = ctx.createRadialGradient(256, 256, 100, 256, 256, 400);
-    gradient.addColorStop(0, "#12301d"); // Slightly lighter center
-    gradient.addColorStop(0.7, "#0E2A1A"); // Medium
-    gradient.addColorStop(1, "#0c2416"); // Slightly darker edges
-
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 512, 512);
-    tableTexture.update();
+    // Configure UV mapping for octagon border
+    tableTexture.uScale = 4.0; // Tile texture more to reduce stretching
+    tableTexture.vScale = 2.0; // Tile vertically for better proportion
+    tableTexture.wrapU = Texture.WRAP_ADDRESSMODE; // Tile around octagon
+    tableTexture.wrapV = Texture.WRAP_ADDRESSMODE; // Tile vertically
 
     mat.diffuseTexture = tableTexture;
-    mat.specularColor = new Color3(0.15, 0.15, 0.15);
-    mat.roughness = 0.7;
+    mat.specularColor = new Color3(0.08, 0.06, 0.05); // Leather specular highlights
+    mat.roughness = 0.85; // Matte leather finish
     table.material = mat;
 
     // ============================================
@@ -435,6 +444,50 @@ export class GameScene {
     material.diffuseTexture = customTexture;
     material.specularColor = new Color3(0.05, 0.05, 0.05);
     material.roughness = 0.95; // Maintain matte felt appearance
+  }
+
+  /**
+   * Create fallback procedural leather texture for table border
+   * Used when leather-border.png fails to load
+   * @param material - Material to apply fallback texture to
+   */
+  private createFallbackBorderTexture(material: StandardMaterial): void {
+    const texture = new DynamicTexture(
+      "tableFallback",
+      { width: 512, height: 512 },
+      this.scene,
+      false
+    );
+    const ctx = texture.getContext();
+
+    // Create brown leather-like gradient
+    const gradient = ctx.createRadialGradient(256, 256, 100, 256, 256, 400);
+    gradient.addColorStop(0, "#3d2817"); // Lighter brown center
+    gradient.addColorStop(0.7, "#2d1f12"); // Medium brown
+    gradient.addColorStop(1, "#1f150c"); // Dark brown edges
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 512, 512);
+
+    // Add subtle leather grain noise
+    const imageData = ctx.getImageData(0, 0, 512, 512);
+    const data = imageData.data;
+
+    for (let y = 0; y < 512; y++) {
+      for (let x = 0; x < 512; x++) {
+        const idx = (y * 512 + x) * 4;
+        const noise = (Math.random() - 0.5) * 15; // Subtle grain
+        data[idx] += noise;
+        data[idx + 1] += noise;
+        data[idx + 2] += noise;
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    texture.update();
+
+    material.diffuseTexture = texture;
+    console.log("[Scene] Fallback leather texture created");
   }
 
   /**
