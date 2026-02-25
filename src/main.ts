@@ -64,9 +64,10 @@ class Game implements GameCallbacks {
     registerGameEffects();
     registerChaosEffects();
 
-    // Apply particle intensity from settings
+    // Apply display settings from saved preferences
     const settings = settingsService.getSettings();
     particleService.setIntensity(settings.display.particleIntensity);
+    this.scene.updateTableContrast(settings.display.visual.tableContrast);
     this.hud = new HUD();
     this.diceRow = new DiceRow((dieId) => this.handleDieClick(dieId), this.diceRenderer as any);
 
@@ -163,9 +164,11 @@ class Game implements GameCallbacks {
     });
 
     // Listen to settings changes to sync mode and update hint mode
-    settingsService.onChange(() => {
+    settingsService.onChange((settings) => {
       GameFlowController.syncModeWithSettings(this.state);
       GameFlowController.updateHintMode(this.state, this.diceRow);
+      // Apply visual settings in real-time
+      this.scene.updateTableContrast(settings.display.visual.tableContrast);
       this.updateUI();
     });
 

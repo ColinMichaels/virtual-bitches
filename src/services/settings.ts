@@ -16,11 +16,16 @@ export interface AudioSettings {
   musicEnabled: boolean;
 }
 
+export interface VisualSettings {
+  tableContrast: "low" | "normal" | "high" | "maximum";
+}
+
 export interface DisplaySettings {
   graphicsQuality: "low" | "medium" | "high";
   shadowsEnabled: boolean;
   particlesEnabled: boolean;
   particleIntensity: "off" | "minimal" | "normal" | "enthusiastic";
+  visual: VisualSettings;
 }
 
 export interface ControlSettings {
@@ -58,6 +63,9 @@ const DEFAULT_SETTINGS: Settings = {
     shadowsEnabled: true,
     particlesEnabled: true,
     particleIntensity: "normal",
+    visual: {
+      tableContrast: "high",
+    },
   },
   controls: {
     cameraSensitivity: 1.0,
@@ -107,7 +115,14 @@ export class SettingsService {
   private mergeWithDefaults(loaded: any): Settings {
     return {
       audio: { ...DEFAULT_SETTINGS.audio, ...loaded.audio },
-      display: { ...DEFAULT_SETTINGS.display, ...loaded.display },
+      display: {
+        ...DEFAULT_SETTINGS.display,
+        ...loaded.display,
+        visual: {
+          ...DEFAULT_SETTINGS.display.visual,
+          ...(loaded.display?.visual || {})
+        }
+      },
       controls: { ...DEFAULT_SETTINGS.controls, ...loaded.controls },
       game: { ...DEFAULT_SETTINGS.game, ...loaded.game },
     };
@@ -144,7 +159,21 @@ export class SettingsService {
    * Update display settings
    */
   updateDisplay(display: Partial<DisplaySettings>): void {
+    // Handle nested visual settings merge
+    if (display.visual) {
+      this.settings.display.visual = { ...this.settings.display.visual, ...display.visual };
+      delete display.visual; // Prevent shallow overwrite
+    }
     this.settings.display = { ...this.settings.display, ...display };
+    this.saveSettings();
+    this.notifyListeners();
+  }
+
+  /**
+   * Update visual settings (convenience method)
+   */
+  updateVisual(visual: Partial<VisualSettings>): void {
+    this.settings.display.visual = { ...this.settings.display.visual, ...visual };
     this.saveSettings();
     this.notifyListeners();
   }

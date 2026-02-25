@@ -135,10 +135,36 @@ export class GameScene {
     rimLight.diffuse = new Color3(0.9, 0.95, 1); // Cool rim light
     rimLight.specular = new Color3(0.2, 0.2, 0.25);
 
-    // Shadows
-    this.shadowGenerator = new ShadowGenerator(1024, sun);
+    // Dedicated dice spotlights - enhance dice readability on dark table
+    const diceSpot1 = new SpotLight(
+      "diceSpot1",
+      new Vector3(-3, 18, -3), // Left-front elevated position
+      new Vector3(0, -1, 0.1), // Slight forward tilt
+      Math.PI / 3.5, // Focused cone
+      2.5, // Sharp falloff
+      this.scene
+    );
+    diceSpot1.intensity = 1.5; // Strong, focused light
+    diceSpot1.diffuse = new Color3(1.0, 0.98, 0.95); // Neutral white
+    diceSpot1.specular = new Color3(0.4, 0.4, 0.4); // Strong specular for dice pips
+
+    const diceSpot2 = new SpotLight(
+      "diceSpot2",
+      new Vector3(3, 18, 3), // Right-back elevated position
+      new Vector3(0, -1, -0.1), // Slight backward tilt
+      Math.PI / 3.5, // Focused cone
+      2.5, // Sharp falloff
+      this.scene
+    );
+    diceSpot2.intensity = 1.5; // Strong, focused light
+    diceSpot2.diffuse = new Color3(1.0, 0.98, 0.95); // Neutral white
+    diceSpot2.specular = new Color3(0.4, 0.4, 0.4); // Strong specular for dice pips
+
+    // Shadows - enhanced for better definition
+    this.shadowGenerator = new ShadowGenerator(2048, sun); // Increased resolution
     this.shadowGenerator.useBlurExponentialShadowMap = true;
-    this.shadowGenerator.blurScale = 2;
+    this.shadowGenerator.blurScale = 1.5; // Sharper edges (was 2)
+    this.shadowGenerator.darkness = 0.5; // Darker shadows for better contrast
 
     // Calculate player seat positions (for future multiplayer)
     this.playerSeats = calculatePlayerSeats(this.tableRadius);
@@ -246,8 +272,12 @@ export class GameScene {
     trayTexture.wrapV = Texture.CLAMP_ADDRESSMODE;
 
     trayMat.diffuseTexture = trayTexture;
-    trayMat.specularColor = new Color3(0.05, 0.05, 0.05);
-    trayMat.roughness = 0.95; // Matte felt
+    // Start with neutral "normal" contrast values - will be overridden by user settings
+    trayMat.specularColor = new Color3(0.035, 0.035, 0.035);
+    trayMat.roughness = 0.96;
+    trayMat.diffuseColor = new Color3(1.0, 1.0, 1.0);
+    trayMat.emissiveColor = new Color3(0.0, 0.0, 0.0);
+    trayMat.ambientColor = new Color3(0.2, 0.2, 0.2);
     tray.material = trayMat;
 
     // ============================================
@@ -316,9 +346,76 @@ export class GameScene {
     scoredTexture.update();
 
     scoredMat.diffuseTexture = scoredTexture;
-    scoredMat.specularColor = new Color3(0.05, 0.05, 0.05);
-    scoredMat.roughness = 0.95;
+    // Start with neutral "normal" contrast values - will be overridden by user settings
+    scoredMat.specularColor = new Color3(0.035, 0.035, 0.035);
+    scoredMat.roughness = 0.96;
+    scoredMat.diffuseColor = new Color3(1.0, 1.0, 1.0);
+    scoredMat.emissiveColor = new Color3(0.0, 0.0, 0.0);
+    scoredMat.ambientColor = new Color3(0.2, 0.2, 0.2);
     scoredArea.material = scoredMat;
+  }
+
+  /**
+   * Update table contrast level for better dice visibility
+   * @param level - Contrast level: low (brighter table), normal (balanced), high (dark), maximum (darkest)
+   */
+  updateTableContrast(level: "low" | "normal" | "high" | "maximum"): void {
+    // Define material properties for each contrast level
+    // Uses emissive color (self-illumination) for dramatic, visible changes
+    const contrastLevels = {
+      low: {
+        specular: 0.05,
+        roughness: 0.95,
+        diffuse: 1.0,
+        emissive: 0.25,  // Bright glow - very visible
+        ambient: 0.4     // Strong ambient response
+      },
+      normal: {
+        specular: 0.035,
+        roughness: 0.96,
+        diffuse: 1.0,
+        emissive: 0.0,   // No glow - baseline
+        ambient: 0.2     // Normal ambient
+      },
+      high: {
+        specular: 0.02,
+        roughness: 0.98,
+        diffuse: 0.75,   // Darker texture multiply
+        emissive: 0.0,   // No glow
+        ambient: 0.1     // Reduced ambient
+      },
+      maximum: {
+        specular: 0.01,
+        roughness: 0.99,
+        diffuse: 0.5,    // Much darker texture multiply
+        emissive: 0.0,   // No glow
+        ambient: 0.05    // Minimal ambient
+      }
+    };
+
+    const props = contrastLevels[level];
+
+    // Update play area felt
+    const tray = this.scene.getMeshByName("tray");
+    if (tray && tray.material) {
+      const trayMat = tray.material as StandardMaterial;
+      trayMat.specularColor = new Color3(props.specular, props.specular, props.specular);
+      trayMat.roughness = props.roughness;
+      trayMat.diffuseColor = new Color3(props.diffuse, props.diffuse, props.diffuse);
+      trayMat.emissiveColor = new Color3(props.emissive, props.emissive, props.emissive);
+      trayMat.ambientColor = new Color3(props.ambient, props.ambient, props.ambient);
+    }
+
+    // Update scored area felt
+    const scoredArea = this.scene.getMeshByName("scoredArea");
+    if (scoredArea && scoredArea.material) {
+      const scoredMat = scoredArea.material as StandardMaterial;
+      scoredMat.specularColor = new Color3(props.specular, props.specular, props.specular);
+      scoredMat.roughness = props.roughness;
+      scoredMat.diffuseColor = new Color3(props.diffuse, props.diffuse, props.diffuse);
+      scoredMat.emissiveColor = new Color3(props.emissive, props.emissive, props.emissive);
+      scoredMat.ambientColor = new Color3(props.ambient, props.ambient, props.ambient);
+    }
   }
 
   /**

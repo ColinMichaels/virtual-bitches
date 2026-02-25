@@ -55,23 +55,23 @@ const DIE_COLLISION_RADII: Record<DieKind, number> = {
   d20: 1.4 * 10 * 0.6, // 8.4 units
 };
 
-// Individual die colors - muted palette for better visibility
+// Individual die colors - brightened palette for better visibility against dark table
 const DIE_COLORS: Color3[] = [
-  Color3.FromHexString("#2a2a2a"), // Dark gray
-  Color3.FromHexString("#3d5a4a"), // Muted green
-  Color3.FromHexString("#4a5c7a"), // Muted blue
-  Color3.FromHexString("#b8a062"), // Muted gold
-  Color3.FromHexString("#8f6f7e"), // Muted pink
-  Color3.FromHexString("#7a3d3d"), // Muted red
-  Color3.FromHexString("#8a4a4a"), // Muted red #2
-  Color3.FromHexString("#c4b399"), // Muted cream
-  Color3.FromHexString("#c8c8c8"), // Light gray
-  Color3.FromHexString("#2a2a2a"), // Dark gray #2
-  Color3.FromHexString("#6b5139"), // Muted brown
-  Color3.FromHexString("#2a2a2a"), // Dark gray #3
-  Color3.FromHexString("#5a6470"), // Muted blue-gray
-  Color3.FromHexString("#7a3d3d"), // Muted red
-  Color3.FromHexString("#6b5688"), // Muted purple
+  Color3.FromHexString("#3a3a3a"), // Dark gray (was #2a2a2a)
+  Color3.FromHexString("#4d7a60"), // Brighter green (was #3d5a4a)
+  Color3.FromHexString("#5a76a0"), // Brighter blue (was #4a5c7a)
+  Color3.FromHexString("#e0c080"), // Brighter gold (was #b8a062)
+  Color3.FromHexString("#b88fa4"), // Brighter pink (was #8f6f7e)
+  Color3.FromHexString("#a04f4f"), // Brighter red (was #7a3d3d)
+  Color3.FromHexString("#b06060"), // Brighter red #2 (was #8a4a4a)
+  Color3.FromHexString("#e8d8b8"), // Brighter cream (was #c4b399)
+  Color3.FromHexString("#e8e8e8"), // Brighter light gray (was #c8c8c8)
+  Color3.FromHexString("#3a3a3a"), // Dark gray #2 (was #2a2a2a)
+  Color3.FromHexString("#8a6a4a"), // Brighter brown (was #6b5139)
+  Color3.FromHexString("#3a3a3a"), // Dark gray #3 (was #2a2a2a)
+  Color3.FromHexString("#748490"), // Brighter blue-gray (was #5a6470)
+  Color3.FromHexString("#a04f4f"), // Brighter red (was #7a3d3d)
+  Color3.FromHexString("#8a82b0"), // Brighter purple (was #6b5688)
 ];
 
 // Animation constants
@@ -448,6 +448,10 @@ export class DiceRenderer {
     material.specularColor = SPECULAR_COLOR_DARK;
     material.specularPower = themeConfig.material.specularPower || DEFAULT_SPECULAR_POWER;
 
+    // Add ambient and emissive for better visibility against dark table
+    material.ambientColor = new Color3(0.3, 0.3, 0.3); // Boost ambient response
+    material.emissiveColor = new Color3(0.08, 0.08, 0.08); // Subtle glow
+
     if (isFallback) {
       // Store in cache for fallback dice
       this.materialCache.set(themeConfig.systemName, {
@@ -539,6 +543,8 @@ export class DiceRenderer {
         specularTexture: specularMap || undefined,
         specularPower: themeConfig.material.specularPower || DEFAULT_SPECULAR_POWER,
         specularColor: SPECULAR_COLOR_LIGHT,
+        ambientColor: new Color3(0.3, 0.3, 0.3),
+        emissiveColor: new Color3(0.08, 0.08, 0.08),
       }
     ) as any; // Cast to any to work with StandardMaterial type
 
@@ -562,6 +568,8 @@ export class DiceRenderer {
         specularTexture: specularMap || undefined,
         specularPower: themeConfig.material.specularPower || DEFAULT_SPECULAR_POWER,
         specularColor: SPECULAR_COLOR_DARK,
+        ambientColor: new Color3(0.3, 0.3, 0.3),
+        emissiveColor: new Color3(0.08, 0.08, 0.08),
       }
     ) as any;
 

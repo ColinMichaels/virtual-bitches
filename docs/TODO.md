@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Particle Intensity Controls Complete)
+**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-25 (Visual Settings System Complete)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -76,6 +76,38 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ---
 
 ## 🟡 Medium Priority
+
+### Visual Settings & Dice Visibility Enhancement (COMPLETE) 🎨
+- **Status**: ✅ Phase 1 COMPLETE (2026-02-25)
+- **Complexity**: Medium
+- **Description**: User-configurable table contrast settings for improved dice readability
+- **Documentation**: Complete specification in `docs/VISUAL-SETTINGS.md` (500+ lines)
+- **Phase 1 Implementation** (Table Contrast System):
+  - ✅ Added VisualSettings interface with tableContrast property
+  - ✅ Four contrast levels: low (brighter), normal, high (darker), maximum (darkest)
+  - ✅ Dramatic diffuse color changes (0.7x to 1.2x multipliers)
+  - ✅ Real-time material updates without scene reload
+  - ✅ User notification feedback on setting changes
+  - ✅ localStorage persistence with backwards compatibility
+  - ✅ Enhanced dice materials (ambient + emissive colors)
+  - ✅ Brightened dice color palette (~30% increase)
+  - ✅ Added dedicated dice spotlights for improved visibility
+  - ✅ Enhanced shadow properties (2048 resolution, sharper edges)
+- **Files Created**:
+  - `docs/VISUAL-SETTINGS.md` - Complete documentation with architecture
+- **Files Modified**:
+  - `src/services/settings.ts` - Added VisualSettings interface and updateVisual()
+  - `src/render/scene.ts` - Added updateTableContrast() with diffuse color control
+  - `src/ui/settings.ts` - Added Visual Settings section with notification feedback
+  - `src/main.ts` - Apply contrast on startup and real-time onChange updates
+  - `src/render/dice.ts` - Enhanced dice materials and brightened color palette
+- **Future Work** (TODO):
+  - 🔲 Fine-tune diffuse multiplier range if too extreme (consider 0.85-1.15)
+  - 🔲 Add additional visual settings (dice brightness, lighting intensity, shadow strength)
+  - 🔲 Implement color blind mode presets
+  - 🔲 User testing and feedback collection on contrast effectiveness
+  - 🔲 Consider ambient color adjustments for softer contrast changes
+- **Result**: Users can now dramatically adjust table brightness with instant visual feedback!
 
 ### Particle System (Phase 1 & 2 - COMPLETE) ✨
 - **Status**: ✅ Phases 1 & 2 COMPLETE (2026-02-24)

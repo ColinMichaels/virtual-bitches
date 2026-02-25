@@ -27,6 +27,10 @@ export interface ColorMaterialOptions {
   specularPower?: number;
   /** Specular color */
   specularColor?: Color3;
+  /** Ambient color for better visibility */
+  ambientColor?: Color3;
+  /** Emissive color for subtle glow */
+  emissiveColor?: Color3;
 }
 
 /**
@@ -69,6 +73,8 @@ export function createColorMaterial(
         "specularPower",
         "specularColor",
         "bumpLevel",
+        "ambientColor",
+        "emissiveColor",
       ],
       samplers: ["diffuseSampler", "bumpSampler", "specularSampler"],
       defines: defines,
@@ -80,6 +86,8 @@ export function createColorMaterial(
   material.setFloat("specularPower", options.specularPower || 32);
   material.setColor3("specularColor", options.specularColor || new Color3(0.8, 0.8, 0.8));
   material.setFloat("bumpLevel", options.bumpLevel || 0.5);
+  material.setColor3("ambientColor", options.ambientColor || new Color3(0.3, 0.3, 0.3));
+  material.setColor3("emissiveColor", options.emissiveColor || new Color3(0.08, 0.08, 0.08));
 
   // Set textures
   material.setTexture("diffuseSampler", options.diffuseTexture);
@@ -164,6 +172,8 @@ uniform vec3 cameraPosition;
 uniform vec3 specularColor;
 uniform float specularPower;
 uniform float bumpLevel;
+uniform vec3 ambientColor;
+uniform vec3 emissiveColor;
 
 // Samplers
 uniform sampler2D diffuseSampler;
@@ -195,18 +205,15 @@ void main(void) {
   float diffuse = max(dot(normal, lightDir), 0.0);
   vec3 diffuseLight = lightColor * diffuse;
 
-  // Ambient light (prevent pure black)
-  vec3 ambient = vec3(0.3, 0.3, 0.3);
-
   // Specular lighting (Blinn-Phong)
   vec3 viewDir = normalize(cameraPosition - vWorldPos);
   vec3 halfDir = normalize(lightDir + viewDir);
   float specular = pow(max(dot(normal, halfDir), 0.0), specularPower);
   vec3 specularLight = specularColor * specular;
 
-  // Combine lighting
-  vec3 lighting = ambient + diffuseLight;
-  finalColor = finalColor * lighting + specularLight;
+  // Combine lighting with ambient and emissive
+  vec3 lighting = ambientColor + diffuseLight;
+  finalColor = finalColor * lighting + specularLight + emissiveColor;
 
   // Output final color (fully opaque)
   gl_FragColor = vec4(finalColor, 1.0);
