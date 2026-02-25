@@ -100,7 +100,7 @@ export class CameraService {
    * Save current camera position
    * @returns Position ID or null if limit reached
    */
-  savePosition(name: string, position: Omit<CameraPosition, 'id' | 'createdAt' | 'isFavorite'>): string | null {
+  savePosition(name: string, position: Omit<CameraPosition, 'id' | 'name' | 'createdAt' | 'isFavorite'>): string | null {
     if (!this.canSaveMore()) {
       log.warn(`Cannot save position: ${this.state.tier} tier limit reached (${this.getMaxSlots()} slots)`);
       return null;

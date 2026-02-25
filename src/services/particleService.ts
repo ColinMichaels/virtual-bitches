@@ -474,7 +474,7 @@ export class ParticleService {
     system.minLifeTime = effect.minLifeTime;
     system.maxLifeTime = effect.maxLifeTime;
     system.emitRate = effect.emitRate;
-    system.maxParticles = effect.maxParticles;
+    // Note: maxParticles is set via capacity in ParticleSystem constructor, not a writable property
     system.blendMode = effect.blendMode;
     system.color1 = effect.color1;
     system.color2 = effect.color2;

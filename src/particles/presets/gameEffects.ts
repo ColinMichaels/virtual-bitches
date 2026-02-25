@@ -3,6 +3,7 @@
  * Registers particle effects and provides helpers for game events
  */
 
+import { Vector3 } from "@babylonjs/core";
 import { particleService } from "../../services/particleService.js";
 import { burstEffects } from "../effects/burstEffects.js";
 import { trailEffects } from "../effects/trailEffects.js";
@@ -32,8 +33,6 @@ export function emitScoreParticles(
   diceValue: number,
   playerId: string
 ): void {
-  const { Vector3 } = require("@babylonjs/core");
-
   // Determine effect based on dice value
   let effectId = "burst-gold";
   let scale = 1.0;
@@ -60,7 +59,6 @@ export function emitBustParticles(
   position: { x: number; y: number; z: number },
   playerId: string
 ): void {
-  const { Vector3 } = require("@babylonjs/core");
 
   particleService.emit({
     effectId: "burst-red",
@@ -80,7 +78,6 @@ export function emitPerfectRollParticles(
   position: { x: number; y: number; z: number },
   playerId: string
 ): void {
-  const { Vector3 } = require("@babylonjs/core");
 
   // White burst + confetti
   particleService.emit({
@@ -114,7 +111,6 @@ export function emitAchievementParticles(
   position: { x: number; y: number; z: number },
   playerId: string
 ): void {
-  const { Vector3 } = require("@babylonjs/core");
 
   // Ambient sparkles
   particleService.emit({
@@ -135,7 +131,6 @@ export function emitAchievementParticles(
 export function emitDiceRollParticles(
   position: { x: number; y: number; z: number }
 ): void {
-  const { Vector3 } = require("@babylonjs/core");
 
   // Dice trail (attached to dice mesh in actual implementation)
   particleService.emit({
@@ -156,7 +151,6 @@ export function emitCelebrationParticles(
   playerId: string,
   intensity: number = 1.0
 ): void {
-  const { Vector3 } = require("@babylonjs/core");
 
   // Confetti burst
   particleService.emit({
