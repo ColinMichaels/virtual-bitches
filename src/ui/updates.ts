@@ -116,7 +116,7 @@ export class UpdatesPanel {
    */
   private async loadUpdates(): Promise<void> {
     try {
-      const response = await fetch("/updates.json");
+      const response = await fetch("./updates.json");
       if (!response.ok) {
         throw new Error(`Failed to load updates: ${response.status}`);
       }

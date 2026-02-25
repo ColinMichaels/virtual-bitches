@@ -26,6 +26,33 @@ export interface CameraPosition {
   isFavorite: boolean;     // Quick access flag
 }
 
+// Interface type for external usage (documented shape of CameraService)
+export interface ICameraService {
+  savePosition(name: string, position: Omit<CameraPosition, 'id' | 'name' | 'createdAt' | 'isFavorite'>): string | null;
+  loadPosition(id: string): CameraPosition | null;
+  deletePosition(id: string): boolean;
+  updatePosition(id: string, updates: Partial<Omit<CameraPosition, 'id' | 'createdAt'>>): boolean;
+  toggleFavorite(id: string): boolean;
+  listPositions(): CameraPosition[];
+  getFavorites(): CameraPosition[];
+  getLastUsed(): CameraPosition | null;
+  exportPosition(id: string): string | null;
+  exportAll(): string;
+  importPosition(json: string): string | null;
+  importAll(json: string): string[];
+  clearAll(): void;
+  getTier(): CameraTier;
+  setTier(tier: CameraTier): void;
+  canSaveMore(): boolean;
+  getMaxSlots(): number;
+  getRemainingSlots(): number;
+  isFlyingModeUnlocked(): boolean;
+  isMachinimaModeUnlocked(): boolean;
+  on(event: string, callback: Function): () => void;
+  off(event: string, callback: Function): void;
+  getStats(): any;
+}
+
 interface CameraServiceState {
   positions: CameraPosition[];
   tier: CameraTier;
@@ -40,11 +67,62 @@ const TIER_LIMITS: Record<CameraTier, number> = {
   premium: Infinity,
 };
 
+function createMemoryStorage(): Storage {
+  const store = new Map<string, string>();
+
+  return {
+    get length() {
+      return store.size;
+    },
+    clear() {
+      store.clear();
+    },
+    getItem(key: string): string | null {
+      return store.has(key) ? (store.get(key) as string) : null;
+    },
+    key(index: number): string | null {
+      const keys = Array.from(store.keys());
+      return keys[index] ?? null;
+    },
+    removeItem(key: string): void {
+      store.delete(key);
+    },
+    setItem(key: string, value: string): void {
+      store.set(key, value);
+    },
+  };
+}
+
+let fallbackStorage: Storage | null = null;
+
+function resolveStorage(storage?: Storage): Storage {
+  if (storage) {
+    return storage;
+  }
+
+  const globalScope = globalThis as typeof globalThis & { localStorage?: Storage };
+  if (globalScope.localStorage) {
+    return globalScope.localStorage;
+  }
+
+  if (!fallbackStorage) {
+    fallbackStorage = createMemoryStorage();
+    log.warn('localStorage unavailable, using in-memory camera storage');
+  }
+
+  return fallbackStorage;
+}
+
 export class CameraService {
   private state: CameraServiceState;
   private listeners: Map<string, Set<Function>> = new Map();
+  private storage: Storage;
 
-  constructor() {
+  /**
+   * @param storage Optional storage implementation (defaults to window.localStorage). Useful for tests.
+   */
+  constructor(storage?: Storage) {
+    this.storage = resolveStorage(storage);
     this.state = this.loadState();
     log.info(`Camera service initialized with ${this.state.positions.length} saved positions (${this.state.tier} tier)`);
   }
@@ -54,12 +132,18 @@ export class CameraService {
    */
   private loadState(): CameraServiceState {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = this.storage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
+
+        // Basic validation of parsed structure
+        const positions = Array.isArray(parsed.positions) ? parsed.positions.filter((p: any) => {
+          return p && typeof p.alpha === 'number' && typeof p.beta === 'number' && typeof p.radius === 'number' && p.target && typeof p.target.x === 'number';
+        }) : [];
+
         return {
-          positions: parsed.positions || [],
-          tier: parsed.tier || 'free',
+          positions,
+          tier: (parsed.tier === 'free' || parsed.tier === 'unlocked' || parsed.tier === 'premium') ? parsed.tier : 'free',
           lastUsedId: parsed.lastUsedId,
         };
       }
@@ -78,7 +162,7 @@ export class CameraService {
    */
   private saveState(): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+      this.storage.setItem(STORAGE_KEY, JSON.stringify(this.state));
       log.debug('Camera state saved');
     } catch (error) {
       log.error('Failed to save camera state:', error);
@@ -438,6 +522,16 @@ export class CameraService {
         eventListeners.delete(callback);
       }
     };
+  }
+
+  /**
+   * Convenience to remove a listener
+   */
+  off(event: string, callback: Function): void {
+    const eventListeners = this.listeners.get(event);
+    if (eventListeners) {
+      eventListeners.delete(callback);
+    }
   }
 
   /**

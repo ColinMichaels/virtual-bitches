@@ -8,8 +8,8 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 
 ## 🔴 High Priority
 
-### Camera System & Machinima Tools (Phase 1 - COMPLETE) 📷
-- **Status**: ✅ Phase 1 COMPLETE (2026-02-24)
+### Camera System & Machinima Tools (Phase 1 COMPLETE, Phase 2 PARTIAL) 📷
+- **Status**: ✅ Phase 1 COMPLETE (2026-02-24) • 🟡 Phase 2 PARTIAL (2026-02-25 foundation work)
 - **Complexity**: Medium (Phase 1), Very High (Full System)
 - **Description**: Camera position management system with progressive unlocks and machinima tools
 - **Documentation**:
@@ -22,21 +22,36 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ Keyboard shortcut (C key) and button access
   - ✅ localStorage persistence
   - ✅ Tier-based access control (free/unlocked/premium)
+- **Phase 2 Foundation Implemented**:
+  - ✅ Smooth camera transition plumbing in `GameScene.setCameraPosition(..., animate)` (settings-gated)
+  - ✅ Babylon animation/easing integration for alpha, beta, radius, and target interpolation
+  - ✅ `SettingsService` camera schema defaults (`smoothTransitions`, `transitionDuration`, unlock flags)
+  - ✅ `CameraService` testability improvements (injectable storage, state validation, explicit `off()` listener removal)
+  - ✅ Camera service test suite scaffold (`src/services/cameraService.test.ts`)
+  - ✅ Non-browser/runtime-safe storage fallback for `cameraService` singleton
 - **Future Phases**:
-  - 🔒 Phase 2: Enhanced Camera (10 slots, smooth transitions, replay - Post-TODO)
+  - 🟡 Phase 2: Enhanced Camera (in progress - smooth transitions core done; 10 slots/replay/per-seat still pending)
   - 🔒 Phase 3: Flying Mode (WASD controls, no-clip - Post-Multiplayer)
   - 🔒 Phase 4: Machinima Pro (paths, director mode, export - Premium Feature)
 - **Files Created**:
-  - `src/services/cameraService.ts` - Core service (430 lines)
+  - `src/services/cameraService.ts` - Core service (500+ lines)
   - `src/ui/cameraControls.ts` - UI panel (430 lines)
   - `docs/CAMERA-SYSTEM.md` - Complete specification (800+ lines)
   - CSS styles added to `src/styles.css` (400+ lines)
 - **Files Modified**:
-  - `src/render/scene.ts` - Added camera save/load methods
+  - `src/render/scene.ts` - Added settings-gated smooth transition animation support
+  - `src/services/settings.ts` - Added/merged camera settings defaults
+  - `src/services/cameraService.ts` - Added storage injection, validation, and listener unsubscribe helper
   - `src/main.ts` - Integrated camera panel
   - `src/controllers/InputController.ts` - Added C key and button handler
   - `index.html` - Added camera positions button
-- **Result**: Players can now save up to 3 camera positions with clear teaser UI for advanced features
+  - `package.json` - Added `test:camera` script
+- **New Files in 2026-02-25 Update**:
+  - `src/services/cameraService.test.ts` - Camera service unit-style test script
+- **Result**: Players can save up to 3 camera positions now, and smooth camera transitions are partially implemented at engine/settings level
+- **Immediate Next Work**:
+  - 🔲 Expose camera smooth-transition controls in UI with proper unlock gating
+  - 🔲 Complete remaining Phase 2 features (10 slots, replay timeline, per-player seat positions)
 
 ### Active Bugs
 
@@ -305,10 +320,47 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ### Future Features (See FUTURE-FEATURES.md)
 
 #### Camera Attack Integration System 💥📷
-- **Status**: DOCUMENTED (not yet implemented)
+- **Status**: 🟡 PHASE 4 CLIENT INTEGRATION IN PROGRESS (2026-02-25)
 - **Complexity**: Very High
 - **Description**: Weaponized camera manipulation for multiplayer psychological warfare
 - **Documentation**: Complete specification in `docs/CAMERA-ATTACKS-INTEGRATION.md` (1000+ lines)
+- **Implemented Foundation**:
+  - ✅ `CameraEffectsService` runtime (`src/services/cameraEffects.ts`) with shake/spin/zoom/drunk effects
+  - ✅ Drunk vision post-processing pipeline (`src/chaos/effects/postProcessingPipeline.ts`) with blur/double-vision/vignette/blackout hooks
+  - ✅ Effect conflict queue/stacking policy (per-type caps, queued drain, drunk-child reserved stacking lane)
+  - ✅ Active camera effect HUD (`src/ui/effectHUD.ts`) with live timers/intensity/queue indicators
+  - ✅ Effect lifecycle controls (active list, stop, clear) + timing/cleanup handling
+  - ✅ Particle integration hooks for shake/spin/drunk effects
+  - ✅ `CameraAttackExecutor` (`src/chaos/cameraAttackExecutor.ts`) for typed message → camera effect mapping
+  - ✅ Main-thread event bridge (`chaos:cameraAttack`) wired in `src/main.ts`
+  - ✅ Multiplayer WebSocket bridge (`src/multiplayer/networkService.ts`) for camera attack + particle delivery
+  - ✅ Unit-style tests for attack mapping (`src/chaos/cameraAttackExecutor.test.ts`)
+  - ✅ Unit-style tests for network bridge routing (`src/multiplayer/networkService.test.ts`)
+  - ✅ Unit-style tests for camera effect queue/post-processing behavior (`src/services/cameraEffects.test.ts`)
+  - ✅ Upgrade progression scaffolding (`src/chaos/upgrades/progressionService.ts`) with XP/tokens/unlock validation + persistence
+  - ✅ Upgrade definitions for three attack families (`src/chaos/upgrades/definitions.ts`)
+  - ✅ Unit-style tests for progression scaffolding (`src/chaos/upgrades/progressionService.test.ts`)
+  - ✅ `ChaosUpgradeMenu` UI scaffold (`src/ui/chaosUpgradeMenu.ts`) wired to desktop/mobile controls + `U` hotkey
+  - ✅ Progression-to-execution profile mapping + message builder (`src/chaos/upgrades/executionProfile.ts`)
+  - ✅ Upgrade menu local cast bridge (`chaos:cameraAttack`) using unlocked level stats
+  - ✅ Control inversion runtime (`src/services/controlInversion.ts`) wired into input and drunk attacks
+  - ✅ Accessibility safeguards in settings + executor (`reduceChaosCameraEffects`, `allowChaosControlInversion`)
+  - ✅ Unit-style tests for execution profile mapping (`src/chaos/upgrades/executionProfile.test.ts`)
+  - ✅ Unit-style tests for control inversion behavior (`src/services/controlInversion.test.ts`)
+  - ✅ Typed backend API client scaffold (`src/services/backendApi.ts`) for profile/log/session routes
+  - ✅ Player data sync scaffold (`src/services/playerDataSync.ts`) for settings/progression/log queue sync
+  - ✅ Sync reliability foundation in `PlayerDataSyncService` (dirty-profile sync + retry backoff/jitter + queue compaction/dedupe + deterministic score log IDs)
+  - ✅ Service worker log upload bridge (`src/services/pwa.ts` + `public/sw.js`)
+  - ✅ Multiplayer session API scaffold (`src/multiplayer/sessionService.ts`) with join/create/heartbeat/leave hooks
+  - ✅ Session-aware multiplayer socket rebinding in `main.ts` (API session `wsUrl`/`playerToken` now updates live network connection)
+  - ✅ Auth session service + 401 recovery (`src/services/authSession.ts`, `src/services/backendApi.ts`) with token refresh and session-expired handling
+  - ✅ WebSocket auth-expiry recovery path (`src/multiplayer/networkService.ts`) with session auth refresh callback
+  - ✅ Multiplayer attack feedback loop (`sent`/`sendFailed`/`received`/`applied`) wired to HUD notifications in `src/main.ts`
+  - ✅ Backend skeleton started in `/api` (HTTP server scaffold + SQL schema/migrations + profile/log/session/auth endpoints)
+  - ✅ Firebase migration strategy documented (`docs/FIREBASE-MIGRATION-PLAN.md`) for moving from GitHub Pages to Firebase Hosting + Cloud Run
+  - ✅ Firebase Phase 1 bootstrap files added (`firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`, `.env.firebase.example`, `docs/FIREBASE-SETUP.md`)
+  - ✅ GitHub Actions deploy workflow added (`.github/workflows/firebase-deploy.yml`) for auto-deploy on `master`/`dev` using GitHub Secrets
+  - ✅ Unit-style tests for backend API request handling (`src/services/backendApi.test.ts`)
 - **Key Features**:
   - Camera Effects API (shake, spin, zoom, tilt, drunk vision)
   - Drunk Vision system (3 severity levels: Tipsy, Hammered, Blackout)
@@ -323,12 +375,12 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - **Dependencies**:
   - Requires Camera System (Phase 1 ✅ complete)
   - Requires Chaos Gameplay Mechanics infrastructure
-  - Requires Multiplayer system
-  - Requires WebSocket server
-  - BabylonJS Post-Processing pipeline
+  - Requires Multiplayer system for networked attacks
+  - Requires WebSocket server for cross-client attack delivery
+  - BabylonJS Post-Processing pipeline (implemented client-side; tuning pending)
 - **Implementation Timeline**: ~10 weeks (5 phases)
 - **Monetization**: Chaos Pass ($4.99/mo), IAP packs, Battle Pass
-- **Implementation Priority**: Post-Multiplayer (Phase 4+)
+- **Implementation Priority**: Next up is production backend/API+DB implementation (profiles/settings/logs), authenticated sync/conflict semantics, and multiplayer backend/session rollout
 
 #### Chaos Gameplay Mechanics System
 - **Status**: DOCUMENTED (not yet implemented)

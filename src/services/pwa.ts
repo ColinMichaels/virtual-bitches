@@ -219,6 +219,66 @@ class PWAService {
       log.info('Requested precaching of assets:', urls);
     }
   }
+
+  /**
+   * Ask service worker to upload game logs in background.
+   * Returns accepted count when worker upload succeeds.
+   */
+  async syncGameLogs(
+    logs: unknown[],
+    endpoint: string
+  ): Promise<{ ok: boolean; accepted: number }> {
+    if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+      return { ok: false, accepted: 0 };
+    }
+    if (logs.length === 0) {
+      return { ok: true, accepted: 0 };
+    }
+
+    const result = await this.postMessageWithReply<{
+      type: string;
+      endpoint: string;
+      logs: unknown[];
+    }, {
+      ok?: boolean;
+      accepted?: number;
+    }>({
+      type: 'SYNC_GAME_LOGS',
+      endpoint,
+      logs,
+    });
+
+    return {
+      ok: result?.ok === true,
+      accepted: typeof result?.accepted === 'number' ? result.accepted : 0,
+    };
+  }
+
+  private async postMessageWithReply<TRequest, TResponse>(
+    payload: TRequest,
+    timeoutMs: number = 7000
+  ): Promise<TResponse | null> {
+    return new Promise((resolve) => {
+      if (!navigator.serviceWorker.controller) {
+        resolve(null);
+        return;
+      }
+
+      const channel = new MessageChannel();
+      const timeout = window.setTimeout(() => {
+        channel.port1.onmessage = null;
+        resolve(null);
+      }, timeoutMs);
+
+      channel.port1.onmessage = (event: MessageEvent<TResponse>) => {
+        window.clearTimeout(timeout);
+        channel.port1.onmessage = null;
+        resolve(event.data ?? null);
+      };
+
+      navigator.serviceWorker.controller.postMessage(payload, [channel.port2]);
+    });
+  }
 }
 
 // Export singleton instance

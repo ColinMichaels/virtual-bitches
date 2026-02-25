@@ -1,0 +1,159 @@
+name: Deploy Firebase + Cloud Run
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Resolve Deployment Target
+        id: target
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+          FIREBASE_PROJECT_ID_PROD: ${{ secrets.FIREBASE_PROJECT_ID_PROD }}
+          FIREBASE_PROJECT_ID_DEV: ${{ secrets.FIREBASE_PROJECT_ID_DEV }}
+          VITE_API_BASE_URL_PROD: ${{ secrets.VITE_API_BASE_URL_PROD }}
+          VITE_API_BASE_URL_DEV: ${{ secrets.VITE_API_BASE_URL_DEV }}
+          VITE_WS_URL_PROD: ${{ secrets.VITE_WS_URL_PROD }}
+          VITE_WS_URL_DEV: ${{ secrets.VITE_WS_URL_DEV }}
+          VITE_FIREBASE_API_KEY_PROD: ${{ secrets.VITE_FIREBASE_API_KEY_PROD }}
+          VITE_FIREBASE_API_KEY_DEV: ${{ secrets.VITE_FIREBASE_API_KEY_DEV }}
+          VITE_FIREBASE_AUTH_DOMAIN_PROD: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN_PROD }}
+          VITE_FIREBASE_AUTH_DOMAIN_DEV: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN_DEV }}
+          VITE_FIREBASE_PROJECT_ID_PROD: ${{ secrets.VITE_FIREBASE_PROJECT_ID_PROD }}
+          VITE_FIREBASE_PROJECT_ID_DEV: ${{ secrets.VITE_FIREBASE_PROJECT_ID_DEV }}
+          VITE_FIREBASE_STORAGE_BUCKET_PROD: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET_PROD }}
+          VITE_FIREBASE_STORAGE_BUCKET_DEV: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET_DEV }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID_PROD: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID_PROD }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID_DEV: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID_DEV }}
+          VITE_FIREBASE_APP_ID_PROD: ${{ secrets.VITE_FIREBASE_APP_ID_PROD }}
+          VITE_FIREBASE_APP_ID_DEV: ${{ secrets.VITE_FIREBASE_APP_ID_DEV }}
+          VITE_FIREBASE_MEASUREMENT_ID_PROD: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID_PROD }}
+          VITE_FIREBASE_MEASUREMENT_ID_DEV: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID_DEV }}
+        run: |
+          set -euo pipefail
+
+          if [ "$BRANCH_NAME" = "master" ]; then
+            echo "project_id=$FIREBASE_PROJECT_ID_PROD" >> "$GITHUB_OUTPUT"
+            echo "api_base_url=$VITE_API_BASE_URL_PROD" >> "$GITHUB_OUTPUT"
+            echo "ws_url=$VITE_WS_URL_PROD" >> "$GITHUB_OUTPUT"
+            echo "fb_api_key=$VITE_FIREBASE_API_KEY_PROD" >> "$GITHUB_OUTPUT"
+            echo "fb_auth_domain=$VITE_FIREBASE_AUTH_DOMAIN_PROD" >> "$GITHUB_OUTPUT"
+            echo "fb_project_id=$VITE_FIREBASE_PROJECT_ID_PROD" >> "$GITHUB_OUTPUT"
+            echo "fb_storage_bucket=$VITE_FIREBASE_STORAGE_BUCKET_PROD" >> "$GITHUB_OUTPUT"
+            echo "fb_messaging_sender_id=$VITE_FIREBASE_MESSAGING_SENDER_ID_PROD" >> "$GITHUB_OUTPUT"
+            echo "fb_app_id=$VITE_FIREBASE_APP_ID_PROD" >> "$GITHUB_OUTPUT"
+            echo "fb_measurement_id=$VITE_FIREBASE_MEASUREMENT_ID_PROD" >> "$GITHUB_OUTPUT"
+          elif [ "$BRANCH_NAME" = "dev" ]; then
+            echo "project_id=$FIREBASE_PROJECT_ID_DEV" >> "$GITHUB_OUTPUT"
+            echo "api_base_url=$VITE_API_BASE_URL_DEV" >> "$GITHUB_OUTPUT"
+            echo "ws_url=$VITE_WS_URL_DEV" >> "$GITHUB_OUTPUT"
+            echo "fb_api_key=$VITE_FIREBASE_API_KEY_DEV" >> "$GITHUB_OUTPUT"
+            echo "fb_auth_domain=$VITE_FIREBASE_AUTH_DOMAIN_DEV" >> "$GITHUB_OUTPUT"
+            echo "fb_project_id=$VITE_FIREBASE_PROJECT_ID_DEV" >> "$GITHUB_OUTPUT"
+            echo "fb_storage_bucket=$VITE_FIREBASE_STORAGE_BUCKET_DEV" >> "$GITHUB_OUTPUT"
+            echo "fb_messaging_sender_id=$VITE_FIREBASE_MESSAGING_SENDER_ID_DEV" >> "$GITHUB_OUTPUT"
+            echo "fb_app_id=$VITE_FIREBASE_APP_ID_DEV" >> "$GITHUB_OUTPUT"
+            echo "fb_measurement_id=$VITE_FIREBASE_MEASUREMENT_ID_DEV" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unsupported branch: $BRANCH_NAME"
+            exit 1
+          fi
+
+      - name: Validate required secrets
+        env:
+          PROJECT_ID: ${{ steps.target.outputs.project_id }}
+          API_BASE_URL: ${{ steps.target.outputs.api_base_url }}
+          WS_URL: ${{ steps.target.outputs.ws_url }}
+          FB_API_KEY: ${{ steps.target.outputs.fb_api_key }}
+          FB_AUTH_DOMAIN: ${{ steps.target.outputs.fb_auth_domain }}
+          FB_PROJECT_ID: ${{ steps.target.outputs.fb_project_id }}
+          FB_STORAGE_BUCKET: ${{ steps.target.outputs.fb_storage_bucket }}
+          FB_SENDER_ID: ${{ steps.target.outputs.fb_messaging_sender_id }}
+          FB_APP_ID: ${{ steps.target.outputs.fb_app_id }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          set -euo pipefail
+          for key in PROJECT_ID API_BASE_URL WS_URL FB_API_KEY FB_AUTH_DOMAIN FB_PROJECT_ID FB_STORAGE_BUCKET FB_SENDER_ID FB_APP_ID GCP_SA_KEY; do
+            value="${!key:-}"
+            if [ -z "$value" ]; then
+              echo "Missing required secret/output: $key"
+              exit 1
+            fi
+          done
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ steps.target.outputs.project_id }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ steps.target.outputs.project_id }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate build env
+        env:
+          API_BASE_URL: ${{ steps.target.outputs.api_base_url }}
+          WS_URL: ${{ steps.target.outputs.ws_url }}
+          FB_API_KEY: ${{ steps.target.outputs.fb_api_key }}
+          FB_AUTH_DOMAIN: ${{ steps.target.outputs.fb_auth_domain }}
+          FB_PROJECT_ID: ${{ steps.target.outputs.fb_project_id }}
+          FB_STORAGE_BUCKET: ${{ steps.target.outputs.fb_storage_bucket }}
+          FB_SENDER_ID: ${{ steps.target.outputs.fb_messaging_sender_id }}
+          FB_APP_ID: ${{ steps.target.outputs.fb_app_id }}
+          FB_MEASUREMENT_ID: ${{ steps.target.outputs.fb_measurement_id }}
+        run: |
+          cat > .env.production <<EOF
+          VITE_API_BASE_URL=$API_BASE_URL
+          VITE_WS_URL=$WS_URL
+          VITE_FIREBASE_API_KEY=$FB_API_KEY
+          VITE_FIREBASE_AUTH_DOMAIN=$FB_AUTH_DOMAIN
+          VITE_FIREBASE_PROJECT_ID=$FB_PROJECT_ID
+          VITE_FIREBASE_STORAGE_BUCKET=$FB_STORAGE_BUCKET
+          VITE_FIREBASE_MESSAGING_SENDER_ID=$FB_SENDER_ID
+          VITE_FIREBASE_APP_ID=$FB_APP_ID
+          VITE_FIREBASE_MEASUREMENT_ID=$FB_MEASUREMENT_ID
+          EOF
+
+      - name: Build frontend
+        run: npm run build:prod
+
+      - name: Deploy API to Cloud Run
+        id: deploy-api
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: biscuits-api
+          source: ./api
+          region: us-central1
+          flags: --allow-unauthenticated
+          env_vars: |
+            NODE_ENV=production
+            WS_BASE_URL=${{ steps.target.outputs.ws_url }}
+
+      - name: Deploy Firebase Hosting + Firestore
+        env:
+          PROJECT_ID: ${{ steps.target.outputs.project_id }}
+        run: npx firebase-tools deploy --project "$PROJECT_ID" --only hosting,firestore --non-interactive

@@ -48,6 +48,132 @@ h1, h2, h3, h4, h5, h6 {
   z-index: 50;
 }
 
+/* Camera effect status HUD */
+#effect-hud {
+  position: absolute;
+  top: max(112px, calc(env(safe-area-inset-top) + 102px));
+  right: max(12px, env(safe-area-inset-right));
+  width: min(280px, calc(100vw - 24px));
+  z-index: 70;
+  pointer-events: none;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+#effect-hud.is-hidden {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.effect-hud__content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(6, 10, 24, 0.84);
+  border: 1px solid rgba(190, 214, 255, 0.18);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+}
+
+.effect-hud__header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.effect-hud__title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.effect-hud__queue {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.effect-hud__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.effect-hud__card {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.effect-hud__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.effect-hud__icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.effect-hud__name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.effect-hud__time {
+  margin-left: auto;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.86);
+  font-variant-numeric: tabular-nums;
+}
+
+.effect-hud__meter {
+  margin-top: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.effect-hud__meter-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  transition: width 0.12s linear;
+  background: linear-gradient(90deg, #8ecbff 0%, #4c8eff 100%);
+}
+
+.effect-hud__meta {
+  margin-top: 5px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.effect-hud__card--shake .effect-hud__meter-fill {
+  background: linear-gradient(90deg, #ffd38e 0%, #ff9f4c 100%);
+}
+
+.effect-hud__card--spin .effect-hud__meter-fill {
+  background: linear-gradient(90deg, #8eb5ff 0%, #5f77ff 100%);
+}
+
+.effect-hud__card--zoom .effect-hud__meter-fill {
+  background: linear-gradient(90deg, #8effca 0%, #45c796 100%);
+}
+
+.effect-hud__card--drunk .effect-hud__meter-fill {
+  background: linear-gradient(90deg, #ff9fb5 0%, #ff6f92 100%);
+}
+
 #stats-bar {
   display: flex;
   gap: 24px;
@@ -688,6 +814,40 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 #updates-toggle-btn:active {
+  transform: scale(0.95);
+}
+
+#chaos-upgrades-btn {
+  position: absolute;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  right: max(200px, calc(env(safe-area-inset-right) + 180px));
+  width: 50px;
+  height: 50px;
+  padding: 12px;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+#chaos-upgrades-btn svg {
+  width: 24px;
+  height: 24px;
+  color: #fff;
+}
+
+#chaos-upgrades-btn:hover {
+  background: rgba(124, 93, 250, 0.85);
+  border-color: #7c5dfa;
+  transform: scale(1.1);
+}
+
+#chaos-upgrades-btn:active {
   transform: scale(0.95);
 }
 
@@ -1746,6 +1906,253 @@ button.danger:hover:not(:disabled) {
   opacity: 0.7;
 }
 
+/* Chaos Upgrade Menu */
+.chaos-upgrade-modal-content {
+  max-width: 980px;
+  width: min(980px, 95vw);
+  max-height: 88vh;
+}
+
+.chaos-upgrade-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.chaos-upgrade-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.chaos-token-box {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.chaos-token-label {
+  font-size: 12px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.chaos-token-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #ffd36b;
+}
+
+.chaos-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chaos-mini-btn {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.chaos-mini-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.chaos-mini-btn.locked,
+.chaos-mini-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.chaos-mini-btn.ghost {
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.chaos-upgrade-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.chaos-upgrade-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.chaos-upgrade-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.chaos-upgrade-card-header h3 {
+  font-size: 18px;
+  color: #fff;
+}
+
+.chaos-upgrade-current-level {
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.chaos-upgrade-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.chaos-upgrade-xp-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.chaos-upgrade-xp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7ad8ff 0%, #4a9eff 100%);
+}
+
+.chaos-upgrade-xp-meta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.chaos-upgrade-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.chaos-upgrade-next {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chaos-upgrade-next.complete {
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 700;
+}
+
+.chaos-upgrade-next-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.chaos-upgrade-next-info strong {
+  color: #fff;
+  font-size: 13px;
+}
+
+.chaos-upgrade-next-info span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+}
+
+.chaos-upgrade-next-status {
+  color: #8bc8ff !important;
+  font-weight: 700;
+}
+
+.chaos-upgrade-next-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chaos-upgrade-level-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chaos-upgrade-level-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.chaos-upgrade-level-row.unlocked {
+  background: rgba(91, 255, 180, 0.12);
+  border-color: rgba(91, 255, 180, 0.35);
+}
+
+.chaos-upgrade-level-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chaos-upgrade-level-main strong {
+  color: #fff;
+  font-size: 12px;
+}
+
+.chaos-upgrade-level-main span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+}
+
+.chaos-upgrade-level-status {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.chaos-upgrade-card--screen_shake .chaos-upgrade-xp-fill {
+  background: linear-gradient(90deg, #ffcf81 0%, #ff9959 100%);
+}
+
+.chaos-upgrade-card--drunk_vision .chaos-upgrade-xp-fill {
+  background: linear-gradient(90deg, #ffafdb 0%, #f678a6 100%);
+}
+
+.chaos-upgrade-card--camera_spin .chaos-upgrade-xp-fill {
+  background: linear-gradient(90deg, #9fb8ff 0%, #7289ff 100%);
+}
+
 /* ============================================
    RESPONSIVE / MOBILE LAYOUT
    ============================================ */
@@ -1757,6 +2164,22 @@ button.danger:hover:not(:disabled) {
     top: max(5px, env(safe-area-inset-top));
     left: max(5px, env(safe-area-inset-left));
     right: max(5px, env(safe-area-inset-right));
+  }
+
+  #effect-hud {
+    top: auto;
+    bottom: max(130px, calc(env(safe-area-inset-bottom) + 120px));
+    left: max(6px, env(safe-area-inset-left));
+    right: max(6px, env(safe-area-inset-right));
+    width: auto;
+  }
+
+  .effect-hud__content {
+    padding: 8px;
+  }
+
+  .effect-hud__list {
+    gap: 6px;
   }
 
   #stats-bar {
@@ -1876,6 +2299,26 @@ button.danger:hover:not(:disabled) {
   #leaderboard-btn svg {
     width: 24px;
     height: 24px;
+  }
+
+  .chaos-upgrade-modal-content {
+    width: 96%;
+    padding: 16px;
+  }
+
+  .chaos-upgrade-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chaos-upgrade-next {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .chaos-upgrade-next-actions {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
   }
 
   /* Camera Controls - Horizontal layout at bottom */
@@ -2167,6 +2610,26 @@ button.danger:hover:not(:disabled) {
     gap: 10px;
   }
 
+  #effect-hud {
+    bottom: max(120px, calc(env(safe-area-inset-bottom) + 100px));
+    left: 4px;
+    right: 4px;
+  }
+
+  .effect-hud__content {
+    border-radius: 8px;
+    padding: 7px;
+  }
+
+  .effect-hud__name,
+  .effect-hud__time {
+    font-size: 11px;
+  }
+
+  .effect-hud__meta {
+    font-size: 9px;
+  }
+
   .stat {
     margin: 0;
     gap: 3px;
@@ -2258,6 +2721,23 @@ button.danger:hover:not(:disabled) {
   #settings-gear-btn svg {
     width: 24px;
     height: 24px;
+  }
+
+  .chaos-upgrade-modal-content {
+    padding: 12px;
+  }
+
+  .chaos-token-value {
+    font-size: 22px;
+  }
+
+  .chaos-mini-btn {
+    font-size: 11px;
+    padding: 7px 10px;
+  }
+
+  .chaos-upgrade-card-header h3 {
+    font-size: 16px;
   }
 
   /* Camera Controls */

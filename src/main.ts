@@ -11,6 +11,8 @@ import { DebugView } from "./ui/debugView.js";
 import { AlphaWarningModal } from "./ui/alphaWarning.js";
 import { UpdatesPanel } from "./ui/updates.js";
 import { CameraControlsPanel } from "./ui/cameraControls.js";
+import { ChaosUpgradeMenu } from "./ui/chaosUpgradeMenu.js";
+import { EffectHUD } from "./ui/effectHUD.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
 import { GameState, Action, GameDifficulty } from "./engine/types.js";
@@ -19,6 +21,7 @@ import { audioService } from "./services/audio.js";
 import { hapticsService } from "./services/haptics.js";
 import { pwaService } from "./services/pwa.js";
 import { settingsService } from "./services/settings.js";
+import { ControlInversionService } from "./services/controlInversion.js";
 import { themeManager } from "./services/themeManager.js";
 import { initParticleService, particleService } from "./services/particleService.js";
 import { registerGameEffects } from "./particles/presets/gameEffects.js";
@@ -28,8 +31,33 @@ import { shouldShowHints, isUndoAllowed } from "./engine/modes.js";
 import { InputController, GameCallbacks } from "./controllers/InputController.js";
 import { GameFlowController } from "./controllers/GameFlowController.js";
 import { GameOverController } from "./controllers/GameOverController.js";
+import { CameraEffectsService } from "./services/cameraEffects.js";
+import { CameraAttackExecutor } from "./chaos/cameraAttackExecutor.js";
+import type { CameraAttackMessage } from "./chaos/types.js";
+import type { ParticleNetworkEvent } from "./services/particleService.js";
+import { playerDataSyncService } from "./services/playerDataSync.js";
+import { getLocalPlayerId } from "./services/playerIdentity.js";
+import { MultiplayerNetworkService } from "./multiplayer/networkService.js";
+import { MultiplayerSessionService } from "./multiplayer/sessionService.js";
+import { environment } from "@env";
+import type { MultiplayerSessionRecord } from "./services/backendApi.js";
 
 const log = logger.create('Game');
+
+function formatCameraAttackLabel(effectType: string): string {
+  switch (effectType) {
+    case "shake":
+      return "Screen Shake";
+    case "spin":
+      return "Camera Spin";
+    case "zoom":
+      return "Zoom Warp";
+    case "drunk":
+      return "Drunk Vision";
+    default:
+      return "Camera Attack";
+  }
+}
 
 class Game implements GameCallbacks {
   private state: GameState;
@@ -43,10 +71,18 @@ class Game implements GameCallbacks {
   private leaderboardModal: LeaderboardModal;
   private debugView: DebugView;
   private cameraControlsPanel: CameraControlsPanel;
+  private chaosUpgradeMenu: ChaosUpgradeMenu;
+  private effectHud: EffectHUD;
+  private cameraEffects: CameraEffectsService;
+  private cameraAttackExecutor: CameraAttackExecutor;
+  private controlInversion: ControlInversionService;
+  private multiplayerNetwork?: MultiplayerNetworkService;
+  private multiplayerSessionService: MultiplayerSessionService;
   private gameStartTime: number;
   private selectedDieIndex = 0; // For keyboard navigation
   private inputController: InputController;
   private gameOverController: GameOverController;
+  private readonly localPlayerId = getLocalPlayerId();
 
   private actionBtn: HTMLButtonElement;
   private deselectBtn: HTMLButtonElement;
@@ -65,6 +101,110 @@ class Game implements GameCallbacks {
     initParticleService(this.scene.scene);
     registerGameEffects();
     registerChaosEffects();
+    this.cameraEffects = new CameraEffectsService(this.scene);
+    this.effectHud = new EffectHUD(this.cameraEffects);
+    this.effectHud.start();
+    this.controlInversion = new ControlInversionService({
+      isEnabled: () => settingsService.getSettings().controls.allowChaosControlInversion,
+    });
+    this.cameraAttackExecutor = new CameraAttackExecutor(
+      this.cameraEffects,
+      () => this.localPlayerId,
+      {
+        controlInversion: this.controlInversion,
+        getAccessibilitySettings: () => ({
+          reduceCameraEffects: settingsService.getSettings().controls.reduceChaosCameraEffects,
+        }),
+      }
+    );
+
+    this.multiplayerSessionService = new MultiplayerSessionService(this.localPlayerId);
+    this.setMultiplayerNetwork(this.getMultiplayerWsUrl());
+
+    document.addEventListener("particle:network:receive", ((event: Event) => {
+      const particleEvent = event as CustomEvent<ParticleNetworkEvent>;
+      if (!particleEvent.detail) return;
+      particleService.handleNetworkEvent(particleEvent.detail);
+    }) as EventListener);
+
+    document.addEventListener("multiplayer:connected", () => {
+      particleService.enableNetworkSync(true);
+    });
+    document.addEventListener("multiplayer:disconnected", () => {
+      particleService.enableNetworkSync(false);
+    });
+    document.addEventListener("multiplayer:authExpired", () => {
+      notificationService.show("Multiplayer auth expired, refreshing session...", "warning", 2200);
+    });
+    document.addEventListener("multiplayer:sessionExpired", () => {
+      notificationService.show("Multiplayer session expired. Rejoin required.", "error", 3200);
+    });
+    document.addEventListener("auth:sessionExpired", () => {
+      notificationService.show("Session expired. Please rejoin multiplayer.", "warning", 2600);
+    });
+
+    document.addEventListener("chaos:cameraAttack:sent", ((event: Event) => {
+      const detail = (event as CustomEvent<{ message?: CameraAttackMessage }>).detail;
+      const message = detail?.message;
+      if (!message) return;
+      notificationService.show(
+        `Attack sent: ${formatCameraAttackLabel(message.effectType)} Lv${message.level}`,
+        "info",
+        1600
+      );
+    }) as EventListener);
+
+    document.addEventListener("chaos:cameraAttack:sendFailed", ((event: Event) => {
+      const detail = (event as CustomEvent<{ message?: CameraAttackMessage }>).detail;
+      const message = detail?.message;
+      if (!message) return;
+      notificationService.show(
+        `Attack failed to send: ${formatCameraAttackLabel(message.effectType)}`,
+        "warning",
+        2200
+      );
+    }) as EventListener);
+
+    document.addEventListener("chaos:cameraAttack:received", ((event: Event) => {
+      const detail = (event as CustomEvent<{ message?: CameraAttackMessage }>).detail;
+      const message = detail?.message;
+      if (!message) return;
+
+      notificationService.show(
+        `Incoming: ${formatCameraAttackLabel(message.effectType)} (${(message.duration / 1000).toFixed(1)}s)`,
+        "warning",
+        1800
+      );
+    }) as EventListener);
+
+    document.addEventListener("chaos:cameraAttack:applied", ((event: Event) => {
+      const detail = (event as CustomEvent<{ message?: CameraAttackMessage }>).detail;
+      const message = detail?.message;
+      if (!message) return;
+
+      notificationService.show(
+        `Effect active: ${formatCameraAttackLabel(message.effectType)}`,
+        "info",
+        1400
+      );
+    }) as EventListener);
+
+    // Bridge for upcoming multiplayer chaos attack messages
+    document.addEventListener("chaos:cameraAttack", ((event: Event) => {
+      const attackEvent = event as CustomEvent<CameraAttackMessage>;
+      if (!attackEvent.detail) return;
+      const effectId = this.cameraAttackExecutor.execute(attackEvent.detail);
+      if (!effectId) return;
+
+      document.dispatchEvent(
+        new CustomEvent("chaos:cameraAttack:applied", {
+          detail: {
+            message: attackEvent.detail,
+            effectId,
+          },
+        })
+      );
+    }) as EventListener);
 
     // Apply display settings from saved preferences
     const settings = settingsService.getSettings();
@@ -124,6 +264,8 @@ class Game implements GameCallbacks {
       );
     });
 
+    this.chaosUpgradeMenu = new ChaosUpgradeMenu();
+
     // Initialize controllers
     this.inputController = new InputController(
       this,
@@ -131,7 +273,9 @@ class Game implements GameCallbacks {
       this.leaderboardModal,
       rulesModal,
       this.debugView,
-      this.cameraControlsPanel
+      this.cameraControlsPanel,
+      this.chaosUpgradeMenu,
+      this.controlInversion
     );
     this.gameOverController = new GameOverController(this.scene);
 
@@ -191,6 +335,7 @@ class Game implements GameCallbacks {
     this.setupDiceSelection();
     GameFlowController.initializeAudio();
     this.updateUI();
+    this.initializeBackendSyncAndMultiplayerSession();
 
     // Show tutorial if this is first time
     if (tutorialModal.shouldShow()) {
@@ -201,6 +346,94 @@ class Game implements GameCallbacks {
 
     // Track game start time
     this.gameStartTime = Date.now();
+  }
+
+  private getMultiplayerWsUrl(): string | undefined {
+    if (!environment.features.multiplayer || !environment.wsUrl) {
+      return undefined;
+    }
+
+    // Prevent automatic reconnect loops during normal single-player sessions.
+    // Enable with ?multiplayer=1, or include ?session=<id> for session join flows.
+    const query = new URLSearchParams(window.location.search);
+    const multiplayerEnabled = query.get("multiplayer") === "1" || !!query.get("session");
+    if (!multiplayerEnabled) {
+      return undefined;
+    }
+
+    const baseUrl = new URL(environment.wsUrl);
+    const sessionId = query.get("session");
+    if (sessionId) {
+      baseUrl.searchParams.set("session", sessionId);
+    }
+    baseUrl.searchParams.set("playerId", this.localPlayerId);
+    return baseUrl.toString();
+  }
+
+  private setMultiplayerNetwork(wsUrl: string | undefined): void {
+    this.multiplayerNetwork?.dispose();
+    this.multiplayerNetwork = new MultiplayerNetworkService({
+      wsUrl,
+      eventTarget: document,
+      onAuthExpired: async () => this.handleMultiplayerAuthExpired(),
+    });
+    this.multiplayerNetwork.enableEventBridge();
+    this.multiplayerNetwork.connect();
+  }
+
+  private async handleMultiplayerAuthExpired(): Promise<string | undefined> {
+    const refreshedSession = await this.multiplayerSessionService.refreshSessionAuth();
+    if (!refreshedSession) {
+      return undefined;
+    }
+
+    return this.buildSessionWsUrl(refreshedSession);
+  }
+
+  private buildSessionWsUrl(session: MultiplayerSessionRecord): string | undefined {
+    if (!environment.features.multiplayer) {
+      return undefined;
+    }
+
+    const base = session.wsUrl ?? environment.wsUrl;
+    if (!base) {
+      return undefined;
+    }
+
+    try {
+      const url = new URL(base);
+      url.searchParams.set("playerId", this.localPlayerId);
+      url.searchParams.set("session", session.sessionId);
+      const socketToken = session.playerToken ?? session.auth?.accessToken;
+      if (socketToken) {
+        url.searchParams.set("token", socketToken);
+      }
+      return url.toString();
+    } catch (error) {
+      log.warn("Invalid session WebSocket URL", error);
+      return undefined;
+    }
+  }
+
+  private initializeBackendSyncAndMultiplayerSession(): void {
+    playerDataSyncService.start();
+
+    const query = new URLSearchParams(window.location.search);
+    const sessionId = query.get("session");
+    if (!sessionId) return;
+
+    playerDataSyncService.setSessionId(sessionId);
+    void this.multiplayerSessionService.joinSession(sessionId).then((session) => {
+      if (!session) return;
+
+      const sessionWsUrl = this.buildSessionWsUrl(session);
+      if (sessionWsUrl) {
+        this.setMultiplayerNetwork(sessionWsUrl);
+        log.info(`Rebound multiplayer network to session socket: ${session.sessionId}`);
+      }
+
+      log.info(`Joined multiplayer session via API scaffold: ${session.sessionId}`);
+    });
   }
 
   // GameCallbacks implementation
@@ -285,6 +518,7 @@ class Game implements GameCallbacks {
     const diceRowEl = document.getElementById("dice-row");
     const controlsEl = document.getElementById("controls");
     const cameraControlsEl = document.getElementById("camera-controls");
+    const effectHudEl = document.getElementById("effect-hud");
 
     if (isDebugMode) {
       // Hide game UI
@@ -292,6 +526,9 @@ class Game implements GameCallbacks {
       if (diceRowEl) diceRowEl.style.display = "none";
       if (controlsEl) controlsEl.style.display = "none";
       if (cameraControlsEl) cameraControlsEl.style.display = "none";
+      if (effectHudEl) effectHudEl.style.display = "none";
+      this.chaosUpgradeMenu.hide();
+      this.controlInversion.clearAll();
 
       // Clear game dice from scene
       this.diceRenderer.clearDice();
@@ -301,6 +538,7 @@ class Game implements GameCallbacks {
       if (diceRowEl) diceRowEl.style.display = "flex";
       if (controlsEl) controlsEl.style.display = "flex";
       if (cameraControlsEl) cameraControlsEl.style.display = "flex";
+      if (effectHudEl) effectHudEl.style.display = "flex";
 
       // Restore game state - updateUI will handle re-rendering dice if needed
       this.updateUI();

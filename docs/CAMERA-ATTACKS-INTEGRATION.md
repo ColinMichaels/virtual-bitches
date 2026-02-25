@@ -1,8 +1,8 @@
 # Camera Attack Integration & Upgrade System 🎥💥
 
-**Document Version**: 1.0
-**Last Updated**: 2026-02-24
-**Status**: Design Specification
+**Document Version**: 1.1
+**Last Updated**: 2026-02-25
+**Status**: Phase 3 Scaffolding In Progress (Runtime + HUD + Upgrade Progression Foundation)
 **Complexity**: Very High
 **Dependencies**: Camera System (Phase 1+), Chaos Gameplay Mechanics, Multiplayer Infrastructure
 
@@ -49,11 +49,44 @@ Traditional game attacks show visual effects ON the screen (overlays, particles,
 
 ✅ **Particle System**: Event-driven particle effects for visual feedback (see PARTICLE-SYSTEM.md)
 
+✅ **New Foundation (2026-02-25)**:
+- `CameraEffectsService` implemented with shake/spin/zoom/drunk runtime effects
+- `CameraAttackExecutor` implemented for typed camera-attack message mapping
+- Event bridge added in `main.ts` (`chaos:cameraAttack` dispatch integration)
+- WebSocket multiplayer bridge implemented (`src/multiplayer/networkService.ts`)
+- Drunk vision post-processing pipeline implemented (`src/chaos/effects/postProcessingPipeline.ts`)
+- Effect conflict queue/stacking policy implemented in `CameraEffectsService` (typed caps + queued drain + child stacking lane)
+- Active camera effect HUD implemented (`src/ui/effectHUD.ts`) with timers/intensity/queue visibility
+- Upgrade progression scaffolding implemented (`src/chaos/upgrades/*`) with definitions, XP/tokens, unlock validation, and persistence
+- `ChaosUpgradeMenu` UI scaffold implemented (`src/ui/chaosUpgradeMenu.ts`) and wired to desktop/mobile input controls
+- Progression-to-execution profile resolver implemented (`src/chaos/upgrades/executionProfile.ts`) and wired into `CameraAttackExecutor`
+- Local progression execution trigger added in upgrade UI (cast current unlocked level via `chaos:cameraAttack`)
+- Control inversion runtime implemented (`src/services/controlInversion.ts`) and wired into input/executor flow
+- Accessibility safeguards wired into settings + executor (`reduceChaosCameraEffects`, `allowChaosControlInversion`)
+- Typed backend API client scaffold implemented (`src/services/backendApi.ts`) for profile/log/session endpoints
+- Player settings/progression/log sync scaffold implemented (`src/services/playerDataSync.ts`) with local queue + remote sync attempts
+- Sync reliability pass implemented in `PlayerDataSyncService` (debounced dirty-profile writes, exponential backoff+jitter retries, queue compaction/dedupe, deterministic score log IDs)
+- Service-worker log offload path implemented (`PWAService.syncGameLogs` + `public/sw.js` `SYNC_GAME_LOGS`)
+- Multiplayer session API scaffold implemented (`src/multiplayer/sessionService.ts`) and bootstrapped from URL session context
+- Session-aware multiplayer socket rebinding implemented in `main.ts` (join response `wsUrl`/`playerToken` now reconfigures live WebSocket connection)
+- Auth session management implemented (`src/services/authSession.ts`) with token persistence, refresh flow, and session-expired events
+- Backend API 401 recovery implemented (`src/services/backendApi.ts`) with bearer header injection + one-shot refresh retry
+- WebSocket auth-expiry recovery implemented in `MultiplayerNetworkService` (close-code detection + session auth refresh callback)
+- Multiplayer attack feedback events + HUD notifications implemented (`sent` / `sendFailed` / `received` / `applied`)
+- Backend HTTP skeleton implemented in `/api` with profile/log/session/auth endpoints and SQL schema scaffolding
+- Unit-style executor tests added (`src/chaos/cameraAttackExecutor.test.ts`)
+- Unit-style network bridge tests added (`src/multiplayer/networkService.test.ts`)
+- Camera effects queue/stacking + post-processing tests added (`src/services/cameraEffects.test.ts`)
+- Upgrade progression tests added (`src/chaos/upgrades/progressionService.test.ts`)
+- Upgrade execution-profile tests added (`src/chaos/upgrades/executionProfile.test.ts`)
+- Control inversion tests added (`src/services/controlInversion.test.ts`)
+- Backend API client tests added (`src/services/backendApi.test.ts`)
+
 ❌ **Missing Components**:
-- Camera manipulation API for real-time effects
-- Drunk vision effects (blur, double vision, wobble)
-- Upgrade progression system
-- Integration layer between systems
+- Production-grade backend implementation (replace JSON file store with real DB runtime and deployment infra)
+- Authenticated API contracts and conflict-resolution strategy for cross-device profile sync
+- Hardened offline/background sync guarantees (durable retry metadata, idempotency/ordering contract, conflict semantics)
+- Production multiplayer backend/session integration (real WS server, rooms, matchmaking, server validation)
 
 ---
 
@@ -1440,13 +1473,14 @@ TOTAL:                          ~$171,000/year
 **Goal**: Camera Effects API + Basic shake/spin
 
 **Tasks**:
-- [ ] Create `CameraEffectsService` class
-- [ ] Implement `shake()` method with intensity scaling
-- [ ] Implement `spin()` method with rotation animation
-- [ ] Extend `GameScene` with camera animation helpers
-- [ ] Add easing functions (ease-in, ease-out, elastic)
-- [ ] Create effect queue system (prevent conflicts)
-- [ ] Unit tests for effect timing and cleanup
+- [x] Create `CameraEffectsService` class
+- [x] Implement `shake()` method with intensity scaling
+- [x] Implement `spin()` method with rotation animation
+- [x] Extend `GameScene` with camera animation helpers
+- [x] Add easing functions (ease-in/out via runtime animation helpers)
+- [x] Create effect queue system (prevent conflicts)
+- [x] Unit tests for effect timing and cleanup
+- [x] Add attack message executor (`CameraAttackExecutor`) + mapping tests
 
 **Deliverables**:
 - Working Screen Shake Level 1
@@ -1459,17 +1493,14 @@ TOTAL:                          ~$171,000/year
 **Goal**: Multi-layered drunk effects with post-processing
 
 **Tasks**:
-- [ ] Integrate BabylonJS `@babylonjs/post-processes`
-- [ ] Create `PostProcessingPipeline` class
-- [ ] Implement blur effect (BlurPostProcess)
-- [ ] Implement vignette (tunnel vision)
-- [ ] Implement chromatic aberration (color split)
-- [ ] Create custom double vision shader
-- [ ] Implement `DrunkVisionEffect` class
-  - [ ] Tipsy mode (light sway + blur)
-  - [ ] Hammered mode (wobble + double vision)
-  - [ ] Blackout mode (spin + periodic blackouts)
-- [ ] Add control inversion system
+- [x] Integrate BabylonJS post-process classes
+- [x] Create `DrunkVisionPostProcessingPipeline` class
+- [x] Implement blur effect (BlurPostProcess)
+- [x] Implement vignette (tunnel vision)
+- [x] Implement chromatic aberration (color split)
+- [x] Create custom double vision shader
+- [x] Integrate drunk severity profiles (tipsy/hammered/blackout) in `CameraEffectsService`
+- [x] Add control inversion system
 - [ ] Test on various hardware (performance check)
 
 **Deliverables**:
@@ -1483,34 +1514,34 @@ TOTAL:                          ~$171,000/year
 **Goal**: Progression trees, XP tracking, token economy
 
 **Tasks**:
-- [ ] Design upgrade database schema
-- [ ] Create `UpgradeProgressionService`
-- [ ] Implement XP earning system
-  - [ ] Award XP on ability use
-  - [ ] Award XP on successful disruption
-  - [ ] Track XP per ability
-- [ ] Implement Chaos Token economy
-  - [ ] Earn tokens from wins
-  - [ ] Spend tokens on upgrades
-  - [ ] Store balance in player profile
-- [ ] Create upgrade definitions
-  - [ ] Screen Shake Levels 2-5
-  - [ ] Drunk Vision Levels 2-5
-  - [ ] Camera Spin Levels 2-5
-- [ ] Implement unlock validation
+- [x] Design upgrade database schema (client-side scaffold)
+- [x] Create `UpgradeProgressionService`
+- [x] Implement XP earning system
+  - [x] Award XP on ability use
+  - [x] Award XP on successful disruption
+  - [x] Track XP per ability
+- [x] Implement Chaos Token economy (client-side scaffold)
+  - [x] Earn tokens from progression service API
+  - [x] Spend tokens on upgrades
+  - [ ] Store balance in player profile (backend pending)
+- [x] Create upgrade definitions
+  - [x] Screen Shake Levels 2-5
+  - [x] Drunk Vision Levels 2-5
+  - [x] Camera Spin Levels 2-5
+- [x] Implement unlock validation
 - [ ] Achievement integration
   - [ ] "Shake Master", "Bartender", etc.
-  - [ ] Link achievements to upgrade unlocks
-- [ ] Create `ChaosUpgradeMenu` UI
-  - [ ] Upgrade tree visualization
-  - [ ] XP progress bars
-  - [ ] Unlock requirements display
-  - [ ] Purchase buttons
+  - [x] Link achievements to upgrade unlock checks (service hook)
+- [x] Create `ChaosUpgradeMenu` UI (client-side scaffold)
+  - [x] Upgrade tree visualization
+  - [x] XP progress bars
+  - [x] Unlock requirements display
+  - [x] Purchase/unlock buttons
 - [ ] Persistence (save upgrade progress to backend)
 
 **Deliverables**:
-- Full upgrade trees for 3 ability families
-- XP/Token economy working
+- Full upgrade trees for 3 ability families (scaffold complete)
+- XP/Token economy working (client-side scaffold complete)
 - Upgrade menu UI complete
 - Achievement system integrated
 
@@ -1521,21 +1552,21 @@ TOTAL:                          ~$171,000/year
 
 **Tasks**:
 - [ ] Extend `ChaosAbilityExecutor` class
-- [ ] Map chaos abilities to camera effects
-  - [ ] `screen_shake` → `CameraEffectsService.shake()`
-  - [ ] `drunk_vision` → `DrunkVisionEffect.apply()`
-  - [ ] `camera_spin` → `CameraEffectsService.spin()`
+- [x] Map chaos abilities to camera effects
+  - [x] `screen_shake` → `CameraEffectsService.shake()`
+  - [x] `drunk_vision` → `CameraEffectsService.drunk()`
+  - [x] `camera_spin` → `CameraEffectsService.spin()`
 - [ ] Implement network protocol
-  - [ ] `CameraAttackMessage` interface
+  - [x] `CameraAttackMessage` interface
   - [ ] Server-side validation
-  - [ ] WebSocket broadcast to victim
-- [ ] Client-side attack rendering
-  - [ ] Receive attack message
-  - [ ] Apply effect locally
-  - [ ] Display effect HUD (active effects UI)
+  - [x] WebSocket broadcast to victim (client bridge + backend HTTP session contract scaffold)
+- [x] Client-side attack rendering
+  - [x] Receive attack message
+  - [x] Apply effect locally
+  - [x] Display effect HUD (active effects UI)
 - [ ] Add attack feedback
-  - [ ] Attacker sees "Hit!" notification
-  - [ ] Victim sees effect name + duration
+  - [x] Attacker sees send/sent failure notifications
+  - [x] Victim sees incoming effect + duration + applied notifications
 - [ ] Test multiplayer synchronization
 - [ ] Implement diminishing returns
 - [ ] Implement immunity system
@@ -1564,7 +1595,8 @@ TOTAL:                          ~$171,000/year
   - [ ] Gravity Well
   - [ ] Nightmare Vision
 - [ ] Add accessibility options
-  - [ ] Reduce camera effects (50% intensity)
+  - [x] Reduce camera effects (50% intensity-style safeguard via settings toggle)
+  - [x] Disable control inversion via accessibility toggle
   - [ ] Disable drunk vision
   - [ ] Epilepsy mode
   - [ ] Text-only notifications
@@ -1598,9 +1630,9 @@ TOTAL:                          ~$171,000/year
 
 | Phase | Duration | Focus | Status |
 |-------|----------|-------|--------|
-| Phase 1 | Weeks 1-2 | Camera Effects API | 📋 Planned |
-| Phase 2 | Weeks 3-4 | Drunk Vision | 📋 Planned |
-| Phase 3 | Weeks 5-7 | Upgrade System | 📋 Planned |
+| Phase 1 | Weeks 1-2 | Camera Effects API | ✅ Core Complete |
+| Phase 2 | Weeks 3-4 | Drunk Vision | 🟡 In Progress |
+| Phase 3 | Weeks 5-7 | Upgrade System | 🟡 Scaffolding In Progress |
 | Phase 4 | Week 8 | Integration | 📋 Planned |
 | Phase 5 | Weeks 9-10 | Polish & Gag Effects | 📋 Planned |
 
@@ -1666,6 +1698,6 @@ We create a system that delivers on the "psychosocial torture" vision while keep
 
 ---
 
-**Document Status**: Design specification complete, ready for development.
+**Document Status**: Active implementation in progress (client-side core + backend integration scaffolding in place).
 
-**Next Steps**: Begin Phase 1 implementation (Camera Effects API).
+**Next Steps**: Implement real API/DB endpoints, harden auth/conflict semantics for sync, and continue multiplayer backend/session rollout.

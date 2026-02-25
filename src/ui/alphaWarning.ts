@@ -25,8 +25,8 @@ export class AlphaWarningModal {
         <div class="alpha-badge">⚠️ ALPHA RELEASE</div>
 
         <div class="alpha-hero">
-          <img src="/alpha-banner.png" alt="Alpha Release" class="alpha-image"
-               onerror="this.onerror=null; this.src='/alpha-warning.png'; this.onerror=function() { this.src='/alpha-warning.svg'; };" />
+          <img src="./alpha-banner.png" alt="Alpha Release" class="alpha-image"
+               onerror="this.onerror=null; this.src='./alpha-warning.png';" />
         </div>
 
         <div class="alpha-body">

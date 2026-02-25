@@ -11,6 +11,8 @@ import type { RulesModal } from "../ui/rules.js";
 import type { GameScene } from "../render/scene.js";
 import type { DebugView } from "../ui/debugView.js";
 import type { CameraControlsPanel } from "../ui/cameraControls.js";
+import type { ChaosUpgradeMenu } from "../ui/chaosUpgradeMenu.js";
+import type { IControlInversionService } from "../services/controlInversion.js";
 
 /**
  * Callback interface for game actions
@@ -38,6 +40,8 @@ export class InputController {
   private rulesModal: RulesModal;
   private debugView: DebugView;
   private cameraControlsPanel: CameraControlsPanel;
+  private chaosUpgradeMenu: ChaosUpgradeMenu;
+  private controlInversionService: IControlInversionService;
 
   // DOM elements
   private actionBtn: HTMLButtonElement;
@@ -48,6 +52,7 @@ export class InputController {
   private settingsGearBtn: HTMLButtonElement;
   private leaderboardBtn: HTMLButtonElement;
   private cameraPositionsBtn: HTMLButtonElement;
+  private chaosUpgradesBtn: HTMLButtonElement;
 
   constructor(
     callbacks: GameCallbacks,
@@ -55,7 +60,9 @@ export class InputController {
     leaderboardModal: LeaderboardModal,
     rulesModal: RulesModal,
     debugView: DebugView,
-    cameraControlsPanel: CameraControlsPanel
+    cameraControlsPanel: CameraControlsPanel,
+    chaosUpgradeMenu: ChaosUpgradeMenu,
+    controlInversionService: IControlInversionService
   ) {
     this.callbacks = callbacks;
     this.scene = scene;
@@ -63,6 +70,8 @@ export class InputController {
     this.rulesModal = rulesModal;
     this.debugView = debugView;
     this.cameraControlsPanel = cameraControlsPanel;
+    this.chaosUpgradeMenu = chaosUpgradeMenu;
+    this.controlInversionService = controlInversionService;
 
     // Get DOM elements
     this.actionBtn = document.getElementById("action-btn") as HTMLButtonElement;
@@ -73,6 +82,7 @@ export class InputController {
     this.settingsGearBtn = document.getElementById("settings-gear-btn") as HTMLButtonElement;
     this.leaderboardBtn = document.getElementById("leaderboard-btn") as HTMLButtonElement;
     this.cameraPositionsBtn = document.getElementById("camera-positions-btn") as HTMLButtonElement;
+    this.chaosUpgradesBtn = document.getElementById("chaos-upgrades-btn") as HTMLButtonElement;
   }
 
   /**
@@ -151,6 +161,12 @@ export class InputController {
         current.radius
       );
     });
+
+    this.chaosUpgradesBtn.addEventListener("click", () => {
+      audioService.playSfx("click");
+      hapticsService.buttonPress();
+      this.chaosUpgradeMenu.toggle();
+    });
   }
 
   /**
@@ -178,6 +194,7 @@ export class InputController {
     const mobileMenu = document.getElementById("mobile-controls-menu");
     const mobileSettingsBtn = document.getElementById("mobile-settings-btn");
     const mobileLeaderboardBtn = document.getElementById("mobile-leaderboard-btn");
+    const mobileUpgradesBtn = document.getElementById("mobile-upgrades-btn");
 
     if (!menuToggle || !mobileMenu) return;
 
@@ -209,6 +226,15 @@ export class InputController {
       });
     }
 
+    if (mobileUpgradesBtn) {
+      mobileUpgradesBtn.addEventListener("click", () => {
+        audioService.playSfx("click");
+        hapticsService.buttonPress();
+        this.chaosUpgradeMenu.toggle();
+        this.closeMobileMenu();
+      });
+    }
+
     // Close menu when clicking outside
     document.addEventListener("click", (e) => {
       const target = e.target as HTMLElement;
@@ -234,15 +260,18 @@ export class InputController {
     const state = this.callbacks.getGameState();
     const animating = this.callbacks.isAnimating();
     const paused = this.callbacks.isPaused();
+    const code = this.controlInversionService.remapKeyCode(e.code);
 
     // ESC key - close modals or toggle pause/settings
-    if (e.code === "Escape") {
+    if (code === "Escape") {
       e.preventDefault();
 
       if (this.rulesModal.isVisible()) {
         this.rulesModal.hide();
       } else if (this.leaderboardModal.isVisible()) {
         this.leaderboardModal.hide();
+      } else if (this.chaosUpgradeMenu.isVisible()) {
+        this.chaosUpgradeMenu.hide();
       } else {
         this.callbacks.togglePause();
       }
@@ -250,7 +279,7 @@ export class InputController {
     }
 
     // Space key - multipurpose action (roll or score)
-    if (e.code === "Space" && !animating && !paused) {
+    if (code === "Space" && !animating && !paused) {
       e.preventDefault();
       this.callbacks.handleAction();
       return;
@@ -262,12 +291,12 @@ export class InputController {
 
       if (activeDice.length === 0) return;
 
-      if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
+      if (code === "ArrowLeft" || code === "ArrowRight") {
         e.preventDefault();
 
         let selectedDieIndex = this.callbacks.getSelectedDieIndex();
 
-        if (e.code === "ArrowLeft") {
+        if (code === "ArrowLeft") {
           selectedDieIndex = (selectedDieIndex - 1 + activeDice.length) % activeDice.length;
         } else {
           selectedDieIndex = (selectedDieIndex + 1) % activeDice.length;
@@ -279,7 +308,7 @@ export class InputController {
       }
 
       // Enter key - toggle selection of focused die
-      if (e.code === "Enter") {
+      if (code === "Enter") {
         e.preventDefault();
         const selectedDieIndex = this.callbacks.getSelectedDieIndex();
         const focusedDie = activeDice[selectedDieIndex];
@@ -291,14 +320,14 @@ export class InputController {
     }
 
     // 'X' key - deselect all (when dice are selected)
-    if (e.code === "KeyX" && state.status === "ROLLED" && state.selected.size > 0 && !animating && !paused) {
+    if (code === "KeyX" && state.status === "ROLLED" && state.selected.size > 0 && !animating && !paused) {
       e.preventDefault();
       this.callbacks.handleDeselectAll();
       return;
     }
 
     // 'N' key - new game
-    if (e.code === "KeyN" && !animating) {
+    if (code === "KeyN" && !animating) {
       e.preventDefault();
       audioService.playSfx("click");
       hapticsService.buttonPress();
@@ -307,7 +336,7 @@ export class InputController {
     }
 
     // 'D' key - debug view
-    if (e.code === "KeyD" && !animating) {
+    if (code === "KeyD" && !animating) {
       e.preventDefault();
       audioService.playSfx("click");
       hapticsService.buttonPress();
@@ -316,7 +345,7 @@ export class InputController {
     }
 
     // 'C' key - camera controls
-    if (e.code === "KeyC" && !animating) {
+    if (code === "KeyC" && !animating) {
       e.preventDefault();
       audioService.playSfx("click");
       hapticsService.buttonPress();
@@ -328,6 +357,15 @@ export class InputController {
         current.beta,
         current.radius
       );
+      return;
+    }
+
+    // 'U' key - chaos upgrades menu
+    if (code === "KeyU" && !animating) {
+      e.preventDefault();
+      audioService.playSfx("click");
+      hapticsService.buttonPress();
+      this.chaosUpgradeMenu.toggle();
       return;
     }
   }

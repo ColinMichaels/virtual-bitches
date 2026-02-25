@@ -2,6 +2,7 @@ import {
   Engine,
   Scene,
   ArcRotateCamera,
+  Animation,
   Vector3,
   HemisphericLight,
   DirectionalLight,
@@ -15,10 +16,12 @@ import {
   Color4,
   Layer,
 } from "@babylonjs/core";
+import { CubicEase } from '@babylonjs/core/Animations/easing';
 import { registerCustomShaders } from "./shaders.js";
 import { createOctagonMesh, calculatePlayerSeats, type PlayerSeat } from "./octagonGeometry.js";
 import { PlayerSeatRenderer } from "./playerSeats.js";
 import { cameraService, type CameraPosition } from "../services/cameraService.js";
+import { settingsService } from "../services/settings.js";
 import { particleService } from "../services/particleService.js";
 
 // Register custom shaders once at module load
@@ -208,7 +211,7 @@ export class GameScene {
 
     // Load leather texture for table border
     const tableTexture = new Texture(
-      "/assets/game-textures/leatherwrap_texture.jpg",
+      "./assets/game-textures/leatherwrap_texture.jpg",
       this.scene,
       undefined,
       true, // invertY for proper orientation
@@ -254,7 +257,7 @@ export class GameScene {
     // Load custom table felt texture
     // Custom octagon felt texture provided by user
     const trayTexture = new Texture(
-      "/assets/textures/table-felt.png",
+      "./assets/game-textures/biscuits_felt_table_texture_darker.jpg",
       this.scene,
       undefined,
       true, // invertY for proper orientation
@@ -559,16 +562,80 @@ export class GameScene {
    * @param animate Whether to animate the transition (future feature)
    */
   setCameraPosition(position: CameraPosition, animate: boolean = false): void {
-    // TODO: Add smooth animation in Phase 2
-    if (animate) {
-      // Future: Implement smooth interpolation
-      // For now, just instant transition
+    const settings = settingsService.getSettings();
+    const useSmooth = animate && settings.camera?.smoothTransitions;
+
+    if (useSmooth) {
+      // Animate alpha, beta, radius and target separately
+      try {
+        const durationSeconds = settings.camera?.transitionDuration ?? 0.75;
+        this.animateCameraTo(position, durationSeconds);
+        return;
+      } catch (error) {
+        // Fallback to instant assignment on any error
+        console.warn('[GameScene] Camera animation failed, falling back to instant set', error);
+      }
     }
 
+    // Instant assignment
     this.camera.alpha = position.alpha;
     this.camera.beta = position.beta;
     this.camera.radius = position.radius;
     this.camera.target = new Vector3(position.target.x, position.target.y, position.target.z);
+  }
+
+  /**
+   * Animate camera properties to target position using Babylon Animations
+   */
+  private animateCameraTo(position: CameraPosition, durationSeconds: number = 0.75) {
+    const fps = 60;
+    const frameCount = Math.max(1, Math.round(durationSeconds * fps));
+
+    // Helper to create animation
+    const createAnim = (property: string) => {
+      const anim = new Animation(`camera_${property}_anim`, property, fps, Animation.ANIMATIONTYPE_FLOAT, Animation.ANIMATIONLOOPMODE_CONSTANT);
+      const keys = [
+        { frame: 0, value: (this.camera as any)[property] },
+        { frame: frameCount, value: (position as any)[property] },
+      ];
+      anim.setKeys(keys);
+      const easing = new CubicEase();
+      easing.setEasingMode(2); // EASEINOUT
+      anim.setEasingFunction(easing);
+      return anim;
+    };
+
+    // Alpha, beta, radius
+    const alphaAnim = createAnim('alpha');
+    const betaAnim = createAnim('beta');
+    const radiusAnim = createAnim('radius');
+
+    // Target (Vector3) animation - animate each component
+    const targetX = new Animation('camera_target_x', 'target.x', fps, Animation.ANIMATIONTYPE_FLOAT, Animation.ANIMATIONLOOPMODE_CONSTANT);
+    targetX.setKeys([
+      { frame: 0, value: this.camera.target.x },
+      { frame: frameCount, value: position.target.x },
+    ]);
+    const targetY = new Animation('camera_target_y', 'target.y', fps, Animation.ANIMATIONTYPE_FLOAT, Animation.ANIMATIONLOOPMODE_CONSTANT);
+    targetY.setKeys([
+      { frame: 0, value: this.camera.target.y },
+      { frame: frameCount, value: position.target.y },
+    ]);
+    const targetZ = new Animation('camera_target_z', 'target.z', fps, Animation.ANIMATIONTYPE_FLOAT, Animation.ANIMATIONLOOPMODE_CONSTANT);
+    targetZ.setKeys([
+      { frame: 0, value: this.camera.target.z },
+      { frame: frameCount, value: position.target.z },
+    ]);
+
+    // Apply animations
+    try {
+      this.camera.animations = [alphaAnim, betaAnim, radiusAnim, targetX, targetY, targetZ];
+      this.scene.stopAnimation(this.camera);
+      this.scene.beginAnimation(this.camera, 0, frameCount, false);
+    } catch (error) {
+      // Re-throw for upstream fallback
+      throw error;
+    }
   }
 
   /**

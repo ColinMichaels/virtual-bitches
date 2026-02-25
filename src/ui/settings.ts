@@ -108,6 +108,33 @@ export class SettingsModal {
           </div>
         </div>
 
+        <div class="settings-section">
+          <h3>Accessibility (Chaos Effects)</h3>
+          <p class="setting-description">Reduce disruptive camera effects when needed</p>
+
+          <div class="setting-row">
+            <label>
+              <input
+                type="checkbox"
+                id="reduce-chaos-camera-effects"
+                ${this.settings.controls.reduceChaosCameraEffects ? "checked" : ""}
+              >
+              Reduce camera attack effects
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <label>
+              <input
+                type="checkbox"
+                id="allow-control-inversion"
+                ${this.settings.controls.allowChaosControlInversion ? "checked" : ""}
+              >
+              Allow control inversion during drunk attacks
+            </label>
+          </div>
+        </div>
+
         <div class="settings-section" id="theme-switcher-container">
         </div>
 
@@ -286,6 +313,35 @@ export class SettingsModal {
         this.container.style.pointerEvents = "auto";
       }, 800); // Show change for 800ms
 
+      audioService.playSfx("click");
+    });
+
+    // Chaos accessibility safeguards
+    const reduceChaosEffects = document.getElementById("reduce-chaos-camera-effects") as HTMLInputElement;
+    reduceChaosEffects.addEventListener("change", () => {
+      settingsService.updateControls({ reduceChaosCameraEffects: reduceChaosEffects.checked });
+      notificationService.show(
+        reduceChaosEffects.checked
+          ? "Chaos camera effects reduced"
+          : "Chaos camera effects restored",
+        "info",
+        2000
+      );
+      audioService.playSfx("click");
+    });
+
+    const allowControlInversion = document.getElementById("allow-control-inversion") as HTMLInputElement;
+    allowControlInversion.addEventListener("change", () => {
+      settingsService.updateControls({
+        allowChaosControlInversion: allowControlInversion.checked,
+      });
+      notificationService.show(
+        allowControlInversion.checked
+          ? "Control inversion enabled for drunk attacks"
+          : "Control inversion blocked by accessibility setting",
+        "info",
+        2200
+      );
       audioService.playSfx("click");
     });
 
@@ -480,6 +536,10 @@ export class SettingsModal {
       this.settings.display.shadowsEnabled;
     (document.getElementById("table-contrast") as HTMLSelectElement).value =
       this.settings.display.visual.tableContrast;
+    (document.getElementById("reduce-chaos-camera-effects") as HTMLInputElement).checked =
+      this.settings.controls.reduceChaosCameraEffects;
+    (document.getElementById("allow-control-inversion") as HTMLInputElement).checked =
+      this.settings.controls.allowChaosControlInversion;
 
     // Update game variants
     (document.getElementById("variant-d20") as HTMLInputElement).checked =
