@@ -555,18 +555,71 @@ This document captures future feature ideas, enhancements, and expansion possibi
   Implement advanced graphics options for BISCUITS. Add SSAO, bloom, and depth-of-field post-processing to src/render/scene.ts using BabylonJS rendering pipeline. Create graphics quality presets (Low/Medium/High/Ultra) with automatic detection based on device capabilities.
   ```
 
-### Camera Controls
+### Camera System & Machinima Tools
+- **Complexity**: Very High
+- **Description**: Progressive camera system with position management, flying mode, and professional machinima tools
+- **Documentation**: See `docs/CAMERA-SYSTEM.md` for complete specification (800+ lines)
+- **Current Status**: ✅ Phase 1 Complete (Basic position management with 3 slots)
+- **Feature Tiers**:
+
+#### Phase 1: Basic Camera Positions (✅ COMPLETE)
+- Save/load camera positions (3 slots free tier)
+- Import/export position JSON
+- Keyboard shortcut (C key) access
+- Tier-based unlock system (free/unlocked/premium)
+
+#### Phase 2: Enhanced Camera System (Post-TODO)
 - **Complexity**: Medium
-- **Description**: Player-controlled camera movement
+- **Unlock**: Complete 10 games OR earn "Cinematographer" achievement
 - **Features**:
-  - Free orbit around table
-  - Zoom in/out
-  - Preset camera angles
-  - First-person view of dice
-  - Cinematic camera on big rolls
+  - 10 saved position slots (up from 3)
+  - Smooth camera transitions with Bezier interpolation
+  - Configurable easing functions (ease-in, ease-out, elastic)
+  - Per-player seat positions for multiplayer (8 seats)
+  - Replay timeline system with scrubbing
+  - Community sharing (export/import preset packs)
+
+#### Phase 3: Flying Camera Mode (Post-Multiplayer)
+- **Complexity**: High
+- **Unlock**: Achievement "Sky Walker" OR item unlock OR $4.99 Camera Pro pack
+- **Features**:
+  - Free-flying camera (UniversalCamera)
+  - WASD + mouse look controls
+  - Q/E for up/down movement
+  - Shift for sprint (3x speed), Ctrl for slow (0.3x speed)
+  - No-clip mode (pass through geometry)
+  - FOV adjustment (60-120°)
+  - Optional gamepad support
+
+#### Phase 4: Machinima Pro Tools (Premium Feature)
+- **Complexity**: Very High
+- **Unlock**: $14.99 Machinima Pro pack OR Player Level 50
+- **Features**:
+  - **Camera Path Editor**: Keyframe system with timeline UI
+  - **Automated Movements**: Orbit, dolly, crane, shake, follow
+  - **Cinematic Effects**: Depth of field, vignette, letterbox, color grading, motion blur
+  - **Director Mode**: Multi-camera live switching with hotkeys
+  - **Picture-in-Picture**: Show multiple angles simultaneously
+  - **Recording & Export**: MP4/WebM video rendering, GIF creation, screenshot gallery
+  - **OBS Integration**: Virtual camera output for streaming
+  - **Lower Thirds**: Custom text overlays for player names
+
+- **Monetization Strategy**:
+  - Free: 3 positions, basic controls
+  - Earned: 10 positions via gameplay (10 games completed)
+  - Camera Pro ($4.99): Flying mode, 20 positions, FOV control
+  - Machinima Pro ($14.99 or $2.99/month): Full toolkit, unlimited positions, video export
+
+- **Use Cases**:
+  - Casual players: Better viewing angles during gameplay
+  - Competitive players: Consistent tournament views
+  - Content creators: Dynamic shots for YouTube/TikTok
+  - Esports broadcasters: Professional multi-camera production
+  - Machinima artists: Full cinematic control for short films
+
 - **AI Prompt**:
   ```
-  Add advanced camera controls to BISCUITS. Implement orbit camera in src/render/scene.ts allowing zoom and rotation. Add preset views (top-down, isometric, close-up) with smooth transitions. Create cinematic camera animation for high-scoring rolls.
+  Implement Camera System Phase 2 per docs/CAMERA-SYSTEM.md. Add smooth camera transitions using Bezier interpolation in src/services/cameraService.ts. Create CameraInterpolator class with easing functions (linear, ease-in-out, elastic). Update CameraControlsPanel to show transition speed slider. Unlock 10 position slots when player completes 10 games or earns Cinematographer achievement.
   ```
 
 ### Customizable Table

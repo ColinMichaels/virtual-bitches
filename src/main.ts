@@ -8,6 +8,7 @@ import { LeaderboardModal } from "./ui/leaderboard.js";
 import { RulesModal } from "./ui/rules.js";
 import { TutorialModal } from "./ui/tutorial.js";
 import { DebugView } from "./ui/debugView.js";
+import { CameraControlsPanel } from "./ui/cameraControls.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
 import { GameState, Action, GameDifficulty } from "./engine/types.js";
@@ -36,6 +37,7 @@ class Game implements GameCallbacks {
   private settingsModal: SettingsModal;
   private leaderboardModal: LeaderboardModal;
   private debugView: DebugView;
+  private cameraControlsPanel: CameraControlsPanel;
   private gameStartTime: number;
   private selectedDieIndex = 0; // For keyboard navigation
   private inputController: InputController;
@@ -73,13 +75,48 @@ class Game implements GameCallbacks {
       this.handleDebugModeToggle(isDebugMode);
     });
 
+    // Initialize camera controls panel
+    this.cameraControlsPanel = new CameraControlsPanel();
+    this.cameraControlsPanel.onLoad((position) => {
+      this.scene.setCameraPosition(position);
+      this.cameraControlsPanel.updateCurrentPosition(
+        position.alpha,
+        position.beta,
+        position.radius
+      );
+    });
+
+    // Listen for save/reset requests from camera panel
+    document.addEventListener('camera:requestSave', ((e: CustomEvent) => {
+      const { name } = e.detail;
+      const current = this.scene.getCameraPosition();
+      this.cameraControlsPanel.savePosition(
+        name,
+        current.alpha,
+        current.beta,
+        current.radius,
+        current.target
+      );
+    }) as EventListener);
+
+    document.addEventListener('camera:requestReset', () => {
+      this.scene.setCameraView('default');
+      const current = this.scene.getCameraPosition();
+      this.cameraControlsPanel.updateCurrentPosition(
+        current.alpha,
+        current.beta,
+        current.radius
+      );
+    });
+
     // Initialize controllers
     this.inputController = new InputController(
       this,
       this.scene,
       this.leaderboardModal,
       rulesModal,
-      this.debugView
+      this.debugView,
+      this.cameraControlsPanel
     );
     this.gameOverController = new GameOverController(this.scene);
 

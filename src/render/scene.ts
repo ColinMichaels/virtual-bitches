@@ -19,6 +19,7 @@ import {
 import { registerCustomShaders } from "./shaders.js";
 import { createOctagonMesh, calculatePlayerSeats, type PlayerSeat } from "./octagonGeometry.js";
 import { PlayerSeatRenderer } from "./playerSeats.js";
+import { cameraService, type CameraPosition } from "../services/cameraService.js";
 
 // Register custom shaders once at module load
 registerCustomShaders();
@@ -382,6 +383,63 @@ export class GameScene {
         this.camera.radius = this.defaultCameraState.radius;
         this.camera.target = new Vector3(0, 0, 0);
         break;
+    }
+  }
+
+  /**
+   * Get current camera position
+   * @returns Current camera state
+   */
+  getCameraPosition(): Omit<CameraPosition, 'id' | 'name' | 'createdAt' | 'isFavorite'> {
+    return {
+      alpha: this.camera.alpha,
+      beta: this.camera.beta,
+      radius: this.camera.radius,
+      target: {
+        x: this.camera.target.x,
+        y: this.camera.target.y,
+        z: this.camera.target.z,
+      },
+    };
+  }
+
+  /**
+   * Set camera to a saved position
+   * @param position Camera position to load
+   * @param animate Whether to animate the transition (future feature)
+   */
+  setCameraPosition(position: CameraPosition, animate: boolean = false): void {
+    // TODO: Add smooth animation in Phase 2
+    if (animate) {
+      // Future: Implement smooth interpolation
+      // For now, just instant transition
+    }
+
+    this.camera.alpha = position.alpha;
+    this.camera.beta = position.beta;
+    this.camera.radius = position.radius;
+    this.camera.target = new Vector3(position.target.x, position.target.y, position.target.z);
+  }
+
+  /**
+   * Save current camera position via Camera Service
+   * @param name Name for the saved position
+   * @returns Position ID or null if limit reached
+   */
+  saveCameraPosition(name: string): string | null {
+    const current = this.getCameraPosition();
+    return cameraService.savePosition(name, current);
+  }
+
+  /**
+   * Load saved camera position by ID
+   * @param id Position ID
+   * @param animate Whether to animate (future feature)
+   */
+  loadCameraPosition(id: string, animate: boolean = false): void {
+    const position = cameraService.loadPosition(id);
+    if (position) {
+      this.setCameraPosition(position, animate);
     }
   }
 

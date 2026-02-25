@@ -10,6 +10,7 @@ import type { LeaderboardModal } from "../ui/leaderboard.js";
 import type { RulesModal } from "../ui/rules.js";
 import type { GameScene } from "../render/scene.js";
 import type { DebugView } from "../ui/debugView.js";
+import type { CameraControlsPanel } from "../ui/cameraControls.js";
 
 /**
  * Callback interface for game actions
@@ -36,6 +37,7 @@ export class InputController {
   private leaderboardModal: LeaderboardModal;
   private rulesModal: RulesModal;
   private debugView: DebugView;
+  private cameraControlsPanel: CameraControlsPanel;
 
   // DOM elements
   private actionBtn: HTMLButtonElement;
@@ -45,19 +47,22 @@ export class InputController {
   private viewLeaderboardBtn: HTMLButtonElement;
   private settingsGearBtn: HTMLButtonElement;
   private leaderboardBtn: HTMLButtonElement;
+  private cameraPositionsBtn: HTMLButtonElement;
 
   constructor(
     callbacks: GameCallbacks,
     scene: GameScene,
     leaderboardModal: LeaderboardModal,
     rulesModal: RulesModal,
-    debugView: DebugView
+    debugView: DebugView,
+    cameraControlsPanel: CameraControlsPanel
   ) {
     this.callbacks = callbacks;
     this.scene = scene;
     this.leaderboardModal = leaderboardModal;
     this.rulesModal = rulesModal;
     this.debugView = debugView;
+    this.cameraControlsPanel = cameraControlsPanel;
 
     // Get DOM elements
     this.actionBtn = document.getElementById("action-btn") as HTMLButtonElement;
@@ -67,6 +72,7 @@ export class InputController {
     this.viewLeaderboardBtn = document.getElementById("view-leaderboard-btn") as HTMLButtonElement;
     this.settingsGearBtn = document.getElementById("settings-gear-btn") as HTMLButtonElement;
     this.leaderboardBtn = document.getElementById("leaderboard-btn") as HTMLButtonElement;
+    this.cameraPositionsBtn = document.getElementById("camera-positions-btn") as HTMLButtonElement;
   }
 
   /**
@@ -130,6 +136,20 @@ export class InputController {
       audioService.playSfx("click");
       hapticsService.buttonPress();
       this.leaderboardModal.show();
+    });
+
+    // Camera Positions button
+    this.cameraPositionsBtn.addEventListener("click", () => {
+      audioService.playSfx("click");
+      hapticsService.buttonPress();
+      this.cameraControlsPanel.toggle();
+      // Update current camera position display
+      const current = this.scene.getCameraPosition();
+      this.cameraControlsPanel.updateCurrentPosition(
+        current.alpha,
+        current.beta,
+        current.radius
+      );
     });
   }
 
@@ -292,6 +312,22 @@ export class InputController {
       audioService.playSfx("click");
       hapticsService.buttonPress();
       this.debugView.show();
+      return;
+    }
+
+    // 'C' key - camera controls
+    if (e.code === "KeyC" && !animating) {
+      e.preventDefault();
+      audioService.playSfx("click");
+      hapticsService.buttonPress();
+      this.cameraControlsPanel.toggle();
+      // Update current camera position display
+      const current = this.scene.getCameraPosition();
+      this.cameraControlsPanel.updateCurrentPosition(
+        current.alpha,
+        current.beta,
+        current.radius
+      );
       return;
     }
   }
