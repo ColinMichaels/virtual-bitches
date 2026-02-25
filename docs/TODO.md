@@ -8,8 +8,8 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 
 ## 🔴 High Priority
 
-### Camera System & Machinima Tools (Phase 1 - COMPLETE) 📷
-- **Status**: ✅ Phase 1 COMPLETE (2026-02-24)
+### Camera System & Machinima Tools (Phase 1 COMPLETE, Phase 2 PARTIAL) 📷
+- **Status**: ✅ Phase 1 COMPLETE (2026-02-24) • 🟡 Phase 2 PARTIAL (2026-02-25 foundation work)
 - **Complexity**: Medium (Phase 1), Very High (Full System)
 - **Description**: Camera position management system with progressive unlocks and machinima tools
 - **Documentation**:
@@ -22,21 +22,37 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ Keyboard shortcut (C key) and button access
   - ✅ localStorage persistence
   - ✅ Tier-based access control (free/unlocked/premium)
+- **Phase 2 Foundation Implemented**:
+  - ✅ Smooth camera transition plumbing in `GameScene.setCameraPosition(..., animate)` (settings-gated)
+  - ✅ Babylon animation/easing integration for alpha, beta, radius, and target interpolation
+  - ✅ `SettingsService` camera schema defaults (`smoothTransitions`, `transitionDuration`, unlock flags)
+  - ✅ `CameraService` testability improvements (injectable storage, state validation, explicit `off()` listener removal)
+  - ✅ Camera service test suite scaffold (`src/services/cameraService.test.ts`)
+  - ⚠️ Test runtime issue discovered: module-level singleton still references browser `localStorage` during Node import
 - **Future Phases**:
-  - 🔒 Phase 2: Enhanced Camera (10 slots, smooth transitions, replay - Post-TODO)
+  - 🟡 Phase 2: Enhanced Camera (in progress - smooth transitions core done; 10 slots/replay/per-seat still pending)
   - 🔒 Phase 3: Flying Mode (WASD controls, no-clip - Post-Multiplayer)
   - 🔒 Phase 4: Machinima Pro (paths, director mode, export - Premium Feature)
 - **Files Created**:
-  - `src/services/cameraService.ts` - Core service (430 lines)
+  - `src/services/cameraService.ts` - Core service (500+ lines)
   - `src/ui/cameraControls.ts` - UI panel (430 lines)
   - `docs/CAMERA-SYSTEM.md` - Complete specification (800+ lines)
   - CSS styles added to `src/styles.css` (400+ lines)
 - **Files Modified**:
-  - `src/render/scene.ts` - Added camera save/load methods
+  - `src/render/scene.ts` - Added settings-gated smooth transition animation support
+  - `src/services/settings.ts` - Added/merged camera settings defaults
+  - `src/services/cameraService.ts` - Added storage injection, validation, and listener unsubscribe helper
   - `src/main.ts` - Integrated camera panel
   - `src/controllers/InputController.ts` - Added C key and button handler
   - `index.html` - Added camera positions button
-- **Result**: Players can now save up to 3 camera positions with clear teaser UI for advanced features
+  - `package.json` - Added `test:camera` script
+- **New Files in 2026-02-25 Update**:
+  - `src/services/cameraService.test.ts` - Camera service unit-style test script
+- **Result**: Players can save up to 3 camera positions now, and smooth camera transitions are partially implemented at engine/settings level
+- **Immediate Next Work**:
+  - 🔲 Make `cameraService` singleton safe for non-browser test/runtime environments
+  - 🔲 Expose camera smooth-transition controls in UI with proper unlock gating
+  - 🔲 Complete remaining Phase 2 features (10 slots, replay timeline, per-player seat positions)
 
 ### Active Bugs
 

@@ -1,8 +1,8 @@
 # BISCUITS Camera System & Machinima Tools
 
-**Document Version**: 1.0
-**Last Updated**: 2026-02-24
-**Status**: Phase 1 (Basic Functionality) - In Development
+**Document Version**: 1.1
+**Last Updated**: 2026-02-25
+**Status**: Phase 1 Complete • Phase 2 Partially Implemented (Smooth Transition Foundation)
 
 ---
 
@@ -51,10 +51,12 @@ The BISCUITS Camera System provides players with powerful tools to control, save
 
 **CameraService** (`src/services/cameraService.ts`)
 - Save current camera position (alpha, beta, radius, target)
-- Load saved positions with instant transition
+- Load saved positions with instant transition or optional smooth animation
 - Name and manage up to 3 favorite positions (Free tier)
 - Persist to localStorage
 - Import/export position JSON for sharing
+- Injectable storage backend for testability (defaults to localStorage in browser)
+- Defensive state validation for restored persisted data
 
 **Camera Position Format**:
 ```typescript
@@ -95,7 +97,7 @@ Keyboard shortcuts (1-5 keys) for instant preset access.
 - **🔒 Teaser Section**: "Advanced Features Coming Soon"
   - Flying Mode (locked icon)
   - Machinima Tools (locked icon)
-  - Smooth Transitions (locked icon)
+  - Smooth Transitions (UI toggle still locked; backend transition path implemented)
 
 #### 4. Camera Settings Integration
 
@@ -105,9 +107,9 @@ interface CameraSettings {
   sensitivity: number;           // 0.5-2.0 (existing)
   smoothTransitions: boolean;    // Animate position changes
   transitionDuration: number;    // Seconds (0.5-3.0)
-  savedPositionSlots: number;    // 3 (Free), 10 (Unlocked), ∞ (Premium)
-  flyingModeEnabled: boolean;    // Unlock flag
-  machinimaModeEnabled: boolean; // Premium flag
+  savedPositionSlots?: number;   // Optional override; tier defaults otherwise
+  flyingModeEnabled?: boolean;   // Unlock flag
+  machinimaModeEnabled?: boolean; // Premium flag
 }
 ```
 
@@ -122,9 +124,10 @@ interface CameraSettings {
 #### Features:
 1. **10 Saved Position Slots** (up from 3)
 2. **Smooth Camera Transitions**
-   - Bezier curve interpolation between positions
-   - Configurable duration (0.5s - 5s)
-   - Easing functions (ease-in, ease-out, elastic, etc.)
+   - ✅ Initial implementation in `GameScene` using Babylon `Animation` + `CubicEase`
+   - ✅ Configurable duration (via `settings.camera.transitionDuration`)
+   - 🔲 Advanced interpolation paths (Bezier/cinematic rails) still pending
+   - 🔲 UI unlock/toggle flow still pending
 3. **Per-Player Seat Positions** (Multiplayer)
    - Save camera angle for each of 8 player seats
    - Auto-switch to seat camera when turn starts
@@ -323,30 +326,28 @@ class DirectorController {
 ```typescript
 // src/services/cameraService.ts
 export class CameraService {
-  private positions: CameraPosition[] = [];
-  private currentTier: 'free' | 'unlocked' | 'premium' = 'free';
-  private maxSlots: number = 3;
+  constructor(storage?: Storage);
 
   // Core functionality
-  savePosition(name: string, position: CameraPosition): string;
+  savePosition(name: string, position: Omit<CameraPosition, 'id' | 'name' | 'createdAt' | 'isFavorite'>): string | null;
   loadPosition(id: string): CameraPosition | null;
-  deletePosition(id: string): void;
+  deletePosition(id: string): boolean;
   listPositions(): CameraPosition[];
 
   // Import/Export
-  exportPosition(id: string): string; // JSON
-  importPosition(json: string): string; // Returns new ID
+  exportPosition(id: string): string | null; // JSON
+  importPosition(json: string): string | null; // Returns new ID
   exportAll(): string;
-  importAll(json: string): void;
+  importAll(json: string): string[];
 
   // Tier management
   setTier(tier: 'free' | 'unlocked' | 'premium'): void;
   canSaveMore(): boolean;
-  getRemainingSlots(): number;
+  getRemainingSlots(): number | Infinity;
 
-  // Observers
-  onPositionAdded(callback: (position: CameraPosition) => void): () => void;
-  onPositionDeleted(callback: (id: string) => void): () => void;
+  // Event bus
+  on(event: string, callback: Function): () => void;
+  off(event: string, callback: Function): void;
 }
 ```
 
@@ -561,28 +562,29 @@ Players can unlock premium features **without payment** via:
 
 ## Implementation Roadmap
 
-### Phase 1: Core Service (Current - Week 1)
-**Status**: 🟡 In Development
+### Phase 1: Core Service (Week 1)
+**Status**: ✅ Complete (2026-02-24)
 
 - [x] Create `CAMERA-SYSTEM.md` documentation
-- [ ] Implement `CameraService` class
-- [ ] Add camera controls UI panel
-- [ ] Integrate with `GameScene`
-- [ ] Add localStorage persistence
-- [ ] Update settings service
-- [ ] Add teaser UI for locked features
-- [ ] Update TODO.md and FUTURE-FEATURES.md
+- [x] Implement `CameraService` class
+- [x] Add camera controls UI panel
+- [x] Integrate with `GameScene`
+- [x] Add localStorage persistence
+- [x] Update settings service
+- [x] Add teaser UI for locked features
+- [x] Update TODO.md and FUTURE-FEATURES.md
 
 **Deliverables**:
 - Working camera save/load (3 slots)
 - Basic UI panel
 - Import/export JSON
 - Documentation complete
+- Initial camera service test script (`src/services/cameraService.test.ts`)
 
 ---
 
-### Phase 2: Enhanced System (Post-TODO - Week 4-6)
-**Status**: 📋 Planned
+### Phase 2: Enhanced System (Week 4-6)
+**Status**: 🟡 In Progress (partial foundation implemented 2026-02-25)
 
 **Prerequisites**:
 - Phase 1 complete
@@ -590,16 +592,17 @@ Players can unlock premium features **without payment** via:
 - Player progression system active
 
 **Tasks**:
-- Implement camera interpolation system
-- Add smooth transitions with easing
-- Create replay timeline UI
-- Implement per-player seat positions
-- Add community sharing features
-- Achievement unlock integration
+- [ ] Implement camera interpolation system (advanced/Bezier)
+- [x] Add smooth transitions with easing (initial implementation in `GameScene`)
+- [ ] Create replay timeline UI
+- [ ] Implement per-player seat positions
+- [ ] Add community sharing features
+- [ ] Achievement unlock integration
+- [ ] Resolve Node test runtime import issue (`cameraService` singleton + `localStorage`)
 
 **Deliverables**:
 - 10 saved positions for unlocked players
-- Smooth animated transitions
+- Smooth animated transitions (initial version complete, unlock/UI wiring pending)
 - Replay system working
 
 ---

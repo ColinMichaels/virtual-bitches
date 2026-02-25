@@ -11,6 +11,7 @@
     "build:prod": "npm run copy:assets && tsc && vite build --mode production",
     "preview": "vite preview",
     "test": "tsx src/engine/rules.test.ts",
+    "test:camera": "tsx src/services/cameraService.test.ts",
     "deploy": "npm run build && npx gh-pages -d dist"
   },
   "dependencies": {
