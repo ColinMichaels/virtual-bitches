@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Build System & Deployment Fixes Complete)
+**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Code Refactoring Complete)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -48,6 +48,36 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ## 🟡 Medium Priority
 
 ### Recently Completed (Session 2026-02-24)
+
+#### Code Refactoring - Controllers Pattern
+- **Status**: ✅ COMPLETE
+- **Objective**: Extract main.ts into focused controllers to reduce complexity
+- **Results**:
+  - Reduced main.ts from **954 lines to 570 lines** (40% reduction)
+  - Extracted 3 new controllers totaling ~600 lines
+  - Improved separation of concerns and testability
+- **New Files Created**:
+  - `src/controllers/InputController.ts` (~326 lines)
+    - Handles all user input: buttons, keyboard, mobile menu
+    - Uses callback interface pattern for loose coupling
+  - `src/controllers/GameFlowController.ts` (~130 lines)
+    - Manages game lifecycle: initialization, new games, mode switching
+    - Static utility methods (stateless design)
+  - `src/controllers/GameOverController.ts` (~143 lines)
+    - Handles end-game flow: score display, ranking, seed sharing
+    - Instance-based for DOM element management
+  - `src/utils/urlUtils.ts` (~24 lines)
+    - URL parsing and seed generation utilities
+- **Files Modified**:
+  - `src/main.ts` - Refactored to use controllers, implements GameCallbacks interface
+  - `docs/ARCHITECTURE.md` - Added Controllers Layer section
+  - `README.md` - Updated architecture diagram
+- **Design Patterns Applied**:
+  - Callback Interface Pattern (InputController)
+  - Static Utility Pattern (GameFlowController)
+  - Instance-based Controller (GameOverController)
+- **Build Status**: ✅ All TypeScript compilation passes
+- **Documentation**: ✅ Architecture docs updated
 
 #### Build System & GitHub Pages Deployment
 - **Status**: ✅ COMPLETE
