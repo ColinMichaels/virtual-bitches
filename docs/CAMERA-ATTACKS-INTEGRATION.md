@@ -1583,7 +1583,8 @@ TOTAL:                          ~$171,000/year
   - [ ] Gravity Well
   - [ ] Nightmare Vision
 - [ ] Add accessibility options
-  - [ ] Reduce camera effects (50% intensity)
+  - [x] Reduce camera effects (50% intensity-style safeguard via settings toggle)
+  - [x] Disable control inversion via accessibility toggle
   - [ ] Disable drunk vision
   - [ ] Epilepsy mode
   - [ ] Text-only notifications

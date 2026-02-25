@@ -30,6 +30,8 @@ export interface DisplaySettings {
 
 export interface ControlSettings {
   cameraSensitivity: number; // 0.5-2.0
+  reduceChaosCameraEffects: boolean;
+  allowChaosControlInversion: boolean;
 }
 
 export interface CameraSettings {
@@ -79,6 +81,8 @@ const DEFAULT_SETTINGS: Settings = {
   },
   controls: {
     cameraSensitivity: 1.0,
+    reduceChaosCameraEffects: false,
+    allowChaosControlInversion: true,
   },
   camera: {
     sensitivity: 1.0,

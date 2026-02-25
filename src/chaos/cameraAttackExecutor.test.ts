@@ -1,6 +1,7 @@
 import { CameraAttackExecutor } from "./cameraAttackExecutor.js";
 import type { CameraAttackMessage } from "./types.js";
 import type { CameraEffect, CameraEffectType, ICameraEffectsService } from "../services/cameraEffects.js";
+import type { IControlInversionService } from "../services/controlInversion.js";
 import type { DrunkSeverity } from "./types.js";
 
 function assert(condition: unknown, message: string): void {
@@ -27,17 +28,22 @@ class MockCameraEffectsService implements ICameraEffectsService {
   public calls: string[] = [];
   public lastDrunkSeverity?: DrunkSeverity;
   public lastShakeIntensity?: number;
+  public lastSpinRotations?: number;
+  public lastDuration?: number;
   public lastTargetId?: string;
 
-  shake(intensity: number, _duration: number, targetPlayerId?: string): string {
+  shake(intensity: number, duration: number, targetPlayerId?: string): string {
     this.calls.push("shake");
     this.lastShakeIntensity = intensity;
+    this.lastDuration = duration;
     this.lastTargetId = targetPlayerId;
     return "shake-id";
   }
 
-  spin(_rotations: number, _duration: number, targetPlayerId?: string): string {
+  spin(rotations: number, duration: number, targetPlayerId?: string): string {
     this.calls.push("spin");
+    this.lastSpinRotations = rotations;
+    this.lastDuration = duration;
     this.lastTargetId = targetPlayerId;
     return "spin-id";
   }
@@ -47,9 +53,10 @@ class MockCameraEffectsService implements ICameraEffectsService {
     return "zoom-id";
   }
 
-  drunk(severity: DrunkSeverity, _duration: number, targetPlayerId?: string): string {
+  drunk(severity: DrunkSeverity, duration: number, targetPlayerId?: string): string {
     this.calls.push("drunk");
     this.lastDrunkSeverity = severity;
+    this.lastDuration = duration;
     this.lastTargetId = targetPlayerId;
     return "drunk-id";
   }
@@ -66,6 +73,39 @@ class MockCameraEffectsService implements ICameraEffectsService {
 
   isEffectActive(_effectType: CameraEffectType): boolean {
     return false;
+  }
+}
+
+class MockControlInversionService implements IControlInversionService {
+  public calls = 0;
+  public lastMode?: "random" | "full";
+  public lastDuration?: number;
+  public lastChance?: number;
+
+  activate(
+    mode: "random" | "full",
+    durationMs: number,
+    options: { randomChance?: number } = {}
+  ): string {
+    this.calls += 1;
+    this.lastMode = mode;
+    this.lastDuration = durationMs;
+    this.lastChance = options.randomChance;
+    return "inversion-id";
+  }
+
+  remapKeyCode(code: string): string {
+    return code;
+  }
+
+  clearAll(): void {}
+
+  isActive(): boolean {
+    return this.calls > 0;
+  }
+
+  getMode(): "none" | "random" | "full" {
+    return this.lastMode ?? "none";
   }
 }
 
@@ -141,6 +181,63 @@ test("uses explicit drunk severity metadata when provided", () => {
   );
 
   assert(cameraEffects.lastDrunkSeverity === "medium", "Should honor metadata severity override");
+});
+
+test("applies level profile metadata for spin rotations", () => {
+  const cameraEffects = new MockCameraEffectsService();
+  const executor = new CameraAttackExecutor(cameraEffects, () => "local-player");
+
+  executor.execute(
+    createMessage({
+      abilityId: "camera_spin",
+      level: 4,
+      effectType: "spin",
+      metadata: undefined,
+    })
+  );
+
+  assertEqual(cameraEffects.calls[0], "spin", "Should execute spin");
+  assertEqual(cameraEffects.lastSpinRotations, 8, "Should use level 4 rotation count from profile");
+});
+
+test("activates full inversion for blackout drunk effects", () => {
+  const cameraEffects = new MockCameraEffectsService();
+  const inversion = new MockControlInversionService();
+  const executor = new CameraAttackExecutor(cameraEffects, () => "local-player", {
+    controlInversion: inversion,
+  });
+
+  executor.execute(
+    createMessage({
+      abilityId: "drunk_vision",
+      level: 4,
+      effectType: "drunk",
+      duration: 1800,
+    })
+  );
+
+  assertEqual(inversion.calls, 1, "Should activate inversion");
+  assertEqual(inversion.lastMode, "full", "Expected blackout inversion mode");
+  assertEqual(inversion.lastDuration, 1800, "Expected inversion duration to match effect duration");
+});
+
+test("reduces drunk severity when accessibility reduction is enabled", () => {
+  const cameraEffects = new MockCameraEffectsService();
+  const executor = new CameraAttackExecutor(cameraEffects, () => "local-player", {
+    getAccessibilitySettings: () => ({ reduceCameraEffects: true }),
+  });
+
+  executor.execute(
+    createMessage({
+      abilityId: "drunk_vision",
+      level: 4,
+      effectType: "drunk",
+      duration: 2000,
+    })
+  );
+
+  assertEqual(cameraEffects.lastDrunkSeverity, "medium", "Expected blackout to downgrade to medium");
+  assertEqual(cameraEffects.lastDuration, 1500, "Expected duration reduction safeguard");
 });
 
 console.log("\nCameraAttackExecutor tests passed! ✓");
