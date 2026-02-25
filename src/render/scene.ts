@@ -208,7 +208,7 @@ export class GameScene {
 
     // Load leather texture for table border
     const tableTexture = new Texture(
-      "/assets/game-textures/leatherwrap_texture.jpg",
+      "./assets/game-textures/leatherwrap_texture.jpg",
       this.scene,
       undefined,
       true, // invertY for proper orientation
@@ -254,7 +254,7 @@ export class GameScene {
     // Load custom table felt texture
     // Custom octagon felt texture provided by user
     const trayTexture = new Texture(
-      "/assets/textures/table-felt.png",
+      "./assets/textures/table-felt.png",
       this.scene,
       undefined,
       true, // invertY for proper orientation
