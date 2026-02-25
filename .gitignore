@@ -38,3 +38,4 @@ lerna-debug.log*
 .parcel-cache/
 
 /dice-box/
+api/data/store.json

@@ -325,6 +325,15 @@ export class UpgradeProgressionService {
     this.emitChanged();
   }
 
+  /**
+   * Replace progression snapshot (used by remote profile sync scaffolding).
+   */
+  replaceState(nextState: Partial<UpgradeProgressionState>): void {
+    this.state = this.deserializeState(nextState, this.state.chaosTokens);
+    this.saveState();
+    this.emitChanged();
+  }
+
   on<K extends ProgressionEvent>(
     event: K,
     callback: (payload: ProgressionEventPayloadByEvent[K]) => void
@@ -360,43 +369,50 @@ export class UpgradeProgressionService {
       }
 
       const parsed = JSON.parse(raw) as Partial<UpgradeProgressionState>;
-      if (parsed.version !== STATE_VERSION) {
-        log.warn("Upgrade progression version mismatch, resetting state");
-        return this.createDefaultState(initialTokens);
-      }
-
-      const base = this.createDefaultState(initialTokens);
-      base.chaosTokens = Math.max(0, Math.floor(parsed.chaosTokens ?? base.chaosTokens));
-      base.achievements = Array.from(
-        new Set((parsed.achievements ?? []).filter((entry) => typeof entry === "string"))
-      );
-      base.updatedAt = typeof parsed.updatedAt === "number" ? parsed.updatedAt : base.updatedAt;
-
-      for (const abilityId of CAMERA_ABILITY_IDS) {
-        const parsedProgress = parsed.abilities?.[abilityId];
-        if (!parsedProgress) continue;
-
-        const maxLevel = this.upgradeTreesByAbility[abilityId].levels.length;
-        base.abilities[abilityId] = {
-          abilityId,
-          xp: Math.max(0, Math.floor(parsedProgress.xp ?? 0)),
-          unlockedLevel: clampInt(parsedProgress.unlockedLevel ?? 1, 1, maxLevel),
-          timesUsed: Math.max(0, Math.floor(parsedProgress.timesUsed ?? 0)),
-          successfulDisruptions: Math.max(
-            0,
-            Math.floor(parsedProgress.successfulDisruptions ?? 0)
-          ),
-          updatedAt: typeof parsedProgress.updatedAt === "number"
-            ? parsedProgress.updatedAt
-            : base.abilities[abilityId].updatedAt,
-        };
-      }
-
-      return base;
+      return this.deserializeState(parsed, initialTokens);
     } catch (error) {
       log.warn("Failed to load upgrade progression state, resetting:", error);
       return this.createDefaultState(initialTokens);
     }
+  }
+
+  private deserializeState(
+    parsed: Partial<UpgradeProgressionState>,
+    initialTokens: number
+  ): UpgradeProgressionState {
+    if (parsed.version !== STATE_VERSION) {
+      log.warn("Upgrade progression version mismatch, resetting state");
+      return this.createDefaultState(initialTokens);
+    }
+
+    const base = this.createDefaultState(initialTokens);
+    base.chaosTokens = Math.max(0, Math.floor(parsed.chaosTokens ?? base.chaosTokens));
+    base.achievements = Array.from(
+      new Set((parsed.achievements ?? []).filter((entry) => typeof entry === "string"))
+    );
+    base.updatedAt = typeof parsed.updatedAt === "number" ? parsed.updatedAt : base.updatedAt;
+
+    for (const abilityId of CAMERA_ABILITY_IDS) {
+      const parsedProgress = parsed.abilities?.[abilityId];
+      if (!parsedProgress) continue;
+
+      const maxLevel = this.upgradeTreesByAbility[abilityId].levels.length;
+      base.abilities[abilityId] = {
+        abilityId,
+        xp: Math.max(0, Math.floor(parsedProgress.xp ?? 0)),
+        unlockedLevel: clampInt(parsedProgress.unlockedLevel ?? 1, 1, maxLevel),
+        timesUsed: Math.max(0, Math.floor(parsedProgress.timesUsed ?? 0)),
+        successfulDisruptions: Math.max(
+          0,
+          Math.floor(parsedProgress.successfulDisruptions ?? 0)
+        ),
+        updatedAt: typeof parsedProgress.updatedAt === "number"
+          ? parsedProgress.updatedAt
+          : base.abilities[abilityId].updatedAt,
+      };
+    }
+
+    return base;
   }
 
   private createDefaultState(initialTokens: number): UpgradeProgressionState {

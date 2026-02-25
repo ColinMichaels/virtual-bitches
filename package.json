@@ -13,11 +13,13 @@
     "test": "tsx src/engine/rules.test.ts",
     "test:camera": "tsx src/services/cameraService.test.ts",
     "test:camera-effects": "tsx src/services/cameraEffects.test.ts",
+    "test:backend-api": "tsx src/services/backendApi.test.ts",
     "test:chaos-camera": "tsx src/chaos/cameraAttackExecutor.test.ts",
     "test:chaos-execution": "tsx src/chaos/upgrades/executionProfile.test.ts",
     "test:chaos-upgrades": "tsx src/chaos/upgrades/progressionService.test.ts",
     "test:controls": "tsx src/services/controlInversion.test.ts",
     "test:network": "tsx src/multiplayer/networkService.test.ts",
+    "api:dev": "node api/server.mjs",
     "deploy": "npm run build && npx gh-pages -d dist"
   },
   "dependencies": {

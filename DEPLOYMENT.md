@@ -1,5 +1,17 @@
 # 🚀 Deployment Guide - BISCUITS Dice Game
 
+## Firebase Migration Plan (New)
+
+For the backend-enabled production path (API + auth + multiplayer), use:
+- [docs/FIREBASE-MIGRATION-PLAN.md](docs/FIREBASE-MIGRATION-PLAN.md)
+
+This documents the migration from GitHub Pages static hosting to:
+- Firebase Hosting (frontend)
+- Cloud Run (`/api`)
+- Firebase Auth + Firestore
+
+with specific notes for WebSocket routing and timeout constraints.
+
 ## Quick Deploy to Vercel (Recommended - 5 minutes)
 
 ### Step 1: Push to GitHub

@@ -229,6 +229,15 @@ export class SettingsService {
   }
 
   /**
+   * Replace full settings snapshot (used by remote profile sync)
+   */
+  replaceSettings(nextSettings: Settings): void {
+    this.settings = this.mergeWithDefaults(nextSettings);
+    this.saveSettings();
+    this.notifyListeners();
+  }
+
+  /**
    * Reset to default settings
    */
   resetToDefaults(): void {

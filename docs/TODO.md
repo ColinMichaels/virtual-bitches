@@ -347,6 +347,18 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ Accessibility safeguards in settings + executor (`reduceChaosCameraEffects`, `allowChaosControlInversion`)
   - ✅ Unit-style tests for execution profile mapping (`src/chaos/upgrades/executionProfile.test.ts`)
   - ✅ Unit-style tests for control inversion behavior (`src/services/controlInversion.test.ts`)
+  - ✅ Typed backend API client scaffold (`src/services/backendApi.ts`) for profile/log/session routes
+  - ✅ Player data sync scaffold (`src/services/playerDataSync.ts`) for settings/progression/log queue sync
+  - ✅ Sync reliability foundation in `PlayerDataSyncService` (dirty-profile sync + retry backoff/jitter + queue compaction/dedupe + deterministic score log IDs)
+  - ✅ Service worker log upload bridge (`src/services/pwa.ts` + `public/sw.js`)
+  - ✅ Multiplayer session API scaffold (`src/multiplayer/sessionService.ts`) with join/create/heartbeat/leave hooks
+  - ✅ Session-aware multiplayer socket rebinding in `main.ts` (API session `wsUrl`/`playerToken` now updates live network connection)
+  - ✅ Auth session service + 401 recovery (`src/services/authSession.ts`, `src/services/backendApi.ts`) with token refresh and session-expired handling
+  - ✅ WebSocket auth-expiry recovery path (`src/multiplayer/networkService.ts`) with session auth refresh callback
+  - ✅ Multiplayer attack feedback loop (`sent`/`sendFailed`/`received`/`applied`) wired to HUD notifications in `src/main.ts`
+  - ✅ Backend skeleton started in `/api` (HTTP server scaffold + SQL schema/migrations + profile/log/session/auth endpoints)
+  - ✅ Firebase migration strategy documented (`docs/FIREBASE-MIGRATION-PLAN.md`) for moving from GitHub Pages to Firebase Hosting + Cloud Run
+  - ✅ Unit-style tests for backend API request handling (`src/services/backendApi.test.ts`)
 - **Key Features**:
   - Camera Effects API (shake, spin, zoom, tilt, drunk vision)
   - Drunk Vision system (3 severity levels: Tipsy, Hammered, Blackout)
@@ -366,7 +378,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - BabylonJS Post-Processing pipeline (implemented client-side; tuning pending)
 - **Implementation Timeline**: ~10 weeks (5 phases)
 - **Monetization**: Chaos Pass ($4.99/mo), IAP packs, Battle Pass
-- **Implementation Priority**: Next up is backend/API+DB profile persistence (settings/progression/logs) + service-worker offloading + multiplayer backend/session groundwork
+- **Implementation Priority**: Next up is production backend/API+DB implementation (profiles/settings/logs), authenticated sync/conflict semantics, and multiplayer backend/session rollout
 
 #### Chaos Gameplay Mechanics System
 - **Status**: DOCUMENTED (not yet implemented)

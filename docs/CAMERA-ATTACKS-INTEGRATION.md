@@ -63,18 +63,30 @@ Traditional game attacks show visual effects ON the screen (overlays, particles,
 - Local progression execution trigger added in upgrade UI (cast current unlocked level via `chaos:cameraAttack`)
 - Control inversion runtime implemented (`src/services/controlInversion.ts`) and wired into input/executor flow
 - Accessibility safeguards wired into settings + executor (`reduceChaosCameraEffects`, `allowChaosControlInversion`)
+- Typed backend API client scaffold implemented (`src/services/backendApi.ts`) for profile/log/session endpoints
+- Player settings/progression/log sync scaffold implemented (`src/services/playerDataSync.ts`) with local queue + remote sync attempts
+- Sync reliability pass implemented in `PlayerDataSyncService` (debounced dirty-profile writes, exponential backoff+jitter retries, queue compaction/dedupe, deterministic score log IDs)
+- Service-worker log offload path implemented (`PWAService.syncGameLogs` + `public/sw.js` `SYNC_GAME_LOGS`)
+- Multiplayer session API scaffold implemented (`src/multiplayer/sessionService.ts`) and bootstrapped from URL session context
+- Session-aware multiplayer socket rebinding implemented in `main.ts` (join response `wsUrl`/`playerToken` now reconfigures live WebSocket connection)
+- Auth session management implemented (`src/services/authSession.ts`) with token persistence, refresh flow, and session-expired events
+- Backend API 401 recovery implemented (`src/services/backendApi.ts`) with bearer header injection + one-shot refresh retry
+- WebSocket auth-expiry recovery implemented in `MultiplayerNetworkService` (close-code detection + session auth refresh callback)
+- Multiplayer attack feedback events + HUD notifications implemented (`sent` / `sendFailed` / `received` / `applied`)
+- Backend HTTP skeleton implemented in `/api` with profile/log/session/auth endpoints and SQL schema scaffolding
 - Unit-style executor tests added (`src/chaos/cameraAttackExecutor.test.ts`)
 - Unit-style network bridge tests added (`src/multiplayer/networkService.test.ts`)
 - Camera effects queue/stacking + post-processing tests added (`src/services/cameraEffects.test.ts`)
 - Upgrade progression tests added (`src/chaos/upgrades/progressionService.test.ts`)
 - Upgrade execution-profile tests added (`src/chaos/upgrades/executionProfile.test.ts`)
 - Control inversion tests added (`src/services/controlInversion.test.ts`)
+- Backend API client tests added (`src/services/backendApi.test.ts`)
 
 ❌ **Missing Components**:
-- Backend profile sync for progression/token state
-- Backend API + DB integration for player settings/profile and match logs
-- Service worker/off-main-thread task offloading for heavy background processing
-- Production multiplayer backend/session integration (auth, rooms, server validation)
+- Production-grade backend implementation (replace JSON file store with real DB runtime and deployment infra)
+- Authenticated API contracts and conflict-resolution strategy for cross-device profile sync
+- Hardened offline/background sync guarantees (durable retry metadata, idempotency/ordering contract, conflict semantics)
+- Production multiplayer backend/session integration (real WS server, rooms, matchmaking, server validation)
 
 ---
 
@@ -1545,16 +1557,16 @@ TOTAL:                          ~$171,000/year
   - [x] `drunk_vision` → `CameraEffectsService.drunk()`
   - [x] `camera_spin` → `CameraEffectsService.spin()`
 - [ ] Implement network protocol
-  - [ ] `CameraAttackMessage` interface
+  - [x] `CameraAttackMessage` interface
   - [ ] Server-side validation
-  - [ ] WebSocket broadcast to victim
+  - [x] WebSocket broadcast to victim (client bridge + backend HTTP session contract scaffold)
 - [x] Client-side attack rendering
   - [x] Receive attack message
   - [x] Apply effect locally
   - [x] Display effect HUD (active effects UI)
 - [ ] Add attack feedback
-  - [ ] Attacker sees "Hit!" notification
-  - [ ] Victim sees effect name + duration
+  - [x] Attacker sees send/sent failure notifications
+  - [x] Victim sees incoming effect + duration + applied notifications
 - [ ] Test multiplayer synchronization
 - [ ] Implement diminishing returns
 - [ ] Implement immunity system
@@ -1686,6 +1698,6 @@ We create a system that delivers on the "psychosocial torture" vision while keep
 
 ---
 
-**Document Status**: Active implementation in progress (Phases 1-3 core client systems + Phase 4 client execution mapping in place).
+**Document Status**: Active implementation in progress (client-side core + backend integration scaffolding in place).
 
-**Next Steps**: Wire backend profile/API storage (settings/progression/logs), start service-worker offloading, and continue multiplayer backend/session implementation.
+**Next Steps**: Implement real API/DB endpoints, harden auth/conflict semantics for sync, and continue multiplayer backend/session rollout.

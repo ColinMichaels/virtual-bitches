@@ -23,6 +23,13 @@ export interface MultiplayerNetworkOptions {
   autoReconnect?: boolean;
   reconnectDelayMs?: number;
   webSocketFactory?: (url: string) => WebSocketLike;
+  onAuthExpired?: () => Promise<string | undefined> | string | undefined;
+}
+
+interface WsErrorMessage {
+  type: "error";
+  code: string;
+  message?: string;
 }
 
 function isCameraAttackMessage(value: unknown): value is CameraAttackMessage {
@@ -52,21 +59,34 @@ function isParticleNetworkEvent(value: unknown): value is ParticleNetworkEvent {
   );
 }
 
+function isWsErrorMessage(value: unknown): value is WsErrorMessage {
+  if (!value || typeof value !== "object") return false;
+
+  const msg = value as Partial<WsErrorMessage>;
+  return msg.type === "error" && typeof msg.code === "string";
+}
+
+function isAuthExpiredCloseCode(code: number): boolean {
+  return code === 4001 || code === 4003 || code === 4401 || code === 4403 || code === 4408;
+}
+
 function createCustomEvent<T>(type: string, detail: T): CustomEvent<T> {
   return new CustomEvent(type, { detail });
 }
 
 export class MultiplayerNetworkService {
-  private readonly wsUrl?: string;
+  private wsUrl?: string;
   private readonly eventTarget: EventTarget;
   private readonly autoReconnect: boolean;
   private readonly reconnectDelayMs: number;
   private readonly webSocketFactory: (url: string) => WebSocketLike;
+  private readonly onAuthExpired?: () => Promise<string | undefined> | string | undefined;
 
   private socket: WebSocketLike | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private manuallyDisconnected = false;
   private bridgeEnabled = false;
+  private authRecoveryInFlight = false;
 
   private readonly onSocketOpen = () => {
     log.info("WebSocket connected");
@@ -89,6 +109,11 @@ export class MultiplayerNetworkService {
     }
 
     if (isCameraAttackMessage(parsed)) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("chaos:cameraAttack:received", {
+          message: parsed,
+        })
+      );
       this.eventTarget.dispatchEvent(createCustomEvent("chaos:cameraAttack", parsed));
       return;
     }
@@ -99,11 +124,43 @@ export class MultiplayerNetworkService {
       );
       return;
     }
+
+    if (isWsErrorMessage(parsed) && parsed.code === "session_expired") {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:authExpired", {
+          code: parsed.code,
+          reason: parsed.message ?? "session_expired",
+        })
+      );
+      if (!this.manuallyDisconnected) {
+        void this.recoverFromAuthExpiry();
+      }
+    }
   };
 
-  private readonly onSocketClose = () => {
+  private readonly onSocketClose = (event: Event) => {
+    const closeEvent = event as CloseEvent;
+    const closeCode = typeof closeEvent?.code === "number" ? closeEvent.code : 0;
+    const closeReason = closeEvent?.reason ?? "";
+
     log.warn("WebSocket disconnected");
-    this.eventTarget.dispatchEvent(createCustomEvent("multiplayer:disconnected", {}));
+    this.eventTarget.dispatchEvent(
+      createCustomEvent("multiplayer:disconnected", {
+        code: closeCode,
+        reason: closeReason,
+      })
+    );
+
+    if (!this.manuallyDisconnected && isAuthExpiredCloseCode(closeCode)) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:authExpired", {
+          code: closeCode,
+          reason: closeReason || "auth_expired",
+        })
+      );
+      void this.recoverFromAuthExpiry();
+      return;
+    }
 
     if (!this.manuallyDisconnected && this.autoReconnect) {
       this.scheduleReconnect();
@@ -123,7 +180,21 @@ export class MultiplayerNetworkService {
   private readonly onCameraAttackSend = (event: Event) => {
     const custom = event as CustomEvent<CameraAttackMessage>;
     if (!custom.detail) return;
-    this.sendCameraAttack(custom.detail);
+    const sent = this.sendCameraAttack(custom.detail);
+    if (sent) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("chaos:cameraAttack:sent", {
+          message: custom.detail,
+        })
+      );
+      return;
+    }
+
+    this.eventTarget.dispatchEvent(
+      createCustomEvent("chaos:cameraAttack:sendFailed", {
+        message: custom.detail,
+      })
+    );
   };
 
   constructor(options: MultiplayerNetworkOptions = {}) {
@@ -131,6 +202,7 @@ export class MultiplayerNetworkService {
     this.eventTarget = options.eventTarget ?? document;
     this.autoReconnect = options.autoReconnect ?? true;
     this.reconnectDelayMs = options.reconnectDelayMs ?? 3000;
+    this.onAuthExpired = options.onAuthExpired;
     this.webSocketFactory =
       options.webSocketFactory ?? ((url: string) => new WebSocket(url));
   }
@@ -225,6 +297,39 @@ export class MultiplayerNetworkService {
       if (this.manuallyDisconnected) return;
       this.connect();
     }, this.reconnectDelayMs);
+  }
+
+  private async recoverFromAuthExpiry(): Promise<void> {
+    if (this.authRecoveryInFlight || !this.onAuthExpired) {
+      if (this.autoReconnect) {
+        this.scheduleReconnect();
+      }
+      return;
+    }
+
+    this.authRecoveryInFlight = true;
+    try {
+      const refreshedWsUrl = await this.onAuthExpired();
+      if (!refreshedWsUrl) {
+        this.eventTarget.dispatchEvent(
+          createCustomEvent("multiplayer:sessionExpired", {
+            reason: "ws_auth_refresh_failed",
+          })
+        );
+        return;
+      }
+
+      this.wsUrl = refreshedWsUrl;
+      this.clearReconnectTimer();
+      this.connect();
+    } catch (error) {
+      log.warn("Failed to recover from WS auth expiry", error);
+      if (this.autoReconnect) {
+        this.scheduleReconnect();
+      }
+    } finally {
+      this.authRecoveryInFlight = false;
+    }
   }
 
   private clearReconnectTimer(): void {

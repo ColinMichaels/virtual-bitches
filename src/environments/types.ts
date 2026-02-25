@@ -15,5 +15,14 @@ export interface Environment {
   storage: {
     prefix: string; // localStorage key prefix
   };
+  firebaseConfig: {
+    apiKey: string;
+    authDomain: string;
+    projectId: string;
+    storageBucket: string;
+    messagingSenderId: string;
+    appId: string;
+    measurementId?: string;
+  };
   debug: boolean;
 }
