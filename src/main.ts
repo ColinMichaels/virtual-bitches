@@ -107,9 +107,11 @@ class Game implements GameCallbacks {
       return GameFlowController.isGameInProgress(this.state);
     });
 
-    // Listen to settings changes to update hint mode
+    // Listen to settings changes to sync mode and update hint mode
     settingsService.onChange(() => {
+      GameFlowController.syncModeWithSettings(this.state);
       GameFlowController.updateHintMode(this.state, this.diceRow);
+      this.updateUI();
     });
 
     // Handle mode changes from HUD dropdown
@@ -119,14 +121,9 @@ class Game implements GameCallbacks {
 
     // Setup tutorial
     tutorialModal.setOnComplete(() => {
-      // After tutorial, update hint mode based on actual difficulty setting
-      const settings = settingsService.getSettings();
-      const hintsEnabled = shouldShowHints({ difficulty: settings.game.difficulty, variant: "classic" });
-      this.diceRow.setHintMode(hintsEnabled);
-
-      // Update game state mode to match settings
-      this.state.mode.difficulty = settings.game.difficulty;
-
+      // After tutorial, sync mode and update hint mode based on actual difficulty setting
+      GameFlowController.syncModeWithSettings(this.state);
+      GameFlowController.updateHintMode(this.state, this.diceRow);
       this.updateUI();
     });
 
@@ -201,20 +198,24 @@ class Game implements GameCallbacks {
 
   private handleModeChange(difficulty: GameDifficulty): void {
     const isInProgress = GameFlowController.isGameInProgress(this.state);
-    const newState = GameFlowController.handleModeChange(this.state, difficulty, isInProgress);
+    const result = GameFlowController.handleModeChange(this.state, difficulty, isInProgress);
 
-    if (newState) {
-      this.state = newState;
+    if (result.newState) {
+      // Game was in progress, starting new game
+      this.state = result.newState;
       GameFlowController.updateHintMode(this.state, this.diceRow);
       GameFlowController.resetForNewGame(this.diceRenderer);
       this.animating = false;
       this.gameStartTime = Date.now();
       this.updateUI();
       notificationService.show("New Game Started!", "success");
-    } else {
-      // User cancelled or just update hint mode
+    } else if (result.modeUpdated) {
+      // Game not in progress, mode was updated in place
       GameFlowController.updateHintMode(this.state, this.diceRow);
       this.updateUI();
+      notificationService.show(`Mode changed to ${difficulty}`, "info");
+    } else {
+      // User cancelled - do nothing
     }
   }
 
@@ -421,11 +422,11 @@ class Game implements GameCallbacks {
 
       // Show score notification
       if (points === 0) {
-        notificationService.show("🎉 Perfect Roll! +0 Points!", "success");
+        notificationService.show("🎉 Perfect Roll! +0", "success");
         // Celebrate perfect roll with particles
         this.scene.celebrateSuccess("perfect");
       } else {
-        notificationService.show(`+${points} Points!`, "success");
+        notificationService.show(`+${points}`, "success");
       }
     });
 
@@ -469,7 +470,7 @@ class Game implements GameCallbacks {
 
     // Update multipurpose action button
     if (this.state.status === "READY") {
-      this.actionBtn.textContent = "Roll Dice (Space)";
+      this.actionBtn.textContent = "Roll";
       this.actionBtn.disabled = this.animating || this.paused;
       this.actionBtn.className = "primary";
       this.deselectBtn.style.display = "none";

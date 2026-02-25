@@ -1299,6 +1299,8 @@ button.danger:hover:not(:disabled) {
   flex-direction: column;
   align-items: center;
   gap: 0;
+  width: 90%;
+  max-width: 600px;
 }
 
 .notification {
@@ -1316,20 +1318,10 @@ button.danger:hover:not(:disabled) {
                0 0 30px currentColor,
                0 2px 4px rgba(0, 0, 0, 0.8);
   animation: floatUp 2s ease-out forwards;
-}
-
-/* Stagger multiple notifications with different directions */
-.notification:nth-child(2) {
-  animation: floatUpLeft 2s ease-out forwards;
-}
-
-.notification:nth-child(3) {
-  animation: floatUpRight 2s ease-out forwards;
-}
-
-.notification:nth-child(4) {
-  animation: floatUp 2s ease-out forwards;
-  animation-delay: 0.2s;
+  transition: top 0.3s ease-out;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 @keyframes floatUp {
@@ -1347,36 +1339,6 @@ button.danger:hover:not(:disabled) {
   }
 }
 
-@keyframes floatUpLeft {
-  0% {
-    opacity: 0;
-    transform: translate(0, 0) scale(0.8);
-  }
-  20% {
-    opacity: 1;
-    transform: translate(-30px, -20px) scale(1.2);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-60px, -120px) scale(1);
-  }
-}
-
-@keyframes floatUpRight {
-  0% {
-    opacity: 0;
-    transform: translate(0, 0) scale(0.8);
-  }
-  20% {
-    opacity: 1;
-    transform: translate(30px, -20px) scale(1.2);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(60px, -120px) scale(1);
-  }
-}
-
 .notification-info {
   color: #66b3ff;
 }
@@ -1391,6 +1353,40 @@ button.danger:hover:not(:disabled) {
 
 .notification-error {
   color: #ff5555;
+}
+
+/* Mobile-responsive notifications */
+@media (max-width: 768px) {
+  #notification-container {
+    top: 35%;
+    width: 95%;
+  }
+
+  .notification {
+    padding: 6px 12px;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    max-width: 90vw;
+    white-space: normal;
+    word-wrap: break-word;
+    line-height: 1.2;
+  }
+
+  @keyframes floatUp {
+    0% {
+      opacity: 0;
+      transform: translateY(0) scale(0.85);
+    }
+    20% {
+      opacity: 1;
+      transform: translateY(-15px) scale(1.15);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-100px) scale(1);
+    }
+  }
 }
 
 /* Leaderboard Modal */

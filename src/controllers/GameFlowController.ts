@@ -22,18 +22,26 @@ export class GameFlowController {
 
     // Get settings for mode configuration
     const settings = settingsService.getSettings();
+
+    const config: GameConfig = {
+      addD20: settings.game.addD20,
+      addD4: settings.game.addD4,
+      add2ndD10: settings.game.add2ndD10,
+      d100Mode: settings.game.d100Mode,
+    };
+
     const mode = {
       difficulty: settings.game.difficulty,
       variant: "classic" as const,
     };
 
     if (logEncoded) {
-      // Replay mode
+      // Replay mode - use current settings for config and mode
       const actions = deserializeActions(logEncoded);
-      return replay(gameSeed, actions);
+      return replay(gameSeed, actions, config, mode);
     } else {
       // New game
-      return createGame(gameSeed, {}, mode);
+      return createGame(gameSeed, config, mode);
     }
   }
 
@@ -61,20 +69,21 @@ export class GameFlowController {
 
   /**
    * Handle mode change (difficulty switch)
-   * Returns new game state if game should be reset, null otherwise
+   * Returns new game state if game should be reset, null if user cancelled
+   * Updates currentState mode if game is not in progress
    */
   static handleModeChange(
     currentState: GameState,
     newDifficulty: GameDifficulty,
     isGameInProgress: boolean
-  ): GameState | null {
+  ): { newState: GameState | null; modeUpdated: boolean } {
     // Check if game is in progress
     if (isGameInProgress) {
       const confirmed = confirm(
         `Switch to ${newDifficulty.charAt(0).toUpperCase() + newDifficulty.slice(1)} mode? This will start a new game and your current progress will be lost.`
       );
       if (!confirmed) {
-        return null;
+        return { newState: null, modeUpdated: false };
       }
     }
 
@@ -83,10 +92,21 @@ export class GameFlowController {
 
     // Return new game state if one was in progress
     if (isGameInProgress) {
-      return GameFlowController.createNewGame();
+      return { newState: GameFlowController.createNewGame(), modeUpdated: true };
     }
 
-    return null;
+    // If game is not in progress, update the current state's mode
+    currentState.mode.difficulty = newDifficulty;
+    return { newState: null, modeUpdated: true };
+  }
+
+  /**
+   * Sync game state mode with current settings
+   * Ensures mode is always up-to-date with user preferences
+   */
+  static syncModeWithSettings(state: GameState): void {
+    const settings = settingsService.getSettings();
+    state.mode.difficulty = settings.game.difficulty;
   }
 
   /**
