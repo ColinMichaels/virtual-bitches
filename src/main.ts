@@ -8,6 +8,8 @@ import { LeaderboardModal } from "./ui/leaderboard.js";
 import { RulesModal } from "./ui/rules.js";
 import { TutorialModal } from "./ui/tutorial.js";
 import { DebugView } from "./ui/debugView.js";
+import { AlphaWarningModal } from "./ui/alphaWarning.js";
+import { UpdatesPanel } from "./ui/updates.js";
 import { CameraControlsPanel } from "./ui/cameraControls.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
@@ -578,6 +580,8 @@ let leaderboardModal: LeaderboardModal;
 let rulesModal: RulesModal;
 let tutorialModal: TutorialModal;
 let splash: SplashScreen;
+let alphaWarning: AlphaWarningModal;
+let updatesPanel: UpdatesPanel;
 
 themeManager.initialize().then(() => {
   log.info("Theme manager initialized successfully");
@@ -587,6 +591,17 @@ themeManager.initialize().then(() => {
   leaderboardModal = new LeaderboardModal();
   rulesModal = new RulesModal();
   tutorialModal = new TutorialModal();
+
+  // Initialize alpha warning and updates panel
+  alphaWarning = new AlphaWarningModal();
+  updatesPanel = new UpdatesPanel();
+
+  // Show alpha warning on first visit
+  if (!AlphaWarningModal.hasSeenWarning()) {
+    setTimeout(() => {
+      alphaWarning.show();
+    }, 1000); // Show after 1 second delay
+  }
 
   // Create splash screen after theme manager is ready
   splash = new SplashScreen(
@@ -615,6 +630,17 @@ themeManager.initialize().then(() => {
   leaderboardModal = new LeaderboardModal();
   rulesModal = new RulesModal();
   tutorialModal = new TutorialModal();
+
+  // Initialize alpha warning and updates panel (even on error)
+  alphaWarning = new AlphaWarningModal();
+  updatesPanel = new UpdatesPanel();
+
+  // Show alpha warning on first visit
+  if (!AlphaWarningModal.hasSeenWarning()) {
+    setTimeout(() => {
+      alphaWarning.show();
+    }, 1000);
+  }
 
   splash = new SplashScreen(
     () => {

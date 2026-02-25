@@ -1869,11 +1869,31 @@ button.danger:hover:not(:disabled) {
     gap: 10px;
     justify-content: flex-start;
     padding: 12px 16px;
+    position: relative;
   }
 
   .mobile-menu-action span {
     font-size: 14px;
     font-weight: 600;
+  }
+
+  .mobile-updates-badge {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: linear-gradient(135deg, #e94560, #ff6b6b);
+    color: white;
+    font-size: 11px;
+    font-weight: bold;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+    box-shadow: 0 2px 8px rgba(233, 69, 96, 0.6);
   }
 
   .mobile-menu-divider {
@@ -3191,4 +3211,467 @@ button.danger:hover:not(:disabled) {
 .camera-positions-list::-webkit-scrollbar-thumb:hover,
 .camera-panel::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+/* ========================================
+   Alpha Warning Modal
+   ======================================== */
+
+.alpha-warning-modal {
+  z-index: 10000;
+}
+
+.alpha-backdrop {
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(8px);
+}
+
+.alpha-content {
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 0;
+  background: linear-gradient(135deg, rgba(26, 26, 46, 0.98), rgba(15, 15, 30, 0.98));
+  border: 2px solid rgba(233, 69, 96, 0.3);
+}
+
+.alpha-badge {
+  background: linear-gradient(135deg, #e94560, #ff6b6b);
+  color: white;
+  font-weight: bold;
+  font-size: 14px;
+  padding: 12px 24px;
+  text-align: center;
+  letter-spacing: 2px;
+  box-shadow: 0 4px 12px rgba(233, 69, 96, 0.4);
+}
+
+.alpha-hero {
+  width: 100%;
+  max-height: 150px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.alpha-image {
+  width: 70%;
+  height: auto;
+  max-height: 120px;
+  object-fit: contain;
+  display: block;
+}
+
+.alpha-body {
+  padding: 30px;
+}
+
+.alpha-body h2 {
+  color: #eee;
+  font-size: 28px;
+  margin: 0 0 10px 0;
+  font-family: 'Caprasimo', cursive;
+}
+
+.alpha-subtitle {
+  color: #e94560;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 20px 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.alpha-message {
+  background: rgba(0, 0, 0, 0.3);
+  border-left: 4px solid #e94560;
+  padding: 20px;
+  margin: 20px 0;
+  border-radius: 4px;
+}
+
+.alpha-message p {
+  color: #ccc;
+  line-height: 1.6;
+  margin: 0 0 15px 0;
+}
+
+.alpha-message p:last-child {
+  margin-bottom: 0;
+}
+
+.alpha-warnings {
+  margin: 20px 0;
+}
+
+.alpha-warning-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  color: #ddd;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.alpha-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.alpha-thanks {
+  background: rgba(233, 69, 96, 0.1);
+  border: 1px solid rgba(233, 69, 96, 0.3);
+  padding: 15px;
+  border-radius: 4px;
+  margin-top: 20px !important;
+  color: #eee !important;
+  font-weight: 500;
+}
+
+.alpha-checkbox {
+  margin: 20px 0;
+}
+
+.alpha-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #ccc;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.alpha-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.alpha-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 25px;
+}
+
+.alpha-actions button {
+  min-width: 200px;
+  font-size: 16px;
+  padding: 14px 28px;
+}
+
+/* ========================================
+   Updates Panel
+   ======================================== */
+
+.updates-container {
+  position: fixed;
+  top: 20px;
+  right: 80px;
+  z-index: 1000;
+}
+
+.updates-toggle-btn {
+  position: relative;
+  background: rgba(26, 26, 46, 0.9);
+  border: 2px solid rgba(233, 69, 96, 0.5);
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #e94560;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.updates-toggle-btn:hover {
+  background: rgba(233, 69, 96, 0.2);
+  border-color: #e94560;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(233, 69, 96, 0.4);
+}
+
+.updates-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: linear-gradient(135deg, #e94560, #ff6b6b);
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  box-shadow: 0 2px 8px rgba(233, 69, 96, 0.6);
+  animation: pulse-badge 2s ease-in-out infinite;
+}
+
+@keyframes pulse-badge {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.updates-panel {
+  position: absolute;
+  top: 60px;
+  right: 0;
+  width: 360px;
+  max-height: 500px;
+  background: rgba(26, 26, 46, 0.98);
+  border: 2px solid rgba(233, 69, 96, 0.3);
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.updates-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background: rgba(233, 69, 96, 0.1);
+  border-bottom: 1px solid rgba(233, 69, 96, 0.2);
+}
+
+.updates-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #eee;
+  font-family: 'Caprasimo', cursive;
+}
+
+.updates-close-btn {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.updates-close-btn:hover {
+  color: #e94560;
+}
+
+.updates-list {
+  max-height: 440px;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.updates-loading,
+.updates-empty,
+.updates-error {
+  text-align: center;
+  padding: 40px 20px;
+  color: #888;
+}
+
+.update-item {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 15px;
+  margin-bottom: 10px;
+  transition: all 0.2s ease;
+}
+
+.update-item:hover {
+  background: rgba(0, 0, 0, 0.4);
+  border-color: rgba(233, 69, 96, 0.3);
+}
+
+.update-new {
+  border-color: rgba(233, 69, 96, 0.5);
+  background: rgba(233, 69, 96, 0.05);
+}
+
+.update-header {
+  margin-bottom: 10px;
+}
+
+.update-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.update-icon {
+  font-size: 16px;
+}
+
+.update-date {
+  color: #888;
+  font-size: 12px;
+}
+
+.update-version {
+  background: rgba(233, 69, 96, 0.2);
+  color: #e94560;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.update-new-badge {
+  background: linear-gradient(135deg, #e94560, #ff6b6b);
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.update-title {
+  color: #eee;
+  font-size: 16px;
+  margin: 0 0 10px 0;
+  font-weight: 600;
+}
+
+.update-content {
+  color: #ccc;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.update-content p {
+  margin: 0 0 10px 0;
+}
+
+.update-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* Scrollbar for updates list */
+.updates-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.updates-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.updates-list::-webkit-scrollbar-thumb {
+  background: rgba(233, 69, 96, 0.4);
+  border-radius: 3px;
+}
+
+.updates-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(233, 69, 96, 0.6);
+}
+
+/* Mobile Responsive */
+@media screen and (max-width: 768px) {
+  .updates-container {
+    right: 20px;
+    top: 80px;
+  }
+
+  .updates-panel {
+    width: 90vw;
+    max-width: 360px;
+    right: -20px;
+  }
+
+  .alpha-content {
+    width: 95%;
+    max-height: 95vh;
+  }
+
+  .alpha-body {
+    padding: 20px;
+  }
+
+  .alpha-body h2 {
+    font-size: 24px;
+  }
+
+  .alpha-actions button {
+    min-width: 150px;
+    font-size: 14px;
+    padding: 12px 20px;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .updates-toggle-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .updates-panel {
+    width: calc(100vw - 20px);
+    max-height: 400px;
+    right: -10px;
+  }
+
+  .alpha-content {
+    border-radius: 0;
+  }
+
+  .alpha-hero {
+    max-height: 120px;
+    padding: 15px;
+  }
+
+  .alpha-image {
+    max-height: 100px;
+    width: 60%;
+  }
+
+  .alpha-body {
+    padding: 15px;
+  }
+
+  .alpha-body h2 {
+    font-size: 20px;
+  }
+
+  .alpha-subtitle {
+    font-size: 14px;
+  }
+
+  .alpha-warning-item {
+    font-size: 13px;
+  }
+
+  .alpha-actions button {
+    width: 100%;
+    min-width: 0;
+  }
 }
