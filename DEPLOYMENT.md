@@ -4,6 +4,7 @@
 
 For the backend-enabled production path (API + auth + multiplayer), use:
 - [docs/FIREBASE-MIGRATION-PLAN.md](docs/FIREBASE-MIGRATION-PLAN.md)
+- [docs/FIREBASE-SETUP.md](docs/FIREBASE-SETUP.md)
 
 This documents the migration from GitHub Pages static hosting to:
 - Firebase Hosting (frontend)

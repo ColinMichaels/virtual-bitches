@@ -358,6 +358,8 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ Multiplayer attack feedback loop (`sent`/`sendFailed`/`received`/`applied`) wired to HUD notifications in `src/main.ts`
   - ✅ Backend skeleton started in `/api` (HTTP server scaffold + SQL schema/migrations + profile/log/session/auth endpoints)
   - ✅ Firebase migration strategy documented (`docs/FIREBASE-MIGRATION-PLAN.md`) for moving from GitHub Pages to Firebase Hosting + Cloud Run
+  - ✅ Firebase Phase 1 bootstrap files added (`firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`, `.env.firebase.example`, `docs/FIREBASE-SETUP.md`)
+  - ✅ GitHub Actions deploy workflow added (`.github/workflows/firebase-deploy.yml`) for auto-deploy on `master`/`dev` using GitHub Secrets
   - ✅ Unit-style tests for backend API request handling (`src/services/backendApi.test.ts`)
 - **Key Features**:
   - Camera Effects API (shake, spin, zoom, tilt, drunk vision)

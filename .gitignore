@@ -32,6 +32,9 @@ lerna-debug.log*
 .env
 .env.local
 .env.*.local
+.env.production
+.env.development
+gha-creds-*.json
 
 # Cache
 .cache/
