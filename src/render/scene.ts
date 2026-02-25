@@ -254,7 +254,7 @@ export class GameScene {
     // Load custom table felt texture
     // Custom octagon felt texture provided by user
     const trayTexture = new Texture(
-      "./assets/textures/table-felt.png",
+      "./assets/game-textures/biscuits_felt_table_texture_darker.jpg",
       this.scene,
       undefined,
       true, // invertY for proper orientation
