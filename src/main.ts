@@ -102,6 +102,12 @@ class Game implements GameCallbacks {
       rulesModal.show();
     });
 
+    // Handle player seat clicks (show multiplayer coming soon notification)
+    this.scene.setPlayerSeatClickHandler((seatIndex: number) => {
+      notificationService.show("Multiplayer Coming Soon!", "info", 3000);
+      audioService.playSfx("click");
+    });
+
     // Provide callback to check if game is in progress
     this.settingsModal.setCheckGameInProgress(() => {
       return GameFlowController.isGameInProgress(this.state);

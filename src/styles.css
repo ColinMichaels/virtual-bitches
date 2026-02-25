@@ -2682,3 +2682,105 @@ button.danger:hover:not(:disabled) {
     min-width: unset;
   }
 }
+
+/* ========================
+   Loading Screen
+   ======================== */
+
+.loading-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.loading-screen.visible {
+  opacity: 1;
+}
+
+.loading-screen.fade-out {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.loading-content {
+  text-align: center;
+  max-width: 400px;
+  padding: 0 20px;
+}
+
+.loading-spinner {
+  margin-bottom: 30px;
+}
+
+.dice-icon {
+  font-size: 64px;
+  animation: dice-spin 2s linear infinite;
+  display: inline-block;
+}
+
+@keyframes dice-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-title {
+  font-size: 2rem;
+  margin-bottom: 20px;
+  color: #ffffff;
+  font-family: 'Caprasimo', cursive, system-ui;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.loading-status {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 25px;
+  min-height: 24px;
+}
+
+.loading-progress-container {
+  width: 100%;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.loading-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #4CAF50, #8BC34A);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+}
+
+.loading-progress-text {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-variant-numeric: tabular-nums;
+}
+
+@media screen and (max-width: 768px) {
+  .loading-title {
+    font-size: 1.5rem;
+  }
+
+  .dice-icon {
+    font-size: 48px;
+  }
+
+  .loading-content {
+    padding: 0 30px;
+  }
+}

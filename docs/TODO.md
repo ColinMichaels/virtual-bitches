@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Code Refactoring Complete)
+**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Octagon Table Texture & Loading Screen Complete)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -189,6 +189,31 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 
 ## 🟢 Low Priority / Backlog
 
+### Future Features (See FUTURE-FEATURES.md)
+
+#### Chaos Gameplay Mechanics System
+- **Status**: DOCUMENTED (not yet implemented)
+- **Complexity**: Very High
+- **Description**: Multiplayer "psychosocial warfare" system with player attacks, distractions, and time pressure
+- **Documentation**: Complete specification in `docs/CHAOS-GAMEPLAY-MECHANICS.md` (700+ lines)
+- **Key Features**:
+  - 50+ attack abilities (Visual, Audio, UI, Dice, Time manipulation)
+  - Time Attack game mode variants (7 different formats)
+  - Insult & Taunt System (300+ taunts, AI generation, emotes)
+  - Chaos Points economy with ability progression
+  - 7 game modes including Team Chaos and Survival
+  - Comprehensive anti-toxicity systems
+- **Dependencies**:
+  - Requires 8-player multiplayer mode complete
+  - Backend WebSocket infrastructure
+  - User authentication and profiles
+  - Time attack game mode implementation
+- **Implementation Priority**: Post-multiplayer (Phase 4+)
+- **AI Prompt**:
+  ```
+  Implement Chaos Gameplay Mechanics per docs/CHAOS-GAMEPLAY-MECHANICS.md. Start with ability system (src/chaos/abilities.ts), Chaos Points economy (src/chaos/economy.ts), and ability bar UI (src/chaos/ui/AbilityBar.ts). Follow the technical implementation section for file structure and type definitions. Ensure all anti-toxicity safeguards are implemented.
+  ```
+
 ### Performance Optimizations
 
 #### Reduce Bundle Size
@@ -346,6 +371,43 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ---
 
 ## ✅ Recently Completed
+
+### Octagon Table Texture & Asset Loading Infrastructure (2026-02-24 Late Evening)
+- ✅ **Custom octagon table texture implementation**
+  - Applied user-provided 1024×1024 square felt texture to octagon play area
+  - Perfect radial UV mapping (1:1 scale, no distortion or stretching)
+  - Automatic procedural fallback if texture fails to load
+  - Error handling with console logging for debugging
+- ✅ **Splash screen gradient background**
+  - Added atmospheric gradient matching game scene (blue-gray to dark)
+  - Visual consistency across splash → loading → game screens
+- ✅ **Loading screen component system**
+  - Created `src/ui/loadingScreen.ts` with progress tracking
+  - Task-based and manual progress modes
+  - Animated dice spinner with gradient background
+  - Ready for integration with asset loading
+- ✅ **Service worker & asset loading strategy documentation**
+  - Created `docs/SERVICE-WORKER-STRATEGY.md` (450+ lines)
+  - Comprehensive PWA optimization roadmap
+  - PRPL pattern implementation guide
+  - Multiplayer preparation with Web Workers strategy
+  - Phase-based implementation timeline
+- ✅ **Texture optimization documentation**
+  - Created `docs/TEXTURE-OPTIMIZATION.md`
+  - WebP conversion guidelines (2.2 MB → 300 KB)
+  - Power-of-2 dimension recommendations
+  - KTX2/Basis Universal for future scaling
+  - Tool recommendations and comparison tables
+- **Files Created**:
+  - `src/ui/loadingScreen.ts` - Progress tracking loading screen
+  - `docs/SERVICE-WORKER-STRATEGY.md` - Comprehensive asset loading strategy
+  - `docs/TEXTURE-OPTIMIZATION.md` - Texture optimization guide
+  - `public/assets/textures/table-felt.png` - Custom 1024×1024 table texture
+- **Files Modified**:
+  - `src/ui/splash.ts` - Added gradient background
+  - `src/render/scene.ts` - Custom texture loading with fallback
+  - `src/styles.css` - Loading screen styles
+- **Result**: Production-ready custom branding on game table, infrastructure for future loading optimization
 
 ### Fallback Theme System & Debug Enhancements (2026-02-24 Evening)
 - ✅ **Implemented fallback theme system**

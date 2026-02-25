@@ -43,6 +43,17 @@ const DIE_SIZES: Record<DieKind, number> = {
   d20: 1.4,
 };
 
+// Collision radii for dice (scaled size * 10 * buffer factor)
+// Used for spacing calculations to prevent overlaps
+const DIE_COLLISION_RADII: Record<DieKind, number> = {
+  d4: 1.2 * 10 * 0.6,  // 7.2 units
+  d6: 1.0 * 10 * 0.6,  // 6.0 units
+  d8: 1.1 * 10 * 0.6,  // 6.6 units
+  d10: 1.1 * 10 * 0.6, // 6.6 units
+  d12: 1.3 * 10 * 0.6, // 7.8 units
+  d20: 1.4 * 10 * 0.6, // 8.4 units
+};
+
 // Individual die colors - muted palette for better visibility
 const DIE_COLORS: Color3[] = [
   Color3.FromHexString("#2a2a2a"), // Dark gray
@@ -72,7 +83,7 @@ const SCORE_ANIMATION_DELAY_MS = 400;
 const DROP_START_HEIGHT = 15;
 const DROP_END_HEIGHT = 0.6;
 const COLLIDER_SCALE_FACTOR = 0.9;
-const RANDOM_POSITION_SPREAD = 2.5; // Increased from 1.5 for more randomization
+const RANDOM_POSITION_SPREAD = 2.0; // Base randomization spread (modulated per die size)
 
 // Rotation detection constants
 const RAYCAST_UP_DOT_THRESHOLD = 0.35; // ~69 degrees tolerance for finding faces during cache building
@@ -1005,11 +1016,30 @@ export class DiceRenderer {
       return;
     }
 
-    // Arrange in grid
-    const cols = Math.ceil(Math.sqrt(activeDice.length));
-    const spacing = 2.5;
+    // Shuffle dice order for randomized positioning on grid
+    // Fisher-Yates shuffle to randomize which dice land where
+    const shuffledDice = [...activeDice];
+    for (let i = shuffledDice.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledDice[i], shuffledDice[j]] = [shuffledDice[j], shuffledDice[i]];
+    }
 
-    activeDice.forEach((die, i) => {
+    // Calculate dynamic spacing based on largest die in this roll
+    const maxDieSize = Math.max(...shuffledDice.map(d => DIE_SIZES[d.def.kind]));
+    const maxCollisionRadius = Math.max(...shuffledDice.map(d => DIE_COLLISION_RADII[d.def.kind]));
+
+    // Base spacing accounts for largest die + buffer
+    // Use collision radius * 2 for diameter, plus 20% spacing buffer
+    const baseSpacing = (maxCollisionRadius * 2) / 10; // Divide by 10 to get world units
+    const spacing = Math.max(baseSpacing * 1.2, 3.0); // Minimum 3.0 units, 20% buffer
+
+    // Arrange in grid
+    const cols = Math.ceil(Math.sqrt(shuffledDice.length));
+
+    // Track placed dice positions for collision detection
+    const placedPositions: Array<{ x: number; z: number; radius: number }> = [];
+
+    shuffledDice.forEach((die, i) => {
       let mesh = this.meshes.get(die.id);
       if (!mesh) {
         mesh = this.createDie(die);
@@ -1018,16 +1048,70 @@ export class DiceRenderer {
       const row = Math.floor(i / cols);
       const col = i % cols;
       const offsetX = (col - cols / 2) * spacing;
-      const offsetZ = (row - Math.floor(activeDice.length / cols) / 2) * spacing;
+      const offsetZ = (row - Math.floor(shuffledDice.length / cols) / 2) * spacing;
 
-      const randomX = offsetX + (Math.random() - 0.5) * RANDOM_POSITION_SPREAD;
-      const randomZ = offsetZ + (Math.random() - 0.5) * RANDOM_POSITION_SPREAD;
+      // Size-based random spread: smaller dice get more spread, larger stay closer to grid
+      const dieSize = DIE_SIZES[die.def.kind];
+      const dieRadius = DIE_COLLISION_RADII[die.def.kind] / 10; // Convert to world units
+      const spreadFactor = 2.0 - (dieSize - 1.0); // d6(1.0)→2.0, d20(1.4)→1.6
+      const randomSpread = RANDOM_POSITION_SPREAD * Math.max(spreadFactor, 0.8);
 
-      // Add variation to drop height for more natural randomness
-      const startY = DROP_START_HEIGHT + (Math.random() - 0.5) * 3;
+      // Try to find a non-overlapping position (max 10 attempts)
+      let finalX = offsetX;
+      let finalZ = offsetZ;
+      let attempts = 0;
+      const maxAttempts = 10;
+
+      while (attempts < maxAttempts) {
+        const randomX = offsetX + (Math.random() - 0.5) * randomSpread;
+        const randomZ = offsetZ + (Math.random() - 0.5) * randomSpread;
+
+        // Check collision with already placed dice
+        let hasCollision = false;
+        for (const placed of placedPositions) {
+          const dx = randomX - placed.x;
+          const dz = randomZ - placed.z;
+          const distance = Math.sqrt(dx * dx + dz * dz);
+          const minDistance = dieRadius + placed.radius;
+
+          if (distance < minDistance) {
+            hasCollision = true;
+            break;
+          }
+        }
+
+        if (!hasCollision) {
+          finalX = randomX;
+          finalZ = randomZ;
+          break;
+        }
+
+        attempts++;
+      }
+
+      // If all attempts failed, fall back to grid position (no random spread)
+      if (attempts === maxAttempts) {
+        finalX = offsetX;
+        finalZ = offsetZ;
+      }
+
+      // Record this position for collision checking
+      placedPositions.push({ x: finalX, z: finalZ, radius: dieRadius });
+
+      // Staggered drop timing creates cascading effect (dice don't all drop at once)
+      const dropDelay = i * 2; // 2 frames delay per die (cascade effect)
+      const animDuration = 31 + Math.random() * 7; // Slightly faster animation
+
+      // Random starting position (clustered center) that moves to final position
+      // Creates "scrambling" effect as dice spread out while falling
+      const startClusterRadius = 3; // Start in tight cluster
+      const startX = (Math.random() - 0.5) * startClusterRadius;
+      const startZ = (Math.random() - 0.5) * startClusterRadius;
+      const startY = DROP_START_HEIGHT + (Math.random() - 0.5) * 4; // Varied heights
       const endY = DROP_END_HEIGHT;
 
-      mesh.position = new Vector3(randomX, startY, randomZ);
+      // Set initial position (clustered)
+      mesh.position = new Vector3(startX, startY, startZ);
 
       // Calculate rotation to show the rolled value face-up
       const baseRotation = this.getRotationForValue(die.def.kind, die.value);
@@ -1047,23 +1131,54 @@ export class DiceRenderer {
       );
       mesh.rotation = startRotation;
 
-      const animDuration = 30 + Math.random() * 10;
+      // Horizontal X movement animation (scrambling sideways)
+      const xAnim = new Animation(
+        `${die.id}-x`,
+        "position.x",
+        60,
+        Animation.ANIMATIONTYPE_FLOAT,
+        Animation.ANIMATIONLOOPMODE_CONSTANT
+      );
 
-      // Drop animation
-      const dropAnim = new Animation(
-        `${die.id}-drop`,
+      // Add mid-point for more interesting trajectory
+      const midX = (startX + finalX) / 2 + (Math.random() - 0.5) * 2;
+      xAnim.setKeys([
+        { frame: dropDelay, value: startX },
+        { frame: dropDelay + animDuration * 0.4, value: midX },
+        { frame: dropDelay + animDuration, value: finalX },
+      ]);
+
+      // Horizontal Z movement animation (scrambling forward/back)
+      const zAnim = new Animation(
+        `${die.id}-z`,
+        "position.z",
+        60,
+        Animation.ANIMATIONTYPE_FLOAT,
+        Animation.ANIMATIONLOOPMODE_CONSTANT
+      );
+
+      const midZ = (startZ + finalZ) / 2 + (Math.random() - 0.5) * 2;
+      zAnim.setKeys([
+        { frame: dropDelay, value: startZ },
+        { frame: dropDelay + animDuration * 0.4, value: midZ },
+        { frame: dropDelay + animDuration, value: finalZ },
+      ]);
+
+      // Vertical drop animation with bounce
+      const yAnim = new Animation(
+        `${die.id}-y`,
         "position.y",
         60,
         Animation.ANIMATIONTYPE_FLOAT,
         Animation.ANIMATIONLOOPMODE_CONSTANT
       );
 
-      dropAnim.setKeys([
-        { frame: 0, value: startY },
-        { frame: animDuration * 0.7, value: endY - 0.1 },
-        { frame: animDuration * 0.85, value: endY + 0.3 },
-        { frame: animDuration * 0.95, value: endY + 0.1 },
-        { frame: animDuration, value: endY },
+      yAnim.setKeys([
+        { frame: dropDelay, value: startY },
+        { frame: dropDelay + animDuration * 0.6, value: endY - 0.1 },
+        { frame: dropDelay + animDuration * 0.75, value: endY + 0.3 },
+        { frame: dropDelay + animDuration * 0.88, value: endY + 0.1 },
+        { frame: dropDelay + animDuration, value: endY },
       ]);
 
       // Rotation animation
@@ -1076,24 +1191,26 @@ export class DiceRenderer {
       );
 
       const midRotation = new Vector3(
-        startRotation.x + (Math.random() - 0.5) * Math.PI * 4,
-        startRotation.y + (Math.random() - 0.5) * Math.PI * 6,
-        startRotation.z + (Math.random() - 0.5) * Math.PI * 4
+        startRotation.x + (Math.random() - 0.5) * Math.PI * 2,
+        startRotation.y + (Math.random() - 0.5) * Math.PI * 3,
+        startRotation.z + (Math.random() - 0.5) * Math.PI * 2
       );
 
       rotAnim.setKeys([
-        { frame: 0, value: startRotation },
-        { frame: animDuration * 0.25, value: midRotation },
-        { frame: animDuration, value: finalRotation },
+        { frame: dropDelay, value: startRotation },
+        { frame: dropDelay + animDuration * 0.25, value: midRotation },
+        { frame: dropDelay + animDuration, value: finalRotation },
       ]);
 
       const ease = new CubicEase();
       ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
-      dropAnim.setEasingFunction(ease);
+      xAnim.setEasingFunction(ease);
+      zAnim.setEasingFunction(ease);
+      yAnim.setEasingFunction(ease);
       rotAnim.setEasingFunction(ease);
 
-      mesh.animations = [dropAnim, rotAnim];
-      this.scene.beginAnimation(mesh, 0, animDuration, false, ANIMATION_SPEED, () => {
+      mesh.animations = [xAnim, zAnim, yAnim, rotAnim];
+      this.scene.beginAnimation(mesh, 0, dropDelay + animDuration, false, ANIMATION_SPEED, () => {
         this.updateDie(die);
         // Validate die rotation after animation completes
         this.validateDieRotation(die, mesh);
@@ -1117,7 +1234,11 @@ export class DiceRenderer {
     const maxGridDice = gridCols * gridRows;
     const spacingX = 1.5;
     const spacingZ = 1.5;
-    const baseX = 12;
+
+    // Calculate score area position relative to current player (seat 0)
+    // Position is between table center and player seat
+    const scoreAreaDistance = 9; // Distance from center toward player
+    const baseX = scoreAreaDistance; // Front of table (seat 0 is at angle 0)
     const baseZ = -3;
     const baseY = DROP_END_HEIGHT;
 
