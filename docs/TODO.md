@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Octagon Table Texture & Loading Screen Complete)
+**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Particle System Implementation Complete)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -76,6 +76,42 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ---
 
 ## 🟡 Medium Priority
+
+### Particle System (Phase 1 - COMPLETE) ✨
+- **Status**: ✅ Phase 1 COMPLETE (2026-02-24)
+- **Complexity**: High
+- **Description**: Centralized, event-driven particle system for all visual effects
+- **Documentation**:
+  - Complete specification in `docs/PARTICLE-SYSTEM.md` (2000+ lines)
+  - Integration docs updated in `docs/CAMERA-ATTACKS-INTEGRATION.md`
+- **Phase 1 Implementation**:
+  - ✅ ParticleService with effect registry and pooling
+  - ✅ Event-driven architecture with custom events
+  - ✅ Quality settings (low/medium/high/ultra) with auto-detection
+  - ✅ Network synchronization hooks for multiplayer
+  - ✅ Integration with Camera, Player, and Chaos systems
+  - ✅ Particle effect definitions (burst, trail, ambient, attack)
+  - ✅ Preset helpers for game events, player actions, and chaos attacks
+  - ✅ Refactored existing scene.ts particle usage
+- **Files Created**:
+  - `src/services/particleService.ts` - Core service (800+ lines)
+  - `src/particles/effects/burstEffects.ts` - Burst particle definitions
+  - `src/particles/effects/trailEffects.ts` - Trail particle definitions
+  - `src/particles/effects/ambientEffects.ts` - Ambient particle definitions
+  - `src/particles/effects/attackEffects.ts` - Attack particle definitions
+  - `src/particles/presets/gameEffects.ts` - Game event helpers
+  - `src/particles/presets/playerEffects.ts` - Player action helpers
+  - `src/particles/presets/chaosEffects.ts` - Chaos attack helpers
+  - `docs/PARTICLE-SYSTEM.md` - Complete documentation
+- **Files Modified**:
+  - `src/main.ts` - Initialize ParticleService and register effects
+  - `src/render/scene.ts` - Refactored to use ParticleService
+  - `docs/CAMERA-ATTACKS-INTEGRATION.md` - Added particle integration details
+- **Future Phases**:
+  - 🔒 Phase 2: Game event integration (score, bust, perfect, achievement)
+  - 🔒 Phase 3: Advanced effects (custom shaders, animated sprites, mesh particles)
+  - 🔒 Phase 4: Particle editor for custom effects
+- **Result**: Centralized particle system ready for game events, multiplayer attacks, and visual feedback
 
 ### Recently Completed (Session 2026-02-24)
 

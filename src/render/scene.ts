@@ -11,7 +11,6 @@ import {
   StandardMaterial,
   Color3,
   DynamicTexture,
-  ParticleSystem,
   Texture,
   Color4,
   Layer,
@@ -20,6 +19,7 @@ import { registerCustomShaders } from "./shaders.js";
 import { createOctagonMesh, calculatePlayerSeats, type PlayerSeat } from "./octagonGeometry.js";
 import { PlayerSeatRenderer } from "./playerSeats.js";
 import { cameraService, type CameraPosition } from "../services/cameraService.js";
+import { particleService } from "../services/particleService.js";
 
 // Register custom shaders once at module load
 registerCustomShaders();
@@ -445,65 +445,35 @@ export class GameScene {
 
   /**
    * Create particle burst effect at a specific position
+   * @deprecated Use particleService.emit() instead
    */
   createParticleBurst(position: Vector3, color: Color4 = new Color4(1, 0.8, 0, 1), count: number = 50) {
-    const particles = new ParticleSystem("particles", count, this.scene);
+    // Determine effect based on color
+    let effectId = "burst-gold"; // Default to gold
 
-    // Create a simple sphere for particle texture (procedural)
-    particles.particleTexture = new Texture("https://assets.babylonjs.com/textures/flare.png", this.scene);
+    if (color.g > 0.8) {
+      effectId = "burst-white"; // Greenish = complete/perfect
+    } else if (color.r > 0.9 && color.g < 0.3) {
+      effectId = "burst-red"; // Red = bust/error
+    }
 
-    // Emission
-    particles.emitter = position;
-    particles.minEmitBox = new Vector3(-0.2, 0, -0.2);
-    particles.maxEmitBox = new Vector3(0.2, 0, 0.2);
-
-    // Colors
-    particles.color1 = color;
-    particles.color2 = new Color4(color.r * 0.5, color.g * 0.5, color.b * 0.5, 1);
-    particles.colorDead = new Color4(color.r * 0.2, color.g * 0.2, color.b * 0.2, 0);
-
-    // Size
-    particles.minSize = 0.3;
-    particles.maxSize = 0.8;
-
-    // Life time
-    particles.minLifeTime = 0.5;
-    particles.maxLifeTime = 1.0;
-
-    // Emission rate
-    particles.emitRate = count;
-    particles.manualEmitCount = count;
-
-    // Speed
-    particles.minEmitPower = 3;
-    particles.maxEmitPower = 6;
-    particles.updateSpeed = 0.01;
-
-    // Direction
-    particles.direction1 = new Vector3(-1, 2, -1);
-    particles.direction2 = new Vector3(1, 4, 1);
-
-    // Gravity
-    particles.gravity = new Vector3(0, -9.8, 0);
-
-    // Start and stop
-    particles.start();
-
-    // Auto-dispose after 2 seconds
-    setTimeout(() => {
-      particles.stop();
-      setTimeout(() => particles.dispose(), 1000);
-    }, 100);
+    // Emit using ParticleService
+    particleService.emit({
+      effectId: effectId,
+      position: position,
+      options: {
+        scale: count / 50, // Scale based on requested count
+        networkSync: false,
+      },
+    });
   }
 
   /**
    * Create celebration effect for perfect roll or game complete
    */
   celebrateSuccess(type: "perfect" | "complete") {
-    const colors = {
-      perfect: new Color4(1, 0.84, 0, 1), // Gold
-      complete: new Color4(0.2, 1, 0.3, 1), // Green
-    };
+    const effectId = type === "perfect" ? "burst-white" : "burst-confetti";
+    const scale = type === "complete" ? 1.6 : 2.0;
 
     const positions = [
       new Vector3(-4, 1, 0),
@@ -514,7 +484,14 @@ export class GameScene {
 
     positions.forEach((pos, i) => {
       setTimeout(() => {
-        this.createParticleBurst(pos, colors[type], type === "complete" ? 80 : 50);
+        particleService.emit({
+          effectId: effectId,
+          position: pos,
+          options: {
+            scale: scale,
+            networkSync: false,
+          },
+        });
       }, i * 100);
     });
   }

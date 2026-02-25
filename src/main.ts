@@ -18,6 +18,9 @@ import { hapticsService } from "./services/haptics.js";
 import { pwaService } from "./services/pwa.js";
 import { settingsService } from "./services/settings.js";
 import { themeManager } from "./services/themeManager.js";
+import { initParticleService } from "./services/particleService.js";
+import { registerGameEffects } from "./particles/presets/gameEffects.js";
+import { registerChaosEffects } from "./particles/presets/chaosEffects.js";
 import { logger } from "./utils/logger.js";
 import { shouldShowHints, isUndoAllowed } from "./engine/modes.js";
 import { InputController, GameCallbacks } from "./controllers/InputController.js";
@@ -55,6 +58,11 @@ class Game implements GameCallbacks {
     const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
     this.scene = new GameScene(canvas);
     this.diceRenderer = new DiceRenderer(this.scene.scene);
+
+    // Initialize particle system
+    initParticleService(this.scene.scene);
+    registerGameEffects();
+    registerChaosEffects();
     this.hud = new HUD();
     this.diceRow = new DiceRow((dieId) => this.handleDieClick(dieId), this.diceRenderer as any);
 

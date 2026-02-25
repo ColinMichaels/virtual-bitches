@@ -47,6 +47,8 @@ Traditional game attacks show visual effects ON the screen (overlays, particles,
 - Chaos Gameplay Mechanics (Documented): Attack framework, Chaos Points economy
 - Screen Shake attack specified in CHAOS-GAMEPLAY-MECHANICS.md
 
+✅ **Particle System**: Event-driven particle effects for visual feedback (see PARTICLE-SYSTEM.md)
+
 ❌ **Missing Components**:
 - Camera manipulation API for real-time effects
 - Drunk vision effects (blur, double vision, wobble)
@@ -243,6 +245,14 @@ export class CameraEffectsService {
         this.startDrunkBlackout(effectId, duration);
         break;
     }
+
+    // Add particle effects for visual feedback
+    // See: PARTICLE-SYSTEM.md - Chaos Attack Integration
+    import { emitDrunkAttack } from '../particles/presets/chaosEffects.js';
+    const sparklesId = emitDrunkAttack(this.targetPlayerId, severity, duration);
+
+    // Store sparkles ID for cleanup
+    this.activeParticleEffects.set(effectId, sparklesId);
 
     return effectId;
   }
@@ -1076,6 +1086,22 @@ src/
 │           ├── Hammered mode
 │           ├── Blackout mode
 │           └── Control inversion
+│
+├── particles/                      (EXISTING)
+│   ├── presets/
+│   │   └── chaosEffects.ts         (EXISTING - EXTENDED)
+│   │       ├── emitShakeAttack()
+│   │       ├── emitDrunkAttack()
+│   │       ├── emitSpinAttack()
+│   │       ├── emitBlindSpell()
+│   │       └── emitConfusionHex()
+│   │
+│   └── effects/
+│       └── attackEffects.ts        (EXISTING)
+│           ├── attack-shake-impact
+│           ├── attack-drunk-aura
+│           ├── attack-spin-impact
+│           └── attack-blind-flash
 │
 ├── ui/
 │   ├── chaosUpgradeMenu.ts        (NEW - 600 lines)
