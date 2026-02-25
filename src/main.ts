@@ -277,14 +277,22 @@ class Game implements GameCallbacks {
       return;
     }
 
-    if (die && die.inPlay && !die.scored && this.state.status === "ROLLED") {
-      audioService.playSfx("select");
-      hapticsService.select();
-      this.dispatch({ t: "TOGGLE_SELECT", dieId });
+    if (this.state.status === "ROLLED") {
+      // Valid die selection
+      if (die && die.inPlay && !die.scored) {
+        audioService.playSfx("select");
+        hapticsService.select();
+        this.dispatch({ t: "TOGGLE_SELECT", dieId });
 
-      // Notify tutorial of select action
-      if (tutorialModal.isActive()) {
-        tutorialModal.onPlayerAction('select');
+        // Notify tutorial of select action
+        if (tutorialModal.isActive()) {
+          tutorialModal.onPlayerAction('select');
+        }
+      } else {
+        // Invalid click - not a selectable die
+        notificationService.show("Select a Die", "warning");
+        audioService.playSfx("click");
+        hapticsService.invalid();
       }
     }
   }
