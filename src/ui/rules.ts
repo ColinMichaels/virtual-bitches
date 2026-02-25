@@ -38,7 +38,8 @@ export class RulesModal {
 
   private async loadRules(): Promise<void> {
     try {
-      const response = await fetch("/src/content/rules.md");
+      const basePath = import.meta.env.BASE_URL || './';
+      const response = await fetch(`${basePath}rules.md`);
       const markdown = await response.text();
       this.rulesContent = await marked.parse(markdown);
       this.renderRules();

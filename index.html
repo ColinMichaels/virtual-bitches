@@ -2,9 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#e94560">
     <meta name="description" content="BISCUITS - Push your luck dice game. Roll, score, and compete for the lowest total!">
+
+    <!-- iOS PWA Settings -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="BISCUITS">
+
     <title>BISCUITS - Push Your Luck Dice Game</title>
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
@@ -20,42 +26,131 @@
 <div id="app">
     <canvas id="renderCanvas"></canvas>
 
-    <div id="dice-row"></div>
+    <div id="unified-hud">
+        <div id="stats-bar">
+            <div class="stat-compact">
+                <span class="stat-label-compact">Roll</span>
+                <span class="stat-value-compact" id="roll-count">0</span>
+            </div>
+            <div class="stat-compact">
+                <span class="stat-label-compact">Score</span>
+                <span class="stat-value-compact" id="score">0</span>
+            </div>
+            <div class="stat-compact stat-remaining" id="dice-remaining">
+                <span class="stat-label-compact">Remaining</span>
+                <div class="stat-value-compact" id="pool-list"></div>
+            </div>
+            <div class="stat-compact" id="mode-indicator">
+                <button class="stat-value-compact mode-switcher" id="mode-display" title="Switch game mode">
+                    Normal
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
+                <div class="mode-dropdown" id="mode-dropdown" style="display: none;">
+                    <button class="mode-option" data-mode="easy">
+                        <span class="mode-name">Easy</span>
+                        <span class="mode-desc">Hints + Undo</span>
+                    </button>
+                    <button class="mode-option" data-mode="normal">
+                        <span class="mode-name">Normal</span>
+                        <span class="mode-desc">Standard Rules</span>
+                    </button>
+                    <button class="mode-option" data-mode="hard">
+                        <span class="mode-name">Hard</span>
+                        <span class="mode-desc">No Assists</span>
+                    </button>
+                </div>
+            </div>
+        </div>
 
-    <div id="hud">
-        <div class="stat">
-            <div class="stat-label">Roll</div>
-            <div class="stat-value" id="roll-count">0</div>
-        </div>
-        <div class="stat">
-            <div class="stat-label">Score</div>
-            <div class="stat-value" id="score">0</div>
-        </div>
-        <div id="dice-pool">
-            <div class="stat-label">Remaining</div>
-            <div id="pool-list"></div>
-        </div>
-        <div id="selected-info" style="display:none;">
-            <div><strong>Selected:</strong> <span id="selected-count">0</span></div>
-            <div><strong>Points:</strong> <span id="selected-points">0</span></div>
-        </div>
+        <div id="dice-row"></div>
     </div>
 
     <div id="controls">
         <button id="action-btn" class="primary">Roll Dice (Space)</button>
         <button id="deselect-btn" class="secondary" style="display: none;">Deselect All</button>
+        <button id="undo-btn" class="secondary" style="display: none;" title="Undo last selection">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                <path d="M3 7v6h6"/>
+                <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/>
+            </svg>
+            Undo
+        </button>
     </div>
 
-    <button id="settings-gear-btn" title="Settings (ESC)">
+    <!-- Mobile Menu Toggle Button (shown only on mobile) -->
+    <button id="mobile-menu-toggle" title="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+    </button>
+
+    <!-- Mobile Controls Menu Container -->
+    <div id="mobile-controls-menu" class="mobile-menu-closed">
+        <div class="mobile-menu-content">
+            <div class="mobile-menu-section">
+                <div class="mobile-menu-label">Camera View</div>
+                <div class="mobile-menu-buttons">
+                    <button class="camera-btn mobile-menu-btn" data-view="default" title="Default View">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                    <button class="camera-btn mobile-menu-btn" data-view="top" title="Top View">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="5" y="5" width="14" height="14"/>
+                            <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+                        </svg>
+                    </button>
+                    <button class="camera-btn mobile-menu-btn" data-view="side" title="Side View">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="8" y="5" width="8" height="14"/>
+                            <path d="M16 12h6M2 12h6"/>
+                        </svg>
+                    </button>
+                    <button class="camera-btn mobile-menu-btn" data-view="front" title="Front View">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="5" y="8" width="14" height="8"/>
+                            <path d="M12 16v6M12 2v6"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="mobile-menu-divider"></div>
+            <div class="mobile-menu-section">
+                <button id="mobile-settings-btn" class="mobile-menu-btn mobile-menu-action" title="Settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M12 1v6m0 6v6M5.6 5.6l4.2 4.2m4.4 4.4l4.2 4.2M1 12h6m6 0h6M5.6 18.4l4.2-4.2m4.4-4.4l4.2-4.2"/>
+                    </svg>
+                    <span>Settings</span>
+                </button>
+                <button id="mobile-leaderboard-btn" class="mobile-menu-btn mobile-menu-action" title="Leaderboard">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 3h7v7H3z"/>
+                        <path d="M14 3h7v7h-7z"/>
+                        <path d="M14 14h7v7h-7z"/>
+                        <path d="M3 14h7v7H3z"/>
+                    </svg>
+                    <span>Leaderboard</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Desktop Controls (hidden on mobile) -->
+    <button id="settings-gear-btn" class="desktop-only" title="Settings (ESC)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"/>
             <path d="M12 1v6m0 6v6M5.6 5.6l4.2 4.2m4.4 4.4l4.2 4.2M1 12h6m6 0h6M5.6 18.4l4.2-4.2m4.4-4.4l4.2-4.2"/>
         </svg>
     </button>
 
-    <!-- Debug tools removed - Use keyboard shortcuts: N for New Game, D for Debug View -->
-
-    <button id="leaderboard-btn" title="Leaderboard">
+    <button id="leaderboard-btn" class="desktop-only" title="Leaderboard">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 3h7v7H3z"/>
             <path d="M14 3h7v7h-7z"/>
@@ -64,7 +159,7 @@
         </svg>
     </button>
 
-    <div id="camera-controls">
+    <div id="camera-controls" class="desktop-only">
         <div class="camera-label">Camera</div>
         <div class="camera-buttons">
             <button class="camera-btn" data-view="default" title="Default View">

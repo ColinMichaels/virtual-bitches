@@ -7,22 +7,25 @@ import {
   isGameComplete,
   scoreDie,
 } from "../engine/rules.js";
-import { GameState, Action, GameConfig, DieState } from "../engine/types.js";
+import { GameState, Action, GameConfig, DieState, GameMode } from "../engine/types.js";
+import { DEFAULT_MODE } from "../engine/modes.js";
 
 /**
  * Create initial game state
  *
  * @param seed - Random seed for deterministic gameplay (used for replay/sharing)
  * @param config - Optional game configuration (add d20, d4, etc.)
+ * @param mode - Game mode (difficulty + variant), defaults to Normal/Classic
  * @returns New game state in READY status
  *
  * @example
  * ```ts
  * const game = createGame("my-seed-123");
  * const gameWithD20 = createGame("my-seed-123", { addD20: true });
+ * const easyGame = createGame("my-seed-123", {}, EASY_MODE);
  * ```
  */
-export function createGame(seed: string, config: GameConfig = {}): GameState {
+export function createGame(seed: string, config: GameConfig = {}, mode: GameMode = DEFAULT_MODE): GameState {
   const pool = buildDicePool(config);
   const dice = initializeDice(pool);
 
@@ -34,6 +37,7 @@ export function createGame(seed: string, config: GameConfig = {}): GameState {
     selected: new Set(),
     seed,
     actionLog: [],
+    mode,
   };
 }
 
@@ -124,6 +128,68 @@ export function reduce(state: GameState, action: Action): GameState {
 }
 
 /**
+ * Check if undo is available
+ *
+ * @param state - Current game state
+ * @returns True if the last scoring action can be undone
+ */
+export function canUndo(state: GameState): boolean {
+  if (state.actionLog.length === 0) return false;
+
+  // Find the last SCORE_SELECTED action
+  for (let i = state.actionLog.length - 1; i >= 0; i--) {
+    const action = state.actionLog[i];
+    if (action.t === "SCORE_SELECTED") {
+      return true;
+    }
+    // Stop if we hit a ROLL action (can't undo across rolls)
+    if (action.t === "ROLL") {
+      return false;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Undo the last scoring action
+ *
+ * Replays the game from the start up to (but not including) the last SCORE_SELECTED action.
+ * This allows players to undo their scoring decision and reselect different dice.
+ * Cannot undo across rolls - only the most recent scoring within current roll.
+ *
+ * @param state - Current game state
+ * @param config - Game configuration (must match original game)
+ * @returns New game state with last score undone, or original state if undo not possible
+ *
+ * @example
+ * ```ts
+ * state = reduce(state, { t: "SCORE_SELECTED" });
+ * state = undo(state, config); // Undoes the scoring, returns to ROLLED state
+ * ```
+ */
+export function undo(state: GameState, config: GameConfig = {}): GameState {
+  if (!canUndo(state)) return state;
+
+  // Find the last SCORE_SELECTED action and remove it plus any TOGGLE_SELECT after it
+  const actionLog = [...state.actionLog];
+  let lastScoreIndex = -1;
+
+  for (let i = actionLog.length - 1; i >= 0; i--) {
+    if (actionLog[i].t === "SCORE_SELECTED") {
+      lastScoreIndex = i;
+      break;
+    }
+  }
+
+  if (lastScoreIndex === -1) return state;
+
+  // Replay without the last SCORE_SELECTED action
+  const actionsWithoutLastScore = actionLog.slice(0, lastScoreIndex);
+  return replay(state.seed, actionsWithoutLastScore, config, state.mode);
+}
+
+/**
  * Replay a game from seed + action log
  *
  * Deterministically replays all actions from a game to reconstruct its final state.
@@ -132,6 +198,7 @@ export function reduce(state: GameState, action: Action): GameState {
  * @param seed - Random seed from the original game
  * @param actions - Array of actions to replay
  * @param config - Game configuration (must match original game)
+ * @param mode - Game mode (must match original game)
  * @returns Final game state after replaying all actions
  *
  * @example
@@ -147,9 +214,10 @@ export function reduce(state: GameState, action: Action): GameState {
 export function replay(
   seed: string,
   actions: Action[],
-  config: GameConfig = {}
+  config: GameConfig = {},
+  mode: GameMode = DEFAULT_MODE
 ): GameState {
-  let state = createGame(seed, config);
+  let state = createGame(seed, config, mode);
   for (const action of actions) {
     state = reduce(state, action);
   }

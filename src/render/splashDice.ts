@@ -160,7 +160,8 @@ export class SplashDiceRenderer {
    * Load material for a specific theme
    */
   private async loadMaterialForTheme(themeConfig: any, isFallback: boolean): Promise<void> {
-    const basePath = `/assets/themes/${themeConfig.systemName}`;
+    const baseUrl = import.meta.env.BASE_URL || './';
+    const basePath = `${baseUrl}assets/themes/${themeConfig.systemName}`;
     log.info(`Loading splash material from: ${basePath}`);
 
     // Load textures based on theme type

@@ -16,14 +16,191 @@
     "bumpLevel": 0.5,
     "specularPower": 32,
     "textureScale": {
-      "u": 1.9,
-      "v": 1.9
+      "u": 1.0,
+      "v": 1.0
     },
     "textureOffset": {
-      "u": 0.05,
-      "v": 0.05
+      "u": 0.0,
+      "v": 0.0
     }
   },
   "d4FaceDown": false,
-  "diceAvailable": ["d4","d6","d8","d10","d12","d20","d100"]
+  "diceAvailable": [
+    "d4",
+    "d6",
+    "d8",
+    "d10",
+    "d12",
+    "d20",
+    "d100"
+  ],
+  "perDieSettings": {
+    "d4": {
+      "positionOffset": [
+        0,
+        0,
+        -0.8524
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.16,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    },
+    "d6": {
+      "positionOffset": [
+        0,
+        0,
+        -0.4823
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.08,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    },
+    "d8": {
+      "positionOffset": [
+        0,
+        0,
+        -0.1119
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.1,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    },
+    "d10": {
+      "positionOffset": [
+        0,
+        0,
+        0.2585
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.12,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    },
+    "d12": {
+      "positionOffset": [
+        0,
+        0,
+        0.6432
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.12,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    },
+    "d20": {
+      "positionOffset": [
+        0,
+        0,
+        0.9985
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.2,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    },
+    "d100": {
+      "positionOffset": [
+        0,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.12,
+        "friction": 0.5,
+        "restitution": 0
+      }
+    }
+  },
+  "physicsEnabled": true,
+  "gravity": [
+    0,
+    -9.81,
+    0
+  ]
 }

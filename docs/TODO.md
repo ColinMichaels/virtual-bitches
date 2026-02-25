@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Keyboard Shortcuts & Mobile UX Complete)
+**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Code Refactoring Complete)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -30,41 +30,84 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - **Total Working Themes**: 8/8 (all themes functional)
 
 #### Smooth-Pip d6 Texture Mapping
-- **Status**: ⚠️ BLOCKED - Debug investigation needed
-- **Issue**: The d6 texture mapping in smooth-pip theme still not displaying correctly despite trying scale 2.0×2.0
-- **Context**:
-  - smooth-pip theme has simple 1-6 grid layout for d6 only
-  - All other dice (d4, d8, d10, d12, d20) correctly use smooth fallback with numbers
-  - Debug view sliders appear to work for standard materials but not color materials
-  - WeakMap texture cache implemented but texture updates may not be propagating to GPU
-- **What We Tried**:
-  - ✅ Implemented fallback theme system (d6 uses smooth-pip, others use smooth)
-  - ✅ Added texture scale/offset to theme configs (2.0×2.0 scale, 0.0×0.0 offset)
-  - ✅ Unified splash screen with same theme system
-  - ✅ Added debug logging to track texture updates
-  - ✅ Material variant switcher (light/dark) for color materials
-  - ✅ WeakMap-based texture cache for ShaderMaterials
-  - ⚠️ Debug view sliders connected but visual updates not visible for color materials
-- **Possible Root Causes**:
-  - BabylonJS textures may need `texture.updateSamplingMode()` or similar to force GPU update
-  - ShaderMaterial uniforms might need manual refresh after texture property changes
-  - d6 mesh UV coordinates might be incompatible with the texture layout
-  - Texture atlas layout for d6 might be completely different from what we expect
-- **Next Steps** (deferred):
-  - Check BabylonJS documentation for forcing texture updates on ShaderMaterial
-  - Verify d6 mesh UV coordinates in smoothDice.json geometry file
-  - Examine actual pips texture file to understand layout
-  - Consider per-die texture scale/offset overrides in theme config
-- **AI Prompt** (for future work):
-  ```
-  Investigate why smooth-pip d6 texture mapping isn't working despite scale 2.0×2.0. Check: (1) BabylonJS ShaderMaterial texture update requirements, (2) d6 mesh UV coordinates in geometry file, (3) actual texture layout in pips-light-rgba.png, (4) whether debug view slider changes are reaching the GPU. Consider adding per-die texture overrides to theme.config.json if d6 needs different values than d4.
-  ```
+- **Status**: ✅ RESOLVED with per-die texture overrides
+- **Root Cause**: d6 mesh UV coordinates only use 45% × 30% of texture space (U: 0.006-0.456, V: 0.002-0.304)
+- **Solution**: Implemented per-die texture override system
+- **Implementation**:
+  - Added `perDieOverrides` field to theme.config.json for per-die texture scale/offset
+  - d6 now uses scale 2.22×3.31 with offset -0.01×-0.01 (calculated from UV analysis)
+  - Updated `DiceRenderer.createDie()` to clone materials and apply per-die overrides
+  - Works with both StandardMaterial and ShaderMaterial (via texture cache)
+- **Files Modified**:
+  - `public/assets/themes/smooth-pip/theme.config.json` - Added perDieOverrides.d6
+  - `src/render/dice.ts` - Implemented per-die texture override logic in createDie()
+- **Result**: d6 pips now display correctly with proper UV scaling!
 
 ---
 
 ## 🟡 Medium Priority
 
 ### Recently Completed (Session 2026-02-24)
+
+#### Code Refactoring - Controllers Pattern
+- **Status**: ✅ COMPLETE
+- **Objective**: Extract main.ts into focused controllers to reduce complexity
+- **Results**:
+  - Reduced main.ts from **954 lines to 570 lines** (40% reduction)
+  - Extracted 3 new controllers totaling ~600 lines
+  - Improved separation of concerns and testability
+- **New Files Created**:
+  - `src/controllers/InputController.ts` (~326 lines)
+    - Handles all user input: buttons, keyboard, mobile menu
+    - Uses callback interface pattern for loose coupling
+  - `src/controllers/GameFlowController.ts` (~130 lines)
+    - Manages game lifecycle: initialization, new games, mode switching
+    - Static utility methods (stateless design)
+  - `src/controllers/GameOverController.ts` (~143 lines)
+    - Handles end-game flow: score display, ranking, seed sharing
+    - Instance-based for DOM element management
+  - `src/utils/urlUtils.ts` (~24 lines)
+    - URL parsing and seed generation utilities
+- **Files Modified**:
+  - `src/main.ts` - Refactored to use controllers, implements GameCallbacks interface
+  - `docs/ARCHITECTURE.md` - Added Controllers Layer section
+  - `README.md` - Updated architecture diagram
+- **Design Patterns Applied**:
+  - Callback Interface Pattern (InputController)
+  - Static Utility Pattern (GameFlowController)
+  - Instance-based Controller (GameOverController)
+- **Build Status**: ✅ All TypeScript compilation passes
+- **Documentation**: ✅ Architecture docs updated
+
+#### Build System & GitHub Pages Deployment
+- **Status**: ✅ COMPLETE
+- **Implemented**:
+  - **Angular-style Build Process**:
+    - Added `vite-plugin-static-copy` for build-time file copying
+    - Created `copy:assets` script that runs before all dev/build commands
+    - Source files stay in `src/content/`, generated copies in `public/` (dev) and `dist/` (build)
+    - Added `public/rules.md` to `.gitignore` (generated file)
+  - **GitHub Pages Path Fixes**:
+    - Changed all asset paths from absolute (`/`) to use `import.meta.env.BASE_URL`
+    - Works correctly for both root (`/`) and subdirectory (`/virtual-bitches/`) deployment
+    - Fixed paths in: geometryLoader, rules UI, themeManager, dice renderer, splash dice
+  - **TypeScript Configuration**:
+    - Added `"types": ["vite/client"]` for `import.meta.env` typings
+  - **Documentation**:
+    - Created `src/assets/README.md` explaining asset management system
+- **Files Modified**:
+  - `vite.config.ts` - Added static copy plugin
+  - `package.json` - Added `copy:assets` script to all build commands
+  - `tsconfig.json` - Added Vite client types
+  - `.gitignore` - Added generated files
+  - `src/render/geometryLoader.ts` - BASE_URL for smoothDice.json
+  - `src/ui/rules.ts` - BASE_URL for rules.md
+  - `src/services/themeManager.ts` - BASE_URL for theme paths
+  - `src/render/dice.ts` - BASE_URL for material loading
+  - `src/render/splashDice.ts` - BASE_URL for splash materials
+- **Files Created**:
+  - `src/assets/README.md` - Asset management documentation
+- **Result**: Clean build system with no file duplication, works on GitHub Pages subdirectories
 
 #### UI Cleanup - Keyboard Shortcuts
 - **Status**: ✅ COMPLETE

@@ -21,10 +21,204 @@
     "textureOffset": {
       "u": 0.0,
       "v": 0.0
+    },
+    "perDieOverrides": {
+      "d6": {
+        "textureScale": {
+          "u": 2.22,
+          "v": 3.31
+        },
+        "textureOffset": {
+          "u": -0.01,
+          "v": -0.01
+        }
+      }
     }
   },
-  "diceAvailable": ["d4", "d6", "d8", "d10", "d12", "d20"],
+  "diceAvailable": [
+    "d4",
+    "d6",
+    "d8",
+    "d10",
+    "d12",
+    "d20"
+  ],
   "fallbackTheme": "smooth",
-  "useFallbackFor": ["d4", "d8", "d10", "d12", "d20"],
-  "description": "Simple pip texture for d6 only. All other dice use smooth theme with numbers."
+  "useFallbackFor": [
+    "d4",
+    "d8",
+    "d10",
+    "d12",
+    "d20"
+  ],
+  "description": "Simple pip texture for d6 only. All other dice use smooth theme with numbers.",
+  "perDieSettings": {
+    "d4": {
+      "positionOffset": [
+        0.6,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.07,
+        "friction": 0.8,
+        "restitution": 0
+      }
+    },
+    "d6": {
+      "positionOffset": [
+        0.4,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.085,
+        "friction": 0.8,
+        "restitution": 0
+      }
+    },
+    "d8": {
+      "positionOffset": [
+        0.2,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.082,
+        "friction": 0.8,
+        "restitution": 0
+      }
+    },
+    "d10": {
+      "positionOffset": [
+        0,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.082,
+        "friction": 0.8,
+        "restitution": 0
+      }
+    },
+    "d12": {
+      "positionOffset": [
+        -0.2,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.09,
+        "friction": 0.8,
+        "restitution": 0
+      }
+    },
+    "d20": {
+      "positionOffset": [
+        -0.4,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.1,
+        "friction": 0.8,
+        "restitution": 0
+      }
+    },
+    "d100": {
+      "positionOffset": [
+        0,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        0,
+        0,
+        0,
+        -1
+      ],
+      "scaling": [
+        1,
+        1,
+        1
+      ],
+      "physics": {
+        "mass": 0.082,
+        "friction": 0.8,
+        "restitution": 0
+      }
+    }
+  },
+  "physicsEnabled": true,
+  "gravity": [
+    0,
+    -9.81,
+    0
+  ]
 }

@@ -36,71 +36,287 @@ h1, h2, h3, h4, h5, h6 {
   touch-action: none;
 }
 
-/* Left Sidebar HUD */
-#hud {
+/* Unified HUD - Full Width at Top */
+#unified-hud {
   position: absolute;
-  top: max(20px, env(safe-area-inset-top));
-  left: max(20px, env(safe-area-inset-left));
-  background: rgba(0,0,0,0.7);
-  padding: 20px;
-  border-radius: 8px;
-  min-width: 200px;
+  top: max(10px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  right: max(10px, env(safe-area-inset-right));
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  z-index: 50;
 }
 
-.stat {
-  margin: 8px 0;
+#stats-bar {
+  display: flex;
+  gap: 24px;
+  padding: 10px 20px;
+  background: rgba(0,0,0,0.8);
+  border-radius: 8px 8px 0 0;
+  align-items: center;
 }
 
-.stat-label {
-  font-size: 12px;
+.stat-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-label-compact {
+  font-size: 11px;
   opacity: 0.7;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
-.stat-value {
-  font-size: 24px;
+.stat-value-compact {
+  font-size: 20px;
   font-weight: 700;
   color: #e94560;
 }
 
-#dice-pool {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255,255,255,0.2);
+/* Mode indicator styling */
+#mode-indicator {
+  margin-left: auto;
+  position: relative;
 }
 
-.die-count {
-  display: flex;
-  justify-content: space-between;
-  margin: 4px 0;
+.mode-switcher {
   font-size: 14px;
-}
-
-#selected-info {
-  margin-top: 16px;
-  padding: 12px;
-  background: rgba(233, 69, 96, 0.2);
+  padding: 4px 12px;
   border-radius: 4px;
-  font-size: 14px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
 }
 
-/* Top Center - 2D Dice Row */
-#dice-row {
+.mode-switcher:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.mode-switcher.mode-easy {
+  background: rgba(135, 206, 235, 0.3);
+  color: #87CEEB;
+  border-color: rgba(135, 206, 235, 0.5);
+}
+
+.mode-switcher.mode-easy:hover {
+  background: rgba(135, 206, 235, 0.4);
+}
+
+.mode-switcher.mode-hard {
+  background: rgba(255, 69, 0, 0.3);
+  color: #FF6347;
+  border-color: rgba(255, 69, 0, 0.5);
+}
+
+.mode-switcher.mode-hard:hover {
+  background: rgba(255, 69, 0, 0.4);
+}
+
+.mode-dropdown {
   position: absolute;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: calc(100% + 8px);
+  right: 0;
+  background: rgba(0, 0, 0, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 8px;
+  min-width: 180px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.mode-option {
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: all 0.2s;
+}
+
+.mode-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.mode-option[data-mode="easy"]:hover {
+  background: rgba(135, 206, 235, 0.2);
+  border-color: rgba(135, 206, 235, 0.5);
+}
+
+.mode-option[data-mode="hard"]:hover {
+  background: rgba(255, 69, 0, 0.2);
+  border-color: rgba(255, 69, 0, 0.5);
+}
+
+.mode-option.active {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.mode-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mode-desc {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* Dice remaining inline display */
+.stat-remaining {
+  flex: 1;
+
+}
+
+.stat-remaining #pool-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 12px;
+  color: #fff;
+}
+
+.stat-remaining .die-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+/* Dice Row - Full width, part of unified HUD */
+#dice-row {
+  position: relative;
   display: flex;
   gap: 8px;
   padding: 12px;
   background: #06013b;
   background: linear-gradient(64deg, rgb(60, 54, 54) 0%, rgba(49, 49, 117, 1) 42%, rgba(71, 71, 71, 1) 100%);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.3);
+  border-radius: 0;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
   flex-wrap: wrap;
-  max-width: 80%;
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 84px;
+}
+
+/* Die type divider - separates different die types */
+.die-type-divider {
+  width: 2px;
+  height: 50px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(255, 255, 255, 0.3) 20%,
+    rgba(255, 255, 255, 0.3) 80%,
+    transparent
+  );
+  margin: auto 8px;
+  align-self: center;
+}
+
+/* Toggle button for HUD details */
+#hud-toggle-btn {
+  background: rgba(0,0,0,0.8);
+  border: none;
+  padding: 4px 16px;
+  cursor: pointer;
+  border-radius: 0 0 8px 8px;
+  transition: all 0.2s;
+  color: #fff;
+  display: flex;
+  align-items: center;
   justify-content: center;
+}
+
+#hud-toggle-btn svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s;
+}
+
+#hud-toggle-btn:hover {
+  background: rgba(233, 69, 96, 0.8);
+}
+
+/* HUD Details - Collapsible section */
+#hud-details {
+  background: rgba(0,0,0,0.9);
+  padding: 12px 20px;
+  border-radius: 0 0 8px 8px;
+  max-height: 300px;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, padding 0.3s, opacity 0.3s;
+  opacity: 1;
+  width: 100%;
+}
+
+#hud-details.collapsed {
+  max-height: 0;
+  padding: 0 20px;
+  opacity: 0;
+}
+
+/* Rotate chevron when expanded */
+#hud-toggle-btn.expanded svg {
+  transform: rotate(180deg);
+}
+
+#dice-pool {
+  margin-bottom: 12px;
+}
+
+#dice-pool .stat-label {
+  font-size: 11px;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+#pool-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.die-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+#selected-info {
+  padding: 10px;
+  background: rgba(233, 69, 96, 0.3);
+  border-radius: 4px;
+  font-size: 13px;
+  text-align: center;
 }
 
 .die-wrapper {
@@ -212,6 +428,42 @@ h1, h2, h3, h4, h5, h6 {
   text-shadow: 0 1px 3px rgba(0,0,0,1);
   padding: 2px 8px;
   border-radius: 3px;
+  transition: color 0.3s, text-shadow 0.3s, background 0.3s;
+}
+
+/* Hint system - point value colors */
+/* Perfect choice - green (0 points) */
+.die-2d .points.hint-perfect {
+  color: #00FF7F;
+  background: rgba(0, 255, 127, 0.25);
+  text-shadow: 0 0 10px rgba(0, 255, 127, 0.9),
+               0 0 15px rgba(0, 255, 127, 0.6),
+               0 1px 3px rgba(0,0,0,1);
+  font-weight: 800;
+}
+
+/* Best choice - gold highlight */
+.die-2d .points.hint-best {
+  color: #FFD700;
+  background: rgba(255, 215, 0, 0.2);
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.8),
+               0 0 12px rgba(255, 215, 0, 0.5),
+               0 1px 3px rgba(0,0,0,1);
+  font-weight: 700;
+}
+
+/* Good choice - light blue */
+.die-2d .points.hint-good {
+  color: #87CEEB;
+  background: rgba(135, 206, 235, 0.2);
+  text-shadow: 0 0 6px rgba(135, 206, 235, 0.6),
+               0 1px 3px rgba(0,0,0,1);
+}
+
+/* Normal/poor choice - default white */
+.die-2d .points.hint-normal {
+  color: #ffffff;
+  opacity: 0.9;
 }
 
 .die-wrapper .kind {
@@ -264,10 +516,11 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Settings Gear Button - Top Right */
+/* Settings and Leaderboard Buttons - Bottom Right (grouped together) */
 #settings-gear-btn {
   position: absolute;
-  top: max(20px, env(safe-area-inset-top));
-  right: max(20px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  right: max(80px, calc(env(safe-area-inset-right) + 60px));
   width: 50px;
   height: 50px;
   padding: 12px;
@@ -298,10 +551,9 @@ h1, h2, h3, h4, h5, h6 {
   transform: rotate(90deg) scale(0.95);
 }
 
-/* Leaderboard Button - Top Right (below settings) */
 #leaderboard-btn {
   position: absolute;
-  top: max(80px, calc(env(safe-area-inset-top) + 60px));
+  bottom: max(20px, env(safe-area-inset-bottom));
   right: max(20px, env(safe-area-inset-right));
   width: 50px;
   height: 50px;
@@ -389,6 +641,19 @@ h1, h2, h3, h4, h5, h6 {
 .camera-btn:active {
   transform: scale(0.95);
   background: rgba(255,255,255,0.3);
+}
+
+/* Mobile Menu - Hidden by default on desktop */
+#mobile-menu-toggle {
+  display: none;
+}
+
+#mobile-controls-menu {
+  display: none;
+}
+
+.desktop-only {
+  display: block;
 }
 
 /* Bottom Controls */
@@ -888,9 +1153,45 @@ button.danger:hover:not(:disabled) {
 }
 
 /* Tutorial Modal */
+.tutorial-modal {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  pointer-events: none !important; /* Allow clicks through */
+  z-index: 2000 !important;
+  display: none;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  padding-top: 40px;
+}
+
+.tutorial-modal .tutorial-backdrop {
+  display: none !important; /* Remove blocking backdrop */
+}
+
 .tutorial-content {
-  max-width: 600px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
   text-align: center;
+  pointer-events: auto !important; /* Re-enable clicks on content */
+  background: rgba(20, 20, 35, 0.98);
+  padding: 24px;
+  border-radius: 16px;
+  border: 2px solid rgba(255, 215, 0, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+@media (max-width: 768px) {
+  .tutorial-content {
+    width: 95%;
+    padding: 16px;
+    max-width: none;
+    max-height: 50vh; /* Reduced height on mobile to avoid covering controls */
+  }
 }
 
 .tutorial-icon {
@@ -917,6 +1218,24 @@ button.danger:hover:not(:disabled) {
   margin-bottom: 32px;
 }
 
+@media (max-width: 768px) {
+  .tutorial-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+  }
+
+  .tutorial-title {
+    font-size: 24px;
+    margin-bottom: 12px;
+  }
+
+  .tutorial-body {
+    font-size: 15px;
+    line-height: 1.5;
+    margin-bottom: 20px;
+  }
+}
+
 .tutorial-nav {
   display: flex;
   justify-content: space-between;
@@ -935,11 +1254,37 @@ button.danger:hover:not(:disabled) {
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.3);
   transition: all 0.3s;
+  cursor: pointer;
 }
 
 .tutorial-dot.active {
   background: #e94560;
   transform: scale(1.3);
+}
+
+/* Tutorial Spotlight Overlay */
+.tutorial-spotlight {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9998;
+  transition: all 0.3s ease;
+  border: 3px solid rgba(255, 215, 0, 0.8);
+  animation: pulse-spotlight 2s ease-in-out infinite;
+}
+
+@keyframes pulse-spotlight {
+  0%, 100% {
+    border-color: rgba(255, 215, 0, 0.8);
+    transform: scale(1);
+  }
+  50% {
+    border-color: rgba(255, 215, 0, 1);
+    transform: scale(1.02);
+  }
+}
+
+.tutorial-modal {
+  z-index: 9999;
 }
 
 /* Notification System - Game-style Floating Text */
@@ -1191,6 +1536,23 @@ button.danger:hover:not(:disabled) {
   color: #999;
 }
 
+.score-entry .score-meta .mode-badge {
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+}
+
+.score-entry .score-meta .mode-badge.mode-easy {
+  background: rgba(135, 206, 235, 0.2);
+  color: #87CEEB;
+}
+
+.score-entry .score-meta .mode-badge.mode-hard {
+  background: rgba(255, 69, 0, 0.2);
+  color: #FF6347;
+}
+
 .btn-replay {
   background: rgba(74, 158, 255, 0.2);
   border: 1px solid #4a9eff;
@@ -1254,55 +1616,65 @@ button.danger:hover:not(:disabled) {
 
 /* Tablet Portrait and Below (768px) */
 @media screen and (max-width: 768px) {
-  /* HUD - Ultra compact single row at very top */
-  #hud {
-    top: 3px;
-    left: 3px;
-    right: 55px; /* Leave space for settings button */
-    padding: 4px 8px;
-    min-width: unset;
-    font-size: 11px;
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    justify-content: flex-start;
-    flex-wrap: nowrap;
+  /* Unified HUD - Full width on mobile */
+  #unified-hud {
+    top: max(5px, env(safe-area-inset-top));
+    left: max(5px, env(safe-area-inset-left));
+    right: max(5px, env(safe-area-inset-right));
   }
 
-  .stat {
-    margin: 0;
-    display: flex;
-    align-items: baseline;
-    gap: 4px;
-    white-space: nowrap;
+  #stats-bar {
+    gap: 16px;
+    padding: 6px 12px;
+    font-size: 10px;
   }
 
-  .stat-label {
+  .stat-compact {
+    gap: 6px;
+  }
+
+  /* Hide dice remaining on mobile to save space */
+  .stat-remaining {
+    display: none;
+  }
+
+  .stat-label-compact {
     font-size: 9px;
   }
 
-  .stat-value {
+  .stat-value-compact {
     font-size: 16px;
-    font-weight: 700;
   }
 
-  /* Hide dice pool and selected info on mobile */
-  #dice-pool,
-  #selected-info {
-    display: none !important;
+  /* HUD Details - Start collapsed on mobile */
+  #hud-details {
+    padding: 10px 16px;
   }
 
-  /* Dice Row - Below HUD, touch-friendly dice */
+  #hud-details.collapsed {
+    padding: 0 16px;
+  }
+
+  #hud-toggle-btn {
+    padding: 3px 12px;
+  }
+
+  #hud-toggle-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Dice Row - Touch-friendly dice */
   #dice-row {
-    top: 32px; /* Below compact HUD */
-    left: 3px;
-    right: 3px;
-    transform: none;
-    max-width: calc(100% - 6px);
-    width: calc(100% - 6px);
     padding: 6px;
     gap: 6px;
-    justify-content: space-evenly;
+  }
+
+  /* Die type divider - mobile */
+  .die-type-divider {
+    width: 1px;
+    height: 40px;
+    margin: auto 4px;
   }
 
   .die-wrapper .die-2d {
@@ -1326,13 +1698,14 @@ button.danger:hover:not(:disabled) {
   }
 
   .die-2d .points {
-    font-size: 8px;
+    font-size: 9px;
   }
 
   /* Settings Button - Touch-friendly 44px minimum */
+  /* Settings and Leaderboard moved to bottom right on mobile */
   #settings-gear-btn {
-    top: 10px;
-    right: 10px;
+    bottom: 10px;
+    right: 62px;
     width: 44px;
     height: 44px;
     padding: 10px;
@@ -1343,9 +1716,8 @@ button.danger:hover:not(:disabled) {
     height: 24px;
   }
 
-  /* Leaderboard Button - Touch-friendly 44px minimum */
   #leaderboard-btn {
-    top: 62px;
+    bottom: 10px;
     right: 10px;
     width: 44px;
     height: 44px;
@@ -1359,7 +1731,7 @@ button.danger:hover:not(:disabled) {
 
   /* Camera Controls - Horizontal layout at bottom */
   #camera-controls {
-    bottom: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
     left: 8px;
     right: 8px;
     flex-direction: row;
@@ -1383,9 +1755,140 @@ button.danger:hover:not(:disabled) {
     flex-shrink: 0;
   }
 
+  /* Hide desktop controls on mobile */
+  .desktop-only {
+    display: none !important;
+  }
+
+  /* Mobile Menu Toggle Button */
+  #mobile-menu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    right: 10px;
+    width: 50px;
+    height: 50px;
+    padding: 12px;
+    background: rgba(233, 69, 96, 0.9);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s;
+    z-index: 1001;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  #mobile-menu-toggle svg {
+    width: 24px;
+    height: 24px;
+    color: #fff;
+  }
+
+  #mobile-menu-toggle:active {
+    transform: scale(0.9);
+  }
+
+  /* Mobile Controls Menu */
+  #mobile-controls-menu {
+    display: block;
+    position: fixed;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    right: 10px;
+    z-index: 1000;
+    transition: all 0.3s ease;
+  }
+
+  #mobile-controls-menu.mobile-menu-closed {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(20px);
+  }
+
+  #mobile-controls-menu.mobile-menu-open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .mobile-menu-content {
+    background: rgba(20, 20, 35, 0.98);
+    border-radius: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    padding: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    margin-bottom: 60px; /* Space for toggle button */
+  }
+
+  .mobile-menu-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .mobile-menu-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.6;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+
+  .mobile-menu-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .mobile-menu-btn {
+    width: 48px;
+    height: 48px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-menu-btn svg {
+    width: 22px;
+    height: 22px;
+    color: #fff;
+  }
+
+  .mobile-menu-btn:active {
+    transform: scale(0.9);
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .mobile-menu-action {
+    width: 100%;
+    flex-direction: row;
+    gap: 10px;
+    justify-content: flex-start;
+    padding: 12px 16px;
+  }
+
+  .mobile-menu-action span {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .mobile-menu-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 8px 0;
+  }
+
   /* Action Controls - Full width at bottom */
   #controls {
-    bottom: 60px; /* Above camera controls */
+    bottom: max(10px, env(safe-area-inset-bottom)); /* Reduced since camera controls are hidden */
     left: 8px;
     right: 8px;
     transform: none;
@@ -1546,7 +2049,7 @@ button.danger:hover:not(:disabled) {
 
   /* Leaderboard Button - Touch-friendly 44px minimum */
   #leaderboard-btn {
-    top: 51px;
+    bottom: 5px;
     right: 5px;
     width: 44px;
     height: 44px;
@@ -1562,10 +2065,9 @@ button.danger:hover:not(:disabled) {
     font-size: 7px;
   }
 
-  /* Settings Button - Touch-friendly 44px minimum */
   #settings-gear-btn {
-    top: 5px;
-    right: 5px;
+    bottom: 5px;
+    right: 56px;
     width: 44px;
     height: 44px;
     padding: 10px;
@@ -1696,8 +2198,8 @@ button.danger:hover:not(:disabled) {
   #settings-gear-btn {
     width: 44px;
     height: 44px;
-    top: 5px;
-    right: 5px;
+    bottom: 5px;
+    right: 56px;
     padding: 10px;
   }
 
@@ -1709,6 +2211,8 @@ button.danger:hover:not(:disabled) {
   #leaderboard-btn {
     width: 44px;
     height: 44px;
+    bottom: 5px;
+    right: 5px;
     padding: 10px;
   }
 

@@ -55,6 +55,17 @@ export interface ThemeConfig {
     bumpLevel?: number;
     /** Specular shininess (1-128) */
     specularPower?: number;
+    /** Texture UV scale (optional) */
+    textureScale?: { u: number; v: number };
+    /** Texture UV offset (optional) */
+    textureOffset?: { u: number; v: number };
+    /** Per-die texture UV overrides (optional) */
+    perDieOverrides?: {
+      [dieType: string]: {
+        textureScale?: { u: number; v: number };
+        textureOffset?: { u: number; v: number };
+      };
+    };
   };
   /** Supported die types (d4, d6, d8, d10, d12, d20, d100) */
   diceAvailable: string[];
@@ -91,6 +102,30 @@ export interface ThemeConfig {
       error?: string;
     };
   };
+  /** Per-die geometry and physics settings (optional - uses geometry file defaults if not specified) */
+  perDieSettings?: {
+    [dieType: string]: {
+      /** Position offset [x, y, z] for this die type in the geometry scene */
+      positionOffset?: [number, number, number];
+      /** Rotation quaternion [x, y, z, w] for this die type */
+      rotationQuaternion?: [number, number, number, number];
+      /** Scaling [x, y, z] for this die type */
+      scaling?: [number, number, number];
+      /** Physics properties for this die type */
+      physics?: {
+        /** Mass of the die in kg */
+        mass?: number;
+        /** Friction coefficient (0-1) */
+        friction?: number;
+        /** Bounciness/restitution (0-1) */
+        restitution?: number;
+      };
+    };
+  };
+  /** Enable physics simulation (optional - defaults to true) */
+  physicsEnabled?: boolean;
+  /** Gravity vector [x, y, z] (optional - defaults to [0, -9.81, 0]) */
+  gravity?: [number, number, number];
 }
 
 /**
@@ -341,7 +376,8 @@ class ThemeManager {
    * @returns Path to current theme folder
    */
   getCurrentThemePath(): string {
-    return `/assets/themes/${this.currentTheme}`;
+    const basePath = import.meta.env.BASE_URL || './';
+    return `${basePath}assets/themes/${this.currentTheme}`;
   }
 
   /**
@@ -351,7 +387,8 @@ class ThemeManager {
    * @returns Path to theme folder
    */
   getThemePath(themeName: string): string {
-    return `/assets/themes/${themeName}`;
+    const basePath = import.meta.env.BASE_URL || './';
+    return `${basePath}assets/themes/${themeName}`;
   }
 
   /**
