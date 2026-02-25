@@ -91,6 +91,11 @@ Branch-specific project:
 - `FIREBASE_PROJECT_ID_PROD`
 - `FIREBASE_PROJECT_ID_DEV`
 
+Fallback behavior:
+- If `FIREBASE_PROJECT_ID_PROD` or `FIREBASE_PROJECT_ID_DEV` is not set, workflow falls back to:
+  - `VITE_FIREBASE_PROJECT_ID_PROD`
+  - `VITE_FIREBASE_PROJECT_ID_DEV`
+
 Branch-specific frontend env secrets:
 - `VITE_API_BASE_URL_PROD`
 - `VITE_API_BASE_URL_DEV`
@@ -112,3 +117,12 @@ Branch-specific frontend env secrets:
 - `VITE_FIREBASE_MEASUREMENT_ID_DEV` (optional)
 
 The workflow builds a `.env.production` file at runtime from these secrets; no keys are committed in source.
+
+### Troubleshooting
+
+If workflow fails with `Missing required secret/output: PROJECT_ID`:
+1. Ensure branch is `master`, `main`, or `dev`.
+2. Set either:
+   - `FIREBASE_PROJECT_ID_<ENV>` (recommended), or
+   - `VITE_FIREBASE_PROJECT_ID_<ENV>` (fallback).
+3. Re-run workflow.
