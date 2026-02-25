@@ -367,6 +367,10 @@ export class CameraEffectsService implements ICameraEffectsService {
     return Array.from(this.activeEffects.values()).map((runtime) => runtime.effect);
   }
 
+  getQueuedEffectCount(): number {
+    return this.queuedEffects.length;
+  }
+
   isEffectActive(effectType: CameraEffectType): boolean {
     return Array.from(this.activeEffects.values()).some(
       (runtime) => runtime.effect.type === effectType

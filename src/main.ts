@@ -11,6 +11,7 @@ import { DebugView } from "./ui/debugView.js";
 import { AlphaWarningModal } from "./ui/alphaWarning.js";
 import { UpdatesPanel } from "./ui/updates.js";
 import { CameraControlsPanel } from "./ui/cameraControls.js";
+import { EffectHUD } from "./ui/effectHUD.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
 import { GameState, Action, GameDifficulty } from "./engine/types.js";
@@ -49,6 +50,7 @@ class Game implements GameCallbacks {
   private leaderboardModal: LeaderboardModal;
   private debugView: DebugView;
   private cameraControlsPanel: CameraControlsPanel;
+  private effectHud: EffectHUD;
   private cameraEffects: CameraEffectsService;
   private cameraAttackExecutor: CameraAttackExecutor;
   private multiplayerNetwork?: MultiplayerNetworkService;
@@ -76,6 +78,8 @@ class Game implements GameCallbacks {
     registerGameEffects();
     registerChaosEffects();
     this.cameraEffects = new CameraEffectsService(this.scene);
+    this.effectHud = new EffectHUD(this.cameraEffects);
+    this.effectHud.start();
     this.cameraAttackExecutor = new CameraAttackExecutor(
       this.cameraEffects,
       () => this.localPlayerId
@@ -342,6 +346,7 @@ class Game implements GameCallbacks {
     const diceRowEl = document.getElementById("dice-row");
     const controlsEl = document.getElementById("controls");
     const cameraControlsEl = document.getElementById("camera-controls");
+    const effectHudEl = document.getElementById("effect-hud");
 
     if (isDebugMode) {
       // Hide game UI
@@ -349,6 +354,7 @@ class Game implements GameCallbacks {
       if (diceRowEl) diceRowEl.style.display = "none";
       if (controlsEl) controlsEl.style.display = "none";
       if (cameraControlsEl) cameraControlsEl.style.display = "none";
+      if (effectHudEl) effectHudEl.style.display = "none";
 
       // Clear game dice from scene
       this.diceRenderer.clearDice();
@@ -358,6 +364,7 @@ class Game implements GameCallbacks {
       if (diceRowEl) diceRowEl.style.display = "flex";
       if (controlsEl) controlsEl.style.display = "flex";
       if (cameraControlsEl) cameraControlsEl.style.display = "flex";
+      if (effectHudEl) effectHudEl.style.display = "flex";
 
       // Restore game state - updateUI will handle re-rendering dice if needed
       this.updateUI();

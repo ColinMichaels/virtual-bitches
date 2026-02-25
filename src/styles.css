@@ -48,6 +48,132 @@ h1, h2, h3, h4, h5, h6 {
   z-index: 50;
 }
 
+/* Camera effect status HUD */
+#effect-hud {
+  position: absolute;
+  top: max(112px, calc(env(safe-area-inset-top) + 102px));
+  right: max(12px, env(safe-area-inset-right));
+  width: min(280px, calc(100vw - 24px));
+  z-index: 70;
+  pointer-events: none;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+#effect-hud.is-hidden {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.effect-hud__content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(6, 10, 24, 0.84);
+  border: 1px solid rgba(190, 214, 255, 0.18);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+}
+
+.effect-hud__header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.effect-hud__title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.effect-hud__queue {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.effect-hud__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.effect-hud__card {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.effect-hud__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.effect-hud__icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.effect-hud__name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.effect-hud__time {
+  margin-left: auto;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.86);
+  font-variant-numeric: tabular-nums;
+}
+
+.effect-hud__meter {
+  margin-top: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.effect-hud__meter-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  transition: width 0.12s linear;
+  background: linear-gradient(90deg, #8ecbff 0%, #4c8eff 100%);
+}
+
+.effect-hud__meta {
+  margin-top: 5px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.effect-hud__card--shake .effect-hud__meter-fill {
+  background: linear-gradient(90deg, #ffd38e 0%, #ff9f4c 100%);
+}
+
+.effect-hud__card--spin .effect-hud__meter-fill {
+  background: linear-gradient(90deg, #8eb5ff 0%, #5f77ff 100%);
+}
+
+.effect-hud__card--zoom .effect-hud__meter-fill {
+  background: linear-gradient(90deg, #8effca 0%, #45c796 100%);
+}
+
+.effect-hud__card--drunk .effect-hud__meter-fill {
+  background: linear-gradient(90deg, #ff9fb5 0%, #ff6f92 100%);
+}
+
 #stats-bar {
   display: flex;
   gap: 24px;
@@ -1759,6 +1885,22 @@ button.danger:hover:not(:disabled) {
     right: max(5px, env(safe-area-inset-right));
   }
 
+  #effect-hud {
+    top: auto;
+    bottom: max(130px, calc(env(safe-area-inset-bottom) + 120px));
+    left: max(6px, env(safe-area-inset-left));
+    right: max(6px, env(safe-area-inset-right));
+    width: auto;
+  }
+
+  .effect-hud__content {
+    padding: 8px;
+  }
+
+  .effect-hud__list {
+    gap: 6px;
+  }
+
   #stats-bar {
     gap: 16px;
     padding: 6px 12px;
@@ -2165,6 +2307,26 @@ button.danger:hover:not(:disabled) {
     min-width: unset;
     font-size: 10px;
     gap: 10px;
+  }
+
+  #effect-hud {
+    bottom: max(120px, calc(env(safe-area-inset-bottom) + 100px));
+    left: 4px;
+    right: 4px;
+  }
+
+  .effect-hud__content {
+    border-radius: 8px;
+    padding: 7px;
+  }
+
+  .effect-hud__name,
+  .effect-hud__time {
+    font-size: 11px;
+  }
+
+  .effect-hud__meta {
+    font-size: 9px;
   }
 
   .stat {

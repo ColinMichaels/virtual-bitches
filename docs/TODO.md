@@ -320,7 +320,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ### Future Features (See FUTURE-FEATURES.md)
 
 #### Camera Attack Integration System 💥📷
-- **Status**: 🟡 PHASE 2 IN PROGRESS (2026-02-25)
+- **Status**: 🟡 PHASE 3 SCAFFOLDING IN PROGRESS (2026-02-25)
 - **Complexity**: Very High
 - **Description**: Weaponized camera manipulation for multiplayer psychological warfare
 - **Documentation**: Complete specification in `docs/CAMERA-ATTACKS-INTEGRATION.md` (1000+ lines)
@@ -328,6 +328,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ `CameraEffectsService` runtime (`src/services/cameraEffects.ts`) with shake/spin/zoom/drunk effects
   - ✅ Drunk vision post-processing pipeline (`src/chaos/effects/postProcessingPipeline.ts`) with blur/double-vision/vignette/blackout hooks
   - ✅ Effect conflict queue/stacking policy (per-type caps, queued drain, drunk-child reserved stacking lane)
+  - ✅ Active camera effect HUD (`src/ui/effectHUD.ts`) with live timers/intensity/queue indicators
   - ✅ Effect lifecycle controls (active list, stop, clear) + timing/cleanup handling
   - ✅ Particle integration hooks for shake/spin/drunk effects
   - ✅ `CameraAttackExecutor` (`src/chaos/cameraAttackExecutor.ts`) for typed message → camera effect mapping
@@ -336,6 +337,9 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ Unit-style tests for attack mapping (`src/chaos/cameraAttackExecutor.test.ts`)
   - ✅ Unit-style tests for network bridge routing (`src/multiplayer/networkService.test.ts`)
   - ✅ Unit-style tests for camera effect queue/post-processing behavior (`src/services/cameraEffects.test.ts`)
+  - ✅ Upgrade progression scaffolding (`src/chaos/upgrades/progressionService.ts`) with XP/tokens/unlock validation + persistence
+  - ✅ Upgrade definitions for three attack families (`src/chaos/upgrades/definitions.ts`)
+  - ✅ Unit-style tests for progression scaffolding (`src/chaos/upgrades/progressionService.test.ts`)
 - **Key Features**:
   - Camera Effects API (shake, spin, zoom, tilt, drunk vision)
   - Drunk Vision system (3 severity levels: Tipsy, Hammered, Blackout)
@@ -355,7 +359,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - BabylonJS Post-Processing pipeline (implemented client-side; tuning pending)
 - **Implementation Timeline**: ~10 weeks (5 phases)
 - **Monetization**: Chaos Pass ($4.99/mo), IAP packs, Battle Pass
-- **Implementation Priority**: Next up is upgrade progression + active effect HUD + control inversion/accessibility safeguards
+- **Implementation Priority**: Next up is `ChaosUpgradeMenu` UI wiring + progression-to-ability integration + control inversion/accessibility safeguards
 
 #### Chaos Gameplay Mechanics System
 - **Status**: DOCUMENTED (not yet implemented)

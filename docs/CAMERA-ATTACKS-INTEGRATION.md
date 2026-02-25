@@ -2,7 +2,7 @@
 
 **Document Version**: 1.1
 **Last Updated**: 2026-02-25
-**Status**: Phase 2 In Progress (Runtime + Executor + WebSocket + Drunk PostFX + Queue Policy Implemented)
+**Status**: Phase 3 Scaffolding In Progress (Runtime + HUD + Upgrade Progression Foundation)
 **Complexity**: Very High
 **Dependencies**: Camera System (Phase 1+), Chaos Gameplay Mechanics, Multiplayer Infrastructure
 
@@ -56,13 +56,15 @@ Traditional game attacks show visual effects ON the screen (overlays, particles,
 - WebSocket multiplayer bridge implemented (`src/multiplayer/networkService.ts`)
 - Drunk vision post-processing pipeline implemented (`src/chaos/effects/postProcessingPipeline.ts`)
 - Effect conflict queue/stacking policy implemented in `CameraEffectsService` (typed caps + queued drain + child stacking lane)
+- Active camera effect HUD implemented (`src/ui/effectHUD.ts`) with timers/intensity/queue visibility
+- Upgrade progression scaffolding implemented (`src/chaos/upgrades/*`) with definitions, XP/tokens, unlock validation, and persistence
 - Unit-style executor tests added (`src/chaos/cameraAttackExecutor.test.ts`)
 - Unit-style network bridge tests added (`src/multiplayer/networkService.test.ts`)
 - Camera effects queue/stacking + post-processing tests added (`src/services/cameraEffects.test.ts`)
+- Upgrade progression tests added (`src/chaos/upgrades/progressionService.test.ts`)
 
 ❌ **Missing Components**:
-- Upgrade progression system
-- Camera effect HUD (active effects + durations)
+- Upgrade progression UI integration (`ChaosUpgradeMenu`) and backend profile sync
 - Control inversion/accessibility safeguards
 - Production multiplayer backend/session integration (auth, rooms, server validation)
 
@@ -1492,24 +1494,24 @@ TOTAL:                          ~$171,000/year
 **Goal**: Progression trees, XP tracking, token economy
 
 **Tasks**:
-- [ ] Design upgrade database schema
-- [ ] Create `UpgradeProgressionService`
-- [ ] Implement XP earning system
-  - [ ] Award XP on ability use
-  - [ ] Award XP on successful disruption
-  - [ ] Track XP per ability
-- [ ] Implement Chaos Token economy
-  - [ ] Earn tokens from wins
-  - [ ] Spend tokens on upgrades
-  - [ ] Store balance in player profile
-- [ ] Create upgrade definitions
-  - [ ] Screen Shake Levels 2-5
-  - [ ] Drunk Vision Levels 2-5
-  - [ ] Camera Spin Levels 2-5
-- [ ] Implement unlock validation
+- [x] Design upgrade database schema (client-side scaffold)
+- [x] Create `UpgradeProgressionService`
+- [x] Implement XP earning system
+  - [x] Award XP on ability use
+  - [x] Award XP on successful disruption
+  - [x] Track XP per ability
+- [x] Implement Chaos Token economy (client-side scaffold)
+  - [x] Earn tokens from progression service API
+  - [x] Spend tokens on upgrades
+  - [ ] Store balance in player profile (backend pending)
+- [x] Create upgrade definitions
+  - [x] Screen Shake Levels 2-5
+  - [x] Drunk Vision Levels 2-5
+  - [x] Camera Spin Levels 2-5
+- [x] Implement unlock validation
 - [ ] Achievement integration
   - [ ] "Shake Master", "Bartender", etc.
-  - [ ] Link achievements to upgrade unlocks
+  - [x] Link achievements to upgrade unlock checks (service hook)
 - [ ] Create `ChaosUpgradeMenu` UI
   - [ ] Upgrade tree visualization
   - [ ] XP progress bars
@@ -1518,8 +1520,8 @@ TOTAL:                          ~$171,000/year
 - [ ] Persistence (save upgrade progress to backend)
 
 **Deliverables**:
-- Full upgrade trees for 3 ability families
-- XP/Token economy working
+- Full upgrade trees for 3 ability families (scaffold complete)
+- XP/Token economy working (client-side scaffold complete)
 - Upgrade menu UI complete
 - Achievement system integrated
 
@@ -1541,7 +1543,7 @@ TOTAL:                          ~$171,000/year
 - [ ] Client-side attack rendering
   - [ ] Receive attack message
   - [ ] Apply effect locally
-  - [ ] Display effect HUD (active effects UI)
+  - [x] Display effect HUD (active effects UI)
 - [ ] Add attack feedback
   - [ ] Attacker sees "Hit!" notification
   - [ ] Victim sees effect name + duration
@@ -1609,7 +1611,7 @@ TOTAL:                          ~$171,000/year
 |-------|----------|-------|--------|
 | Phase 1 | Weeks 1-2 | Camera Effects API | ✅ Core Complete |
 | Phase 2 | Weeks 3-4 | Drunk Vision | 🟡 In Progress |
-| Phase 3 | Weeks 5-7 | Upgrade System | 📋 Planned |
+| Phase 3 | Weeks 5-7 | Upgrade System | 🟡 Scaffolding In Progress |
 | Phase 4 | Week 8 | Integration | 📋 Planned |
 | Phase 5 | Weeks 9-10 | Polish & Gag Effects | 📋 Planned |
 
@@ -1675,6 +1677,6 @@ We create a system that delivers on the "psychosocial torture" vision while keep
 
 ---
 
-**Document Status**: Active implementation in progress (Phases 1-2 partial complete).
+**Document Status**: Active implementation in progress (Phases 1-3 scaffold complete).
 
-**Next Steps**: Implement upgrade progression system and active effect HUD/inversion safeguards.
+**Next Steps**: Build `ChaosUpgradeMenu` UI and connect progression to ability loadout/execution.
