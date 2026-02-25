@@ -86,9 +86,10 @@ export class GameOverController {
     const rankEl = document.getElementById("rank-display")!;
 
     // Difficulty badge with emoji
-    const difficultyEmoji = state.mode === "easy" ? "🌱" : state.mode === "normal" ? "⚔️" : "🔥";
-    const difficultyLabel = state.mode.charAt(0).toUpperCase() + state.mode.slice(1);
-    const difficultyColor = state.mode === "easy" ? "#4CAF50" : state.mode === "normal" ? "#2196F3" : "#FF5722";
+    const difficulty = state.mode.difficulty;
+    const difficultyEmoji = difficulty === "easy" ? "🌱" : difficulty === "normal" ? "⚔️" : "🔥";
+    const difficultyLabel = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+    const difficultyColor = difficulty === "easy" ? "#4CAF50" : difficulty === "normal" ? "#2196F3" : "#FF5722";
 
     if (rank) {
       const totalGames = stats.totalGames;

@@ -622,11 +622,11 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Settings Gear Button - Top Right */
-/* Settings and Leaderboard Buttons - Bottom Right (grouped together) */
+/* Settings, Updates, and Leaderboard Buttons - Bottom Right (grouped together) */
 #settings-gear-btn {
   position: absolute;
   bottom: max(20px, env(safe-area-inset-bottom));
-  right: max(80px, calc(env(safe-area-inset-right) + 60px));
+  right: max(140px, calc(env(safe-area-inset-right) + 120px));
   width: 50px;
   height: 50px;
   padding: 12px;
@@ -655,6 +655,40 @@ h1, h2, h3, h4, h5, h6 {
 
 #settings-gear-btn:active {
   transform: rotate(90deg) scale(0.95);
+}
+
+#updates-toggle-btn {
+  position: absolute;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  right: max(80px, calc(env(safe-area-inset-right) + 60px));
+  width: 50px;
+  height: 50px;
+  padding: 12px;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+#updates-toggle-btn svg {
+  width: 24px;
+  height: 24px;
+  color: #fff;
+}
+
+#updates-toggle-btn:hover {
+  background: rgba(124, 93, 250, 0.8);
+  border-color: #7c5dfa;
+  transform: scale(1.1);
+}
+
+#updates-toggle-btn:active {
+  transform: scale(0.95);
 }
 
 #leaderboard-btn {
@@ -1804,8 +1838,21 @@ button.danger:hover:not(:disabled) {
   }
 
   /* Settings Button - Touch-friendly 44px minimum */
-  /* Settings and Leaderboard moved to bottom right on mobile */
+  /* Settings, Updates, and Leaderboard moved to bottom right on mobile */
   #settings-gear-btn {
+    bottom: 10px;
+    right: 114px;
+    width: 44px;
+    height: 44px;
+    padding: 10px;
+  }
+
+  #settings-gear-btn svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  #updates-toggle-btn {
     bottom: 10px;
     right: 62px;
     width: 44px;
@@ -1813,7 +1860,7 @@ button.danger:hover:not(:disabled) {
     padding: 10px;
   }
 
-  #settings-gear-btn svg {
+  #updates-toggle-btn svg {
     width: 24px;
     height: 24px;
   }
@@ -2187,9 +2234,22 @@ button.danger:hover:not(:disabled) {
     font-size: 7px;
   }
 
-  #settings-gear-btn {
+  #updates-toggle-btn {
     bottom: 5px;
     right: 56px;
+    width: 44px;
+    height: 44px;
+    padding: 10px;
+  }
+
+  #updates-toggle-btn svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  #settings-gear-btn {
+    bottom: 5px;
+    right: 107px;
     width: 44px;
     height: 44px;
     padding: 10px;
@@ -2321,11 +2381,24 @@ button.danger:hover:not(:disabled) {
     width: 44px;
     height: 44px;
     bottom: 5px;
-    right: 56px;
+    right: 107px;
     padding: 10px;
   }
 
   #settings-gear-btn svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  #updates-toggle-btn {
+    width: 44px;
+    height: 44px;
+    bottom: 5px;
+    right: 56px;
+    padding: 10px;
+  }
+
+  #updates-toggle-btn svg {
     width: 24px;
     height: 24px;
   }
@@ -3476,31 +3549,8 @@ button.danger:hover:not(:disabled) {
 .updates-container {
   position: fixed;
   top: 20px;
-  right: 80px;
+  right: 20px;
   z-index: 1000;
-}
-
-.updates-toggle-btn {
-  position: relative;
-  background: rgba(26, 26, 46, 0.9);
-  border: 2px solid rgba(233, 69, 96, 0.5);
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #e94560;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.updates-toggle-btn:hover {
-  background: rgba(233, 69, 96, 0.2);
-  border-color: #e94560;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(233, 69, 96, 0.4);
 }
 
 .updates-badge {
@@ -3702,11 +3752,6 @@ button.danger:hover:not(:disabled) {
 
 /* Mobile Responsive */
 @media screen and (max-width: 768px) {
-  .updates-container {
-    right: 20px;
-    top: 80px;
-  }
-
   .updates-panel {
     width: 90vw;
     max-width: 360px;
@@ -3734,11 +3779,6 @@ button.danger:hover:not(:disabled) {
 }
 
 @media screen and (max-width: 480px) {
-  .updates-toggle-btn {
-    width: 44px;
-    height: 44px;
-  }
-
   .updates-panel {
     width: calc(100vw - 20px);
     max-height: 400px;
