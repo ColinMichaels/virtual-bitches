@@ -1,6 +1,14 @@
 {
   "updates": [
     {
+      "id": "feature-music-muted-2026-02-25",
+      "date": "2026-02-25",
+      "title": "🔇 Music Disabled by Default",
+      "content": "<p>Background music is now muted by default while we develop a proper music player system.</p><p><strong>What Changed:</strong></p><ul style=\"margin: 10px 0; padding-left: 20px;\"><li>Music is disabled on first launch (new users)</li><li>All music functionality preserved in Settings</li><li>You can still enable music manually in Settings → Audio</li><li>Existing users keep their saved music preferences</li></ul><p>We're planning a full music player with track selection, playlists, and controls in a future update!</p>",
+      "version": "0.1.0-alpha",
+      "type": "feature"
+    },
+    {
       "id": "alpha-release-2026-02-25",
       "date": "2026-02-25",
       "title": "🎉 Alpha Release - Welcome to BISCUITS!",

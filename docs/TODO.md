@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-25 (Visual Settings System Complete)
+**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-25 (Alpha Release Ready - Music Muted)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -380,6 +380,35 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - **AI Prompt**:
   ```
   Profile and optimize BISCUITS rendering performance. Focus on mobile devices where frame rate drops to ~40fps. Consider shadow optimization, LOD systems, and physics calculation improvements in src/render/diceRenderer.ts.
+  ```
+
+### Music Player System 🎵
+- **Status**: ⚠️ MUTED BY DEFAULT (functionality preserved, disabled until proper system developed)
+- **Complexity**: Medium
+- **Description**: Develop full music player system with track selection and controls
+- **Current State** (2026-02-25):
+  - ✅ Music generation system complete (procedural ambient drone)
+  - ✅ Audio API functional (playMusic/stopMusic)
+  - ✅ Settings UI present (volume slider + enable checkbox)
+  - ⚠️ Music DISABLED by default (musicEnabled: false, musicVolume: 0)
+  - All functionality preserved for future development
+- **Future Features**:
+  - [ ] Multiple music tracks
+  - [ ] Track selection UI
+  - [ ] Play/pause controls in HUD
+  - [ ] Playlist management
+  - [ ] Volume fade in/out
+  - [ ] Context-aware music (menu vs gameplay vs game over)
+  - [ ] User-uploaded music support
+  - [ ] Spotify/streaming integration (premium feature?)
+- **Files Involved**:
+  - `src/services/audio.ts` - Music generation and playback
+  - `src/services/settings.ts` - Music settings (line 57-59: defaults set to 0/false)
+  - `src/ui/settings.ts` - Music controls UI
+- **Implementation Priority**: Post-alpha (after core gameplay polish)
+- **AI Prompt**:
+  ```
+  Implement a music player system for BISCUITS. Create multiple ambient music tracks, add UI controls for track selection and playback, and integrate with the existing audio service in src/services/audio.ts. Consider context-aware music that changes based on game state.
   ```
 
 ### Additional Themes
