@@ -58,14 +58,22 @@ Traditional game attacks show visual effects ON the screen (overlays, particles,
 - Effect conflict queue/stacking policy implemented in `CameraEffectsService` (typed caps + queued drain + child stacking lane)
 - Active camera effect HUD implemented (`src/ui/effectHUD.ts`) with timers/intensity/queue visibility
 - Upgrade progression scaffolding implemented (`src/chaos/upgrades/*`) with definitions, XP/tokens, unlock validation, and persistence
+- `ChaosUpgradeMenu` UI scaffold implemented (`src/ui/chaosUpgradeMenu.ts`) and wired to desktop/mobile input controls
+- Progression-to-execution profile resolver implemented (`src/chaos/upgrades/executionProfile.ts`) and wired into `CameraAttackExecutor`
+- Local progression execution trigger added in upgrade UI (cast current unlocked level via `chaos:cameraAttack`)
+- Control inversion runtime implemented (`src/services/controlInversion.ts`) and wired into input/executor flow
+- Accessibility safeguards wired into settings + executor (`reduceChaosCameraEffects`, `allowChaosControlInversion`)
 - Unit-style executor tests added (`src/chaos/cameraAttackExecutor.test.ts`)
 - Unit-style network bridge tests added (`src/multiplayer/networkService.test.ts`)
 - Camera effects queue/stacking + post-processing tests added (`src/services/cameraEffects.test.ts`)
 - Upgrade progression tests added (`src/chaos/upgrades/progressionService.test.ts`)
+- Upgrade execution-profile tests added (`src/chaos/upgrades/executionProfile.test.ts`)
+- Control inversion tests added (`src/services/controlInversion.test.ts`)
 
 ❌ **Missing Components**:
-- Upgrade progression UI integration (`ChaosUpgradeMenu`) and backend profile sync
-- Control inversion/accessibility safeguards
+- Backend profile sync for progression/token state
+- Backend API + DB integration for player settings/profile and match logs
+- Service worker/off-main-thread task offloading for heavy background processing
 - Production multiplayer backend/session integration (auth, rooms, server validation)
 
 ---
@@ -1480,7 +1488,7 @@ TOTAL:                          ~$171,000/year
 - [x] Implement chromatic aberration (color split)
 - [x] Create custom double vision shader
 - [x] Integrate drunk severity profiles (tipsy/hammered/blackout) in `CameraEffectsService`
-- [ ] Add control inversion system
+- [x] Add control inversion system
 - [ ] Test on various hardware (performance check)
 
 **Deliverables**:
@@ -1512,11 +1520,11 @@ TOTAL:                          ~$171,000/year
 - [ ] Achievement integration
   - [ ] "Shake Master", "Bartender", etc.
   - [x] Link achievements to upgrade unlock checks (service hook)
-- [ ] Create `ChaosUpgradeMenu` UI
-  - [ ] Upgrade tree visualization
-  - [ ] XP progress bars
-  - [ ] Unlock requirements display
-  - [ ] Purchase buttons
+- [x] Create `ChaosUpgradeMenu` UI (client-side scaffold)
+  - [x] Upgrade tree visualization
+  - [x] XP progress bars
+  - [x] Unlock requirements display
+  - [x] Purchase/unlock buttons
 - [ ] Persistence (save upgrade progress to backend)
 
 **Deliverables**:
@@ -1532,17 +1540,17 @@ TOTAL:                          ~$171,000/year
 
 **Tasks**:
 - [ ] Extend `ChaosAbilityExecutor` class
-- [ ] Map chaos abilities to camera effects
-  - [ ] `screen_shake` → `CameraEffectsService.shake()`
-  - [ ] `drunk_vision` → `DrunkVisionEffect.apply()`
-  - [ ] `camera_spin` → `CameraEffectsService.spin()`
+- [x] Map chaos abilities to camera effects
+  - [x] `screen_shake` → `CameraEffectsService.shake()`
+  - [x] `drunk_vision` → `CameraEffectsService.drunk()`
+  - [x] `camera_spin` → `CameraEffectsService.spin()`
 - [ ] Implement network protocol
   - [ ] `CameraAttackMessage` interface
   - [ ] Server-side validation
   - [ ] WebSocket broadcast to victim
-- [ ] Client-side attack rendering
-  - [ ] Receive attack message
-  - [ ] Apply effect locally
+- [x] Client-side attack rendering
+  - [x] Receive attack message
+  - [x] Apply effect locally
   - [x] Display effect HUD (active effects UI)
 - [ ] Add attack feedback
   - [ ] Attacker sees "Hit!" notification
@@ -1677,6 +1685,6 @@ We create a system that delivers on the "psychosocial torture" vision while keep
 
 ---
 
-**Document Status**: Active implementation in progress (Phases 1-3 scaffold complete).
+**Document Status**: Active implementation in progress (Phases 1-3 core client systems + Phase 4 client execution mapping in place).
 
-**Next Steps**: Build `ChaosUpgradeMenu` UI and connect progression to ability loadout/execution.
+**Next Steps**: Wire backend profile/API storage (settings/progression/logs), start service-worker offloading, and continue multiplayer backend/session implementation.

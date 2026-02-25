@@ -11,6 +11,7 @@ import { DebugView } from "./ui/debugView.js";
 import { AlphaWarningModal } from "./ui/alphaWarning.js";
 import { UpdatesPanel } from "./ui/updates.js";
 import { CameraControlsPanel } from "./ui/cameraControls.js";
+import { ChaosUpgradeMenu } from "./ui/chaosUpgradeMenu.js";
 import { EffectHUD } from "./ui/effectHUD.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
@@ -20,6 +21,7 @@ import { audioService } from "./services/audio.js";
 import { hapticsService } from "./services/haptics.js";
 import { pwaService } from "./services/pwa.js";
 import { settingsService } from "./services/settings.js";
+import { ControlInversionService } from "./services/controlInversion.js";
 import { themeManager } from "./services/themeManager.js";
 import { initParticleService, particleService } from "./services/particleService.js";
 import { registerGameEffects } from "./particles/presets/gameEffects.js";
@@ -50,9 +52,11 @@ class Game implements GameCallbacks {
   private leaderboardModal: LeaderboardModal;
   private debugView: DebugView;
   private cameraControlsPanel: CameraControlsPanel;
+  private chaosUpgradeMenu: ChaosUpgradeMenu;
   private effectHud: EffectHUD;
   private cameraEffects: CameraEffectsService;
   private cameraAttackExecutor: CameraAttackExecutor;
+  private controlInversion: ControlInversionService;
   private multiplayerNetwork?: MultiplayerNetworkService;
   private gameStartTime: number;
   private selectedDieIndex = 0; // For keyboard navigation
@@ -80,9 +84,18 @@ class Game implements GameCallbacks {
     this.cameraEffects = new CameraEffectsService(this.scene);
     this.effectHud = new EffectHUD(this.cameraEffects);
     this.effectHud.start();
+    this.controlInversion = new ControlInversionService({
+      isEnabled: () => settingsService.getSettings().controls.allowChaosControlInversion,
+    });
     this.cameraAttackExecutor = new CameraAttackExecutor(
       this.cameraEffects,
-      () => this.localPlayerId
+      () => this.localPlayerId,
+      {
+        controlInversion: this.controlInversion,
+        getAccessibilitySettings: () => ({
+          reduceCameraEffects: settingsService.getSettings().controls.reduceChaosCameraEffects,
+        }),
+      }
     );
 
     this.multiplayerNetwork = new MultiplayerNetworkService({
@@ -170,6 +183,8 @@ class Game implements GameCallbacks {
       );
     });
 
+    this.chaosUpgradeMenu = new ChaosUpgradeMenu();
+
     // Initialize controllers
     this.inputController = new InputController(
       this,
@@ -177,7 +192,9 @@ class Game implements GameCallbacks {
       this.leaderboardModal,
       rulesModal,
       this.debugView,
-      this.cameraControlsPanel
+      this.cameraControlsPanel,
+      this.chaosUpgradeMenu,
+      this.controlInversion
     );
     this.gameOverController = new GameOverController(this.scene);
 
@@ -355,6 +372,8 @@ class Game implements GameCallbacks {
       if (controlsEl) controlsEl.style.display = "none";
       if (cameraControlsEl) cameraControlsEl.style.display = "none";
       if (effectHudEl) effectHudEl.style.display = "none";
+      this.chaosUpgradeMenu.hide();
+      this.controlInversion.clearAll();
 
       // Clear game dice from scene
       this.diceRenderer.clearDice();

@@ -320,7 +320,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ### Future Features (See FUTURE-FEATURES.md)
 
 #### Camera Attack Integration System 💥📷
-- **Status**: 🟡 PHASE 3 SCAFFOLDING IN PROGRESS (2026-02-25)
+- **Status**: 🟡 PHASE 4 CLIENT INTEGRATION IN PROGRESS (2026-02-25)
 - **Complexity**: Very High
 - **Description**: Weaponized camera manipulation for multiplayer psychological warfare
 - **Documentation**: Complete specification in `docs/CAMERA-ATTACKS-INTEGRATION.md` (1000+ lines)
@@ -340,6 +340,13 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ Upgrade progression scaffolding (`src/chaos/upgrades/progressionService.ts`) with XP/tokens/unlock validation + persistence
   - ✅ Upgrade definitions for three attack families (`src/chaos/upgrades/definitions.ts`)
   - ✅ Unit-style tests for progression scaffolding (`src/chaos/upgrades/progressionService.test.ts`)
+  - ✅ `ChaosUpgradeMenu` UI scaffold (`src/ui/chaosUpgradeMenu.ts`) wired to desktop/mobile controls + `U` hotkey
+  - ✅ Progression-to-execution profile mapping + message builder (`src/chaos/upgrades/executionProfile.ts`)
+  - ✅ Upgrade menu local cast bridge (`chaos:cameraAttack`) using unlocked level stats
+  - ✅ Control inversion runtime (`src/services/controlInversion.ts`) wired into input and drunk attacks
+  - ✅ Accessibility safeguards in settings + executor (`reduceChaosCameraEffects`, `allowChaosControlInversion`)
+  - ✅ Unit-style tests for execution profile mapping (`src/chaos/upgrades/executionProfile.test.ts`)
+  - ✅ Unit-style tests for control inversion behavior (`src/services/controlInversion.test.ts`)
 - **Key Features**:
   - Camera Effects API (shake, spin, zoom, tilt, drunk vision)
   - Drunk Vision system (3 severity levels: Tipsy, Hammered, Blackout)
@@ -359,7 +366,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - BabylonJS Post-Processing pipeline (implemented client-side; tuning pending)
 - **Implementation Timeline**: ~10 weeks (5 phases)
 - **Monetization**: Chaos Pass ($4.99/mo), IAP packs, Battle Pass
-- **Implementation Priority**: Next up is `ChaosUpgradeMenu` UI wiring + progression-to-ability integration + control inversion/accessibility safeguards
+- **Implementation Priority**: Next up is backend/API+DB profile persistence (settings/progression/logs) + service-worker offloading + multiplayer backend/session groundwork
 
 #### Chaos Gameplay Mechanics System
 - **Status**: DOCUMENTED (not yet implemented)
