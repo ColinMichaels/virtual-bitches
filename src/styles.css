@@ -346,8 +346,10 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .die-wrapper:hover .die-2d {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+  transform: scale(1.5) translateY(-4px);
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* Focused state for keyboard navigation */
@@ -417,6 +419,13 @@ h1, h2, h3, h4, h5, h6 {
   color: #efefef;
   text-shadow: 0 1px 3px rgba(0,0,0,1);
   line-height: 1;
+  transition: font-size 0.3s, text-shadow 0.3s;
+}
+
+.die-wrapper:hover .die-2d .top-value {
+  font-size: 36px;
+  text-shadow: 0 2px 6px rgba(0,0,0,1),
+               0 0 12px rgba(255,255,255,0.5);
 }
 
 .die-2d .points {
@@ -428,7 +437,12 @@ h1, h2, h3, h4, h5, h6 {
   text-shadow: 0 1px 3px rgba(0,0,0,1);
   padding: 2px 8px;
   border-radius: 3px;
-  transition: color 0.3s, text-shadow 0.3s, background 0.3s;
+  transition: all 0.3s;
+}
+
+.die-wrapper:hover .die-2d .points {
+  font-size: 16px;
+  padding: 4px 10px;
 }
 
 /* Hint system - point value colors */
@@ -513,6 +527,98 @@ h1, h2, h3, h4, h5, h6 {
 .die-2d.d20 {
   background: #a5f5c9;
   border-radius: 50%;
+}
+
+/* Color overlay system for hover effects */
+.die-2d::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  clip-path: inherit;
+  pointer-events: none;
+  transition: background 0.3s;
+  z-index: 1;
+}
+
+/* Distinct color highlights per die type on hover */
+.die-wrapper:hover .die-2d.d4::after {
+  background: rgba(255, 68, 68, 0.4); /* Bright red */
+}
+
+.die-wrapper:hover .die-2d.d6::after {
+  background: rgba(68, 136, 255, 0.4); /* Bright blue */
+}
+
+.die-wrapper:hover .die-2d.d8::after {
+  background: rgba(68, 255, 136, 0.4); /* Bright green */
+}
+
+.die-wrapper:hover .die-2d.d10::after {
+  background: rgba(255, 170, 68, 0.4); /* Bright orange */
+}
+
+.die-wrapper:hover .die-2d.d12::after {
+  background: rgba(170, 68, 255, 0.4); /* Bright purple */
+}
+
+.die-wrapper:hover .die-2d.d20::after {
+  background: rgba(68, 255, 255, 0.4); /* Bright cyan */
+}
+
+/* Ensure text appears above overlay */
+.die-2d .top-value,
+.die-2d .points {
+  position: relative;
+  z-index: 2;
+}
+
+/* Mobile/tablet optimization - larger hover scale */
+@media (max-width: 1024px) {
+  .die-wrapper:hover .die-2d,
+  .die-wrapper:active .die-2d {
+    transform: scale(1.8) translateY(-6px);
+  }
+}
+
+/* Touch devices - use active state instead of hover */
+@media (hover: none) and (pointer: coarse) {
+  .die-wrapper:active .die-2d {
+    transform: scale(1.8) translateY(-6px);
+  }
+
+  .die-wrapper:active .die-2d .top-value {
+    font-size: 36px;
+  }
+
+  .die-wrapper:active .die-2d .points {
+    font-size: 16px;
+    padding: 4px 10px;
+  }
+
+  .die-wrapper:active .die-2d.d4::after {
+    background: rgba(255, 68, 68, 0.4);
+  }
+
+  .die-wrapper:active .die-2d.d6::after {
+    background: rgba(68, 136, 255, 0.4);
+  }
+
+  .die-wrapper:active .die-2d.d8::after {
+    background: rgba(68, 255, 136, 0.4);
+  }
+
+  .die-wrapper:active .die-2d.d10::after {
+    background: rgba(255, 170, 68, 0.4);
+  }
+
+  .die-wrapper:active .die-2d.d12::after {
+    background: rgba(170, 68, 255, 0.4);
+  }
+
+  .die-wrapper:active .die-2d.d20::after {
+    background: rgba(68, 255, 255, 0.4);
+  }
 }
 
 /* Settings Gear Button - Top Right */
@@ -3227,7 +3333,7 @@ button.danger:hover:not(:disabled) {
 }
 
 .alpha-content {
-  max-width: 600px;
+  max-width: 700px;
   width: 90%;
   max-height: 90vh;
   overflow-y: auto;
@@ -3249,20 +3355,19 @@ button.danger:hover:not(:disabled) {
 
 .alpha-hero {
   width: 100%;
-  max-height: 150px;
+  aspect-ratio: 16 / 9;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 0;
 }
 
 .alpha-image {
-  width: 70%;
-  height: auto;
-  max-height: 120px;
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   display: block;
 }
 
@@ -3645,13 +3750,14 @@ button.danger:hover:not(:disabled) {
   }
 
   .alpha-hero {
-    max-height: 120px;
-    padding: 15px;
+    aspect-ratio: 16 / 9;
+    padding: 0;
   }
 
   .alpha-image {
-    max-height: 100px;
-    width: 60%;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   .alpha-body {

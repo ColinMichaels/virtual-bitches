@@ -27,35 +27,43 @@ This document explains the alpha warning modal and updates panel system added fo
 
 ## Adding the Alpha Warning Image
 
-The alpha warning modal comes with a default placeholder SVG at:
-```
-/public/alpha-warning.svg
-```
+The alpha warning modal is optimized for **16:9 aspect ratio** images (e.g., 1920×1080, 1280×720).
 
-You can replace this with your own custom image.
+### Image Priority (Automatic Fallback):
+The modal will try to load images in this order:
+1. `/public/alpha-banner.png` (primary - 16:9 format)
+2. `/public/alpha-warning.png` (fallback)
+3. `/public/alpha-warning.svg` (default placeholder)
 
 ### Recommended Image Specifications:
-- **Dimensions**: 600px × 250px (or similar aspect ratio)
+- **Aspect Ratio**: 16:9 (optimal for social media sharing)
+- **Dimensions**: 1920×1080px or 1280×720px recommended
 - **Format**: PNG with transparency preferred (JPG also works)
+- **File Size**: < 500KB for fast loading
 - **Content**: Eye-catching visual representing alpha/pre-release status
 - **Style**: Should match game's visual style (dark theme, red accents)
 
-### Fallback Behavior:
-If the image doesn't exist, the browser will show a broken image icon. The modal will still be functional.
-
-### To Replace with Your Own Image:
-1. Prepare your image (600×250px recommended)
-2. Save it as `alpha-warning.png` (or `.jpg`, `.svg`)
+### To Add Your 16:9 Image:
+1. Prepare your 16:9 image (1920×1080px recommended)
+2. Save it as `alpha-banner.png` (or `alpha-warning.png`)
 3. Place it in `/public/` directory
-4. Update the image reference in `src/ui/alphaWarning.ts` line 28
+4. The modal will automatically use it!
+
+### Current Setup (2026-02-25):
+- ✅ Modal styled for 16:9 aspect ratio (aspect-ratio: 16 / 9)
+- ✅ Image uses `object-fit: cover` for perfect fit
+- ✅ Automatic fallback chain to SVG placeholder
+- ✅ Max width increased to 700px to accommodate wider format
+- ✅ Mobile responsive (full width, maintains aspect ratio)
 
 ### Alternative Image Paths:
 If you want to use a different path, edit `src/ui/alphaWarning.ts` line 28:
 ```typescript
-<img src="/alpha-warning.svg" alt="Alpha Release" class="alpha-image" onerror="this.style.display='none'" />
+<img src="/alpha-banner.png" alt="Alpha Release" class="alpha-image"
+     onerror="this.onerror=null; this.src='/alpha-warning.png'; this.onerror=function() { this.src='/alpha-warning.svg'; };" />
 ```
 
-Change `/alpha-warning.svg` to your preferred path (e.g., `/alpha-warning.png`).
+Change `/alpha-banner.png` to your preferred path.
 
 ## Managing Game Updates
 
