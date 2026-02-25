@@ -141,10 +141,14 @@ class Game {
 
     // Setup tutorial
     tutorialModal.setOnComplete(() => {
-      // After tutorial, update hint mode in case Easy Mode was enabled
+      // After tutorial, update hint mode based on actual difficulty setting
       const settings = settingsService.getSettings();
       const hintsEnabled = shouldShowHints({ difficulty: settings.game.difficulty, variant: "classic" });
       this.diceRow.setHintMode(hintsEnabled);
+
+      // Update game state mode to match settings
+      this.state.mode.difficulty = settings.game.difficulty;
+
       this.updateUI();
     });
 
@@ -277,8 +281,13 @@ class Game {
         hapticsService.buttonPress();
         const view = btn.getAttribute("data-view") as "default" | "top" | "side" | "front";
         this.scene.setCameraView(view);
+        // Close mobile menu after camera selection
+        this.closeMobileMenu();
       });
     });
+
+    // Mobile menu toggle
+    this.setupMobileMenu();
 
     // Keyboard shortcuts
     window.addEventListener("keydown", (e) => {
@@ -397,6 +406,72 @@ class Game {
       // Restore game state - updateUI will handle re-rendering dice if needed
       this.updateUI();
     }
+  }
+
+  private setupMobileMenu() {
+    const menuToggle = document.getElementById("mobile-menu-toggle");
+    const mobileMenu = document.getElementById("mobile-controls-menu");
+    const mobileSettingsBtn = document.getElementById("mobile-settings-btn");
+    const mobileLeaderboardBtn = document.getElementById("mobile-leaderboard-btn");
+
+    if (!menuToggle || !mobileMenu) return;
+
+    // Toggle menu on hamburger click
+    menuToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      audioService.playSfx("click");
+      hapticsService.buttonPress();
+      this.toggleMobileMenu();
+    });
+
+    // Mobile settings button
+    if (mobileSettingsBtn) {
+      mobileSettingsBtn.addEventListener("click", () => {
+        audioService.playSfx("click");
+        hapticsService.buttonPress();
+        this.togglePause();
+        this.closeMobileMenu();
+      });
+    }
+
+    // Mobile leaderboard button
+    if (mobileLeaderboardBtn) {
+      mobileLeaderboardBtn.addEventListener("click", () => {
+        audioService.playSfx("click");
+        hapticsService.buttonPress();
+        this.leaderboardModal.show();
+        this.closeMobileMenu();
+      });
+    }
+
+    // Close menu when clicking outside
+    document.addEventListener("click", (e) => {
+      const target = e.target as HTMLElement;
+      if (!mobileMenu.contains(target) && !menuToggle.contains(target)) {
+        this.closeMobileMenu();
+      }
+    });
+  }
+
+  private toggleMobileMenu() {
+    const mobileMenu = document.getElementById("mobile-controls-menu");
+    if (!mobileMenu) return;
+
+    if (mobileMenu.classList.contains("mobile-menu-closed")) {
+      mobileMenu.classList.remove("mobile-menu-closed");
+      mobileMenu.classList.add("mobile-menu-open");
+    } else {
+      mobileMenu.classList.remove("mobile-menu-open");
+      mobileMenu.classList.add("mobile-menu-closed");
+    }
+  }
+
+  private closeMobileMenu() {
+    const mobileMenu = document.getElementById("mobile-controls-menu");
+    if (!mobileMenu) return;
+
+    mobileMenu.classList.remove("mobile-menu-open");
+    mobileMenu.classList.add("mobile-menu-closed");
   }
 
   private setupDiceSelection() {

@@ -216,21 +216,35 @@ export class TutorialModal {
     const modalContent = this.container.querySelector('.tutorial-content') as HTMLElement;
     if (!modalContent) return;
 
-    // If target is in the upper half, position modal below it
-    // If target is in the lower half, position modal above it
     const viewportHeight = window.innerHeight;
-    const targetMiddle = rect.top + rect.height / 2;
+    const isMobile = window.innerWidth <= 768;
 
-    if (targetMiddle < viewportHeight / 2) {
-      // Target is in upper half - position modal below
+    // For dice-row, always position below on mobile, otherwise position based on location
+    if (selector === '#dice-row') {
+      // Dice row is at top - position modal below it
       this.container.style.alignItems = 'flex-start';
-      this.container.style.paddingTop = `${rect.bottom + 20}px`;
-      this.container.style.paddingBottom = '40px';
+      this.container.style.paddingTop = `${rect.bottom + 10}px`;
+      this.container.style.paddingBottom = '10px';
+    } else if (selector === '#action-btn') {
+      // Action button is at bottom - position modal at top to avoid covering it
+      this.container.style.alignItems = 'flex-start';
+      this.container.style.paddingTop = '10px';
+      this.container.style.paddingBottom = `${viewportHeight - rect.top + 100}px`;
     } else {
-      // Target is in lower half - position modal above
-      this.container.style.alignItems = 'flex-end';
-      this.container.style.paddingTop = '40px';
-      this.container.style.paddingBottom = `${viewportHeight - rect.top + 20}px`;
+      // Default: position based on target location
+      const targetMiddle = rect.top + rect.height / 2;
+
+      if (targetMiddle < viewportHeight / 2) {
+        // Target is in upper half - position modal below
+        this.container.style.alignItems = 'flex-start';
+        this.container.style.paddingTop = `${rect.bottom + 10}px`;
+        this.container.style.paddingBottom = '10px';
+      } else {
+        // Target is in lower half - position modal at top
+        this.container.style.alignItems = 'flex-start';
+        this.container.style.paddingTop = '10px';
+        this.container.style.paddingBottom = `${viewportHeight - rect.top + 100}px`;
+      }
     }
   }
 
