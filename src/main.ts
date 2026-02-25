@@ -18,7 +18,7 @@ import { hapticsService } from "./services/haptics.js";
 import { pwaService } from "./services/pwa.js";
 import { settingsService } from "./services/settings.js";
 import { themeManager } from "./services/themeManager.js";
-import { initParticleService } from "./services/particleService.js";
+import { initParticleService, particleService } from "./services/particleService.js";
 import { registerGameEffects } from "./particles/presets/gameEffects.js";
 import { registerChaosEffects } from "./particles/presets/chaosEffects.js";
 import { logger } from "./utils/logger.js";
@@ -63,6 +63,10 @@ class Game implements GameCallbacks {
     initParticleService(this.scene.scene);
     registerGameEffects();
     registerChaosEffects();
+
+    // Apply particle intensity from settings
+    const settings = settingsService.getSettings();
+    particleService.setIntensity(settings.display.particleIntensity);
     this.hud = new HUD();
     this.diceRow = new DiceRow((dieId) => this.handleDieClick(dieId), this.diceRenderer as any);
 

@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Particle System Implementation Complete)
+**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Particle Intensity Controls Complete)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -77,14 +77,14 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 
 ## 🟡 Medium Priority
 
-### Particle System (Phase 1 - COMPLETE) ✨
-- **Status**: ✅ Phase 1 COMPLETE (2026-02-24)
+### Particle System (Phase 1 & 2 - COMPLETE) ✨
+- **Status**: ✅ Phases 1 & 2 COMPLETE (2026-02-24)
 - **Complexity**: High
-- **Description**: Centralized, event-driven particle system for all visual effects
+- **Description**: Centralized, event-driven particle system integrated with gameplay
 - **Documentation**:
   - Complete specification in `docs/PARTICLE-SYSTEM.md` (2000+ lines)
   - Integration docs updated in `docs/CAMERA-ATTACKS-INTEGRATION.md`
-- **Phase 1 Implementation**:
+- **Phase 1 Implementation** (Core System):
   - ✅ ParticleService with effect registry and pooling
   - ✅ Event-driven architecture with custom events
   - ✅ Quality settings (low/medium/high/ultra) with auto-detection
@@ -93,6 +93,18 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ Particle effect definitions (burst, trail, ambient, attack)
   - ✅ Preset helpers for game events, player actions, and chaos attacks
   - ✅ Refactored existing scene.ts particle usage
+- **Phase 2 Implementation** (Gameplay Integration):
+  - ✅ Dice score particles - gold burst when dice land in score area
+  - ✅ Dice roll landing particles - white burst when dice hit table
+  - ✅ Perfect roll celebration - confetti burst (already working)
+  - ✅ Game completion celebration - confetti burst (already working)
+- **Phase 2.5 Implementation** (Intensity Controls):
+  - ✅ Added `particleIntensity` setting ("off" | "minimal" | "normal" | "enthusiastic")
+  - ✅ Intensity multipliers in ParticleService (0%, 30%, 60%, 100%)
+  - ✅ Reduced baseline particle scales: roll 0.25 (was 0.4), score 0.6 (was 1.0)
+  - ✅ Reduced celebration scales: perfect 1.2 (was 2.0), complete 1.0 (was 1.6)
+  - ✅ Adaptive burst counts: minimal=0, normal=2-3, enthusiastic=4
+  - ✅ Default "normal" intensity = 60% of previous particle amount
 - **Files Created**:
   - `src/services/particleService.ts` - Core service (800+ lines)
   - `src/particles/effects/burstEffects.ts` - Burst particle definitions
@@ -102,16 +114,19 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - `src/particles/presets/gameEffects.ts` - Game event helpers
   - `src/particles/presets/playerEffects.ts` - Player action helpers
   - `src/particles/presets/chaosEffects.ts` - Chaos attack helpers
-  - `docs/PARTICLE-SYSTEM.md` - Complete documentation
+  - `docs/PARTICLE-SYSTEM.md` - Complete documentation with intensity section
 - **Files Modified**:
-  - `src/main.ts` - Initialize ParticleService and register effects
-  - `src/render/scene.ts` - Refactored to use ParticleService
+  - `src/main.ts` - Initialize ParticleService, register effects, apply intensity
+  - `src/render/scene.ts` - Refactored particles, added intensity-aware celebrations
+  - `src/render/dice.ts` - Added particles with reduced baseline scales
+  - `src/services/settings.ts` - Added particleIntensity to DisplaySettings
+  - `src/services/particleService.ts` - Added intensity system with multipliers
   - `docs/CAMERA-ATTACKS-INTEGRATION.md` - Added particle integration details
 - **Future Phases**:
-  - 🔒 Phase 2: Game event integration (score, bust, perfect, achievement)
   - 🔒 Phase 3: Advanced effects (custom shaders, animated sprites, mesh particles)
   - 🔒 Phase 4: Particle editor for custom effects
-- **Result**: Centralized particle system ready for game events, multiplayer attacks, and visual feedback
+  - 🔒 Phase 5: Settings UI dropdown for particle intensity control
+- **Result**: Balanced, configurable particle system with 60% less visual noise by default! 🎉
 
 ### Recently Completed (Session 2026-02-24)
 

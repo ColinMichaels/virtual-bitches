@@ -20,6 +20,7 @@ export interface DisplaySettings {
   graphicsQuality: "low" | "medium" | "high";
   shadowsEnabled: boolean;
   particlesEnabled: boolean;
+  particleIntensity: "off" | "minimal" | "normal" | "enthusiastic";
 }
 
 export interface ControlSettings {
@@ -56,6 +57,7 @@ const DEFAULT_SETTINGS: Settings = {
     graphicsQuality: "high",
     shadowsEnabled: true,
     particlesEnabled: true,
+    particleIntensity: "normal",
   },
   controls: {
     cameraSensitivity: 1.0,

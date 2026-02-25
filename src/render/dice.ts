@@ -28,6 +28,7 @@ import {
 import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
 import "@babylonjs/loaders/glTF";
 import { DieState, DieKind } from "../engine/types.js";
+import { particleService } from "../services/particleService.js";
 import { themeManager } from "../services/themeManager.js";
 import { logger } from "../utils/logger.js";
 import { createColorMaterial } from "./colorMaterial.js";
@@ -1214,6 +1215,16 @@ export class DiceRenderer {
         this.updateDie(die);
         // Validate die rotation after animation completes
         this.validateDieRotation(die, mesh);
+
+        // Emit small particle burst when die lands
+        particleService.emit({
+          effectId: "burst-white",
+          position: new Vector3(finalX, endY + 0.3, finalZ),
+          options: {
+            scale: 0.25, // Reduced from 0.4 (normal intensity will be 0.15)
+            networkSync: false,
+          },
+        });
       });
     });
 
@@ -1295,7 +1306,19 @@ export class DiceRenderer {
       ]);
 
       mesh.animations = [moveAnim, rotAnim];
-      this.scene.beginAnimation(mesh, 0, 20, false);
+      const anim = this.scene.beginAnimation(mesh, 0, 20, false);
+
+      // Emit particle burst when die lands in score area
+      anim.onAnimationEndObservable.addOnce(() => {
+        particleService.emit({
+          effectId: "burst-gold",
+          position: new Vector3(targetX, targetY + 0.5, targetZ),
+          options: {
+            scale: 0.6, // Reduced from 1.0 (normal intensity will be 0.36)
+            networkSync: false,
+          },
+        });
+      });
     });
 
     setTimeout(onComplete, SCORE_ANIMATION_DELAY_MS);

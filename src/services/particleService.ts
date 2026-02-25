@@ -104,12 +104,18 @@ export interface ParticleNetworkEvent {
 /**
  * ParticleService - Manages all particle effects in the game
  */
+/**
+ * Particle intensity levels
+ */
+export type ParticleIntensity = "off" | "minimal" | "normal" | "enthusiastic";
+
 export class ParticleService {
   private scene: Scene;
   private effectRegistry: Map<string, ParticleEffect> = new Map();
   private particlePool: ParticleSystem[] = [];
   private activeParticles: Map<string, ParticleInstance> = new Map();
   private quality: ParticleQuality = "medium";
+  private intensity: ParticleIntensity = "normal";
   private maxActiveParticles = 20;
   private maxParticlesPerEffect = 200;
   private networkSyncEnabled = false;
@@ -121,6 +127,14 @@ export class ParticleService {
     medium: { particles: 0.75, emitRate: 0.75 },
     high: { particles: 1.0, emitRate: 1.0 },
     ultra: { particles: 1.5, emitRate: 1.25 },
+  };
+
+  // Intensity multipliers
+  private intensityMultipliers = {
+    off: 0,
+    minimal: 0.3,
+    normal: 0.6,
+    enthusiastic: 1.0,
   };
 
   constructor(scene: Scene) {
@@ -204,6 +218,12 @@ export class ParticleService {
    * Emit particles based on ParticleEvent
    */
   emit(event: ParticleEvent): string {
+    // Check intensity - if off, don't emit
+    const intensityMultiplier = this.intensityMultipliers[this.intensity];
+    if (intensityMultiplier === 0) {
+      return ""; // Skip emission for "off" intensity
+    }
+
     if (!this.canEmit()) {
       console.warn("[ParticleService] Cannot emit - max particles reached");
       return "";
@@ -218,12 +238,15 @@ export class ParticleService {
     // Apply quality settings
     const adjustedEffect = this.applyQuality(effect);
 
-    // Apply scale option
-    if (event.options?.scale) {
-      adjustedEffect.minSize *= event.options.scale;
-      adjustedEffect.maxSize *= event.options.scale;
+    // Apply scale option with intensity multiplier
+    const baseScale = event.options?.scale || 1.0;
+    const finalScale = baseScale * intensityMultiplier;
+
+    if (finalScale !== 1.0) {
+      adjustedEffect.minSize *= finalScale;
+      adjustedEffect.maxSize *= finalScale;
       adjustedEffect.maxParticles = Math.floor(
-        adjustedEffect.maxParticles * event.options.scale
+        adjustedEffect.maxParticles * finalScale
       );
     }
 
@@ -571,6 +594,21 @@ export class ParticleService {
   setQuality(quality: ParticleQuality): void {
     this.quality = quality;
     console.log(`[ParticleService] Quality set to: ${quality}`);
+  }
+
+  /**
+   * Set particle intensity level
+   */
+  setIntensity(intensity: ParticleIntensity): void {
+    this.intensity = intensity;
+    console.log(`[ParticleService] Intensity set to: ${intensity}`);
+  }
+
+  /**
+   * Get current particle intensity
+   */
+  getIntensity(): ParticleIntensity {
+    return this.intensity;
   }
 
   /**

@@ -472,15 +472,36 @@ export class GameScene {
    * Create celebration effect for perfect roll or game complete
    */
   celebrateSuccess(type: "perfect" | "complete") {
-    const effectId = type === "perfect" ? "burst-white" : "burst-confetti";
-    const scale = type === "complete" ? 1.6 : 2.0;
+    const intensity = particleService.getIntensity();
 
-    const positions = [
+    // Minimal intensity: skip celebrations
+    if (intensity === "minimal") {
+      return;
+    }
+
+    const effectId = type === "perfect" ? "burst-white" : "burst-confetti";
+    // Reduced base scales: perfect 1.2 (was 2.0), complete 1.0 (was 1.6)
+    const baseScale = type === "complete" ? 1.0 : 1.2;
+
+    // All positions for enthusiastic mode
+    const allPositions = [
       new Vector3(-4, 1, 0),
       new Vector3(4, 1, 0),
       new Vector3(0, 1, -3),
       new Vector3(0, 1, 3),
     ];
+
+    // Adjust burst count based on intensity
+    let positions: Vector3[];
+    if (intensity === "normal") {
+      // Normal: 2 bursts for perfect, 3 for complete
+      positions = type === "perfect"
+        ? [allPositions[0], allPositions[1]] // Left and right
+        : [allPositions[0], allPositions[1], allPositions[2]]; // Left, right, front
+    } else {
+      // Enthusiastic: all 4 bursts
+      positions = allPositions;
+    }
 
     positions.forEach((pos, i) => {
       setTimeout(() => {
@@ -488,7 +509,7 @@ export class GameScene {
           effectId: effectId,
           position: pos,
           options: {
-            scale: scale,
+            scale: baseScale,
             networkSync: false,
           },
         });

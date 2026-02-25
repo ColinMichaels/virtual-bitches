@@ -140,6 +140,25 @@ Particle density adapts to device capability:
 | **High** | 100% | 100% | High-end PCs, dedicated GPUs |
 | **Ultra** | 150% | 125% | Enthusiast hardware |
 
+### Intensity Levels
+
+Particle intensity controls celebration and achievement particles based on player preference:
+
+| Intensity | Scale Multiplier | Celebrations | Use Case |
+|-----------|-----------------|--------------|----------|
+| **Off** | 0% (disabled) | None | Players who prefer clean gameplay |
+| **Minimal** | 30% | None | Subtle feedback only (scoring dice) |
+| **Normal** | 60% | 2-3 bursts | Balanced feel (default) |
+| **Enthusiastic** | 100% | 4 bursts | Full celebration mode for streamers |
+
+**Intensity affects**:
+- Scale of all particle emissions
+- Number of celebration bursts (perfect roll, game complete)
+- Dice roll landing particles reduced to subtle feedback
+- Scoring particles remain visible at all non-off levels
+
+**Note**: Intensity multiplies the base scale, so a particle with scale 1.0 at "normal" intensity becomes scale 0.6 (1.0 × 0.6).
+
 ---
 
 ## API Reference
@@ -323,6 +342,28 @@ Set particle quality tier.
 
 ```typescript
 particleService.setQuality('high');
+```
+
+---
+
+##### `setIntensity(intensity: 'off' | 'minimal' | 'normal' | 'enthusiastic'): void`
+
+Set particle intensity level for celebrations and achievements.
+
+```typescript
+// Read from settings
+const settings = settingsService.getSettings();
+particleService.setIntensity(settings.display.particleIntensity);
+```
+
+---
+
+##### `getIntensity(): ParticleIntensity`
+
+Get current particle intensity level.
+
+```typescript
+const currentIntensity = particleService.getIntensity();
 ```
 
 ---
