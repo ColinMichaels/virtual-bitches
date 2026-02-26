@@ -57,6 +57,8 @@ The running server uses JSON-file persistence for now. SQL files define the inte
 - Supported WS message types for relay:
   - `chaos_attack`
   - `particle:emit`
+  - `game_update` (`title` + `content` required)
+  - `player_notification` (`message` required, optional `targetPlayerId`)
 - Leaderboard ordering is deterministic:
   1. Lower score first
   2. Lower duration first

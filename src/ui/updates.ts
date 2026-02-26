@@ -4,7 +4,13 @@
  */
 
 import { audioService } from "../services/audio.js";
+import { getLocalPlayerId } from "../services/playerIdentity.js";
+import { notificationService } from "./notifications.js";
 import { logger } from "../utils/logger.js";
+import type {
+  MultiplayerGameUpdateMessage,
+  MultiplayerPlayerNotificationMessage,
+} from "../multiplayer/networkService.js";
 
 const log = logger.create('UpdatesPanel');
 
@@ -30,6 +36,30 @@ export class UpdatesPanel {
   private updates: GameUpdate[] = [];
   private lastSeenId: string | null = null;
   private isExpanded = false;
+  private readonly localPlayerId = getLocalPlayerId();
+  private readonly onDocumentClick = (e: MouseEvent) => {
+    const targetNode = e.target;
+    const targetElement = targetNode instanceof Element ? targetNode : null;
+
+    if (
+      this.isExpanded &&
+      targetNode instanceof Node &&
+      !this.container.contains(targetNode) &&
+      !targetElement?.closest("#mobile-updates-btn, #updates-toggle-btn")
+    ) {
+      this.closePanel();
+    }
+  };
+  private readonly onRealtimeUpdate = (event: Event) => {
+    const payload = (event as CustomEvent<MultiplayerGameUpdateMessage>).detail;
+    if (!payload) return;
+    this.pushRealtimeUpdate(payload);
+  };
+  private readonly onRealtimeNotification = (event: Event) => {
+    const payload = (event as CustomEvent<MultiplayerPlayerNotificationMessage>).detail;
+    if (!payload) return;
+    this.pushRealtimeNotification(payload);
+  };
 
   constructor() {
     this.lastSeenId = this.getLastSeenUpdate();
@@ -62,6 +92,7 @@ export class UpdatesPanel {
 
     // Setup event handlers
     this.setupEventHandlers();
+    this.setupRealtimeEventHandlers();
 
     // Load updates
     this.loadUpdates();
@@ -102,13 +133,15 @@ export class UpdatesPanel {
     }
 
     // Close on outside click
-    document.addEventListener("click", (e) => {
-      if (this.isExpanded &&
-          !this.container.contains(e.target as Node) &&
-          !(e.target as HTMLElement).closest('#mobile-updates-btn')) {
-        this.closePanel();
-      }
-    });
+    document.addEventListener("click", this.onDocumentClick);
+  }
+
+  private setupRealtimeEventHandlers(): void {
+    document.addEventListener("multiplayer:update:received", this.onRealtimeUpdate as EventListener);
+    document.addEventListener(
+      "multiplayer:notification:received",
+      this.onRealtimeNotification as EventListener
+    );
   }
 
   /**
@@ -260,6 +293,117 @@ export class UpdatesPanel {
     this.isExpanded = false;
   }
 
+  private pushRealtimeUpdate(payload: MultiplayerGameUpdateMessage): void {
+    const title = payload.title.trim();
+    const content = payload.content.trim();
+    if (!title || !content) return;
+
+    const timestamp = typeof payload.timestamp === "number" ? payload.timestamp : Date.now();
+    const generatedId = `ws-update-${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
+    const updateId = payload.id?.trim() || generatedId;
+    if (this.updates.some((update) => update.id === updateId)) {
+      return;
+    }
+
+    const normalizedType = this.normalizeUpdateType(payload.updateType);
+    const safeTitle = this.escapeHtml(title);
+    const safeContent = `<p>${this.escapeHtml(content)}</p>`;
+
+    this.updates.unshift({
+      id: updateId,
+      date: this.normalizeDateInput(payload.date, timestamp),
+      title: safeTitle,
+      content: safeContent,
+      version: payload.version,
+      type: normalizedType,
+    });
+
+    this.updates.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    this.renderUpdates();
+    this.updateBadge();
+
+    if (!this.isExpanded) {
+      notificationService.show(`New update: ${title}`, "info", 2800);
+    }
+  }
+
+  private pushRealtimeNotification(payload: MultiplayerPlayerNotificationMessage): void {
+    if (payload.targetPlayerId && payload.targetPlayerId !== this.localPlayerId) {
+      return;
+    }
+
+    const message = payload.message.trim();
+    if (!message) return;
+
+    const title = payload.title?.trim() || "Player Notification";
+    const severity = this.normalizeNotificationType(payload.severity);
+
+    notificationService.show(`${title}: ${message}`, severity, 3200);
+
+    const timestamp = typeof payload.timestamp === "number" ? payload.timestamp : Date.now();
+    const generatedId = `ws-note-${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
+    const updateId = payload.id?.trim() || generatedId;
+    if (this.updates.some((update) => update.id === updateId)) {
+      return;
+    }
+
+    this.updates.unshift({
+      id: updateId,
+      date: new Date(timestamp).toISOString(),
+      title: this.escapeHtml(title),
+      content: `<p>${this.escapeHtml(message)}</p>`,
+      type: "alert",
+    });
+
+    this.updates.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    this.renderUpdates();
+    this.updateBadge();
+  }
+
+  private normalizeNotificationType(
+    severity: MultiplayerPlayerNotificationMessage["severity"]
+  ): "info" | "success" | "warning" | "error" {
+    switch (severity) {
+      case "success":
+      case "warning":
+      case "error":
+        return severity;
+      default:
+        return "info";
+    }
+  }
+
+  private normalizeUpdateType(
+    updateType: MultiplayerGameUpdateMessage["updateType"]
+  ): GameUpdate["type"] {
+    switch (updateType) {
+      case "feature":
+      case "bugfix":
+      case "announcement":
+      case "alert":
+        return updateType;
+      default:
+        return "announcement";
+    }
+  }
+
+  private normalizeDateInput(dateInput: string | undefined, fallbackTimestamp: number): string {
+    if (dateInput && !Number.isNaN(Date.parse(dateInput))) {
+      return dateInput;
+    }
+
+    return new Date(fallbackTimestamp).toISOString();
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   /**
    * Get last seen update ID from localStorage
    */
@@ -335,6 +479,12 @@ export class UpdatesPanel {
    * Dispose panel
    */
   dispose(): void {
+    document.removeEventListener("click", this.onDocumentClick);
+    document.removeEventListener("multiplayer:update:received", this.onRealtimeUpdate as EventListener);
+    document.removeEventListener(
+      "multiplayer:notification:received",
+      this.onRealtimeNotification as EventListener
+    );
     this.container.remove();
   }
 }

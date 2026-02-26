@@ -1426,7 +1426,24 @@ function handleSocketMessage(client, rawMessage) {
 function isSupportedSocketPayload(payload) {
   if (!payload || typeof payload !== "object") return false;
   const messageType = payload.type;
-  return messageType === "chaos_attack" || messageType === "particle:emit";
+  if (messageType === "chaos_attack" || messageType === "particle:emit") {
+    return true;
+  }
+  if (messageType === "game_update") {
+    return (
+      typeof payload.title === "string" &&
+      payload.title.trim().length > 0 &&
+      typeof payload.content === "string" &&
+      payload.content.trim().length > 0
+    );
+  }
+  if (messageType === "player_notification") {
+    return (
+      typeof payload.message === "string" &&
+      payload.message.trim().length > 0
+    );
+  }
+  return false;
 }
 
 function registerSocketClient(client, sessionId) {

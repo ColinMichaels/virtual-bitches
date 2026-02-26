@@ -32,6 +32,27 @@ interface WsErrorMessage {
   message?: string;
 }
 
+export interface MultiplayerGameUpdateMessage {
+  type: "game_update";
+  id?: string;
+  title: string;
+  content: string;
+  date?: string;
+  version?: string;
+  updateType?: "feature" | "bugfix" | "announcement" | "alert";
+  timestamp?: number;
+}
+
+export interface MultiplayerPlayerNotificationMessage {
+  type: "player_notification";
+  id?: string;
+  title?: string;
+  message: string;
+  severity?: "info" | "success" | "warning" | "error";
+  targetPlayerId?: string;
+  timestamp?: number;
+}
+
 function isCameraAttackMessage(value: unknown): value is CameraAttackMessage {
   if (!value || typeof value !== "object") return false;
 
@@ -64,6 +85,26 @@ function isWsErrorMessage(value: unknown): value is WsErrorMessage {
 
   const msg = value as Partial<WsErrorMessage>;
   return msg.type === "error" && typeof msg.code === "string";
+}
+
+function isMultiplayerGameUpdateMessage(value: unknown): value is MultiplayerGameUpdateMessage {
+  if (!value || typeof value !== "object") return false;
+
+  const msg = value as Partial<MultiplayerGameUpdateMessage>;
+  return (
+    msg.type === "game_update" &&
+    typeof msg.title === "string" &&
+    typeof msg.content === "string"
+  );
+}
+
+function isMultiplayerPlayerNotificationMessage(
+  value: unknown
+): value is MultiplayerPlayerNotificationMessage {
+  if (!value || typeof value !== "object") return false;
+
+  const msg = value as Partial<MultiplayerPlayerNotificationMessage>;
+  return msg.type === "player_notification" && typeof msg.message === "string";
 }
 
 function isAuthExpiredCloseCode(code: number): boolean {
@@ -121,6 +162,20 @@ export class MultiplayerNetworkService {
     if (isParticleNetworkEvent(parsed)) {
       this.eventTarget.dispatchEvent(
         createCustomEvent("particle:network:receive", parsed)
+      );
+      return;
+    }
+
+    if (isMultiplayerGameUpdateMessage(parsed)) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:update:received", parsed)
+      );
+      return;
+    }
+
+    if (isMultiplayerPlayerNotificationMessage(parsed)) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:notification:received", parsed)
       );
       return;
     }
@@ -204,6 +259,46 @@ export class MultiplayerNetworkService {
     );
   };
 
+  private readonly onGameUpdateSend = (event: Event) => {
+    const custom = event as CustomEvent<MultiplayerGameUpdateMessage>;
+    if (!custom.detail) return;
+    const sent = this.sendGameUpdate(custom.detail);
+    if (sent) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:update:sent", {
+          message: custom.detail,
+        })
+      );
+      return;
+    }
+
+    this.eventTarget.dispatchEvent(
+      createCustomEvent("multiplayer:update:sendFailed", {
+        message: custom.detail,
+      })
+    );
+  };
+
+  private readonly onPlayerNotificationSend = (event: Event) => {
+    const custom = event as CustomEvent<MultiplayerPlayerNotificationMessage>;
+    if (!custom.detail) return;
+    const sent = this.sendPlayerNotification(custom.detail);
+    if (sent) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:notification:sent", {
+          message: custom.detail,
+        })
+      );
+      return;
+    }
+
+    this.eventTarget.dispatchEvent(
+      createCustomEvent("multiplayer:notification:sendFailed", {
+        message: custom.detail,
+      })
+    );
+  };
+
   constructor(options: MultiplayerNetworkOptions = {}) {
     const hasExplicitWsUrl = Object.prototype.hasOwnProperty.call(options, "wsUrl");
     this.wsUrl = hasExplicitWsUrl
@@ -226,6 +321,11 @@ export class MultiplayerNetworkService {
       "chaos:cameraAttack:send",
       this.onCameraAttackSend
     );
+    this.eventTarget.addEventListener("multiplayer:update:send", this.onGameUpdateSend);
+    this.eventTarget.addEventListener(
+      "multiplayer:notification:send",
+      this.onPlayerNotificationSend
+    );
   }
 
   disableEventBridge(): void {
@@ -236,6 +336,11 @@ export class MultiplayerNetworkService {
     this.eventTarget.removeEventListener(
       "chaos:cameraAttack:send",
       this.onCameraAttackSend
+    );
+    this.eventTarget.removeEventListener("multiplayer:update:send", this.onGameUpdateSend);
+    this.eventTarget.removeEventListener(
+      "multiplayer:notification:send",
+      this.onPlayerNotificationSend
     );
   }
 
@@ -277,6 +382,14 @@ export class MultiplayerNetworkService {
   }
 
   sendCameraAttack(message: CameraAttackMessage): boolean {
+    return this.sendRaw(message);
+  }
+
+  sendGameUpdate(message: MultiplayerGameUpdateMessage): boolean {
+    return this.sendRaw(message);
+  }
+
+  sendPlayerNotification(message: MultiplayerPlayerNotificationMessage): boolean {
     return this.sendRaw(message);
   }
 
