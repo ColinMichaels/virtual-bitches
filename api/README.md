@@ -51,6 +51,7 @@ SQL files define the intended longer-term relational schema.
 - `GET /api/admin/overview`
 - `GET /api/admin/rooms`
 - `GET /api/admin/metrics`
+- `GET /api/admin/storage`
 - `GET /api/admin/audit`
 - `GET /api/admin/roles`
 - `PUT /api/admin/roles/:uid`
@@ -94,8 +95,10 @@ Planned (not implemented yet):
   - `operator` and `owner` may run room control mutations:
     - expire room session
     - remove participant from room
+  - `GET /api/admin/storage` exposes active persistence backend + section counts for audit checks.
   - Mutation actions are written to admin audit logs and exposed via `GET /api/admin/audit`.
   - Pass `x-admin-token: <token>` (or bearer token) when token mode is enabled.
+- Current multiplayer orchestration is server-process authoritative (in-memory + persisted snapshots). Keep Cloud Run API single-instance until distributed room coordination is introduced.
 - Friends/presence architecture plan lives in `docs/FRIENDS-SYSTEM-PLAN.md`; endpoints above are intentionally deferred until multiplayer stability gate completion.
 - `GET /api/players/:playerId/profile` returns `204 No Content` when profile does not exist yet.
 - WS endpoint is available at `/` and expects query params:

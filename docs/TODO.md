@@ -160,6 +160,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
     - `GET /api/admin/overview`
     - `GET /api/admin/rooms`
     - `GET /api/admin/metrics`
+    - `GET /api/admin/storage`
   - ✅ Added configurable admin access modes (`auto` | `open` | `token` | `role` | `hybrid` | `disabled`)
   - ✅ Added role-protected admin access (Firebase-authenticated `viewer`/`operator`/`owner`)
   - ✅ Added owner role assignment API (`GET /api/admin/roles`, `PUT /api/admin/roles/:uid`) with bootstrap owner allowlists
@@ -851,11 +852,12 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 
 ## 🎯 Next Sprint Goals
 
-1. **Enable Firestore Backend in Deploy Envs**: Set `API_STORE_BACKEND=firestore` (+ optional `API_FIRESTORE_PREFIX`) and verify data migration from `api/data/store.json`.
+1. **Firestore Deploy Cutover Verification**: ✅ Workflow default now deploys API with `API_STORE_BACKEND=firestore`; next validate env-specific prefixes and post-deploy section counts via `GET /api/admin/storage`.
 2. **Auth Hardening Finalization**: Run production with `FIREBASE_AUTH_MODE=admin` and remove legacy lookup fallback after cutover validation.
-3. **Multiplayer Rollout (Server Authoritative)**: Implement room/lobby lifecycle, ready states, and canonical game-state messaging.
-4. **Leaderboard UX**: Add filters (mode/difficulty), pagination, and player history views.
-5. **Theme Polish Follow-up**: Finish remaining UV/lighting consistency checks across all die types.
+3. **Multiplayer Consistency Guardrail**: Keep Cloud Run `API_MAX_INSTANCES=1` until shared-state coordination is implemented for multi-instance websocket rooms.
+4. **Multiplayer Rollout (Server Authoritative)**: Implement room/lobby lifecycle, ready states, and canonical game-state messaging.
+5. **Leaderboard UX**: Add filters (mode/difficulty), pagination, and player history views.
+6. **Theme Polish Follow-up**: Finish remaining UV/lighting consistency checks across all die types.
 
 ---
 

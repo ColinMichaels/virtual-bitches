@@ -94,6 +94,17 @@ export interface AdminRoleRecord {
   roleUpdatedBy?: string;
 }
 
+export interface AdminStorageDiagnostics {
+  backend: string;
+  firestorePrefix?: string;
+  firestoreCollections?: string[];
+}
+
+export interface AdminStorageSectionSummary {
+  section: string;
+  count: number;
+}
+
 export type AdminAuditAction = "role_upsert" | "session_expire" | "participant_remove" | string;
 
 export interface AdminAuditEntry {
@@ -131,6 +142,14 @@ export interface AdminRolesResult {
 
 export interface AdminRoleUpdateResult {
   roleRecord: AdminRoleRecord | null;
+  status?: number;
+  reason?: string;
+  principal?: AdminPrincipal | null;
+}
+
+export interface AdminStorageResult {
+  storage: AdminStorageDiagnostics | null;
+  sections: AdminStorageSectionSummary[] | null;
   status?: number;
   reason?: string;
   principal?: AdminPrincipal | null;
@@ -279,6 +298,35 @@ export class AdminApiService {
     }
     return {
       entries: result.payload.entries,
+      status: result.status,
+      principal: result.payload.principal ?? null,
+    };
+  }
+
+  async getStorage(authOptions: AdminRequestAuthOptions = {}): Promise<AdminStorageResult> {
+    const result = await this.requestJson("/admin/storage", {
+      method: "GET",
+      authOptions,
+    });
+    if (!result.ok) {
+      return {
+        storage: null,
+        sections: null,
+        status: result.status,
+        reason: result.reason,
+      };
+    }
+    if (!isAdminStoragePayload(result.payload)) {
+      return {
+        storage: null,
+        sections: null,
+        status: result.status,
+        reason: "invalid_admin_payload",
+      };
+    }
+    return {
+      storage: result.payload.storage,
+      sections: result.payload.sections,
       status: result.status,
       principal: result.payload.principal ?? null,
     };
@@ -589,6 +637,48 @@ function isAdminAuditPayload(
     return false;
   }
   return payload.entries.every((entry) => isAdminAuditEntry(entry));
+}
+
+function isAdminStorageDiagnostics(payload: unknown): payload is AdminStorageDiagnostics {
+  if (!isRecord(payload)) {
+    return false;
+  }
+  if (typeof payload.backend !== "string" || !payload.backend.trim()) {
+    return false;
+  }
+  return true;
+}
+
+function isAdminStorageSectionSummary(payload: unknown): payload is AdminStorageSectionSummary {
+  if (!isRecord(payload)) {
+    return false;
+  }
+  if (typeof payload.section !== "string" || !payload.section.trim()) {
+    return false;
+  }
+  if (typeof payload.count !== "number" || !Number.isFinite(payload.count)) {
+    return false;
+  }
+  return true;
+}
+
+function isAdminStoragePayload(
+  payload: Record<string, unknown> | null
+): payload is {
+  storage: AdminStorageDiagnostics;
+  sections: AdminStorageSectionSummary[];
+  principal?: AdminPrincipal | null;
+} {
+  if (!isRecord(payload)) {
+    return false;
+  }
+  if (!isAdminStorageDiagnostics(payload.storage)) {
+    return false;
+  }
+  if (!Array.isArray(payload.sections)) {
+    return false;
+  }
+  return payload.sections.every((entry) => isAdminStorageSectionSummary(entry));
 }
 
 export const adminApiService = new AdminApiService();

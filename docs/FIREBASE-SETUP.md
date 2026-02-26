@@ -77,6 +77,9 @@ Notes:
 - Set `FIREBASE_PROJECT_ID` on Cloud Run so API-side Firebase ID token validation can enforce token audience.
 - For Firestore-backed API persistence, set `API_STORE_BACKEND=firestore` (optional `API_FIRESTORE_PREFIX`, default `api_v1`).
 - For hardened Firebase token verification, set `FIREBASE_AUTH_MODE=admin` in Cloud Run.
+- Runtime verification:
+  - `GET /api/health` now includes `storage.backend` + Firestore prefix metadata.
+  - `GET /api/admin/storage` returns persistence backend and per-section counts for audit checks.
 
 Optional smoke test against deployed API + WebSocket:
 
@@ -139,6 +142,10 @@ Recommended setup (GitHub Environments):
   - `VITE_FIREBASE_APP_ID`
   - `VITE_FIREBASE_MEASUREMENT_ID` (optional)
   - `VITE_ENABLE_ADMIN_UI` (optional)
+  - `API_STORE_BACKEND` (recommended: `firestore`)
+  - `API_FIRESTORE_PREFIX` (optional; default `api_v1`)
+  - `FIREBASE_AUTH_MODE` (recommended: `admin` for production)
+  - `API_MAX_INSTANCES` (recommended current gameplay architecture: `1`)
 
 Alternate setup (repo-level branch-suffixed keys):
 - `FIREBASE_PROJECT_ID_PROD`

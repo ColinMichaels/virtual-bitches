@@ -616,6 +616,18 @@ async function runAdminMonitorChecks() {
     "admin metrics missing activeSessionCount"
   );
 
+  const storage = await apiRequest("/admin/storage", {
+    method: "GET",
+    headers: adminHeaders,
+  });
+  assert(typeof storage?.timestamp === "number", "admin storage missing timestamp");
+  assert(storage?.storage && typeof storage.storage === "object", "admin storage missing storage object");
+  assert(
+    typeof storage.storage.backend === "string" && storage.storage.backend.length > 0,
+    "admin storage missing backend"
+  );
+  assert(Array.isArray(storage?.sections), "admin storage missing sections[]");
+
   const auditBefore = await apiRequest("/admin/audit?limit=5", {
     method: "GET",
     headers: adminHeaders,
