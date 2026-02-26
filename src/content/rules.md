@@ -1,102 +1,110 @@
-# Bitches (a Dice Game) — Quick Rules + Fun Table Talk
+# BISCUITS: How To Play
 
-A fast, push-your-luck dice game where every roll feels like a small life decision… and your friends will absolutely comment on all of them.
+<div class="rules-callout">
+  <strong>Goal:</strong> finish with the <strong>lowest total score</strong>.  
+  Every scored die is worth <strong>(max face - rolled face)</strong>, so high rolls are good and low rolls are expensive.
+</div>
 
----
+## Quick Start
 
-## Components
-- **15 dice total:** **11× d6**, **1× d8**, **1× d10**, **1× d12**, and **1× custom “Bitches” (or “Biscuits”) die**
-- **Dice bag** (for maximum drama when you shake it)
+1. Roll all dice in play.
+2. Select one or more dice.
+3. Score selected dice (they are removed from the pool).
+4. Repeat until all dice are scored.
 
-> **Family-friendly mode:** “Biscuits” is the same game with a cleaner label on the custom die.
+The game ends when every die has been scored.
 
----
+## Dice Pool
 
-## Objective
-You’re chasing **perfect rolls** (the highest face on each die), because in this game:
+Base pool is 15 dice total:
 
-**Lower score wins.**
+- 12 x d6
+- 1 x d8
+- 1 x d10
+- 1 x d12
 
----
+Variant options (Settings -> Game Variants) can swap some d6 slots for:
 
-## Key Terms
-- **A “Bitch/Biscuit”** = the **highest value** on a die
-  - d6 → **6**
-  - d8 → **8**
-  - d10 → **0 counts as 10** (highest)
-  - d12 → **12**
-  - custom die → its highest face
+- d20
+- d4
+- second d10
+- d100 mode (paired d10 tens/ones behavior)
 
----
+## Scoring
 
-## How to Play (One Player Turn)
-1. **Roll all dice currently in play.**
-2. **Choose at least one die to score (set aside).**
-  - You can set aside as many as you want, but **you must set aside at least one** every roll.
-3. **Re-roll the remaining dice.**
-4. Repeat until **all dice have been set aside/scored**.
+Formula:
 
-Then the next player goes. After everyone plays, compare scores.
+`points = die max value - rolled value`
 
----
+| Die | Perfect Roll | Perfect Score |
+| --- | --- | --- |
+| d4 | 4 | 0 |
+| d6 | 6 | 0 |
+| d8 | 8 | 0 |
+| d10 | 10 | 0 |
+| d12 | 12 | 0 |
+| d20 | 20 | 0 |
 
-## Scoring (Reverse Scoring — simple and fast)
-When you score a die, you score the **difference from perfect**:
+Lower total score wins.
 
-**Score = (max value on that die) − (value rolled).**
+## Modes And Rooms
 
-Examples:
-- d6 showing **6** → **6 − 6 = 0**
-- d12 showing **10** → **12 − 10 = 2**
-- d8 showing **1** → **8 − 1 = 7**
+<div class="rules-grid">
+  <section class="rules-card">
+    <h3>Solo</h3>
+    <p>Fast local play. Best for learning, experimenting with variants, and replaying tutorial flows.</p>
+  </section>
+  <section class="rules-card">
+    <h3>Multiplayer Rooms</h3>
+    <p>Create or join rooms from the splash screen. Rooms are listed with active players and auto-expire when inactive.</p>
+  </section>
+</div>
 
-**Winner:** the player with the **lowest total score**.
+### Multiplayer Session Recovery
 
----
+- If a room session expires, you get an in-game modal with two choices:
+  - Return to Lobby
+  - Continue Solo
+- Continuing solo keeps your run moving immediately.
+- Returning to lobby takes you back to room selection/creation.
 
-## The Fun Game Moments (what you’ll feel at the table)
+## Tutorial
 
-### 1) “Free Zero” Temptation
-You roll a couple perfect dice early (0 points).  
-Do you grab them immediately… or get greedy and chase even more perfect dice?
+- Tutorial is an interactive guided flow (roll, select, score).
+- At completion, the tutorial scoring step is auto-undone so you can optimize your selection.
+- A highlight pulse marks restored dice.
+- You can replay tutorial anytime from this screen using the **Replay Tutorial** button.
 
-### 2) The Shrinking-Pool Squeeze
-As your dice pool gets smaller, “safe” perfect rolls get harder to hit.  
-This is where the game turns into a slow-motion train wreck—sometimes in your favor.
+## Controls
 
-### 3) The Late-Game Pain Roll
-You’re down to a couple dice, you *need* a good result, and the dice say, “No.”  
-That single roll can swing the whole round.
+### Core Actions
 
-### 4) The Miracle Finish
-You hit a perfect roll right when it matters most and end with a tiny score.  
-Everyone immediately demands a rematch.
+| Action | Control |
+| --- | --- |
+| Roll / Score | <kbd>Space</kbd> or Action Button |
+| Select / Deselect focused die | <kbd>Enter</kbd> |
+| Move die focus | <kbd>Left</kbd> / <kbd>Right</kbd> |
+| Deselect all | <kbd>X</kbd> |
+| Pause / Settings | <kbd>Esc</kbd> |
+| Start new game | <kbd>N</kbd> |
+| Camera controls panel | <kbd>C</kbd> |
+| Chaos upgrades menu | <kbd>U</kbd> |
+| Debug view | <kbd>D</kbd> |
 
----
+### Mouse / Touch
 
-## Quick Strategy (one paragraph)
-Perfect dice are usually worth banking right away because the game gets more dangerous as your pool shrinks. Most of your points tend to come from the last few rolls—so taking points early can quietly doom you unless you’re making a deliberate gamble.
+- Tap/click dice to select or deselect.
+- Use on-screen buttons for roll, score, settings, and menus.
+- Mobile menu exposes settings, profile, leaderboard, and upgrade access.
 
----
+## HUD And Turn Indicators
 
-## One-line teach
-**"Roll everything, take at least one die out each time, score the difference from perfect, and try to finish with the lowest total."**
+- Top multiplayer standings row shows score, placement, completion status, and current turn marker.
+- Turn timer appears in HUD during enforced multiplayer turns.
+- Seat score zones and table-side cues indicate where scored dice are being committed.
 
----
+## Practical Tips
 
-## Keyboard Controls
-
-### Game Controls
-- **Space** — Roll / Score selected dice
-- **ESC** — Open settings & pause game
-- **← →** — Navigate through dice (keyboard selection)
-- **Enter** — Select/deselect focused die
-- **X** — Deselect all selected dice
-
-### Shortcuts
-- **N** — Start new game
-- **D** — Open debug view (theme testing)
-
-### Mouse Controls
-- **Click dice** — Select/deselect
-- **Click buttons** — Roll, score, or access menus
+- Bank strong dice early to avoid late-roll risk.
+- Use undo (Easy mode) before your next roll if you need to adjust scored picks.
+- In multiplayer, act within turn timers to avoid automatic turn advancement.

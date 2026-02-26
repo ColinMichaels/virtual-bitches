@@ -23,7 +23,7 @@ export class RulesModal {
       <div class="modal-backdrop"></div>
       <div class="modal-content rules-modal-content">
         <div class="modal-header">
-          <h2>Game Rules</h2>
+          <h2>How To Play</h2>
           <button class="modal-close" aria-label="Close">&times;</button>
         </div>
         <div class="rules-actions">
