@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Bot engine extraction + contract tests)
+**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Session expiry choice integration tests + reliability pass)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -112,7 +112,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - `src/ui/confirmModal.ts`
   - `src/ui/sessionExpiryModal.ts`
 - **Follow-up TODO (Next Iteration)**:
-  - [ ] Add integration tests for session-expired choice flow (`lobby` vs `continue solo`)
+  - ✅ Added integration tests for session-expired choice flow (`recovered` vs `lobby` vs `continue solo`) via `src/multiplayer/sessionExpiryFlow.test.ts`
   - [ ] Continue improving bot intelligence with game-level difficulty integration:
     - Easy mode bots should play intentionally dumber (more mistakes, weaker optimization)
     - Normal mode bots should remain balanced
