@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Multiplayer room lifecycle + tutorial/rules UX pass)
+**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Bot engine extraction + contract tests)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -98,19 +98,24 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
     - Return to Lobby
     - Continue Solo
   - ✅ Solo fallback path prevents hard-lock when multiplayer session/auth expires
+  - ✅ Reconnect-first multiplayer expiry flow (attempt rejoin before showing expiry modal)
   - ✅ Replaced browser `confirm(...)` usage in gameplay-critical flows with in-game modals
   - ✅ Added reusable `ConfirmModal` and dedicated `SessionExpiryModal`
   - ✅ Tutorial completion now auto-undoes guided score step so players can optimize selection
   - ✅ Tutorial rollback visual highlight pulse added to restored dice
   - ✅ How To Play modal now includes `Replay Tutorial` action
   - ✅ Rules content refreshed with current controls/multiplayer/session-recovery behavior
+  - ✅ Extracted bot decision logic to dedicated API bot engine module (`api/bot/engine.mjs`)
+  - ✅ Added bot engine contract tests (`api/bot/engine.test.mjs`)
 - **Files Added**:
   - `src/ui/confirmModal.ts`
   - `src/ui/sessionExpiryModal.ts`
 - **Follow-up TODO (Next Iteration)**:
   - [ ] Add integration tests for session-expired choice flow (`lobby` vs `continue solo`)
-  - [ ] Add reconnect-first flow (attempt rejoin before presenting expiry modal when feasible)
-  - [ ] Improve bot turn strategy so bot scoring decisions are less random/greedy
+  - [ ] Continue improving bot intelligence with game-level difficulty integration:
+    - Easy mode bots should play intentionally dumber (more mistakes, weaker optimization)
+    - Normal mode bots should remain balanced
+    - Hard mode bots should be more adaptive/aggressive
   - [ ] Add optional replay-tutorial entry point from splash screen (pre-game)
   - [ ] Add regression test ensuring no browser `confirm/prompt` remains in gameplay paths
 

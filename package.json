@@ -21,6 +21,7 @@
     "test:chaos-upgrades": "tsx src/chaos/upgrades/progressionService.test.ts",
     "test:controls": "tsx src/services/controlInversion.test.ts",
     "test:network": "tsx src/multiplayer/networkService.test.ts",
+    "test:bot-engine": "npm --prefix api run test:bot-engine",
     "test:e2e:api": "node api/e2e/smoke.mjs",
     "test:e2e:api:local": "node api/e2e/run-local.mjs",
     "api:migrate:firestore": "node api/scripts/migrate-file-store-to-firestore.mjs",

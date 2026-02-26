@@ -64,6 +64,7 @@ SQL files define the intended longer-term relational schema.
   - `participants[]` snapshot (`playerId`, `displayName`, `isBot`, `joinedAt`, `lastHeartbeatAt`)
   - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `phase`, `activeRollServerId`, optional `activeRoll`, `updatedAt`)
 - `POST /api/multiplayer/sessions` accepts optional `botCount` (`0..4`) to add lightweight AI bot participants for websocket testing.
+- Bot turn strategy is isolated in [`api/bot/engine.mjs`](./bot/engine.mjs) behind `createBotEngine()` so implementations can be swapped without rewriting websocket/session orchestration.
 - `GET /api/players/:playerId/profile` returns `204 No Content` when profile does not exist yet.
 - WS endpoint is available at `/` and expects query params:
   - `session=<sessionId>`
@@ -111,6 +112,12 @@ Optional bot traffic assertion in smoke tests:
 
 ```bash
 E2E_ASSERT_BOTS=1 npm run test:e2e:api:local
+```
+
+Bot engine contract tests (strategy interface and invariants):
+
+```bash
+npm run test:bot-engine
 ```
 
 ## File Store -> Firestore Migration (Sprint 1.5)
