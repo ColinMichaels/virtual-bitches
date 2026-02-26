@@ -1,133 +1,91 @@
-# BISCUITS AKA BITCHES - Push Your Luck Dice Game
+# BISCUITS (AKA BITCHES)
 
-```
- /$$$$$$$  /$$$$$$ /$$$$$$$$ /$$$$$$  /$$   /$$ /$$$$$$$$  /$$$$$$ 
-| $$__  $$|_  $$_/|__  $$__//$$__  $$| $$  | $$| $$_____/ /$$__  $$
-| $$  \ $$  | $$     | $$  | $$  \__/| $$  | $$| $$      | $$  \__/
-| $$$$$$$   | $$     | $$  | $$      | $$$$$$$$| $$$$$   |  $$$$$$ 
-| $$__  $$  | $$     | $$  | $$      | $$__  $$| $$__/    \____  $$
-| $$  \ $$  | $$     | $$  | $$    $$| $$  | $$| $$       /$$  \ $$
-| $$$$$$$/ /$$$$$$   | $$  |  $$$$$$/| $$  | $$| $$$$$$$$|  $$$$$$/
-|_______/ |______/   |__/   \______/ |__/  |__/|________/ \______/ 
+A push-your-luck dice game where low score wins, friendships are tested, and your "safe" roll usually is not.
 
-```
+## Play Now
 
-A 3D browser-based implementation of BISCUITS, a 5-minute push-your-luck dice game where the goal is to achieve the **lowest score**.
+- Firebase (primary): https://biscuits-488600.web.app
+- GitHub Pages (fallback): https://colinmichaels.github.io/virtual-bitches/
 
-Game play demo link https://colinmichaels.github.io/virtual-bitches/      
+[![Alpha Warning - We Need Testers](https://storage.googleapis.com/biscuits-488600.firebasestorage.app/assets/ads/betahelp_ad.png)](https://biscuits-488600.web.app)
 
-# DEV INFO
+## Alpha Call For Testers
 
-## Quick Start
+We want testers for gameplay feel, multiplayer sync, and mobile UX hardening.
+
+- Break things: room joins, reconnects, turn rotation, session expiry flow.
+- Stress things: theme switching, audio/settings, long multiplayer sessions.
+- Report bugs and weird behavior in GitHub Issues with steps/screenshots:
+  https://github.com/colinmichaels/virtual-bitches/issues
+
+If it gets weird, that is useful data.
+
+## Quick Start (Dev)
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173 in your browser.
+Open `http://localhost:5173`.
 
-## Game Rules
+## Rules (Short Version)
 
-### Objective
-Score all 15 dice with the **lowest total score**.
+- Objective: score all 15 dice with the lowest total.
+- Dice pool: `12x d6`, `1x d8`, `1x d10`, `1x d12`.
+- Turn loop:
+1. Roll remaining dice.
+2. Select one or more dice to score.
+3. Score selected dice using `points = maxFace - value`.
+4. Repeat until all dice are scored.
 
-### Dice Pool
-- 12× d6
-- 1× d8
-- 1× d10
-- 1× d12
+Examples:
 
-### Turn Flow
-1. **Roll** all remaining dice
-2. **Select** one or more dice to score (minimum 1)
-3. **Score** selected dice: `points = max - value`
-4. Repeat until all dice are scored
-
-### Scoring Examples
-- d6 showing 6 → `6-6 = 0 points` ✨
-- d12 showing 10 → `12-10 = 2 points`
-- d8 showing 1 → `8-1 = 7 points` 😱
+- `d6` rolled `6` -> `0` points (beautiful)
+- `d12` rolled `10` -> `2` points (acceptable)
+- `d8` rolled `1` -> `7` points (rough)
 
 ## Controls
 
-- **Roll Dice**: Click button or press `Space`
-- **Select Dice**: Click dice in 3D scene OR click 2D dice in top row
-- **Score Selected**: Click button (enabled when 1+ dice selected)
-- **Camera**: Mouse drag to rotate, scroll to zoom
+- Roll: button or `Space`
+- Select: click dice in 3D scene or in 2D dice row
+- Score: button enabled when 1+ dice are selected
+- Camera: drag to rotate, scroll/pinch to zoom
 
-## UI Features
+## Core Features
 
-- **3D Game Board**: Beautiful 3D dice with physics-style animations
-- **2D Dice Row**: Top row shows clear top-down view of all active dice
-  - Easy to read values and point scores
-  - Click to select (highlights in yellow)
-  - Color-coded by die type (d4=red, d6=white, d8=blue, d10=yellow, d12=purple, d20=green)
-- **Dice Lay Flat**: Dice settle flat after rolling for easy reading
+- 3D dice rendering + animation (Babylon.js)
+- Deterministic RNG for fairness/replayability
+- Replay/share flow via seed + action log
+- Multiplayer room system with bot support
+- Mobile-responsive HUD and settings/tutor flows
+- CDN-ready runtime asset loading
 
-## Features
+## Project Layout
 
-✅ **3D Dice** - Babylon.js rendering with animations
-✅ **Deterministic RNG** - Seeded for fairness
-✅ **Replay System** - Share URLs with seed + action log
-✅ **Clean HUD** - Score tracking and dice pool display
-✅ **Mobile-friendly** - Touch controls supported
-
-## Architecture
-
-```
+```text
 src/
-├── engine/        # Pure game logic (no rendering dependencies)
-│   ├── rng.ts            # Deterministic RNG
-│   ├── types.ts          # Core data types
-│   ├── rules.ts          # Scoring & validation
-│   └── rules.test.ts     # Unit tests
-├── game/          # State management
-│   └── state.ts          # Reducer & replay logic
-├── controllers/   # Orchestration layer (NEW)
-│   ├── InputController.ts       # User input handling
-│   ├── GameFlowController.ts    # Game lifecycle
-│   └── GameOverController.ts    # End-game flow
-├── render/        # 3D visualization
-│   ├── scene.ts          # Babylon.js scene setup
-│   └── dice.ts           # Dice meshes & animations
-├── ui/            # HUD components
-│   ├── hud.ts            # Game HUD
-│   ├── diceRow.ts        # 2D dice view
-│   └── ...               # Modals, notifications
-├── services/      # Cross-cutting concerns
-│   ├── themeManager.ts   # Theme system
-│   ├── audio.ts          # Audio service
-│   └── settings.ts       # Settings management
-└── main.ts        # App entry point (~570 lines, down from 954)
+  engine/       # Pure rules + RNG + tests
+  game/         # State and action flow
+  multiplayer/  # Rooms, sync, turn flow
+  render/       # Babylon scene + dice
+  ui/           # HUD, modals, tutorial, notifications
+  services/     # Audio, theme, settings, backend clients
 ```
 
-## Deploy
+## Build
 
 ```bash
 npm run build
 ```
 
-Deploy the `dist/` folder to any static host (Vercel, Netlify, GitHub Pages, etc).
+Deploy `dist/` to static hosting.
 
-## Replay & Sharing
+## Replay URL Format
 
-Games generate shareable URLs with format:
-```
+```text
 /?seed=<seed>&log=<base64_action_log>
 ```
-
-This enables:
-- Fair daily challenges
-- Speedrun verification
-- Bug reproduction
-
-## Optional Expansions (Not Implemented)
-
-- Add d20 (remove 1 d6)
-- Add d4 (remove 1 d6)
-- Add 2nd d10 / d100 mode
-- Toggleable in-game (future)
 
 ## License
 
