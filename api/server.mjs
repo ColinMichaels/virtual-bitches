@@ -530,6 +530,7 @@ async function handleCreateSession(req, res) {
       displayName: typeof body?.displayName === "string" ? body.displayName : undefined,
       joinedAt: now,
       lastHeartbeatAt: now,
+      isReady: false,
     },
   };
 
@@ -541,6 +542,7 @@ async function handleCreateSession(req, res) {
       joinedAt: now,
       lastHeartbeatAt: now,
       isBot: true,
+      isReady: true,
     };
   }
 
@@ -583,6 +585,7 @@ async function handleJoinSession(req, res, pathname) {
     displayName: typeof body?.displayName === "string" ? body.displayName : undefined,
     joinedAt: session.participants[playerId]?.joinedAt ?? Date.now(),
     lastHeartbeatAt: Date.now(),
+    isReady: false,
   };
   ensureSessionTurnState(session);
   reconcileSessionLoops(sessionId);
@@ -1530,6 +1533,7 @@ function serializeSessionParticipants(session) {
           ? participant.lastHeartbeatAt
           : Date.now(),
       isBot: Boolean(participant.isBot),
+      isReady: participant.isBot ? true : participant.isReady === true,
     }))
     .sort((left, right) => {
       const joinedDelta = left.joinedAt - right.joinedAt;
@@ -1586,13 +1590,16 @@ function ensureSessionTurnState(session) {
     }
   });
 
+  const allHumansReady = areAllHumansReady(session);
   const now = Date.now();
   let activeTurnPlayerId =
     typeof currentState?.activeTurnPlayerId === "string"
       ? currentState.activeTurnPlayerId
       : null;
   let activeTurnRecovered = false;
-  if (!activeTurnPlayerId || !nextOrder.includes(activeTurnPlayerId)) {
+  if (!allHumansReady) {
+    activeTurnPlayerId = null;
+  } else if (!activeTurnPlayerId || !nextOrder.includes(activeTurnPlayerId)) {
     activeTurnPlayerId = nextOrder[0] ?? null;
     activeTurnRecovered = true;
   }
@@ -1618,7 +1625,12 @@ function ensureSessionTurnState(session) {
       ? Math.floor(currentState.turnExpiresAt)
       : null;
 
-  if (activeTurnRecovered) {
+  if (!allHumansReady) {
+    phase = TURN_PHASES.awaitRoll;
+    lastRollSnapshot = null;
+    lastScoreSummary = null;
+    turnExpiresAt = null;
+  } else if (activeTurnRecovered) {
     phase = TURN_PHASES.awaitRoll;
     lastRollSnapshot = null;
     lastScoreSummary = null;
@@ -1641,8 +1653,10 @@ function ensureSessionTurnState(session) {
     }
   }
 
-  if (!turnExpiresAt || turnExpiresAt <= now) {
+  if (allHumansReady && activeTurnPlayerId && (!turnExpiresAt || turnExpiresAt <= now)) {
     turnExpiresAt = now + turnTimeoutMs;
+  } else if (!allHumansReady || !activeTurnPlayerId) {
+    turnExpiresAt = null;
   }
 
   session.turnState = {
@@ -1658,7 +1672,11 @@ function ensureSessionTurnState(session) {
     updatedAt: now,
   };
 
-  if (!session.turnState.activeTurnPlayerId && session.turnState.order.length > 0) {
+  if (
+    allHumansReady &&
+    !session.turnState.activeTurnPlayerId &&
+    session.turnState.order.length > 0
+  ) {
     session.turnState.activeTurnPlayerId = session.turnState.order[0];
   }
 
@@ -1846,6 +1864,21 @@ function getHumanParticipantCount(session) {
   }
   return Object.values(session.participants).filter((participant) => participant && !isBotParticipant(participant))
     .length;
+}
+
+function areAllHumansReady(session) {
+  if (!session?.participants) {
+    return false;
+  }
+
+  const humans = Object.values(session.participants).filter(
+    (participant) => participant && !isBotParticipant(participant)
+  );
+  if (humans.length <= 1) {
+    return true;
+  }
+
+  return humans.every((participant) => participant.isReady === true);
 }
 
 function getBotParticipants(session) {
@@ -2579,6 +2612,26 @@ function handleSocketConnection(socket, auth) {
 
   const session = store.multiplayerSessions[client.sessionId];
   if (session) {
+    const participant = session.participants[client.playerId];
+    let readinessChanged = false;
+    if (participant && !isBotParticipant(participant) && participant.isReady !== true) {
+      participant.isReady = true;
+      participant.lastHeartbeatAt = Date.now();
+      ensureSessionTurnState(session);
+      readinessChanged = true;
+    }
+
+    if (readinessChanged) {
+      broadcastSessionState(session, "ready", client);
+      const turnStart = buildTurnStartMessage(session, { source: "ready" });
+      if (turnStart) {
+        broadcastToSession(client.sessionId, JSON.stringify(turnStart), client);
+      }
+      persistStore().catch((error) => {
+        log.warn("Failed to persist session after readiness update", error);
+      });
+    }
+
     sendTurnSyncPayload(client, session, "sync");
     reconcileSessionLoops(client.sessionId);
   }
@@ -2977,12 +3030,25 @@ function unregisterSocketClient(client) {
 
   wsClientMeta.delete(client.socket);
   const clients = wsSessionClients.get(client.sessionId);
-  if (!clients) return;
-
-  clients.delete(client);
-  if (clients.size === 0) {
-    wsSessionClients.delete(client.sessionId);
+  if (clients) {
+    clients.delete(client);
+    if (clients.size === 0) {
+      wsSessionClients.delete(client.sessionId);
+    }
   }
+
+  const session = store.multiplayerSessions[client.sessionId];
+  const participant = session?.participants?.[client.playerId];
+  if (participant && !isBotParticipant(participant) && participant.isReady === true) {
+    participant.isReady = false;
+    participant.lastHeartbeatAt = Date.now();
+    ensureSessionTurnState(session);
+    broadcastSessionState(session, "unready");
+    persistStore().catch((error) => {
+      log.warn("Failed to persist session after readiness clear", error);
+    });
+  }
+
   reconcileTurnTimeoutLoop(client.sessionId);
 }
 

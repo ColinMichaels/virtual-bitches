@@ -739,6 +739,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - ✅ Added optional multiplayer bot participants (`botCount`) for websocket session testing (`player_notification`, `game_update`, `chaos_attack`)
 - ✅ Added optional bot-traffic assertion mode for API smoke tests (`E2E_ASSERT_BOTS=1`)
 - ✅ Added multiplayer seat population from session participants (humans + bots shown around table)
+- ✅ Added connectivity-driven lobby ready-state tracking (`participants.isReady`) with turn gating until all humans are ready
 - ✅ Added clockwise turn-order planning scaffold from seat assignments (foundation for per-turn roll flow)
 - ✅ Added server-validated turn action protocol (`turn_action` roll/score -> `turn_end`) with active-turn enforcement and invalid-order rejection
 - ✅ Added roll/score payload validation against canonical turn roll snapshots (score points must match selected dice from accepted roll)
@@ -749,6 +750,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - ✅ Added server-enforced multiplayer turn timeout with warning + auto-advance events
 - ✅ Added top-bar game clock with live turn countdown indicator for multiplayer/timed-trial readiness
 - ✅ Added in-game `Main Menu` action in Settings to leave multiplayer sessions and return to lobby
+- ✅ Added single-human multiplayer fallback (no turn-sync lock) so solo/one-human sessions can always play through
 - ✅ Tuned bot chaos traffic down (lower chaos frequency, shake-only, shorter/safer intensity) to avoid disruptive camera failures
 
 ---

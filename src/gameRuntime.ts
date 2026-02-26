@@ -845,6 +845,15 @@ class Game implements GameCallbacks {
       return;
     }
 
+    if (this.isMultiplayerTurnEnforced()) {
+      this.activeTurnPlayerId = null;
+      this.activeRollServerId = null;
+      this.pendingTurnEndSync = false;
+      this.applyTurnTiming(null);
+      this.updateTurnSeatHighlight(null);
+      return;
+    }
+
     const fallbackActive =
       this.multiplayerTurnPlan?.order[0]?.playerId ??
       (this.playMode === "multiplayer" ? this.localPlayerId : null);
@@ -909,6 +918,10 @@ class Game implements GameCallbacks {
   }
 
   private handleMultiplayerTurnStart(message: MultiplayerTurnStartMessage): void {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return;
+    }
+
     this.awaitingMultiplayerRoll = false;
     this.applyTurnTiming(message.turnExpiresAt ?? null);
     this.activeTurnPlayerId = message.playerId;
@@ -942,6 +955,10 @@ class Game implements GameCallbacks {
   }
 
   private handleMultiplayerTurnEnd(message: MultiplayerTurnEndMessage): void {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return;
+    }
+
     this.pendingTurnEndSync = false;
     this.applyTurnTiming(null);
     if (typeof message.playerId !== "string" || !message.playerId) {
@@ -963,6 +980,10 @@ class Game implements GameCallbacks {
   private handleMultiplayerTurnTimeoutWarning(
     message: MultiplayerTurnTimeoutWarningMessage
   ): void {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return;
+    }
+
     const expiresAt =
       typeof message.turnExpiresAt === "number" && Number.isFinite(message.turnExpiresAt)
         ? message.turnExpiresAt
@@ -993,6 +1014,10 @@ class Game implements GameCallbacks {
   private handleMultiplayerTurnAutoAdvanced(
     message: MultiplayerTurnAutoAdvancedMessage
   ): void {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return;
+    }
+
     this.applyTurnTiming(null);
     const playerId = typeof message.playerId === "string" ? message.playerId : "";
     if (!playerId) {
@@ -1003,6 +1028,10 @@ class Game implements GameCallbacks {
   }
 
   private handleMultiplayerTurnAction(message: MultiplayerTurnActionMessage): void {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return;
+    }
+
     if (!message?.playerId) {
       return;
     }
@@ -1036,6 +1065,10 @@ class Game implements GameCallbacks {
   }
 
   private handleMultiplayerProtocolError(code: string, message?: string): void {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return;
+    }
+
     if (code === "turn_not_active") {
       this.awaitingMultiplayerRoll = false;
       return;
@@ -1069,8 +1102,21 @@ class Game implements GameCallbacks {
     }
   }
 
+  private getHumanParticipantCount(): number {
+    const participants = this.multiplayerSessionService.getActiveSession()?.participants ?? [];
+    if (!Array.isArray(participants) || participants.length === 0) {
+      return 0;
+    }
+    return participants.filter((participant) => participant && !participant.isBot).length;
+  }
+
   private isMultiplayerTurnEnforced(): boolean {
-    return this.playMode === "multiplayer" && environment.features.multiplayer;
+    if (this.playMode !== "multiplayer" || !environment.features.multiplayer) {
+      return false;
+    }
+
+    // Single-human sessions should keep playing locally even if turn sync stalls.
+    return this.getHumanParticipantCount() > 1;
   }
 
   private canLocalPlayerTakeTurnAction(): boolean {
@@ -1690,14 +1736,16 @@ class Game implements GameCallbacks {
     // Calculate points for notification
     const scoredDice = this.state.dice.filter((d) => selected.has(d.id));
     const points = scoredDice.reduce((sum, die) => sum + (die.def.sides - die.value), 0);
-    if (!this.activeRollServerId) {
-      notificationService.show("Waiting for roll sync before scoring.", "warning", 1800);
-      return;
-    }
+    if (this.isMultiplayerTurnEnforced()) {
+      if (!this.activeRollServerId) {
+        notificationService.show("Waiting for roll sync before scoring.", "warning", 1800);
+        return;
+      }
 
-    const scorePayload = this.buildScoreTurnPayload(selected, points, this.activeRollServerId);
-    if (!this.emitTurnAction("score", { score: scorePayload })) {
-      return;
+      const scorePayload = this.buildScoreTurnPayload(selected, points, this.activeRollServerId);
+      if (!this.emitTurnAction("score", { score: scorePayload })) {
+        return;
+      }
     }
 
     this.animating = true;
