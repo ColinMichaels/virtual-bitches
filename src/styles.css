@@ -2003,6 +2003,53 @@ button.danger:hover:not(:disabled) {
   color: rgba(255, 255, 255, 0.5);
 }
 
+.auth-gate-modal-content {
+  max-width: 520px;
+}
+
+.auth-gate-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth-gate-content p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.auth-gate-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-auth-google,
+.btn-auth-guest {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  padding: 10px 12px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-auth-google {
+  background: rgba(74, 158, 255, 0.35);
+}
+
+.btn-auth-guest {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.btn-auth-google:hover,
+.btn-auth-guest:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 /* Chaos Upgrade Menu */
 .chaos-upgrade-modal-content {
   max-width: 980px;
@@ -2699,6 +2746,10 @@ button.danger:hover:not(:disabled) {
   }
 
   .global-name-row {
+    flex-direction: column;
+  }
+
+  .auth-gate-actions {
     flex-direction: column;
   }
 }

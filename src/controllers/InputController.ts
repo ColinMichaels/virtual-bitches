@@ -261,6 +261,8 @@ export class InputController {
     const animating = this.callbacks.isAnimating();
     const paused = this.callbacks.isPaused();
     const code = this.controlInversionService.remapKeyCode(e.code);
+    const isModalOpen = this.isAnyModalOpen();
+    const isTextEntryActive = this.isTextEntryTarget(e.target);
 
     // ESC key - close modals or toggle pause/settings
     if (code === "Escape") {
@@ -272,9 +274,21 @@ export class InputController {
         this.leaderboardModal.hide();
       } else if (this.chaosUpgradeMenu.isVisible()) {
         this.chaosUpgradeMenu.hide();
+      } else if (this.isElementVisibleById("settings-modal")) {
+        this.callbacks.togglePause();
       } else {
         this.callbacks.togglePause();
       }
+      return;
+    }
+
+    // Pause all gameplay/global shortcuts while any modal is open.
+    if (isModalOpen) {
+      return;
+    }
+
+    // Never steal typing keys from text inputs/editors.
+    if (isTextEntryActive) {
       return;
     }
 
@@ -368,6 +382,40 @@ export class InputController {
       this.chaosUpgradeMenu.toggle();
       return;
     }
+  }
+
+  private isAnyModalOpen(): boolean {
+    const modalSelectors = [".modal", "#settings-modal", "#game-over"];
+    return modalSelectors.some((selector) =>
+      Array.from(document.querySelectorAll<HTMLElement>(selector)).some((el) =>
+        this.isElementVisible(el)
+      )
+    );
+  }
+
+  private isElementVisibleById(id: string): boolean {
+    const el = document.getElementById(id);
+    return this.isElementVisible(el);
+  }
+
+  private isElementVisible(element: HTMLElement | null): boolean {
+    if (!element) return false;
+    if (element.classList.contains("show")) return true;
+
+    const style = window.getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden";
+  }
+
+  private isTextEntryTarget(target: EventTarget | null): boolean {
+    const element = target as HTMLElement | null;
+    if (!element) return false;
+
+    const tagName = element.tagName;
+    if (tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT") {
+      return true;
+    }
+
+    return Boolean(element.closest("[contenteditable='true']"));
   }
 
   /**

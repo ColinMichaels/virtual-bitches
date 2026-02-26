@@ -27,7 +27,12 @@ export class SplashScreen {
   private animationRunning = false;
   gameTitle = environment.gameTitle;
 
-  constructor(onStart: () => void, onSettings: () => void, onLeaderboard: () => void, onRules: () => void) {
+  constructor(
+    onStart: () => boolean | Promise<boolean>,
+    onSettings: () => void,
+    onLeaderboard: () => void,
+    onRules: () => void
+  ) {
     // Create splash container
     this.container = document.createElement("div");
     this.container.id = "splash-screen";
@@ -51,10 +56,28 @@ export class SplashScreen {
     this.canvas = document.getElementById("splash-canvas") as HTMLCanvasElement;
 
     // Setup button handlers
-    document.getElementById("start-game-btn")!.addEventListener("click", () => {
+    document.getElementById("start-game-btn")!.addEventListener("click", async () => {
       audioService.playSfx("click");
-      this.hide();
-      onStart();
+      const startButton = document.getElementById("start-game-btn") as HTMLButtonElement | null;
+      if (startButton?.disabled) {
+        return;
+      }
+
+      if (startButton) {
+        startButton.disabled = true;
+      }
+
+      try {
+        const shouldStart = await Promise.resolve(onStart());
+        if (!shouldStart) {
+          return;
+        }
+        this.hide();
+      } finally {
+        if (startButton) {
+          startButton.disabled = false;
+        }
+      }
     });
 
     document.getElementById("splash-rules-btn")!.addEventListener("click", () => {
