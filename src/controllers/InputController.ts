@@ -12,6 +12,7 @@ import type { GameScene } from "../render/scene.js";
 import type { DebugView } from "../ui/debugView.js";
 import type { CameraControlsPanel } from "../ui/cameraControls.js";
 import type { ChaosUpgradeMenu } from "../ui/chaosUpgradeMenu.js";
+import type { ProfileModal } from "../ui/profile.js";
 import type { IControlInversionService } from "../services/controlInversion.js";
 
 /**
@@ -41,6 +42,7 @@ export class InputController {
   private debugView: DebugView;
   private cameraControlsPanel: CameraControlsPanel;
   private chaosUpgradeMenu: ChaosUpgradeMenu;
+  private profileModal: ProfileModal;
   private controlInversionService: IControlInversionService;
 
   // DOM elements
@@ -51,6 +53,7 @@ export class InputController {
   private viewLeaderboardBtn: HTMLButtonElement;
   private settingsGearBtn: HTMLButtonElement;
   private leaderboardBtn: HTMLButtonElement;
+  private profileBtn: HTMLButtonElement | null;
   private cameraPositionsBtn: HTMLButtonElement;
   private chaosUpgradesBtn: HTMLButtonElement;
 
@@ -62,6 +65,7 @@ export class InputController {
     debugView: DebugView,
     cameraControlsPanel: CameraControlsPanel,
     chaosUpgradeMenu: ChaosUpgradeMenu,
+    profileModal: ProfileModal,
     controlInversionService: IControlInversionService
   ) {
     this.callbacks = callbacks;
@@ -71,6 +75,7 @@ export class InputController {
     this.debugView = debugView;
     this.cameraControlsPanel = cameraControlsPanel;
     this.chaosUpgradeMenu = chaosUpgradeMenu;
+    this.profileModal = profileModal;
     this.controlInversionService = controlInversionService;
 
     // Get DOM elements
@@ -81,6 +86,7 @@ export class InputController {
     this.viewLeaderboardBtn = document.getElementById("view-leaderboard-btn") as HTMLButtonElement;
     this.settingsGearBtn = document.getElementById("settings-gear-btn") as HTMLButtonElement;
     this.leaderboardBtn = document.getElementById("leaderboard-btn") as HTMLButtonElement;
+    this.profileBtn = document.getElementById("profile-btn") as HTMLButtonElement | null;
     this.cameraPositionsBtn = document.getElementById("camera-positions-btn") as HTMLButtonElement;
     this.chaosUpgradesBtn = document.getElementById("chaos-upgrades-btn") as HTMLButtonElement;
   }
@@ -148,6 +154,13 @@ export class InputController {
       this.leaderboardModal.show();
     });
 
+    // Profile button
+    this.profileBtn?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      hapticsService.buttonPress();
+      this.profileModal.show();
+    });
+
     // Camera Positions button
     this.cameraPositionsBtn.addEventListener("click", () => {
       audioService.playSfx("click");
@@ -193,6 +206,7 @@ export class InputController {
     const menuToggle = document.getElementById("mobile-menu-toggle");
     const mobileMenu = document.getElementById("mobile-controls-menu");
     const mobileSettingsBtn = document.getElementById("mobile-settings-btn");
+    const mobileProfileBtn = document.getElementById("mobile-profile-btn");
     const mobileLeaderboardBtn = document.getElementById("mobile-leaderboard-btn");
     const mobileUpgradesBtn = document.getElementById("mobile-upgrades-btn");
 
@@ -212,6 +226,15 @@ export class InputController {
         audioService.playSfx("click");
         hapticsService.buttonPress();
         this.callbacks.togglePause();
+        this.closeMobileMenu();
+      });
+    }
+
+    if (mobileProfileBtn) {
+      mobileProfileBtn.addEventListener("click", () => {
+        audioService.playSfx("click");
+        hapticsService.buttonPress();
+        this.profileModal.show();
         this.closeMobileMenu();
       });
     }
@@ -272,6 +295,8 @@ export class InputController {
         this.rulesModal.hide();
       } else if (this.leaderboardModal.isVisible()) {
         this.leaderboardModal.hide();
+      } else if (this.profileModal.isVisible()) {
+        this.profileModal.hide();
       } else if (this.chaosUpgradeMenu.isVisible()) {
         this.chaosUpgradeMenu.hide();
       } else if (this.isElementVisibleById("settings-modal")) {

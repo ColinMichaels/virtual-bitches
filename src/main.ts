@@ -14,6 +14,7 @@ import { CameraControlsPanel } from "./ui/cameraControls.js";
 import { ChaosUpgradeMenu } from "./ui/chaosUpgradeMenu.js";
 import { EffectHUD } from "./ui/effectHUD.js";
 import { AuthGateModal } from "./ui/authGate.js";
+import { ProfileModal } from "./ui/profile.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
 import { GameState, Action, GameDifficulty } from "./engine/types.js";
@@ -279,6 +280,7 @@ class Game implements GameCallbacks {
       this.debugView,
       this.cameraControlsPanel,
       this.chaosUpgradeMenu,
+      profileModal,
       this.controlInversion
     );
     this.gameOverController = new GameOverController(this.scene);
@@ -811,6 +813,7 @@ let splash: SplashScreen;
 let alphaWarning: AlphaWarningModal;
 let updatesPanel: UpdatesPanel;
 let authGateModal: AuthGateModal;
+let profileModal: ProfileModal;
 
 const GUEST_MODE_KEY = `${environment.storage.prefix}-guest-mode-enabled`;
 
@@ -826,6 +829,7 @@ themeManager.initialize().then(() => {
   rulesModal = new RulesModal();
   tutorialModal = new TutorialModal();
   authGateModal = new AuthGateModal();
+  profileModal = new ProfileModal();
 
   // Initialize alpha warning and updates panel
   alphaWarning = new AlphaWarningModal();
@@ -866,6 +870,7 @@ themeManager.initialize().then(() => {
   rulesModal = new RulesModal();
   tutorialModal = new TutorialModal();
   authGateModal = new AuthGateModal();
+  profileModal = new ProfileModal();
 
   // Initialize alpha warning and updates panel (even on error)
   alphaWarning = new AlphaWarningModal();
