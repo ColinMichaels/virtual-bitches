@@ -166,7 +166,15 @@ export function createBotEngine(options = {}) {
         selectionCount = Math.min(selectionTarget, scoredCandidates.length, Math.min(2, remainingDice));
       }
 
-      const selectedDice = scoredCandidates.slice(0, selectionCount);
+      const prioritizedCandidates = prioritizeScoredCandidatesForDifficulty(
+        scoredCandidates,
+        input.botProfile,
+        gameDifficulty,
+        safeTurnNumber,
+        remainingDice,
+        strategyContext
+      );
+      const selectedDice = prioritizedCandidates.slice(0, selectionCount);
       const points = selectedDice.reduce((sum, die) => sum + die.points, 0);
 
       return {
@@ -199,6 +207,90 @@ export function createBotEngine(options = {}) {
       );
     },
   };
+}
+
+function prioritizeScoredCandidatesForDifficulty(
+  scoredCandidates,
+  botProfile,
+  gameDifficulty,
+  turnNumber,
+  remainingDice,
+  context = {}
+) {
+  const difficulty = normalizeGameDifficulty(gameDifficulty);
+  if (difficulty !== "easy" || scoredCandidates.length <= 1) {
+    return scoredCandidates;
+  }
+
+  const mistakeCount = resolveEasyDifficultyMistakeCount(
+    botProfile,
+    turnNumber,
+    remainingDice,
+    context,
+    scoredCandidates.length
+  );
+  if (mistakeCount <= 0) {
+    return scoredCandidates;
+  }
+
+  const bestPoints = scoredCandidates[0]?.points ?? 0;
+  const riskyCandidates = [...scoredCandidates]
+    .sort((left, right) => {
+      const pointsDelta = right.points - left.points;
+      if (pointsDelta !== 0) {
+        return pointsDelta;
+      }
+      const valueDelta = left.value - right.value;
+      if (valueDelta !== 0) {
+        return valueDelta;
+      }
+      return left.dieId.localeCompare(right.dieId);
+    })
+    .filter((candidate) => candidate.points > bestPoints)
+    .slice(0, mistakeCount);
+
+  if (riskyCandidates.length === 0) {
+    return scoredCandidates;
+  }
+
+  const riskyIds = new Set(riskyCandidates.map((candidate) => candidate.dieId));
+  return [
+    ...riskyCandidates,
+    ...scoredCandidates.filter((candidate) => !riskyIds.has(candidate.dieId)),
+  ];
+}
+
+function resolveEasyDifficultyMistakeCount(
+  botProfile,
+  turnNumber,
+  remainingDice,
+  context = {},
+  availableDice = 0
+) {
+  const safeTurnNumber = normalizeTurnNumber(turnNumber);
+  const remaining = Math.max(1, normalizeParticipantRemainingDice(remainingDice));
+  const available = Math.max(0, Math.floor(availableDice));
+  if (available <= 1 || safeTurnNumber <= 2) {
+    return 0;
+  }
+
+  const profile = normalizeBotProfile(botProfile);
+  let mistakeCount = profile === "aggressive" ? 2 : 1;
+
+  if (safeTurnNumber >= 6) {
+    mistakeCount += 1;
+  }
+  if (context.isLeading === true) {
+    mistakeCount += 1;
+  }
+  if (context.isTrailing === true) {
+    mistakeCount -= 1;
+  }
+  if (remaining <= 4) {
+    mistakeCount -= 1;
+  }
+
+  return Math.max(0, Math.min(3, available - 1, mistakeCount));
 }
 
 function buildActiveRaceStandings(sessionParticipants) {

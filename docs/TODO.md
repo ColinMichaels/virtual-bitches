@@ -113,10 +113,11 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - `src/ui/sessionExpiryModal.ts`
 - **Follow-up TODO (Next Iteration)**:
   - ✅ Added integration tests for session-expired choice flow (`recovered` vs `lobby` vs `continue solo`) via `src/multiplayer/sessionExpiryFlow.test.ts`
-  - [ ] Continue improving bot intelligence with game-level difficulty integration:
-    - Easy mode bots should play intentionally dumber (more mistakes, weaker optimization)
-    - Normal mode bots should remain balanced
-    - Hard mode bots should be more adaptive/aggressive
+  - ✅ Continued bot intelligence tuning with game-level difficulty integration:
+    - Easy mode now intentionally injects higher-risk scoring mistakes
+    - Normal mode remains baseline/balanced behavior
+    - Hard mode keeps tighter conservative scoring + faster decision tempo
+  - [ ] Next bot pass: add dynamic playstyle shifts by match phase (opening/midgame/endgame) and player trend adaptation
   - ✅ Added optional replay-tutorial entry point from splash screen (pre-game)
   - [ ] Add regression test ensuring no browser `confirm/prompt` remains in gameplay paths
 

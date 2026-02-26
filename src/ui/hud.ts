@@ -214,13 +214,22 @@ export class HUD {
 
     if (!this.turnDeadlineAtMs) {
       this.turnTimerEl.style.display = "none";
-      this.turnTimerEl.classList.remove("is-warning", "is-critical");
+      this.turnTimerEl.classList.remove("is-warning", "is-critical", "is-self-turn");
       return;
     }
 
     const remainingMs = Math.max(0, this.turnDeadlineAtMs - nowMs);
+    const activeTurnEntry = this.multiplayerStandings.find(
+      (entry) => entry.playerId === this.multiplayerActivePlayerId
+    );
+    const turnLabel = activeTurnEntry
+      ? activeTurnEntry.isCurrentPlayer
+        ? "Your Turn"
+        : `${activeTurnEntry.label} Turn`
+      : "Turn";
     this.turnTimerEl.style.display = "inline";
-    this.turnTimerEl.textContent = `Turn ${this.formatClock(remainingMs)}`;
+    this.turnTimerEl.textContent = `${turnLabel} ${this.formatClock(remainingMs)}`;
+    this.turnTimerEl.classList.toggle("is-self-turn", activeTurnEntry?.isCurrentPlayer === true);
     this.turnTimerEl.classList.toggle("is-warning", remainingMs <= 15000 && remainingMs > 5000);
     this.turnTimerEl.classList.toggle("is-critical", remainingMs <= 5000);
   }
