@@ -60,7 +60,7 @@ SQL files define the intended longer-term relational schema.
   - `playerToken` for WS query auth
   - `auth` bundle (`accessToken`, `refreshToken`, `expiresAt`, `tokenType`)
   - `participants[]` snapshot (`playerId`, `displayName`, `isBot`, `joinedAt`, `lastHeartbeatAt`)
-  - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `updatedAt`)
+  - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `phase`, `updatedAt`)
 - `POST /api/multiplayer/sessions` accepts optional `botCount` (`0..4`) to add lightweight AI bot participants for websocket testing.
 - `GET /api/players/:playerId/profile` returns `204 No Content` when profile does not exist yet.
 - WS endpoint is available at `/` and expects query params:
@@ -73,9 +73,10 @@ SQL files define the intended longer-term relational schema.
   - `game_update` (`title` + `content` required)
   - `player_notification` (`message` required, optional `targetPlayerId`)
 - Turn flow messages:
-  - client -> server: `turn_end`
-  - server -> clients: `turn_end`, `turn_start`
-  - validation: only the current `activeTurnPlayerId` may advance turn order
+  - client -> server: `turn_action` (`roll` | `score`), `turn_end`
+  - server -> clients: `turn_action`, `turn_end`, `turn_start`
+  - validation: only the current `activeTurnPlayerId` may send turn actions
+  - order enforcement: `await_roll` -> `await_score` -> `ready_to_end`; `turn_end` is rejected until score is recorded
 - Bot participants can emit periodic `player_notification`, `game_update`, and `chaos_attack` messages to connected humans.
 - Leaderboard ordering is deterministic:
   1. Lower score first

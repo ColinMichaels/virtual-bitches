@@ -38,6 +38,11 @@ const BOT_NAMES = ["Byte Bessie", "Lag Larry", "Packet Patty", "Dicebot Dave"];
 const BOT_CAMERA_EFFECTS = ["shake", "spin", "zoom", "drunk"];
 const BOT_TURN_ADVANCE_MIN_MS = 1600;
 const BOT_TURN_ADVANCE_MAX_MS = 3200;
+const TURN_PHASES = {
+  awaitRoll: "await_roll",
+  awaitScore: "await_score",
+  readyToEnd: "ready_to_end",
+};
 
 const WS_CLOSE_CODES = {
   normal: 1000,
@@ -1133,9 +1138,21 @@ function serializeTurnState(turnState) {
     turnNumber: Number.isFinite(turnState.turnNumber)
       ? Number(turnState.turnNumber)
       : 1,
+    phase: normalizeTurnPhase(turnState.phase),
     updatedAt:
       Number.isFinite(turnState.updatedAt) ? Number(turnState.updatedAt) : Date.now(),
   };
+}
+
+function normalizeTurnPhase(value) {
+  if (
+    value === TURN_PHASES.awaitRoll ||
+    value === TURN_PHASES.awaitScore ||
+    value === TURN_PHASES.readyToEnd
+  ) {
+    return value;
+  }
+  return TURN_PHASES.awaitRoll;
 }
 
 function serializeSessionParticipants(session) {
@@ -1227,12 +1244,14 @@ function ensureSessionTurnState(session) {
     currentState.turnNumber > 0
       ? Math.floor(currentState.turnNumber)
       : 1;
+  const phase = normalizeTurnPhase(currentState?.phase);
 
   session.turnState = {
     order: nextOrder,
     activeTurnPlayerId,
     round,
     turnNumber,
+    phase,
     updatedAt: now,
   };
 
@@ -1255,6 +1274,7 @@ function buildTurnStartMessage(session, options = {}) {
     playerId: turnState.activeTurnPlayerId,
     round: turnState.round,
     turnNumber: turnState.turnNumber,
+    phase: normalizeTurnPhase(turnState.phase),
     timestamp: Date.now(),
     order: [...turnState.order],
     source: options.source ?? "server",
@@ -1273,6 +1293,25 @@ function buildTurnEndMessage(session, playerId, options = {}) {
     playerId,
     round: turnState.round,
     turnNumber: turnState.turnNumber,
+    timestamp: Date.now(),
+    source: options.source ?? "player",
+  };
+}
+
+function buildTurnActionMessage(session, playerId, action, options = {}) {
+  const turnState = ensureSessionTurnState(session);
+  if (!turnState) {
+    return null;
+  }
+
+  return {
+    type: "turn_action",
+    sessionId: session.sessionId,
+    playerId,
+    action,
+    round: turnState.round,
+    turnNumber: turnState.turnNumber,
+    phase: normalizeTurnPhase(turnState.phase),
     timestamp: Date.now(),
     source: options.source ?? "player",
   };
@@ -1311,6 +1350,7 @@ function advanceSessionTurn(session, endedByPlayerId, options = {}) {
   if (wrapped) {
     turnState.round = Math.max(1, Math.floor(turnState.round) + 1);
   }
+  turnState.phase = TURN_PHASES.awaitRoll;
   turnState.updatedAt = timestamp;
 
   const turnStart = {
@@ -1319,6 +1359,7 @@ function advanceSessionTurn(session, endedByPlayerId, options = {}) {
     playerId: turnState.activeTurnPlayerId,
     round: turnState.round,
     turnNumber: turnState.turnNumber,
+    phase: normalizeTurnPhase(turnState.phase),
     timestamp,
     order: [...turnState.order],
     source: options.source ?? "player",
@@ -2060,6 +2101,11 @@ function handleSocketMessage(client, rawMessage) {
     return;
   }
 
+  if (payload.type === "turn_action") {
+    handleTurnActionMessage(client, session, payload);
+    return;
+  }
+
   session.participants[client.playerId].lastHeartbeatAt = Date.now();
   broadcastToSession(client.sessionId, rawMessage, client);
 }
@@ -2087,7 +2133,60 @@ function isSupportedSocketPayload(payload) {
   if (messageType === "turn_end") {
     return true;
   }
+  if (messageType === "turn_action") {
+    return payload.action === "roll" || payload.action === "score";
+  }
   return false;
+}
+
+function handleTurnActionMessage(client, session, payload) {
+  session.participants[client.playerId].lastHeartbeatAt = Date.now();
+  const turnState = ensureSessionTurnState(session);
+  if (!turnState?.activeTurnPlayerId) {
+    sendSocketError(client, "turn_unavailable", "turn_unavailable");
+    return;
+  }
+
+  if (turnState.activeTurnPlayerId !== client.playerId) {
+    sendSocketError(client, "turn_not_active", "not_your_turn");
+    const syncMessage = buildTurnStartMessage(session, { source: "sync" });
+    if (syncMessage) {
+      sendSocketPayload(client, syncMessage);
+    }
+    return;
+  }
+
+  const action = payload.action === "score" ? "score" : "roll";
+  const currentPhase = normalizeTurnPhase(turnState.phase);
+  if (action === "roll" && currentPhase !== TURN_PHASES.awaitRoll) {
+    sendSocketError(client, "turn_action_invalid_phase", "roll_not_expected");
+    const syncMessage = buildTurnStartMessage(session, { source: "sync" });
+    if (syncMessage) {
+      sendSocketPayload(client, syncMessage);
+    }
+    return;
+  }
+  if (action === "score" && currentPhase !== TURN_PHASES.awaitScore) {
+    sendSocketError(client, "turn_action_invalid_phase", "score_not_expected");
+    const syncMessage = buildTurnStartMessage(session, { source: "sync" });
+    if (syncMessage) {
+      sendSocketPayload(client, syncMessage);
+    }
+    return;
+  }
+
+  turnState.phase =
+    action === "roll" ? TURN_PHASES.awaitScore : TURN_PHASES.readyToEnd;
+  turnState.updatedAt = Date.now();
+  const message = buildTurnActionMessage(session, client.playerId, action, {
+    source: "player",
+  });
+  if (message) {
+    broadcastToSession(client.sessionId, JSON.stringify(message), null);
+  }
+  persistStore().catch((error) => {
+    log.warn("Failed to persist session after turn action", error);
+  });
 }
 
 function handleTurnEndMessage(client, session) {
@@ -2103,6 +2202,15 @@ function handleTurnEndMessage(client, session) {
 
   if (turnState.activeTurnPlayerId !== client.playerId) {
     sendSocketError(client, "turn_not_active", "not_your_turn");
+    const syncMessage = buildTurnStartMessage(session, { source: "sync" });
+    if (syncMessage) {
+      sendSocketPayload(client, syncMessage);
+    }
+    return;
+  }
+
+  if (normalizeTurnPhase(turnState.phase) !== TURN_PHASES.readyToEnd) {
+    sendSocketError(client, "turn_action_required", "score_required_before_turn_end");
     const syncMessage = buildTurnStartMessage(session, { source: "sync" });
     if (syncMessage) {
       sendSocketPayload(client, syncMessage);

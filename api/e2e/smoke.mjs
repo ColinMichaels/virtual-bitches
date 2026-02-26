@@ -80,6 +80,7 @@ async function run() {
     typeof joined?.turnState?.activeTurnPlayerId === "string"
       ? joined.turnState.activeTurnPlayerId
       : hostPlayerId;
+  assertEqual(expectedFirstTurnPlayerId, hostPlayerId, "expected host first turn");
 
   guestSocket.send(JSON.stringify({ type: "turn_end" }));
   const guestTurnError = await waitForBufferedMessage(
@@ -104,6 +105,42 @@ async function run() {
     Array.isArray(joined?.turnState?.order) && joined.turnState.order.length > 1
       ? joined.turnState.order[1]
       : (joined?.turnState?.order?.[0] ?? guestPlayerId);
+  hostSocket.send(JSON.stringify({ type: "turn_end" }));
+  const prematureTurnEndError = await waitForBufferedMessage(
+    hostMessageBuffer,
+    (payload) => payload?.type === "error" && payload?.code === "turn_action_required",
+    "host premature turn_end rejection"
+  );
+  assertEqual(
+    prematureTurnEndError.code,
+    "turn_action_required",
+    "expected turn_action_required rejection"
+  );
+
+  const guestTurnRollPromise = waitForBufferedMessage(
+    guestMessageBuffer,
+    (payload) =>
+      payload?.type === "turn_action" &&
+      payload?.playerId === hostPlayerId &&
+      payload?.action === "roll",
+    "guest turn roll receive"
+  );
+  hostSocket.send(JSON.stringify({ type: "turn_action", action: "roll" }));
+  const guestTurnRolled = await guestTurnRollPromise;
+  assertEqual(guestTurnRolled.action, "roll", "turn_action roll mismatch");
+
+  const guestTurnScorePromise = waitForBufferedMessage(
+    guestMessageBuffer,
+    (payload) =>
+      payload?.type === "turn_action" &&
+      payload?.playerId === hostPlayerId &&
+      payload?.action === "score",
+    "guest turn score receive"
+  );
+  hostSocket.send(JSON.stringify({ type: "turn_action", action: "score" }));
+  const guestTurnScored = await guestTurnScorePromise;
+  assertEqual(guestTurnScored.action, "score", "turn_action score mismatch");
+
   const guestTurnEndedPromise = waitForBufferedMessage(
     guestMessageBuffer,
     (payload) => payload?.type === "turn_end" && payload?.playerId === hostPlayerId,

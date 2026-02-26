@@ -35,6 +35,7 @@ import { playerDataSyncService } from "./services/playerDataSync.js";
 import { getLocalPlayerId } from "./services/playerIdentity.js";
 import {
   MultiplayerNetworkService,
+  type MultiplayerTurnActionMessage,
   type MultiplayerTurnEndMessage,
   type MultiplayerTurnStartMessage,
 } from "./multiplayer/networkService.js";
@@ -187,6 +188,16 @@ class Game implements GameCallbacks {
       const detail = (event as CustomEvent<MultiplayerTurnEndMessage>).detail;
       if (!detail) return;
       this.handleMultiplayerTurnEnd(detail);
+    }) as EventListener);
+    document.addEventListener("multiplayer:turn:action", ((event: Event) => {
+      const detail = (event as CustomEvent<MultiplayerTurnActionMessage>).detail;
+      if (!detail) return;
+      this.handleMultiplayerTurnAction(detail);
+    }) as EventListener);
+    document.addEventListener("multiplayer:error", ((event: Event) => {
+      const detail = (event as CustomEvent<{ code?: string; message?: string }>).detail;
+      if (!detail?.code) return;
+      this.handleMultiplayerProtocolError(detail.code, detail.message);
     }) as EventListener);
 
     document.addEventListener("chaos:cameraAttack:sent", ((event: Event) => {
@@ -823,6 +834,39 @@ class Game implements GameCallbacks {
     );
   }
 
+  private handleMultiplayerTurnAction(message: MultiplayerTurnActionMessage): void {
+    if (!message?.playerId || message.playerId === this.localPlayerId) {
+      return;
+    }
+
+    const actionLabel = message.action === "score" ? "scored" : "rolled";
+    notificationService.show(
+      `${this.getParticipantLabel(message.playerId)} ${actionLabel}`,
+      "info",
+      1200
+    );
+  }
+
+  private handleMultiplayerProtocolError(code: string, message?: string): void {
+    if (code === "turn_not_active") {
+      return;
+    }
+
+    if (code === "turn_action_required") {
+      notificationService.show("Score before ending your turn.", "warning", 1800);
+      return;
+    }
+
+    if (code === "turn_action_invalid_phase") {
+      notificationService.show("Turn sync conflict. Wait for turn update.", "warning", 2000);
+      return;
+    }
+
+    if (message) {
+      log.warn("Multiplayer protocol warning", { code, message });
+    }
+  }
+
   private isMultiplayerTurnEnforced(): boolean {
     return this.playMode === "multiplayer" && environment.features.multiplayer;
   }
@@ -873,6 +917,36 @@ class Game implements GameCallbacks {
     if (!sent) {
       notificationService.show("Failed to signal turn end.", "warning", 1800);
     }
+  }
+
+  private emitTurnAction(action: "roll" | "score"): boolean {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return true;
+    }
+
+    if (!this.multiplayerNetwork?.isConnected()) {
+      notificationService.show(
+        `Unable to ${action} while disconnected.`,
+        "warning",
+        1800
+      );
+      return false;
+    }
+
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    const sent = this.multiplayerNetwork.sendTurnAction({
+      type: "turn_action",
+      sessionId: activeSession?.sessionId,
+      playerId: this.localPlayerId,
+      action,
+      timestamp: Date.now(),
+    });
+    if (!sent) {
+      notificationService.show(`Failed to sync ${action} action.`, "warning", 1800);
+      return false;
+    }
+
+    return true;
   }
 
   private updateSessionQueryParam(sessionId: string): void {
@@ -1142,6 +1216,7 @@ class Game implements GameCallbacks {
     }
 
     if (this.animating || this.state.status !== "READY") return;
+    if (!this.emitTurnAction("roll")) return;
 
     this.animating = true;
     this.dispatch({ t: "ROLL" });
@@ -1172,6 +1247,7 @@ class Game implements GameCallbacks {
     if (this.animating || this.state.status !== "ROLLED" || this.state.selected.size === 0) {
       return;
     }
+    if (!this.emitTurnAction("score")) return;
 
     this.animating = true;
     const selected = new Set(this.state.selected);

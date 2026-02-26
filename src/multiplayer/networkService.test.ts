@@ -2,6 +2,7 @@ import {
   MultiplayerNetworkService,
   type MultiplayerGameUpdateMessage,
   type MultiplayerPlayerNotificationMessage,
+  type MultiplayerTurnActionMessage,
   type MultiplayerTurnEndMessage,
   type MultiplayerTurnStartMessage,
   type WebSocketLike,
@@ -167,6 +168,18 @@ function createTurnEndMessage(): MultiplayerTurnEndMessage {
     type: "turn_end",
     sessionId: "session-1",
     playerId: "player-1",
+    round: 1,
+    turnNumber: 1,
+    timestamp: Date.now(),
+  };
+}
+
+function createTurnActionMessage(action: "roll" | "score" = "roll"): MultiplayerTurnActionMessage {
+  return {
+    type: "turn_action",
+    sessionId: "session-1",
+    playerId: "player-1",
+    action,
     round: 1,
     turnNumber: 1,
     timestamp: Date.now(),
@@ -455,12 +468,16 @@ await test("dispatches inbound multiplayer turn start/end events", () => {
   let socket: MockWebSocket | null = null;
   let started: MultiplayerTurnStartMessage | null = null;
   let ended: MultiplayerTurnEndMessage | null = null;
+  let actioned: MultiplayerTurnActionMessage | null = null;
 
   eventTarget.addEventListener("multiplayer:turn:start", (event: Event) => {
     started = (event as CustomEvent<MultiplayerTurnStartMessage>).detail;
   });
   eventTarget.addEventListener("multiplayer:turn:end", (event: Event) => {
     ended = (event as CustomEvent<MultiplayerTurnEndMessage>).detail;
+  });
+  eventTarget.addEventListener("multiplayer:turn:action", (event: Event) => {
+    actioned = (event as CustomEvent<MultiplayerTurnActionMessage>).detail;
   });
 
   const network = new MultiplayerNetworkService({
@@ -476,12 +493,45 @@ await test("dispatches inbound multiplayer turn start/end events", () => {
   network.connect();
   socket!.emitOpen();
   socket!.emitMessage(createTurnStartMessage());
+  socket!.emitMessage(createTurnActionMessage("roll"));
   socket!.emitMessage(createTurnEndMessage());
 
   assert(started !== null, "Expected inbound turn start");
   assertEqual(started!.playerId, "player-1", "Expected turn start player");
+  assert(actioned !== null, "Expected inbound turn action");
+  assertEqual(actioned!.action, "roll", "Expected turn action payload");
   assert(ended !== null, "Expected inbound turn end");
   assertEqual(ended!.playerId, "player-1", "Expected turn end player");
+});
+
+await test("dispatches inbound ws error event", () => {
+  const eventTarget = new EventTarget();
+  let socket: MockWebSocket | null = null;
+  let receivedCode: string | null = null;
+  let receivedMessage: string | null = null;
+
+  eventTarget.addEventListener("multiplayer:error", (event: Event) => {
+    const detail = (event as CustomEvent<{ code: string; message: string }>).detail;
+    receivedCode = detail?.code ?? null;
+    receivedMessage = detail?.message ?? null;
+  });
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local",
+    eventTarget,
+    autoReconnect: false,
+    webSocketFactory: () => {
+      socket = new MockWebSocket();
+      return socket;
+    },
+  });
+
+  network.connect();
+  socket!.emitOpen();
+  socket!.emitMessage({ type: "error", code: "turn_not_active", message: "not_your_turn" });
+
+  assertEqual(receivedCode, "turn_not_active", "Expected ws error code");
+  assertEqual(receivedMessage, "not_your_turn", "Expected ws error message");
 });
 
 await test("bridges outgoing multiplayer game update to websocket", () => {
@@ -581,6 +631,40 @@ await test("bridges outgoing turn_end to websocket", () => {
   const sent = JSON.parse(socket!.sentPayloads[0]) as MultiplayerTurnEndMessage;
   assertEqual(sent.type, "turn_end", "Expected turn_end payload type");
   assertEqual(sentEventCount, 1, "Expected turn_end sent feedback event");
+});
+
+await test("bridges outgoing turn_action to websocket", () => {
+  const eventTarget = new EventTarget();
+  let socket: MockWebSocket | null = null;
+  let sentEventCount = 0;
+  eventTarget.addEventListener("multiplayer:turn:action:sent", () => {
+    sentEventCount += 1;
+  });
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local",
+    eventTarget,
+    autoReconnect: false,
+    webSocketFactory: () => {
+      socket = new MockWebSocket();
+      return socket;
+    },
+  });
+
+  network.enableEventBridge();
+  network.connect();
+  socket!.emitOpen();
+
+  const outgoing = createTurnActionMessage("score");
+  eventTarget.dispatchEvent(
+    new CustomEvent("multiplayer:turn:action:send", { detail: outgoing })
+  );
+
+  assertEqual(socket!.sentPayloads.length, 1, "Expected one outbound turn_action payload");
+  const sent = JSON.parse(socket!.sentPayloads[0]) as MultiplayerTurnActionMessage;
+  assertEqual(sent.type, "turn_action", "Expected turn_action payload type");
+  assertEqual(sent.action, "score", "Expected turn_action action");
+  assertEqual(sentEventCount, 1, "Expected turn_action sent feedback event");
 });
 
 console.log("\nMultiplayerNetworkService tests passed! ✓");
