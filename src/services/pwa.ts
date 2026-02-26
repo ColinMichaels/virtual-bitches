@@ -26,6 +26,12 @@ class PWAService {
         });
 
         log.info('Service Worker registered:', registration);
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
 
         // Check for updates periodically
         setInterval(() => {
@@ -39,7 +45,7 @@ class PWAService {
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                 log.info('New service worker available');
-                this.showUpdateNotification();
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
               }
             });
           }
