@@ -5,6 +5,7 @@
 
 import { audioService } from "../services/audio.js";
 import { hapticsService } from "../services/haptics.js";
+import { cameraService, type CameraPosition } from "../services/cameraService.js";
 import type { GameState } from "../engine/types.js";
 import type { LeaderboardModal } from "../ui/leaderboard.js";
 import type { RulesModal } from "../ui/rules.js";
@@ -205,7 +206,7 @@ export class InputController {
    * Setup camera control buttons
    */
   private setupCameraControls(): void {
-    const cameraButtons = document.querySelectorAll(".camera-btn");
+    const cameraButtons = document.querySelectorAll("#camera-controls .camera-btn[data-view]");
     cameraButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         audioService.playSfx("click");
@@ -229,14 +230,22 @@ export class InputController {
     const mobileProfileBtn = document.getElementById("mobile-profile-btn");
     const mobileLeaderboardBtn = document.getElementById("mobile-leaderboard-btn");
     const mobileUpgradesBtn = document.getElementById("mobile-upgrades-btn");
+    const mobileReturnLobbyBtn = document.getElementById("mobile-return-lobby-btn");
 
     if (!menuToggle || !mobileMenu) return;
+    this.setupMobileCameraSlots();
+    this.refreshMobileCameraSlots();
+    cameraService.on("positionAdded", () => this.refreshMobileCameraSlots());
+    cameraService.on("positionUpdated", () => this.refreshMobileCameraSlots());
+    cameraService.on("positionDeleted", () => this.refreshMobileCameraSlots());
+    cameraService.on("allCleared", () => this.refreshMobileCameraSlots());
 
     // Toggle menu on hamburger click
     menuToggle.addEventListener("click", (e) => {
       e.stopPropagation();
       audioService.playSfx("click");
       hapticsService.buttonPress();
+      this.refreshMobileCameraSlots();
       this.toggleMobileMenu();
     });
 
@@ -287,11 +296,159 @@ export class InputController {
       });
     }
 
+    if (mobileReturnLobbyBtn) {
+      mobileReturnLobbyBtn.addEventListener("click", () => {
+        audioService.playSfx("click");
+        hapticsService.buttonPress();
+        this.callbacks.handleReturnToMainMenu();
+        this.closeMobileMenu();
+      });
+    }
+
     // Close menu when clicking outside
     document.addEventListener("click", (e) => {
       const target = e.target as HTMLElement;
       if (!mobileMenu.contains(target) && !menuToggle.contains(target)) {
         this.closeMobileMenu();
+      }
+    });
+
+    const handleViewportChange = () => {
+      this.closeMobileMenu();
+      this.refreshMobileCameraSlots();
+    };
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("orientationchange", handleViewportChange);
+  }
+
+  private setupMobileCameraSlots(): void {
+    const slotButtons = document.querySelectorAll<HTMLButtonElement>(".mobile-camera-slot-btn");
+    slotButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const mode = (button.dataset.cameraMode ?? "").trim();
+        if (mode === "saved") {
+          const positionId = (button.dataset.cameraPositionId ?? "").trim();
+          if (!positionId) {
+            return;
+          }
+          const savedPosition = cameraService.loadPosition(positionId);
+          if (!savedPosition) {
+            return;
+          }
+          this.scene.setCameraPosition(savedPosition, true);
+        } else {
+          const fallbackView =
+            (button.dataset.cameraView as "default" | "top" | "side" | "front" | null) ?? "default";
+          this.scene.setCameraView(fallbackView || "default");
+        }
+
+        audioService.playSfx("click");
+        hapticsService.buttonPress();
+        this.closeMobileMenu();
+      });
+    });
+  }
+
+  private getMobileCameraSlots(): Array<{
+    mode: "saved" | "default";
+    label: string;
+    meta: string;
+    icon: string;
+    positionId?: string;
+    view?: "default" | "top" | "side" | "front";
+  }> {
+    const defaultSlots: Array<{
+      mode: "default";
+      label: string;
+      meta: string;
+      icon: string;
+      view: "default" | "top" | "side" | "front";
+    }> = [
+      { mode: "default", label: "Default", meta: "Preset", icon: "📷", view: "default" },
+      { mode: "default", label: "Top", meta: "Preset", icon: "⬆️", view: "top" },
+      { mode: "default", label: "Side", meta: "Preset", icon: "↔️", view: "side" },
+      { mode: "default", label: "Front", meta: "Preset", icon: "🎯", view: "front" },
+    ];
+
+    const favoritePositions = cameraService
+      .getFavorites()
+      .slice()
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 4);
+    const savedPositions =
+      favoritePositions.length > 0
+        ? favoritePositions
+        : cameraService
+            .listPositions()
+            .slice()
+            .sort((a, b) => b.createdAt - a.createdAt)
+            .slice(0, 4);
+    if (savedPositions.length === 0) {
+      return defaultSlots;
+    }
+
+    const savedSlots: Array<{
+      mode: "saved" | "default";
+      label: string;
+      meta: string;
+      icon: string;
+      positionId?: string;
+      view?: "default" | "top" | "side" | "front";
+    }> = savedPositions.map((position) => this.mapSavedCameraSlot(position));
+    while (savedSlots.length < 4) {
+      savedSlots.push(defaultSlots[savedSlots.length]);
+    }
+    return savedSlots;
+  }
+
+  private mapSavedCameraSlot(position: CameraPosition): {
+    mode: "saved";
+    label: string;
+    meta: string;
+    icon: string;
+    positionId: string;
+  } {
+    const shortLabel = position.name.trim().slice(0, 12) || "Saved";
+    return {
+      mode: "saved",
+      label: shortLabel,
+      meta: position.isFavorite ? "Pinned" : "Saved",
+      icon: position.isFavorite ? "📌" : "📷",
+      positionId: position.id,
+    };
+  }
+
+  private refreshMobileCameraSlots(): void {
+    const slotButtons = document.querySelectorAll<HTMLButtonElement>(".mobile-camera-slot-btn");
+    if (slotButtons.length === 0) {
+      return;
+    }
+
+    const slots = this.getMobileCameraSlots();
+    slotButtons.forEach((button, index) => {
+      const slot = slots[index];
+      if (!slot) {
+        button.style.display = "none";
+        return;
+      }
+
+      button.style.display = "";
+      button.dataset.cameraMode = slot.mode;
+      button.dataset.cameraPositionId = slot.positionId ?? "";
+      button.dataset.cameraView = slot.view ?? "";
+      button.title = slot.mode === "saved" ? `Pinned: ${slot.label}` : `${slot.label} View`;
+
+      const iconEl = button.querySelector<HTMLElement>(".mobile-camera-slot-icon");
+      const nameEl = button.querySelector<HTMLElement>(".mobile-camera-slot-name");
+      const metaEl = button.querySelector<HTMLElement>(".mobile-camera-slot-meta");
+      if (iconEl) {
+        iconEl.textContent = slot.icon;
+      }
+      if (nameEl) {
+        nameEl.textContent = slot.label;
+      }
+      if (metaEl) {
+        metaEl.textContent = slot.meta;
       }
     });
   }
