@@ -11,6 +11,8 @@ import { CameraControlsPanel } from "./ui/cameraControls.js";
 import { ChaosUpgradeMenu } from "./ui/chaosUpgradeMenu.js";
 import { EffectHUD } from "./ui/effectHUD.js";
 import { ProfileModal } from "./ui/profile.js";
+import { SessionExpiryModal } from "./ui/sessionExpiryModal.js";
+import { confirmAction } from "./ui/confirmModal.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
 import { GameState, Action, GameDifficulty } from "./engine/types.js";
@@ -62,6 +64,7 @@ export type GamePlayMode = "solo" | "multiplayer";
 export interface MultiplayerBootstrapOptions {
   roomCode?: string;
   botCount?: number;
+  sessionId?: string;
 }
 
 interface GameSessionBootstrapOptions {
@@ -130,6 +133,7 @@ class Game implements GameCallbacks {
   private debugView: DebugView;
   private cameraControlsPanel: CameraControlsPanel;
   private chaosUpgradeMenu: ChaosUpgradeMenu;
+  private sessionExpiryModal: SessionExpiryModal;
   private effectHud: EffectHUD;
   private cameraEffects: CameraEffectsService;
   private cameraAttackExecutor: CameraAttackExecutor;
@@ -150,6 +154,7 @@ class Game implements GameCallbacks {
   private awaitingMultiplayerRoll = false;
   private pendingTurnEndSync = false;
   private lobbyRedirectInProgress = false;
+  private sessionExpiryPromptActive = false;
   private hudClockHandle: ReturnType<typeof setInterval> | null = null;
   private participantSeatById = new Map<string, number>();
   private participantLabelById = new Map<string, string>();
@@ -194,6 +199,7 @@ class Game implements GameCallbacks {
     );
 
     this.multiplayerSessionService = new MultiplayerSessionService(this.localPlayerId);
+    this.sessionExpiryModal = new SessionExpiryModal();
     this.setMultiplayerNetwork(this.getMultiplayerWsUrl());
 
     document.addEventListener("particle:network:receive", ((event: Event) => {
@@ -214,7 +220,7 @@ class Game implements GameCallbacks {
     });
     document.addEventListener("multiplayer:sessionExpired", ((event: Event) => {
       const detail = (event as CustomEvent<{ reason?: string }>).detail;
-      this.handleMultiplayerSessionExpired(detail?.reason ?? "multiplayer_session_expired");
+      void this.handleMultiplayerSessionExpired(detail?.reason ?? "multiplayer_session_expired");
     }) as EventListener);
     document.addEventListener("auth:sessionExpired", ((event: Event) => {
       const detail = (event as CustomEvent<{ reason?: string }>).detail;
@@ -222,7 +228,7 @@ class Game implements GameCallbacks {
         notificationService.show("Session expired. Please reauthenticate.", "warning", 2600);
         return;
       }
-      this.handleMultiplayerSessionExpired(detail?.reason ?? "auth_session_expired");
+      void this.handleMultiplayerSessionExpired(detail?.reason ?? "auth_session_expired");
     }) as EventListener);
     document.addEventListener("multiplayer:turn:start", ((event: Event) => {
       const detail = (event as CustomEvent<MultiplayerTurnStartMessage>).detail;
@@ -418,6 +424,9 @@ class Game implements GameCallbacks {
     this.settingsModal.setOnHowToPlay(() => {
       rulesModal.show();
     });
+    rulesModal.setOnReplayTutorial(() => {
+      this.replayTutorialFromRules();
+    });
 
     // Handle return to main menu / lobby from settings
     this.settingsModal.setOnReturnToLobby(() => {
@@ -462,11 +471,12 @@ class Game implements GameCallbacks {
 
     // Handle mode changes from HUD dropdown
     this.hud.setOnModeChange((difficulty) => {
-      this.handleModeChange(difficulty);
+      void this.handleModeChange(difficulty);
     });
 
     // Setup tutorial
     tutorialModal.setOnComplete(() => {
+      this.queueTutorialCompletionUndo();
       // After tutorial, sync mode and update hint mode based on actual difficulty setting
       GameFlowController.syncModeWithSettings(this.state);
       GameFlowController.updateHintMode(this.state, this.diceRow);
@@ -573,10 +583,19 @@ class Game implements GameCallbacks {
 
   private async bootstrapMultiplayerSession(): Promise<void> {
     const query = new URLSearchParams(window.location.search);
-    const sessionIdFromUrl = query.get("session")?.trim();
-    if (sessionIdFromUrl) {
-      await this.joinMultiplayerSession(sessionIdFromUrl, true);
-      return;
+    const sessionIdFromUrl = query.get("session")?.trim() ?? "";
+    const sessionIdFromOption =
+      typeof this.multiplayerOptions.sessionId === "string"
+        ? this.multiplayerOptions.sessionId.trim()
+        : "";
+    const targetSessionId = sessionIdFromOption || sessionIdFromUrl;
+    const fromInviteLink = targetSessionId.length > 0 && targetSessionId === sessionIdFromUrl;
+    if (targetSessionId) {
+      const joined = await this.joinMultiplayerSession(targetSessionId, fromInviteLink);
+      if (joined || fromInviteLink) {
+        return;
+      }
+      notificationService.show("Selected room unavailable. Creating a new room instead.", "warning", 2800);
     }
 
     if (!environment.features.multiplayer || this.playMode !== "multiplayer") {
@@ -610,18 +629,20 @@ class Game implements GameCallbacks {
     );
   }
 
-  private async joinMultiplayerSession(sessionId: string, fromInviteLink: boolean): Promise<void> {
+  private async joinMultiplayerSession(sessionId: string, fromInviteLink: boolean): Promise<boolean> {
     playerDataSyncService.setSessionId(sessionId);
     const session = await this.multiplayerSessionService.joinSession(sessionId);
     if (!session) {
+      playerDataSyncService.setSessionId(undefined);
       notificationService.show("Unable to join multiplayer session.", "error", 2600);
-      return;
+      return false;
     }
 
     this.bindMultiplayerSession(session, !fromInviteLink);
     if (fromInviteLink) {
       notificationService.show(`Joined multiplayer room ${session.roomCode}.`, "success", 2600);
     }
+    return true;
   }
 
   private bindMultiplayerSession(
@@ -629,6 +650,7 @@ class Game implements GameCallbacks {
     updateUrlSessionParam: boolean
   ): void {
     playerDataSyncService.setSessionId(session.sessionId);
+    this.sessionExpiryPromptActive = false;
     this.lastTurnPlanPreview = "";
     this.applyMultiplayerSeatState(session);
 
@@ -720,6 +742,30 @@ class Game implements GameCallbacks {
 
     this.updateMultiplayerStandingsHud(session, seatedParticipants);
     this.applyTurnStateFromSession(session);
+  }
+
+  private applySoloSeatState(): void {
+    this.participantSeatById.clear();
+    this.participantLabelById.clear();
+    this.multiplayerTurnPlan = null;
+
+    const seatCount = Math.max(1, this.scene.playerSeats.length || 8);
+    const currentSeatIndex = this.scene.currentPlayerSeat;
+    for (let seatIndex = 0; seatIndex < seatCount; seatIndex += 1) {
+      const isCurrentSeat = seatIndex === currentSeatIndex;
+      this.scene.playerSeatRenderer.updateSeat(seatIndex, {
+        occupied: isCurrentSeat,
+        isCurrentPlayer: isCurrentSeat,
+        isBot: false,
+        playerName: isCurrentSeat ? "YOU" : "Empty",
+        avatarColor: isCurrentSeat ? new Color3(0.24, 0.84, 0.36) : undefined,
+        score: isCurrentSeat ? this.state.score : undefined,
+        isComplete: false,
+      });
+    }
+    this.scene.playerSeatRenderer.highlightSeat(currentSeatIndex);
+    this.hud.setMultiplayerStandings([], null);
+    this.hud.setMultiplayerActiveTurn(null);
   }
 
   private computeSeatedParticipants(session: MultiplayerSessionRecord): SeatedMultiplayerParticipant[] {
@@ -1633,17 +1679,59 @@ class Game implements GameCallbacks {
     window.history.replaceState(window.history.state, "", currentUrl.toString());
   }
 
-  private handleMultiplayerSessionExpired(reason: string): void {
-    if (!this.isMultiplayerTurnEnforced()) {
+  private async handleMultiplayerSessionExpired(reason: string): Promise<void> {
+    if (this.playMode !== "multiplayer" || !environment.features.multiplayer) {
       return;
     }
     if (this.lobbyRedirectInProgress) {
       return;
     }
+    if (this.sessionExpiryPromptActive) {
+      return;
+    }
 
-    log.warn("Multiplayer session expired; returning to lobby", { reason });
-    notificationService.show("Multiplayer session expired. Returning to main menu...", "warning", 2200);
-    void this.returnToLobby();
+    this.sessionExpiryPromptActive = true;
+    log.warn("Multiplayer session expired", { reason });
+    notificationService.show(
+      "Multiplayer room expired or became inactive.",
+      "warning",
+      2600
+    );
+
+    let choice: "lobby" | "solo" = "solo";
+    try {
+      choice = await this.sessionExpiryModal.prompt(reason);
+    } finally {
+      this.sessionExpiryPromptActive = false;
+    }
+
+    if (choice === "lobby") {
+      void this.returnToLobby();
+      return;
+    }
+
+    this.continueSoloAfterSessionExpiry(reason);
+  }
+
+  private continueSoloAfterSessionExpiry(reason: string): void {
+    log.info("Continuing game in solo mode after multiplayer expiry", { reason });
+    this.multiplayerNetwork?.dispose();
+    this.multiplayerNetwork = undefined;
+    this.multiplayerSessionService.dispose();
+    particleService.enableNetworkSync(false);
+    this.awaitingMultiplayerRoll = false;
+    this.pendingTurnEndSync = false;
+    this.activeTurnPlayerId = this.localPlayerId;
+    this.activeRollServerId = null;
+    this.applyTurnTiming(null);
+    this.diceRenderer.cancelAllSpectatorPreviews();
+    this.lastTurnPlanPreview = "";
+    this.lastSessionComplete = false;
+    playerDataSyncService.setSessionId(undefined);
+    this.clearSessionQueryParam();
+    this.applySoloSeatState();
+    this.updateUI();
+    notificationService.show("Continuing in solo mode.", "info", 2200);
   }
 
   private async returnToLobby(): Promise<void> {
@@ -1651,6 +1739,7 @@ class Game implements GameCallbacks {
       return;
     }
     this.lobbyRedirectInProgress = true;
+    this.sessionExpiryPromptActive = false;
     try {
       await this.multiplayerSessionService.leaveSession();
     } catch (error) {
@@ -1754,9 +1843,26 @@ class Game implements GameCallbacks {
     }
   }
 
-  private handleModeChange(difficulty: GameDifficulty): void {
+  private async handleModeChange(difficulty: GameDifficulty): Promise<void> {
     const isInProgress = GameFlowController.isGameInProgress(this.state);
-    const result = GameFlowController.handleModeChange(this.state, difficulty, isInProgress);
+    let allowGameReset = true;
+    if (isInProgress) {
+      const modeLabel = `${difficulty.charAt(0).toUpperCase()}${difficulty.slice(1)}`;
+      allowGameReset = await confirmAction({
+        title: `Switch To ${modeLabel} Mode?`,
+        message: "This will start a new game and your current progress will be lost.",
+        confirmLabel: "Switch Mode",
+        cancelLabel: "Keep Current Game",
+        tone: "danger",
+      });
+    }
+
+    const result = GameFlowController.handleModeChange(
+      this.state,
+      difficulty,
+      isInProgress,
+      allowGameReset
+    );
 
     if (result.newState) {
       // Game was in progress, starting new game
@@ -1775,7 +1881,8 @@ class Game implements GameCallbacks {
       this.updateUI();
       notificationService.show(`Mode changed to ${difficulty}`, "info");
     } else {
-      // User cancelled - do nothing
+      // User cancelled mode change - restore HUD mode label.
+      this.updateUI();
     }
   }
 
@@ -1905,9 +2012,44 @@ class Game implements GameCallbacks {
     notificationService.show("Deselected All", "info");
   }
 
-  handleUndo(): void {
+  private queueTutorialCompletionUndo(): void {
+    if (this.playMode !== "solo" || !canUndo(this.state)) {
+      return;
+    }
+
+    const tryUndo = () => {
+      if (this.animating) {
+        window.setTimeout(tryUndo, 75);
+        return;
+      }
+      this.handleUndo(true, "Tutorial score reset - choose your best dice.", true);
+    };
+
+    tryUndo();
+  }
+
+  private replayTutorialFromRules(): void {
+    if (this.playMode !== "solo") {
+      notificationService.show("Replay tutorial is currently available in solo games.", "info", 2600);
+      return;
+    }
+
+    if (this.settingsModal.isVisible()) {
+      this.settingsModal.hide();
+    }
+    this.startNewGame();
+    this.diceRow.setHintMode(true);
+    tutorialModal.show();
+    notificationService.show("Tutorial restarted.", "info", 1800);
+  }
+
+  handleUndo(
+    force: boolean = false,
+    successMessage: string = "Score undone - reselect dice",
+    highlightRestoredDice: boolean = false
+  ): void {
     if (this.paused || this.animating) return;
-    if (!isUndoAllowed(this.state.mode) || !canUndo(this.state)) return;
+    if ((!force && !isUndoAllowed(this.state.mode)) || !canUndo(this.state)) return;
 
     // Get config for replay
     const settings = settingsService.getSettings();
@@ -1919,8 +2061,23 @@ class Game implements GameCallbacks {
     };
 
     // Undo last scoring action
+    const previousState = this.state;
     const newState = undo(this.state, config);
     if (newState !== this.state) {
+      const restoredDieIds: string[] = [];
+      if (highlightRestoredDice) {
+        const nextDieById = new Map(newState.dice.map((die) => [die.id, die]));
+        previousState.dice.forEach((priorDie) => {
+          if (!priorDie.scored) {
+            return;
+          }
+          const nextDie = nextDieById.get(priorDie.id);
+          if (nextDie && nextDie.inPlay && !nextDie.scored && nextDie.value > 0) {
+            restoredDieIds.push(priorDie.id);
+          }
+        });
+      }
+
       this.state = newState;
 
       // Update 3D renderer to match new state
@@ -1933,7 +2090,10 @@ class Game implements GameCallbacks {
       });
 
       this.updateUI();
-      notificationService.show("Score undone - reselect dice", "info");
+      if (highlightRestoredDice && restoredDieIds.length > 0) {
+        this.diceRow.highlightDice(restoredDieIds);
+      }
+      notificationService.show(successMessage, "info");
     }
   }
 

@@ -8,6 +8,7 @@ export class DiceRow {
   private onDieClick: (dieId: string) => void;
   private diceRenderer: DiceRenderer;
   private hintMode: boolean = false;
+  private highlightTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(onDieClick: (dieId: string) => void, diceRenderer: DiceRenderer) {
     this.container = document.getElementById("dice-row")!;
@@ -25,6 +26,7 @@ export class DiceRow {
     );
 
     if (activeDice.length === 0) {
+      this.clearHighlightTimers();
       this.container.innerHTML = "";
       this.container.style.display = "none";
       return;
@@ -43,6 +45,7 @@ export class DiceRow {
     });
 
     this.container.style.display = "flex";
+    this.clearHighlightTimers();
     this.container.innerHTML = "";
 
     let lastKind: DieKind | null = null;
@@ -170,5 +173,41 @@ export class DiceRow {
   setHintMode(enabled: boolean) {
     this.hintMode = enabled;
     localStorage.setItem('hintMode', String(enabled));
+  }
+
+  highlightDice(dieIds: string[], durationMs: number = 820): void {
+    if (!Array.isArray(dieIds) || dieIds.length === 0) {
+      return;
+    }
+
+    const wrappers = Array.from(this.container.querySelectorAll<HTMLElement>(".die-wrapper"));
+    dieIds.forEach((dieId) => {
+      const wrapper = wrappers.find((candidate) => candidate.dataset.dieId === dieId);
+      if (!wrapper) {
+        return;
+      }
+
+      wrapper.classList.remove("tutorial-undo-highlight");
+      void wrapper.offsetWidth;
+      wrapper.classList.add("tutorial-undo-highlight");
+
+      const existingTimer = this.highlightTimers.get(dieId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
+
+      const timer = window.setTimeout(() => {
+        wrapper.classList.remove("tutorial-undo-highlight");
+        this.highlightTimers.delete(dieId);
+      }, durationMs);
+      this.highlightTimers.set(dieId, timer);
+    });
+  }
+
+  private clearHighlightTimers(): void {
+    this.highlightTimers.forEach((timer) => {
+      clearTimeout(timer);
+    });
+    this.highlightTimers.clear();
   }
 }

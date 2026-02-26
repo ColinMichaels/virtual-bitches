@@ -573,6 +573,8 @@ h1, h2, h3, h4, h5, h6 {
   display: inline-block;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  --tutorial-undo-highlight-color: 111, 230, 255;
+  --tutorial-undo-highlight-duration: 0.82s;
 }
 
 .die-wrapper:active .die-2d {
@@ -605,6 +607,14 @@ h1, h2, h3, h4, h5, h6 {
 .die-wrapper.focused .die-2d {
   box-shadow: 0 0 0 3px rgba(100, 180, 255, 0.8), 0 4px 8px rgba(0,0,0,0.3);
   transform: translateY(-2px);
+}
+
+.die-wrapper.tutorial-undo-highlight .die-2d {
+  animation: tutorial-undo-highlight var(--tutorial-undo-highlight-duration) cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.die-wrapper.tutorial-undo-highlight .die-2d .points {
+  animation: tutorial-undo-highlight-points var(--tutorial-undo-highlight-duration) cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .die-wrapper .die-2d.selected {
@@ -1281,6 +1291,54 @@ button.danger:hover:not(:disabled) {
   }
 }
 
+@keyframes tutorial-undo-highlight {
+  0% {
+    box-shadow: 0 0 0 0 rgba(var(--tutorial-undo-highlight-color), 0);
+    filter: brightness(1);
+    transform: translateY(0) scale(1);
+  }
+  22% {
+    box-shadow:
+      0 0 0 4px rgba(var(--tutorial-undo-highlight-color), 0.95),
+      0 0 28px rgba(var(--tutorial-undo-highlight-color), 0.72),
+      0 10px 22px rgba(0, 0, 0, 0.42);
+    filter: brightness(1.22);
+    transform: translateY(-2px) scale(1.06);
+  }
+  58% {
+    box-shadow:
+      0 0 0 2px rgba(var(--tutorial-undo-highlight-color), 0.45),
+      0 0 14px rgba(var(--tutorial-undo-highlight-color), 0.35);
+    filter: brightness(1.08);
+    transform: translateY(-1px) scale(1.02);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--tutorial-undo-highlight-color), 0);
+    filter: brightness(1);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tutorial-undo-highlight-points {
+  0% {
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 1);
+  }
+  22% {
+    text-shadow:
+      0 1px 3px rgba(0, 0, 0, 1),
+      0 0 14px rgba(var(--tutorial-undo-highlight-color), 0.95),
+      0 0 24px rgba(var(--tutorial-undo-highlight-color), 0.4);
+  }
+  58% {
+    text-shadow:
+      0 1px 3px rgba(0, 0, 0, 1),
+      0 0 8px rgba(var(--tutorial-undo-highlight-color), 0.55);
+  }
+  100% {
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 1);
+  }
+}
+
 .splash-title {
   font-family: 'Caprasimo', cursive, system-ui;
   font-size: 72px;
@@ -1362,6 +1420,22 @@ button.danger:hover:not(:disabled) {
   color: #fff;
   font-size: 14px;
   padding: 8px 12px;
+}
+
+.splash-room-picker {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.splash-room-picker select {
+  min-width: 260px;
+}
+
+.splash-room-picker button {
+  min-width: 92px;
+  padding: 9px 12px;
+  font-size: 13px;
 }
 
 .splash-multiplayer-options p {
@@ -1458,6 +1532,27 @@ button.danger:hover:not(:disabled) {
 /* Rules Modal Specific Styles */
 .rules-modal-content {
   max-width: 800px;
+}
+
+.rules-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: -18px 0 16px;
+}
+
+.btn-rules-replay {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background: rgba(87, 165, 255, 0.28);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.btn-rules-replay:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .rules-body {
@@ -2458,6 +2553,106 @@ button.danger:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.2);
 }
 
+.confirm-modal-content {
+  max-width: 540px;
+}
+
+.confirm-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.confirm-modal-message {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.btn-confirm-cancel,
+.btn-confirm-accept {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  padding: 10px 12px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-confirm-cancel {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.btn-confirm-accept {
+  background: rgba(87, 165, 255, 0.28);
+}
+
+.btn-confirm-accept.is-danger {
+  background: rgba(245, 107, 107, 0.35);
+}
+
+.btn-confirm-cancel:hover,
+.btn-confirm-accept:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.session-expiry-modal-content {
+  max-width: 560px;
+}
+
+.session-expiry-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.session-expiry-content p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.session-expiry-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-session-lobby,
+.btn-session-solo {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  padding: 10px 12px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-session-lobby {
+  background: rgba(245, 107, 107, 0.35);
+}
+
+.btn-session-solo {
+  background: rgba(87, 165, 255, 0.28);
+}
+
+.btn-session-lobby:hover,
+.btn-session-solo:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 /* Profile Modal */
 .profile-modal-content {
   max-width: 760px;
@@ -3388,6 +3583,18 @@ button.danger:hover:not(:disabled) {
     width: 100%;
   }
 
+  .splash-room-picker {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .splash-room-picker select,
+  .splash-room-picker button {
+    width: 100%;
+    min-width: 0;
+  }
+
   .splash-buttons {
     flex-direction: column;
     width: 100%;
@@ -3406,6 +3613,16 @@ button.danger:hover:not(:disabled) {
 
   .tab-btn {
     width: 100%;
+  }
+
+  .rules-actions {
+    justify-content: stretch;
+    margin: 0 0 14px;
+  }
+
+  .btn-rules-replay {
+    width: 100%;
+    justify-content: center;
   }
 
   .score-entry {
@@ -3428,6 +3645,14 @@ button.danger:hover:not(:disabled) {
   }
 
   .auth-gate-actions {
+    flex-direction: column;
+  }
+
+  .confirm-modal-actions {
+    flex-direction: column;
+  }
+
+  .session-expiry-actions {
     flex-direction: column;
   }
 

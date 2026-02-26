@@ -6,6 +6,7 @@
 import { audioService } from "../services/audio.js";
 import { environment } from "../environments/environment.js";
 import { logger } from "../utils/logger.js";
+import type { MultiplayerRoomListing } from "../services/backendApi.js";
 import type { SplashBackground3D } from "./splashBackground3d.js";
 
 const log = logger.create("SplashScreen");
@@ -16,6 +17,7 @@ export interface SplashStartOptions {
   playMode: SplashPlayMode;
   multiplayer?: {
     botCount: number;
+    sessionId?: string;
   };
 }
 
@@ -26,6 +28,9 @@ export class SplashScreen {
   private backgroundLoadPromise: Promise<void> | null = null;
   private playMode: SplashPlayMode = "solo";
   private botCount = 1;
+  private roomList: MultiplayerRoomListing[] = [];
+  private selectedRoomSessionId: string | null = null;
+  private roomListLoading = false;
   gameTitle = environment.gameTitle;
 
   constructor(
@@ -70,6 +75,14 @@ export class SplashScreen {
             <option value="2">2 bots</option>
             <option value="3">3 bots</option>
           </select>
+          <label for="splash-room-select">Join Existing Room</label>
+          <div class="splash-room-picker">
+            <select id="splash-room-select">
+              <option value="">Create New Room</option>
+            </select>
+            <button type="button" id="splash-room-refresh" class="secondary">Refresh</button>
+          </div>
+          <p id="splash-room-status">No active rooms found. Starting creates a new room.</p>
           <p>Bots send lightweight update and chaos events for multiplayer testing.</p>
         </div>
         <div class="splash-buttons">
@@ -98,6 +111,19 @@ export class SplashScreen {
       this.botCount = Number.isFinite(parsed) ? Math.max(0, Math.min(3, Math.floor(parsed))) : 0;
     });
 
+    const roomSelect = this.container.querySelector<HTMLSelectElement>("#splash-room-select");
+    roomSelect?.addEventListener("change", () => {
+      const selected = roomSelect.value.trim();
+      this.selectedRoomSessionId = selected.length > 0 ? selected : null;
+      this.updateRoomStatus();
+    });
+
+    const refreshButton = this.container.querySelector<HTMLButtonElement>("#splash-room-refresh");
+    refreshButton?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      void this.refreshRoomList(true);
+    });
+
     document.getElementById("start-game-btn")?.addEventListener("click", async () => {
       audioService.playSfx("click");
       const startButton = document.getElementById("start-game-btn") as HTMLButtonElement | null;
@@ -117,6 +143,7 @@ export class SplashScreen {
               this.playMode === "multiplayer"
                 ? {
                     botCount: this.botCount,
+                    sessionId: this.selectedRoomSessionId ?? undefined,
                   }
                 : undefined,
           })
@@ -209,6 +236,104 @@ export class SplashScreen {
     const multiplayerOptions = this.container.querySelector<HTMLElement>("#splash-multiplayer-options");
     if (multiplayerOptions) {
       multiplayerOptions.style.display = this.playMode === "multiplayer" ? "flex" : "none";
+    }
+
+    if (this.playMode === "multiplayer") {
+      void this.refreshRoomList(false);
+    }
+  }
+
+  private updateRoomStatus(): void {
+    const statusEl = this.container.querySelector<HTMLElement>("#splash-room-status");
+    if (!statusEl) {
+      return;
+    }
+    if (this.roomListLoading) {
+      statusEl.textContent = "Refreshing rooms...";
+      return;
+    }
+    if (this.selectedRoomSessionId) {
+      const selected = this.roomList.find((room) => room.sessionId === this.selectedRoomSessionId);
+      if (selected) {
+        const expiresInMinutes = Math.max(1, Math.ceil((selected.expiresAt - Date.now()) / 60000));
+        statusEl.textContent = `Joining room ${selected.roomCode}. Expires in ~${expiresInMinutes}m without activity.`;
+        return;
+      }
+    }
+    if (this.roomList.length === 0) {
+      statusEl.textContent = "No active rooms found. Starting creates a new room.";
+      return;
+    }
+    statusEl.textContent = "Select a room to join, or choose Create New Room.";
+  }
+
+  private async refreshRoomList(force: boolean): Promise<void> {
+    if (this.playMode !== "multiplayer") {
+      return;
+    }
+    if (this.roomListLoading) {
+      return;
+    }
+    if (!force && this.roomList.length > 0) {
+      this.updateRoomStatus();
+      return;
+    }
+
+    const roomSelect = this.container.querySelector<HTMLSelectElement>("#splash-room-select");
+    const refreshButton = this.container.querySelector<HTMLButtonElement>("#splash-room-refresh");
+    this.roomListLoading = true;
+    if (refreshButton) {
+      refreshButton.disabled = true;
+    }
+    this.updateRoomStatus();
+
+    try {
+      const { backendApiService } = await import("../services/backendApi.js");
+      const rooms = await backendApiService.listMultiplayerRooms(24);
+      this.roomList = Array.isArray(rooms) ? rooms : [];
+      if (!roomSelect) {
+        return;
+      }
+
+      const priorSelection = this.selectedRoomSessionId;
+      roomSelect.innerHTML = "";
+      const createOption = document.createElement("option");
+      createOption.value = "";
+      createOption.textContent = "Create New Room";
+      roomSelect.appendChild(createOption);
+
+      this.roomList.forEach((room) => {
+        const option = document.createElement("option");
+        option.value = room.sessionId;
+        const sessionState = room.sessionComplete ? "complete" : `${room.activeHumanCount} active`;
+        option.textContent = `${room.roomCode} • ${room.humanCount}H/${room.botCount}B • ${sessionState}`;
+        roomSelect.appendChild(option);
+      });
+
+      const canRestoreSelection =
+        typeof priorSelection === "string" &&
+        priorSelection.length > 0 &&
+        this.roomList.some((room) => room.sessionId === priorSelection);
+      this.selectedRoomSessionId = canRestoreSelection ? priorSelection : null;
+      roomSelect.value = this.selectedRoomSessionId ?? "";
+    } catch (error) {
+      log.warn("Failed to refresh room list", error);
+      this.roomList = [];
+      this.selectedRoomSessionId = null;
+      if (roomSelect) {
+        roomSelect.innerHTML = "";
+        const createOption = document.createElement("option");
+        createOption.value = "";
+        createOption.textContent = "Create New Room";
+        roomSelect.appendChild(createOption);
+        roomSelect.value = "";
+      }
+    } finally {
+      this.roomListLoading = false;
+      if (refreshButton) {
+        refreshButton.disabled = false;
+      }
+      this.updateRoomStatus();
     }
   }
 }

@@ -5,6 +5,7 @@
 
 import { cameraService, type CameraPosition, type CameraTier } from "../services/cameraService.js";
 import { logger } from "../utils/logger.js";
+import { confirmAction } from "./confirmModal.js";
 
 const log = logger.create('CameraControls');
 
@@ -376,7 +377,7 @@ export class CameraControlsPanel {
     listEl.querySelectorAll('.camera-delete-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const id = (e.target as HTMLElement).dataset.id;
-        if (id) this.deletePosition(id);
+        if (id) void this.deletePosition(id);
       });
     });
 
@@ -399,16 +400,25 @@ export class CameraControlsPanel {
   /**
    * Delete a camera position
    */
-  private deletePosition(id: string): void {
+  private async deletePosition(id: string): Promise<void> {
     const position = cameraService.listPositions().find(p => p.id === id);
 
     if (!position) return;
 
-    if (confirm(`Delete "${position.name}"?`)) {
-      cameraService.deletePosition(id);
-      this.showNotification(`🗑️ Deleted: ${position.name}`, 'info');
-      this.refreshPositions();
+    const confirmed = await confirmAction({
+      title: "Delete Camera Position?",
+      message: `Delete "${position.name}"?`,
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+      tone: "danger",
+    });
+    if (!confirmed) {
+      return;
     }
+
+    cameraService.deletePosition(id);
+    this.showNotification(`🗑️ Deleted: ${position.name}`, 'info');
+    this.refreshPositions();
   }
 
   /**
