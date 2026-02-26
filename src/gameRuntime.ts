@@ -14,6 +14,7 @@ import { ProfileModal } from "./ui/profile.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
 import { GameState, Action, GameDifficulty } from "./engine/types.js";
+import { SeededRNG } from "./engine/rng.js";
 import { Color3, PointerEventTypes } from "@babylonjs/core";
 import { audioService } from "./services/audio.js";
 import { hapticsService } from "./services/haptics.js";
@@ -115,6 +116,7 @@ class Game implements GameCallbacks {
   private readonly multiplayerOptions: MultiplayerBootstrapOptions;
   private multiplayerTurnPlan: MultiplayerTurnPlan | null = null;
   private activeTurnPlayerId: string | null = null;
+  private activeRollServerId: string | null = null;
   private participantSeatById = new Map<string, number>();
   private participantLabelById = new Map<string, string>();
 
@@ -354,6 +356,11 @@ class Game implements GameCallbacks {
     // Handle How to Play button in settings
     this.settingsModal.setOnHowToPlay(() => {
       rulesModal.show();
+    });
+
+    // Handle return to main menu / lobby from settings
+    this.settingsModal.setOnReturnToLobby(() => {
+      void this.returnToLobby();
     });
 
     // Handle player seat clicks for multiplayer invites
@@ -759,6 +766,12 @@ class Game implements GameCallbacks {
     const serverActiveTurnPlayerId = session.turnState?.activeTurnPlayerId ?? null;
     if (serverActiveTurnPlayerId) {
       this.activeTurnPlayerId = serverActiveTurnPlayerId;
+      this.activeRollServerId =
+        serverActiveTurnPlayerId === this.localPlayerId &&
+        typeof session.turnState?.activeRollServerId === "string" &&
+        session.turnState.activeRollServerId
+          ? session.turnState.activeRollServerId
+          : null;
       this.updateTurnSeatHighlight(serverActiveTurnPlayerId);
       return;
     }
@@ -767,6 +780,7 @@ class Game implements GameCallbacks {
       this.multiplayerTurnPlan?.order[0]?.playerId ??
       (this.playMode === "multiplayer" ? this.localPlayerId : null);
     this.activeTurnPlayerId = fallbackActive;
+    this.activeRollServerId = null;
     this.updateTurnSeatHighlight(fallbackActive);
   }
 
@@ -799,6 +813,12 @@ class Game implements GameCallbacks {
 
   private handleMultiplayerTurnStart(message: MultiplayerTurnStartMessage): void {
     this.activeTurnPlayerId = message.playerId;
+    this.activeRollServerId =
+      message.playerId === this.localPlayerId &&
+      typeof message.activeRollServerId === "string" &&
+      message.activeRollServerId
+        ? message.activeRollServerId
+        : null;
     this.updateTurnSeatHighlight(message.playerId);
 
     if (message.playerId === this.localPlayerId) {
@@ -835,7 +855,17 @@ class Game implements GameCallbacks {
   }
 
   private handleMultiplayerTurnAction(message: MultiplayerTurnActionMessage): void {
-    if (!message?.playerId || message.playerId === this.localPlayerId) {
+    if (!message?.playerId) {
+      return;
+    }
+
+    if (message.playerId === this.localPlayerId) {
+      if (message.action === "roll") {
+        this.activeRollServerId =
+          typeof message.roll?.serverRollId === "string" && message.roll.serverRollId
+            ? message.roll.serverRollId
+            : null;
+      }
       return;
     }
 
@@ -859,6 +889,16 @@ class Game implements GameCallbacks {
 
     if (code === "turn_action_invalid_phase") {
       notificationService.show("Turn sync conflict. Wait for turn update.", "warning", 2000);
+      return;
+    }
+
+    if (code === "turn_action_invalid_score") {
+      notificationService.show("Score validation failed. Re-roll this turn.", "warning", 2200);
+      return;
+    }
+
+    if (code === "turn_action_invalid_payload") {
+      notificationService.show("Turn payload rejected. Syncing...", "warning", 2200);
       return;
     }
 
@@ -919,7 +959,10 @@ class Game implements GameCallbacks {
     }
   }
 
-  private emitTurnAction(action: "roll" | "score"): boolean {
+  private emitTurnAction(
+    action: "roll" | "score",
+    details?: Pick<MultiplayerTurnActionMessage, "roll" | "score">
+  ): boolean {
     if (!this.isMultiplayerTurnEnforced()) {
       return true;
     }
@@ -939,6 +982,7 @@ class Game implements GameCallbacks {
       sessionId: activeSession?.sessionId,
       playerId: this.localPlayerId,
       action,
+      ...details,
       timestamp: Date.now(),
     });
     if (!sent) {
@@ -949,10 +993,72 @@ class Game implements GameCallbacks {
     return true;
   }
 
+  private buildRollTurnPayload(): {
+    rollIndex: number;
+    dice: Array<{ dieId: string; sides: number; value: number }>;
+  } {
+    const rng = new SeededRNG(`${this.state.seed}-${this.state.rollIndex}`);
+    const dice = this.state.dice
+      .filter((die) => die.inPlay && !die.scored)
+      .map((die) => ({
+        dieId: die.id,
+        sides: die.def.sides,
+        value: rng.rollDie(die.def.sides),
+      }));
+
+    return {
+      rollIndex: this.state.rollIndex + 1,
+      dice,
+    };
+  }
+
+  private buildScoreTurnPayload(
+    selected: Set<string>,
+    points: number,
+    rollServerId: string
+  ): {
+    selectedDiceIds: string[];
+    points: number;
+    rollServerId: string;
+    projectedTotalScore: number;
+  } {
+    return {
+      selectedDiceIds: [...selected],
+      points,
+      rollServerId,
+      projectedTotalScore: this.state.score + points,
+    };
+  }
+
   private updateSessionQueryParam(sessionId: string): void {
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.set("session", sessionId);
     window.history.replaceState(window.history.state, "", currentUrl.toString());
+  }
+
+  private clearSessionQueryParam(): void {
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.delete("session");
+    window.history.replaceState(window.history.state, "", currentUrl.toString());
+  }
+
+  private async returnToLobby(): Promise<void> {
+    try {
+      await this.multiplayerSessionService.leaveSession();
+    } catch (error) {
+      log.warn("Failed to leave multiplayer session during lobby return", error);
+    }
+
+    this.multiplayerNetwork?.dispose();
+    this.multiplayerNetwork = undefined;
+    playerDataSyncService.setSessionId(undefined);
+    this.clearSessionQueryParam();
+
+    const redirectUrl = new URL(window.location.href);
+    redirectUrl.searchParams.delete("session");
+    redirectUrl.searchParams.delete("seed");
+    redirectUrl.searchParams.delete("log");
+    window.location.assign(redirectUrl.toString());
   }
 
   private async copySessionInviteLink(sessionId: string): Promise<void> {
@@ -1216,7 +1322,11 @@ class Game implements GameCallbacks {
     }
 
     if (this.animating || this.state.status !== "READY") return;
-    if (!this.emitTurnAction("roll")) return;
+    this.activeRollServerId = null;
+    const rollPayload = this.buildRollTurnPayload();
+    if (!this.emitTurnAction("roll", { roll: rollPayload })) {
+      return;
+    }
 
     this.animating = true;
     this.dispatch({ t: "ROLL" });
@@ -1247,14 +1357,22 @@ class Game implements GameCallbacks {
     if (this.animating || this.state.status !== "ROLLED" || this.state.selected.size === 0) {
       return;
     }
-    if (!this.emitTurnAction("score")) return;
-
-    this.animating = true;
     const selected = new Set(this.state.selected);
 
     // Calculate points for notification
     const scoredDice = this.state.dice.filter((d) => selected.has(d.id));
     const points = scoredDice.reduce((sum, die) => sum + (die.def.sides - die.value), 0);
+    if (!this.activeRollServerId) {
+      notificationService.show("Waiting for roll sync before scoring.", "warning", 1800);
+      return;
+    }
+
+    const scorePayload = this.buildScoreTurnPayload(selected, points, this.activeRollServerId);
+    if (!this.emitTurnAction("score", { score: scorePayload })) {
+      return;
+    }
+
+    this.animating = true;
 
     // Play score sound and haptic feedback
     audioService.playSfx("score");

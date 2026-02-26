@@ -32,12 +32,14 @@ const MAX_STORED_GAME_LOGS = 10000;
 const MAX_WS_MESSAGE_BYTES = 16 * 1024;
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const MAX_MULTIPLAYER_BOTS = 4;
-const BOT_TICK_MIN_MS = 2600;
-const BOT_TICK_MAX_MS = 5200;
+const BOT_TICK_MIN_MS = 4500;
+const BOT_TICK_MAX_MS = 9000;
 const BOT_NAMES = ["Byte Bessie", "Lag Larry", "Packet Patty", "Dicebot Dave"];
-const BOT_CAMERA_EFFECTS = ["shake", "spin", "zoom", "drunk"];
+const BOT_CAMERA_EFFECTS = ["shake"];
 const BOT_TURN_ADVANCE_MIN_MS = 1600;
 const BOT_TURN_ADVANCE_MAX_MS = 3200;
+const MAX_TURN_ROLL_DICE = 64;
+const MAX_TURN_SCORE_SELECTION = 64;
 const TURN_PHASES = {
   awaitRoll: "await_roll",
   awaitScore: "await_score",
@@ -1139,6 +1141,10 @@ function serializeTurnState(turnState) {
       ? Number(turnState.turnNumber)
       : 1,
     phase: normalizeTurnPhase(turnState.phase),
+    activeRollServerId:
+      typeof turnState?.lastRollSnapshot?.serverRollId === "string"
+        ? turnState.lastRollSnapshot.serverRollId
+        : null,
     updatedAt:
       Number.isFinite(turnState.updatedAt) ? Number(turnState.updatedAt) : Date.now(),
   };
@@ -1153,6 +1159,253 @@ function normalizeTurnPhase(value) {
     return value;
   }
   return TURN_PHASES.awaitRoll;
+}
+
+function normalizeTurnRollSnapshot(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const rollIndex = Number.isFinite(value.rollIndex) ? Math.floor(value.rollIndex) : NaN;
+  const rawDice = Array.isArray(value.dice) ? value.dice : null;
+  if (!Number.isFinite(rollIndex) || rollIndex <= 0 || !rawDice || rawDice.length === 0) {
+    return null;
+  }
+
+  const dice = [];
+  const seenIds = new Set();
+  for (const die of rawDice.slice(0, MAX_TURN_ROLL_DICE)) {
+    if (!die || typeof die !== "object") {
+      continue;
+    }
+    const dieId = typeof die.dieId === "string" ? die.dieId.trim() : "";
+    const sides = Number.isFinite(die.sides) ? Math.floor(die.sides) : NaN;
+    const valueAtFace = Number.isFinite(die.value) ? Math.floor(die.value) : NaN;
+    if (!dieId || seenIds.has(dieId)) {
+      continue;
+    }
+    if (!Number.isFinite(sides) || sides < 2 || sides > 1000) {
+      continue;
+    }
+    if (!Number.isFinite(valueAtFace) || valueAtFace < 1 || valueAtFace > sides) {
+      continue;
+    }
+    seenIds.add(dieId);
+    dice.push({
+      dieId,
+      sides,
+      value: valueAtFace,
+    });
+  }
+
+  if (dice.length === 0) {
+    return null;
+  }
+
+  return {
+    rollIndex,
+    dice,
+    serverRollId:
+      typeof value.serverRollId === "string" && value.serverRollId
+        ? value.serverRollId
+        : randomUUID(),
+    updatedAt: Number.isFinite(value.updatedAt) ? Number(value.updatedAt) : Date.now(),
+  };
+}
+
+function normalizeTurnScoreSummary(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const selectedDiceIds = Array.isArray(value.selectedDiceIds)
+    ? value.selectedDiceIds
+        .filter((id) => typeof id === "string" && id.trim().length > 0)
+        .map((id) => id.trim())
+        .slice(0, MAX_TURN_SCORE_SELECTION)
+    : [];
+  const points = Number.isFinite(value.points) ? Math.floor(value.points) : NaN;
+  const expectedPoints = Number.isFinite(value.expectedPoints)
+    ? Math.floor(value.expectedPoints)
+    : NaN;
+  if (
+    selectedDiceIds.length === 0 ||
+    !Number.isFinite(points) ||
+    points < 0 ||
+    !Number.isFinite(expectedPoints) ||
+    expectedPoints < 0
+  ) {
+    return null;
+  }
+
+  const projectedTotalScore = Number.isFinite(value.projectedTotalScore)
+    ? Math.floor(value.projectedTotalScore)
+    : null;
+  const rollServerId =
+    typeof value.rollServerId === "string" && value.rollServerId
+      ? value.rollServerId
+      : "";
+  if (!rollServerId) {
+    return null;
+  }
+  return {
+    selectedDiceIds,
+    points,
+    expectedPoints,
+    rollServerId,
+    projectedTotalScore:
+      Number.isFinite(projectedTotalScore) && projectedTotalScore >= 0
+        ? projectedTotalScore
+        : null,
+    updatedAt: Number.isFinite(value.updatedAt) ? Number(value.updatedAt) : Date.now(),
+  };
+}
+
+function parseTurnRollPayload(payload) {
+  const roll = payload?.roll;
+  if (!roll || typeof roll !== "object") {
+    return { ok: false, reason: "missing_roll_payload" };
+  }
+
+  const rollIndex = Number.isFinite(roll.rollIndex) ? Math.floor(roll.rollIndex) : NaN;
+  const rawDice = Array.isArray(roll.dice) ? roll.dice : null;
+  if (!Number.isFinite(rollIndex) || rollIndex <= 0 || !rawDice || rawDice.length === 0) {
+    return { ok: false, reason: "invalid_roll_payload" };
+  }
+  if (rawDice.length > MAX_TURN_ROLL_DICE) {
+    return { ok: false, reason: "roll_payload_too_large" };
+  }
+
+  const dice = [];
+  const seenIds = new Set();
+  for (const die of rawDice) {
+    if (!die || typeof die !== "object") {
+      return { ok: false, reason: "invalid_roll_die" };
+    }
+    const dieId = typeof die.dieId === "string" ? die.dieId.trim() : "";
+    const sides = Number.isFinite(die.sides) ? Math.floor(die.sides) : NaN;
+    const valueAtFace = Number.isFinite(die.value) ? Math.floor(die.value) : NaN;
+    if (!dieId || seenIds.has(dieId)) {
+      return { ok: false, reason: "invalid_roll_die_id" };
+    }
+    if (!Number.isFinite(sides) || sides < 2 || sides > 1000) {
+      return { ok: false, reason: "invalid_roll_die_sides" };
+    }
+    if (!Number.isFinite(valueAtFace) || valueAtFace < 1 || valueAtFace > sides) {
+      return { ok: false, reason: "invalid_roll_die_value" };
+    }
+    seenIds.add(dieId);
+    dice.push({
+      dieId,
+      sides,
+      value: valueAtFace,
+    });
+  }
+
+  return {
+    ok: true,
+    value: {
+      rollIndex,
+      dice,
+      serverRollId: randomUUID(),
+      updatedAt: Date.now(),
+    },
+  };
+}
+
+function parseTurnScorePayload(payload, lastRollSnapshot) {
+  if (!lastRollSnapshot?.dice || !Array.isArray(lastRollSnapshot.dice)) {
+    return { ok: false, reason: "missing_roll_snapshot" };
+  }
+
+  const score = payload?.score;
+  if (!score || typeof score !== "object") {
+    return { ok: false, reason: "missing_score_payload" };
+  }
+
+  const rawSelected = Array.isArray(score.selectedDiceIds) ? score.selectedDiceIds : null;
+  if (!rawSelected || rawSelected.length === 0) {
+    return { ok: false, reason: "missing_selected_dice" };
+  }
+  if (rawSelected.length > MAX_TURN_SCORE_SELECTION) {
+    return { ok: false, reason: "score_payload_too_large" };
+  }
+
+  const selectedDiceIds = [];
+  const selectedSet = new Set();
+  for (const dieIdRaw of rawSelected) {
+    const dieId = typeof dieIdRaw === "string" ? dieIdRaw.trim() : "";
+    if (!dieId || selectedSet.has(dieId)) {
+      return { ok: false, reason: "invalid_selected_dice" };
+    }
+    selectedSet.add(dieId);
+    selectedDiceIds.push(dieId);
+  }
+
+  const points = Number.isFinite(score.points) ? Math.floor(score.points) : NaN;
+  if (!Number.isFinite(points) || points < 0) {
+    return { ok: false, reason: "invalid_score_points" };
+  }
+  const rollServerId = typeof score.rollServerId === "string" ? score.rollServerId.trim() : "";
+  if (!rollServerId) {
+    return { ok: false, reason: "missing_score_roll_id" };
+  }
+  const expectedRollServerId =
+    typeof lastRollSnapshot.serverRollId === "string" ? lastRollSnapshot.serverRollId : "";
+  if (!expectedRollServerId || rollServerId !== expectedRollServerId) {
+    return { ok: false, reason: "score_roll_mismatch" };
+  }
+
+  const rollById = new Map();
+  lastRollSnapshot.dice.forEach((die) => {
+    if (!die || typeof die !== "object") {
+      return;
+    }
+    if (typeof die.dieId !== "string") {
+      return;
+    }
+    const sides = Number.isFinite(die.sides) ? Math.floor(die.sides) : NaN;
+    const valueAtFace = Number.isFinite(die.value) ? Math.floor(die.value) : NaN;
+    if (!Number.isFinite(sides) || !Number.isFinite(valueAtFace)) {
+      return;
+    }
+    rollById.set(die.dieId, { sides, value: valueAtFace });
+  });
+  if (rollById.size === 0) {
+    return { ok: false, reason: "invalid_roll_snapshot" };
+  }
+
+  let expectedPoints = 0;
+  for (const dieId of selectedDiceIds) {
+    const die = rollById.get(dieId);
+    if (!die) {
+      return { ok: false, reason: "selected_die_not_in_roll" };
+    }
+    expectedPoints += die.sides - die.value;
+  }
+
+  if (points !== expectedPoints) {
+    return { ok: false, reason: "score_points_mismatch", expectedPoints };
+  }
+
+  const projectedTotalScore = Number.isFinite(score.projectedTotalScore)
+    ? Math.floor(score.projectedTotalScore)
+    : null;
+
+  return {
+    ok: true,
+    value: {
+      selectedDiceIds,
+      points,
+      expectedPoints,
+      rollServerId,
+      projectedTotalScore:
+        Number.isFinite(projectedTotalScore) && projectedTotalScore >= 0
+          ? projectedTotalScore
+          : null,
+      updatedAt: Date.now(),
+    },
+  };
 }
 
 function serializeSessionParticipants(session) {
@@ -1230,8 +1483,10 @@ function ensureSessionTurnState(session) {
     typeof currentState?.activeTurnPlayerId === "string"
       ? currentState.activeTurnPlayerId
       : null;
+  let activeTurnRecovered = false;
   if (!activeTurnPlayerId || !nextOrder.includes(activeTurnPlayerId)) {
     activeTurnPlayerId = nextOrder[0] ?? null;
+    activeTurnRecovered = true;
   }
 
   const round =
@@ -1244,7 +1499,31 @@ function ensureSessionTurnState(session) {
     currentState.turnNumber > 0
       ? Math.floor(currentState.turnNumber)
       : 1;
-  const phase = normalizeTurnPhase(currentState?.phase);
+  let phase = normalizeTurnPhase(currentState?.phase);
+  let lastRollSnapshot = normalizeTurnRollSnapshot(currentState?.lastRollSnapshot);
+  let lastScoreSummary = normalizeTurnScoreSummary(currentState?.lastScoreSummary);
+
+  if (activeTurnRecovered) {
+    phase = TURN_PHASES.awaitRoll;
+    lastRollSnapshot = null;
+    lastScoreSummary = null;
+  } else if (phase === TURN_PHASES.awaitRoll) {
+    lastRollSnapshot = null;
+    lastScoreSummary = null;
+  } else if (phase === TURN_PHASES.awaitScore && !lastRollSnapshot) {
+    phase = TURN_PHASES.awaitRoll;
+    lastScoreSummary = null;
+  } else if (phase === TURN_PHASES.readyToEnd) {
+    if (!lastRollSnapshot) {
+      phase = TURN_PHASES.awaitRoll;
+      lastScoreSummary = null;
+    } else if (!lastScoreSummary) {
+      phase = TURN_PHASES.awaitScore;
+    } else if (lastScoreSummary.rollServerId !== lastRollSnapshot.serverRollId) {
+      phase = TURN_PHASES.awaitScore;
+      lastScoreSummary = null;
+    }
+  }
 
   session.turnState = {
     order: nextOrder,
@@ -1252,6 +1531,8 @@ function ensureSessionTurnState(session) {
     round,
     turnNumber,
     phase,
+    lastRollSnapshot,
+    lastScoreSummary,
     updatedAt: now,
   };
 
@@ -1275,6 +1556,10 @@ function buildTurnStartMessage(session, options = {}) {
     round: turnState.round,
     turnNumber: turnState.turnNumber,
     phase: normalizeTurnPhase(turnState.phase),
+    activeRollServerId:
+      typeof turnState?.lastRollSnapshot?.serverRollId === "string"
+        ? turnState.lastRollSnapshot.serverRollId
+        : null,
     timestamp: Date.now(),
     order: [...turnState.order],
     source: options.source ?? "server",
@@ -1298,7 +1583,7 @@ function buildTurnEndMessage(session, playerId, options = {}) {
   };
 }
 
-function buildTurnActionMessage(session, playerId, action, options = {}) {
+function buildTurnActionMessage(session, playerId, action, details = {}, options = {}) {
   const turnState = ensureSessionTurnState(session);
   if (!turnState) {
     return null;
@@ -1309,6 +1594,8 @@ function buildTurnActionMessage(session, playerId, action, options = {}) {
     sessionId: session.sessionId,
     playerId,
     action,
+    ...(details.roll ? { roll: details.roll } : {}),
+    ...(details.score ? { score: details.score } : {}),
     round: turnState.round,
     turnNumber: turnState.turnNumber,
     phase: normalizeTurnPhase(turnState.phase),
@@ -1351,6 +1638,8 @@ function advanceSessionTurn(session, endedByPlayerId, options = {}) {
     turnState.round = Math.max(1, Math.floor(turnState.round) + 1);
   }
   turnState.phase = TURN_PHASES.awaitRoll;
+  turnState.lastRollSnapshot = null;
+  turnState.lastScoreSummary = null;
   turnState.updatedAt = timestamp;
 
   const turnStart = {
@@ -1494,7 +1783,7 @@ function dispatchBotMessage(sessionId) {
 
   const actor = bots[Math.floor(Math.random() * bots.length)];
   const target = connectedHumans[Math.floor(Math.random() * connectedHumans.length)];
-  const payload = buildBotSocketPayload(actor, target, connectedHumans.length);
+  const payload = buildBotSocketPayload(sessionId, actor, target, connectedHumans.length);
   if (!payload) {
     return;
   }
@@ -1576,7 +1865,7 @@ function isSessionParticipantConnected(sessionId, playerId) {
   return false;
 }
 
-function buildBotSocketPayload(actor, target, connectedHumanCount) {
+function buildBotSocketPayload(sessionId, actor, target, connectedHumanCount) {
   if (!actor || !target) {
     return null;
   }
@@ -1585,7 +1874,7 @@ function buildBotSocketPayload(actor, target, connectedHumanCount) {
   const actorName = actor.displayName || actor.playerId;
   const roll = Math.random();
 
-  if (roll < 0.55) {
+  if (roll < 0.74) {
     return {
       type: "player_notification",
       bot: true,
@@ -1598,7 +1887,7 @@ function buildBotSocketPayload(actor, target, connectedHumanCount) {
     };
   }
 
-  if (roll < 0.82) {
+  if (roll < 0.96) {
     return {
       type: "game_update",
       bot: true,
@@ -1618,12 +1907,15 @@ function buildBotSocketPayload(actor, target, connectedHumanCount) {
     bot: true,
     id: randomUUID(),
     attackType: "camera_effect",
-    sourceId: actor.playerId,
+    gameId: typeof sessionId === "string" && sessionId ? sessionId : "bot-session",
+    attackerId: actor.playerId,
     targetId: target.playerId,
-    abilityId: `bot-${randomUUID().slice(0, 8)}`,
+    abilityId: "screen_shake",
     effectType,
-    duration: 1200 + Math.floor(Math.random() * 1600),
+    intensity: 0.18,
+    duration: 500 + Math.floor(Math.random() * 500),
     level: 1,
+    chaosPointsCost: 1,
     timestamp: now,
   };
 }
@@ -2175,12 +2467,53 @@ function handleTurnActionMessage(client, session, payload) {
     return;
   }
 
-  turnState.phase =
-    action === "roll" ? TURN_PHASES.awaitScore : TURN_PHASES.readyToEnd;
+  let details = {};
+  if (action === "roll") {
+    const parsedRoll = parseTurnRollPayload(payload);
+    if (!parsedRoll.ok) {
+      sendSocketError(client, "turn_action_invalid_payload", parsedRoll.reason);
+      const syncMessage = buildTurnStartMessage(session, { source: "sync" });
+      if (syncMessage) {
+        sendSocketPayload(client, syncMessage);
+      }
+      return;
+    }
+
+    turnState.lastRollSnapshot = parsedRoll.value;
+    turnState.lastScoreSummary = null;
+    turnState.phase = TURN_PHASES.awaitScore;
+    details = { roll: parsedRoll.value };
+  } else {
+    const parsedScore = parseTurnScorePayload(payload, turnState.lastRollSnapshot);
+    if (!parsedScore.ok) {
+      const code =
+        parsedScore.reason === "score_points_mismatch" ||
+        parsedScore.reason === "score_roll_mismatch"
+          ? "turn_action_invalid_score"
+          : "turn_action_invalid_payload";
+      sendSocketError(client, code, parsedScore.reason);
+      const syncMessage = buildTurnStartMessage(session, { source: "sync" });
+      if (syncMessage) {
+        sendSocketPayload(client, syncMessage);
+      }
+      return;
+    }
+
+    turnState.lastScoreSummary = parsedScore.value;
+    turnState.phase = TURN_PHASES.readyToEnd;
+    details = { score: parsedScore.value };
+  }
+
   turnState.updatedAt = Date.now();
-  const message = buildTurnActionMessage(session, client.playerId, action, {
-    source: "player",
-  });
+  const message = buildTurnActionMessage(
+    session,
+    client.playerId,
+    action,
+    details,
+    {
+      source: "player",
+    }
+  );
   if (message) {
     broadcastToSession(client.sessionId, JSON.stringify(message), null);
   }

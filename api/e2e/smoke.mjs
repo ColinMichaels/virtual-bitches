@@ -125,9 +125,46 @@ async function run() {
       payload?.action === "roll",
     "guest turn roll receive"
   );
-  hostSocket.send(JSON.stringify({ type: "turn_action", action: "roll" }));
+  const turnRollPayload = {
+    rollIndex: 1,
+    dice: [
+      { dieId: "d6-a", sides: 6, value: 2 },
+      { dieId: "d8-a", sides: 8, value: 8 },
+    ],
+  };
+  hostSocket.send(
+    JSON.stringify({ type: "turn_action", action: "roll", roll: turnRollPayload })
+  );
   const guestTurnRolled = await guestTurnRollPromise;
   assertEqual(guestTurnRolled.action, "roll", "turn_action roll mismatch");
+  const rollServerId = guestTurnRolled?.roll?.serverRollId;
+  assert(
+    typeof rollServerId === "string" && rollServerId.length > 0,
+    "missing server-issued roll id"
+  );
+
+  hostSocket.send(
+    JSON.stringify({
+      type: "turn_action",
+      action: "score",
+      score: {
+        selectedDiceIds: ["d6-a"],
+        points: 0,
+        rollServerId: rollServerId,
+        projectedTotalScore: 0,
+      },
+    })
+  );
+  const invalidScoreError = await waitForBufferedMessage(
+    hostMessageBuffer,
+    (payload) => payload?.type === "error" && payload?.code === "turn_action_invalid_score",
+    "host invalid score rejection"
+  );
+  assertEqual(
+    invalidScoreError.code,
+    "turn_action_invalid_score",
+    "expected invalid score rejection"
+  );
 
   const guestTurnScorePromise = waitForBufferedMessage(
     guestMessageBuffer,
@@ -137,7 +174,18 @@ async function run() {
       payload?.action === "score",
     "guest turn score receive"
   );
-  hostSocket.send(JSON.stringify({ type: "turn_action", action: "score" }));
+  hostSocket.send(
+    JSON.stringify({
+      type: "turn_action",
+      action: "score",
+      score: {
+        selectedDiceIds: ["d6-a"],
+        points: 4,
+        rollServerId: rollServerId,
+        projectedTotalScore: 4,
+      },
+    })
+  );
   const guestTurnScored = await guestTurnScorePromise;
   assertEqual(guestTurnScored.action, "score", "turn_action score mismatch");
 

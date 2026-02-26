@@ -77,6 +77,9 @@ SQL files define the intended longer-term relational schema.
   - server -> clients: `turn_action`, `turn_end`, `turn_start`
   - validation: only the current `activeTurnPlayerId` may send turn actions
   - order enforcement: `await_roll` -> `await_score` -> `ready_to_end`; `turn_end` is rejected until score is recorded
+  - roll payload shape: `turn_action.action=roll` with `roll.rollIndex` and `roll.dice[]` (`dieId`, `sides`, `value`)
+  - server-issued roll id: accepted roll actions are stamped with `roll.serverRollId` and mirrored in `turn_start.activeRollServerId`
+  - score payload shape: `turn_action.action=score` with `score.selectedDiceIds[]`, `score.points`, and `score.rollServerId` (must match the server-issued id from the latest accepted roll)
 - Bot participants can emit periodic `player_notification`, `game_update`, and `chaos_attack` messages to connected humans.
 - Leaderboard ordering is deterministic:
   1. Lower score first
