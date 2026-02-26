@@ -56,6 +56,7 @@ import {
   buildClockwiseTurnPlan,
   type MultiplayerTurnPlan,
 } from "./multiplayer/turnPlanner.js";
+import { resolveSessionExpiryOutcome } from "./multiplayer/sessionExpiryFlow.js";
 
 const log = logger.create('Game');
 
@@ -1777,22 +1778,26 @@ class Game implements GameCallbacks {
     }
 
     log.warn("Multiplayer session expired", { reason });
-    const recovered = await this.attemptMultiplayerSessionRecovery(reason, preferredSessionId);
-    if (recovered) {
+    const outcome = await resolveSessionExpiryOutcome({
+      reason,
+      preferredSessionId,
+      attemptRecovery: async (expiryReason, sessionId) =>
+        this.attemptMultiplayerSessionRecovery(expiryReason, sessionId),
+      promptChoice: async (expiryReason) => {
+        this.sessionExpiryPromptActive = true;
+        notificationService.show("Multiplayer room expired or became inactive.", "warning", 2600);
+        try {
+          return await this.sessionExpiryModal.prompt(expiryReason);
+        } finally {
+          this.sessionExpiryPromptActive = false;
+        }
+      },
+    });
+
+    if (outcome === "recovered") {
       return;
     }
-
-    this.sessionExpiryPromptActive = true;
-    notificationService.show("Multiplayer room expired or became inactive.", "warning", 2600);
-
-    let choice: "lobby" | "solo" = "solo";
-    try {
-      choice = await this.sessionExpiryModal.prompt(reason);
-    } finally {
-      this.sessionExpiryPromptActive = false;
-    }
-
-    if (choice === "lobby") {
+    if (outcome === "lobby") {
       void this.returnToLobby();
       return;
     }

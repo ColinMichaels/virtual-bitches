@@ -7,6 +7,7 @@ RUN npm install --omit=dev --no-audit --no-fund
 
 COPY server.mjs ./
 COPY logger.mjs ./
+COPY bot ./bot
 COPY storage ./storage
 COPY data ./data
 

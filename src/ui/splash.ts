@@ -15,6 +15,7 @@ export type SplashPlayMode = "solo" | "multiplayer";
 
 export interface SplashStartOptions {
   playMode: SplashPlayMode;
+  forceTutorialReplay?: boolean;
   multiplayer?: {
     botCount: number;
     sessionId?: string;
@@ -87,6 +88,7 @@ export class SplashScreen {
         </div>
         <div class="splash-buttons">
           <button id="start-game-btn" class="primary splash-btn">Start Game</button>
+          <button id="splash-replay-tutorial-btn" class="secondary splash-btn">Replay Tutorial</button>
           <button id="splash-rules-btn" class="splash-btn">How to Play</button>
           <button id="splash-leaderboard-btn" class="splash-btn">Leaderboard</button>
           <button id="splash-settings-btn" class="splash-btn">Settings</button>
@@ -124,30 +126,22 @@ export class SplashScreen {
       void this.refreshRoomList(true);
     });
 
-    document.getElementById("start-game-btn")?.addEventListener("click", async () => {
-      audioService.playSfx("click");
-      const startButton = document.getElementById("start-game-btn") as HTMLButtonElement | null;
-      if (startButton?.disabled) {
+    const startButton = this.container.querySelector<HTMLButtonElement>("#start-game-btn");
+    const replayTutorialButton = this.container.querySelector<HTMLButtonElement>("#splash-replay-tutorial-btn");
+    const attemptStart = async (options: SplashStartOptions): Promise<void> => {
+      if (startButton?.disabled || replayTutorialButton?.disabled) {
         return;
       }
 
       if (startButton) {
         startButton.disabled = true;
       }
+      if (replayTutorialButton) {
+        replayTutorialButton.disabled = true;
+      }
 
       try {
-        const shouldStart = await Promise.resolve(
-          onStart({
-            playMode: this.playMode,
-            multiplayer:
-              this.playMode === "multiplayer"
-                ? {
-                    botCount: this.botCount,
-                    sessionId: this.selectedRoomSessionId ?? undefined,
-                  }
-                : undefined,
-          })
-        );
+        const shouldStart = await Promise.resolve(onStart(options));
         if (!shouldStart) {
           return;
         }
@@ -156,7 +150,32 @@ export class SplashScreen {
         if (startButton) {
           startButton.disabled = false;
         }
+        if (replayTutorialButton) {
+          replayTutorialButton.disabled = false;
+        }
       }
+    };
+
+    startButton?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      void attemptStart({
+        playMode: this.playMode,
+        multiplayer:
+          this.playMode === "multiplayer"
+            ? {
+                botCount: this.botCount,
+                sessionId: this.selectedRoomSessionId ?? undefined,
+              }
+            : undefined,
+      });
+    });
+
+    replayTutorialButton?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      void attemptStart({
+        playMode: "solo",
+        forceTutorialReplay: true,
+      });
     });
 
     document.getElementById("splash-rules-btn")?.addEventListener("click", () => {

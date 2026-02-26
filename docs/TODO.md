@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Bot engine extraction + contract tests)
+**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Session expiry tests + splash tutorial replay entrypoint)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -112,12 +112,12 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - `src/ui/confirmModal.ts`
   - `src/ui/sessionExpiryModal.ts`
 - **Follow-up TODO (Next Iteration)**:
-  - [ ] Add integration tests for session-expired choice flow (`lobby` vs `continue solo`)
+  - ✅ Added integration tests for session-expired choice flow (`recovered` vs `lobby` vs `continue solo`) via `src/multiplayer/sessionExpiryFlow.test.ts`
   - [ ] Continue improving bot intelligence with game-level difficulty integration:
     - Easy mode bots should play intentionally dumber (more mistakes, weaker optimization)
     - Normal mode bots should remain balanced
     - Hard mode bots should be more adaptive/aggressive
-  - [ ] Add optional replay-tutorial entry point from splash screen (pre-game)
+  - ✅ Added optional replay-tutorial entry point from splash screen (pre-game)
   - [ ] Add regression test ensuring no browser `confirm/prompt` remains in gameplay paths
 
 ### Theme Asset Copying and Deployment Robustness (2026-02-26)

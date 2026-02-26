@@ -1447,7 +1447,10 @@ button.danger:hover:not(:disabled) {
 .splash-buttons {
   display: flex;
   gap: 16px;
+  flex-wrap: wrap;
   justify-content: center;
+  max-width: 860px;
+  margin: 0 auto;
 }
 
 .splash-btn {
