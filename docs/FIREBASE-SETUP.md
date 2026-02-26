@@ -74,6 +74,8 @@ Notes:
 - This command requires Google Cloud SDK (`gcloud`) auth and project selection.
 - WebSocket traffic should connect directly to Cloud Run/domain (`VITE_WS_URL`), not through Hosting rewrites.
 - Set `FIREBASE_PROJECT_ID` on Cloud Run so API-side Firebase ID token validation can enforce token audience.
+- For Firestore-backed API persistence, set `API_STORE_BACKEND=firestore` (optional `API_FIRESTORE_PREFIX`, default `api_v1`).
+- For hardened Firebase token verification, set `FIREBASE_AUTH_MODE=admin` in Cloud Run.
 
 Optional smoke test against deployed API + WebSocket:
 

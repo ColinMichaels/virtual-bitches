@@ -12,8 +12,12 @@ Environment variables:
 
 - `PORT` (default: `3000`)
 - `WS_BASE_URL` (default: `ws://localhost:3000`)
-- `FIREBASE_PROJECT_ID` (recommended for Firebase ID token audience validation)
-- `FIREBASE_WEB_API_KEY` (required for Firebase `accounts:lookup` ID token validation)
+- `API_STORE_BACKEND` (`file` or `firestore`, default: `file`)
+- `API_FIRESTORE_PREFIX` (Firestore collection prefix, default: `api_v1`)
+- `FIREBASE_PROJECT_ID` (recommended for Firebase token audience validation)
+- `FIREBASE_AUTH_MODE` (`auto`, `admin`, or `legacy`, default: `auto`)
+- `FIREBASE_SERVICE_ACCOUNT_JSON` (optional inline service account JSON for Admin SDK init)
+- `FIREBASE_WEB_API_KEY` (required only for legacy lookup fallback mode)
 
 ## Storage
 
@@ -21,7 +25,12 @@ Environment variables:
 - SQL schema reference: `api/db/schema.sql`
 - First migration scaffold: `api/db/migrations/001_init.sql`
 
-The running server uses JSON-file persistence for now. SQL files define the intended production schema.
+Storage backends:
+
+- `file` backend (`API_STORE_BACKEND=file`): JSON file persistence at `api/data/store.json`
+- `firestore` backend (`API_STORE_BACKEND=firestore`): Firestore collections with prefix `API_FIRESTORE_PREFIX`
+
+SQL files define the intended longer-term relational schema.
 
 ## Endpoints
 
@@ -42,6 +51,7 @@ The running server uses JSON-file persistence for now. SQL files define the inte
 ## Notes
 
 - Auth contract is bearer token based with refresh token rotation.
+- Firebase token verification now supports Admin SDK mode (`FIREBASE_AUTH_MODE=admin`) with strict audience/issuer checks.
 - Global leaderboard score submissions require non-anonymous Firebase-authenticated users.
 - `/api/auth/me` supports:
   - `GET` to inspect authenticated account profile
