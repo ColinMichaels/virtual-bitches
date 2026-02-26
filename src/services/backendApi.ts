@@ -52,6 +52,7 @@ export interface MultiplayerSessionTurnState {
   round: number;
   turnNumber: number;
   phase?: "await_roll" | "await_score" | "ready_to_end";
+  activeRollServerId?: string | null;
   updatedAt: number;
 }
 

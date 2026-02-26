@@ -741,6 +741,10 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - ✅ Added multiplayer seat population from session participants (humans + bots shown around table)
 - ✅ Added clockwise turn-order planning scaffold from seat assignments (foundation for per-turn roll flow)
 - ✅ Added server-validated turn action protocol (`turn_action` roll/score -> `turn_end`) with active-turn enforcement and invalid-order rejection
+- ✅ Added roll/score payload validation against canonical turn roll snapshots (score points must match selected dice from accepted roll)
+- ✅ Added server-issued roll ids (`roll.serverRollId`) required by score actions to prevent cross-roll/replay submissions
+- ✅ Added in-game `Main Menu` action in Settings to leave multiplayer sessions and return to lobby
+- ✅ Tuned bot chaos traffic down (lower chaos frequency, shake-only, shorter/safer intensity) to avoid disruptive camera failures
 
 ---
 

@@ -61,6 +61,7 @@ export interface MultiplayerTurnStartMessage {
   playerId: string;
   round?: number;
   turnNumber?: number;
+  activeRollServerId?: string | null;
   timestamp?: number;
   order?: string[];
   source?: string;
@@ -78,11 +79,32 @@ export interface MultiplayerTurnEndMessage {
 
 export type MultiplayerTurnActionType = "roll" | "score";
 
+export interface MultiplayerTurnRollDieSnapshot {
+  dieId: string;
+  sides: number;
+  value: number;
+}
+
+export interface MultiplayerTurnRollPayload {
+  rollIndex: number;
+  dice: MultiplayerTurnRollDieSnapshot[];
+  serverRollId?: string;
+}
+
+export interface MultiplayerTurnScorePayload {
+  selectedDiceIds: string[];
+  points: number;
+  rollServerId: string;
+  projectedTotalScore?: number;
+}
+
 export interface MultiplayerTurnActionMessage {
   type: "turn_action";
   sessionId?: string;
   playerId?: string;
   action: MultiplayerTurnActionType;
+  roll?: MultiplayerTurnRollPayload;
+  score?: MultiplayerTurnScorePayload;
   round?: number;
   turnNumber?: number;
   timestamp?: number;
@@ -98,7 +120,11 @@ function isCameraAttackMessage(value: unknown): value is CameraAttackMessage {
     msg.attackType === "camera_effect" &&
     typeof msg.targetId === "string" &&
     typeof msg.effectType === "string" &&
-    typeof msg.duration === "number"
+    typeof msg.duration === "number" &&
+    Number.isFinite(msg.duration) &&
+    msg.duration > 0 &&
+    typeof msg.intensity === "number" &&
+    Number.isFinite(msg.intensity)
   );
 }
 

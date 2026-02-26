@@ -34,6 +34,7 @@ export class SettingsModal {
   private onClose: (() => void) | null = null;
   private onNewGame: (() => void) | null = null;
   private onHowToPlay: (() => void) | null = null;
+  private onReturnToLobby: (() => void) | null = null;
   private checkGameInProgress: (() => boolean) | null = null;
   private activeTab: SettingsTab = "game";
   private savingLeaderboardName = false;
@@ -244,6 +245,7 @@ export class SettingsModal {
         </div>
 
         <div class="settings-buttons">
+          <button id="settings-return-lobby">Main Menu</button>
           <button id="settings-how-to-play">How to Play</button>
           <button id="settings-close" class="primary">Close</button>
           <button id="settings-new-game" class="danger">New Game</button>
@@ -523,6 +525,18 @@ export class SettingsModal {
       audioService.playSfx("click");
       if (this.onHowToPlay) {
         this.onHowToPlay();
+      }
+    });
+
+    // Main Menu button
+    document.getElementById("settings-return-lobby")?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      if (!confirm("Leave this game and return to the main menu?")) {
+        return;
+      }
+      this.hide();
+      if (this.onReturnToLobby) {
+        this.onReturnToLobby();
       }
     });
 
@@ -978,6 +992,13 @@ export class SettingsModal {
    */
   setOnHowToPlay(callback: () => void): void {
     this.onHowToPlay = callback;
+  }
+
+  /**
+   * Set callback for when return to lobby is requested
+   */
+  setOnReturnToLobby(callback: () => void): void {
+    this.onReturnToLobby = callback;
   }
 
   /**
