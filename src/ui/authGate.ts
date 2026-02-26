@@ -1,4 +1,5 @@
 import { audioService } from "../services/audio.js";
+import { modalManager } from "./modalManager.js";
 
 export type AuthGateChoice = "google" | "guest" | "cancel";
 
@@ -9,6 +10,10 @@ export class AuthGateModal {
   constructor() {
     this.container = this.createModal();
     document.body.appendChild(this.container);
+    modalManager.register({
+      id: "auth-gate-modal",
+      close: () => this.resolve("cancel"),
+    });
   }
 
   async prompt(): Promise<AuthGateChoice> {
@@ -16,6 +21,7 @@ export class AuthGateModal {
       return "cancel";
     }
 
+    modalManager.requestOpen("auth-gate-modal");
     this.container.style.display = "flex";
     return new Promise<AuthGateChoice>((resolve) => {
       this.resolver = resolve;
@@ -24,6 +30,7 @@ export class AuthGateModal {
 
   dispose(): void {
     this.resolve("cancel");
+    modalManager.notifyClosed("auth-gate-modal");
     this.container.remove();
   }
 
@@ -70,6 +77,9 @@ export class AuthGateModal {
   }
 
   private resolve(choice: AuthGateChoice): void {
+    if (this.container.style.display !== "none") {
+      modalManager.notifyClosed("auth-gate-modal");
+    }
     this.container.style.display = "none";
     const current = this.resolver;
     this.resolver = null;

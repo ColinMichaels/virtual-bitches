@@ -6,6 +6,7 @@
 import { marked } from "marked";
 import { audioService } from "../services/audio.js";
 import { logger } from "../utils/logger.js";
+import { modalManager } from "./modalManager.js";
 
 const log = logger.create('RulesModal');
 
@@ -36,6 +37,10 @@ export class RulesModal {
     `;
 
     document.body.appendChild(this.container);
+    modalManager.register({
+      id: "rules-modal",
+      close: () => this.hide(),
+    });
     this.setupEventListeners();
     this.loadRules();
   }
@@ -89,11 +94,16 @@ export class RulesModal {
   }
 
   show(): void {
+    modalManager.requestOpen("rules-modal");
     this.container.style.display = "flex";
   }
 
   hide(): void {
+    if (this.container.style.display === "none") {
+      return;
+    }
     this.container.style.display = "none";
+    modalManager.notifyClosed("rules-modal");
   }
 
   isVisible(): boolean {

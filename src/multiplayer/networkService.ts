@@ -37,22 +37,29 @@ interface WsErrorMessage {
 export interface MultiplayerGameUpdateMessage {
   type: "game_update";
   id?: string;
+  playerId?: string;
+  sourcePlayerId?: string;
+  targetPlayerId?: string;
   title: string;
   content: string;
   date?: string;
   version?: string;
   updateType?: "feature" | "bugfix" | "announcement" | "alert";
   timestamp?: number;
+  bot?: boolean;
 }
 
 export interface MultiplayerPlayerNotificationMessage {
   type: "player_notification";
   id?: string;
+  playerId?: string;
+  sourcePlayerId?: string;
   title?: string;
   message: string;
   severity?: "info" | "success" | "warning" | "error";
   targetPlayerId?: string;
   timestamp?: number;
+  bot?: boolean;
 }
 
 export type MultiplayerTurnPhase = "await_roll" | "await_score" | "ready_to_end";

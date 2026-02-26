@@ -5,6 +5,7 @@ import { scoreHistoryService } from "../services/score-history.js";
 import { getDifficultyName } from "../engine/modes.js";
 import type { AuthenticatedUserProfile } from "../services/backendApi.js";
 import { logger } from "../utils/logger.js";
+import { modalManager } from "./modalManager.js";
 
 const log = logger.create("ProfileModal");
 
@@ -24,6 +25,10 @@ export class ProfileModal {
     this.container = this.createModal();
     this.contentContainer = this.container.querySelector(".profile-content") as HTMLElement;
     document.body.appendChild(this.container);
+    modalManager.register({
+      id: "profile-modal",
+      close: () => this.hide(),
+    });
     document.addEventListener("auth:firebaseUserChanged", this.onFirebaseAuthChanged as EventListener);
   }
 
@@ -258,12 +263,17 @@ export class ProfileModal {
   }
 
   show(): void {
+    modalManager.requestOpen("profile-modal");
     this.container.style.display = "flex";
     void this.render();
   }
 
   hide(): void {
+    if (this.container.style.display === "none") {
+      return;
+    }
     this.container.style.display = "none";
+    modalManager.notifyClosed("profile-modal");
   }
 
   isVisible(): boolean {
@@ -272,6 +282,7 @@ export class ProfileModal {
 
   dispose(): void {
     document.removeEventListener("auth:firebaseUserChanged", this.onFirebaseAuthChanged as EventListener);
+    modalManager.notifyClosed("profile-modal");
     this.container.remove();
   }
 

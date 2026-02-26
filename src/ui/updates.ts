@@ -5,7 +5,6 @@
 
 import { audioService } from "../services/audio.js";
 import { getLocalPlayerId } from "../services/playerIdentity.js";
-import { notificationService } from "./notifications.js";
 import { logger } from "../utils/logger.js";
 import type {
   MultiplayerGameUpdateMessage,
@@ -322,9 +321,6 @@ export class UpdatesPanel {
     this.renderUpdates();
     this.updateBadge();
 
-    if (!this.isExpanded) {
-      notificationService.show(`New update: ${title}`, "info", 2800);
-    }
   }
 
   private pushRealtimeNotification(payload: MultiplayerPlayerNotificationMessage): void {
@@ -336,9 +332,6 @@ export class UpdatesPanel {
     if (!message) return;
 
     const title = payload.title?.trim() || "Player Notification";
-    const severity = this.normalizeNotificationType(payload.severity);
-
-    notificationService.show(`${title}: ${message}`, severity, 3200);
 
     const timestamp = typeof payload.timestamp === "number" ? payload.timestamp : Date.now();
     const generatedId = `ws-note-${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
@@ -358,19 +351,6 @@ export class UpdatesPanel {
     this.updates.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     this.renderUpdates();
     this.updateBadge();
-  }
-
-  private normalizeNotificationType(
-    severity: MultiplayerPlayerNotificationMessage["severity"]
-  ): "info" | "success" | "warning" | "error" {
-    switch (severity) {
-      case "success":
-      case "warning":
-      case "error":
-        return severity;
-      default:
-        return "info";
-    }
   }
 
   private normalizeUpdateType(

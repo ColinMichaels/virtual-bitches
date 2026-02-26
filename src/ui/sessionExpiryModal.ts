@@ -1,4 +1,5 @@
 import { audioService } from "../services/audio.js";
+import { modalManager } from "./modalManager.js";
 
 export type SessionExpiryChoice = "lobby" | "solo";
 
@@ -9,6 +10,10 @@ export class SessionExpiryModal {
   constructor() {
     this.container = this.createModal();
     document.body.appendChild(this.container);
+    modalManager.register({
+      id: "session-expiry-modal",
+      close: () => this.resolve("solo"),
+    });
   }
 
   async prompt(reason?: string): Promise<SessionExpiryChoice> {
@@ -21,6 +26,7 @@ export class SessionExpiryModal {
       reasonText.textContent = this.formatReason(reason);
     }
 
+    modalManager.requestOpen("session-expiry-modal");
     this.container.style.display = "flex";
     return new Promise<SessionExpiryChoice>((resolve) => {
       this.resolver = resolve;
@@ -29,6 +35,7 @@ export class SessionExpiryModal {
 
   dispose(): void {
     this.resolve("solo");
+    modalManager.notifyClosed("session-expiry-modal");
     this.container.remove();
   }
 
@@ -84,6 +91,9 @@ export class SessionExpiryModal {
   }
 
   private resolve(choice: SessionExpiryChoice): void {
+    if (this.container.style.display !== "none") {
+      modalManager.notifyClosed("session-expiry-modal");
+    }
     this.container.style.display = "none";
     const current = this.resolver;
     this.resolver = null;

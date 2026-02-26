@@ -7,6 +7,7 @@ import { audioService } from "../services/audio.js";
 import { settingsService } from "../services/settings.js";
 import { logger } from "../utils/logger.js";
 import { confirmAction } from "./confirmModal.js";
+import { modalManager } from "./modalManager.js";
 
 const log = logger.create("Tutorial");
 
@@ -32,7 +33,6 @@ export class TutorialModal {
   private onRequestOpenGraphicsSettings: (() => void) | null = null;
   private onRequestCloseAuxiliaryModals: (() => void) | null = null;
   private autoOpenSettingsRequested = false;
-  private previousStepSettingsFocus = false;
   private highlightedTargets: HTMLElement[] = [];
   private tutorialMusicPreviewStarted = false;
   private tutorialMusicChoiceCommitted = false;
@@ -144,6 +144,12 @@ export class TutorialModal {
     `;
 
     document.body.appendChild(this.container);
+    modalManager.register({
+      id: "tutorial-modal",
+      close: () => this.hide(),
+      canStackWith: ["settings-modal"],
+      allowStackOnMobile: true,
+    });
     this.setupEventListeners();
     this.renderStep();
   }
@@ -181,10 +187,9 @@ export class TutorialModal {
     const dots = this.container.querySelector(".tutorial-dots")!;
     const nextBtn = document.getElementById("tutorial-next")!;
     const settingsFocusStep = this.isSettingsFocusStep(step);
-    if (!settingsFocusStep && this.previousStepSettingsFocus) {
+    if (!settingsFocusStep) {
       this.onRequestCloseAuxiliaryModals?.();
     }
-    this.previousStepSettingsFocus = settingsFocusStep;
 
     icon.textContent = step.image;
     title.textContent = step.title;
@@ -294,42 +299,76 @@ export class TutorialModal {
     if (!modalContent) return;
 
     const viewportHeight = window.innerHeight;
-    const isMobile = window.innerWidth <= 768;
+    const safeTopPadding = Math.max(10, this.getSafeAreaInset("top") + 10);
+    const safeBottomPadding = Math.max(10, this.getSafeAreaInset("bottom") + 10);
+    const modalHeight = Math.max(
+      200,
+      Math.min(modalContent.getBoundingClientRect().height || 320, viewportHeight - safeTopPadding - safeBottomPadding)
+    );
+    const maxTopPadding = Math.max(
+      safeTopPadding,
+      viewportHeight - safeBottomPadding - modalHeight - 8
+    );
+    const maxBottomPadding = Math.max(
+      safeBottomPadding,
+      viewportHeight - safeTopPadding - modalHeight - 8
+    );
 
-    // For dice-row, always position below on mobile, otherwise position based on location
+    const setVerticalPadding = (topPadding: number, bottomPadding: number): void => {
+      this.container.style.alignItems = "flex-start";
+      this.container.style.paddingTop = `${this.clamp(topPadding, safeTopPadding, maxTopPadding)}px`;
+      this.container.style.paddingBottom = `${this.clamp(
+        bottomPadding,
+        safeBottomPadding,
+        maxBottomPadding
+      )}px`;
+    };
+
+    // Position the card away from highlighted controls while staying in the safe viewport area.
     if (selector === '#dice-row') {
       // Dice row is at top - position modal below it
-      this.container.style.alignItems = 'flex-start';
-      this.container.style.paddingTop = `${rect.bottom + 10}px`;
-      this.container.style.paddingBottom = '10px';
+      setVerticalPadding(rect.bottom + 10, safeBottomPadding);
     } else if (selector === '#action-btn') {
       // Action button is at bottom - position modal at top to avoid covering it
-      this.container.style.alignItems = 'flex-start';
-      this.container.style.paddingTop = '10px';
-      this.container.style.paddingBottom = `${viewportHeight - rect.top + 100}px`;
+      setVerticalPadding(safeTopPadding, viewportHeight - rect.top + 84);
     } else {
       // Default: position based on target location
       const targetMiddle = rect.top + rect.height / 2;
 
       if (targetMiddle < viewportHeight / 2) {
         // Target is in upper half - position modal below
-        this.container.style.alignItems = 'flex-start';
-        this.container.style.paddingTop = `${rect.bottom + 10}px`;
-        this.container.style.paddingBottom = '10px';
+        setVerticalPadding(rect.bottom + 10, safeBottomPadding);
       } else {
         // Target is in lower half - position modal at top
-        this.container.style.alignItems = 'flex-start';
-        this.container.style.paddingTop = '10px';
-        this.container.style.paddingBottom = `${viewportHeight - rect.top + 100}px`;
+        setVerticalPadding(safeTopPadding, viewportHeight - rect.top + 84);
       }
     }
   }
 
   private resetModalPosition(): void {
     // Reset to default centered position
+    const safeTopPadding = Math.max(12, this.getSafeAreaInset("top") + 12);
+    const safeBottomPadding = Math.max(12, this.getSafeAreaInset("bottom") + 12);
     this.container.style.alignItems = 'flex-start';
-    this.container.style.paddingTop = '40px';
-    this.container.style.paddingBottom = '40px';
+    this.container.style.paddingTop = `${safeTopPadding}px`;
+    this.container.style.paddingBottom = `${safeBottomPadding}px`;
+  }
+
+  private getSafeAreaInset(edge: "top" | "right" | "bottom" | "left"): number {
+    if (typeof window === "undefined") {
+      return 0;
+    }
+    const rootStyles = window.getComputedStyle(document.documentElement);
+    const value = rootStyles.getPropertyValue(`--safe-area-${edge}`).trim();
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  }
+
+  private clamp(value: number, min: number, max: number): number {
+    if (!Number.isFinite(value)) {
+      return min;
+    }
+    return Math.max(min, Math.min(max, value));
   }
 
   private isSettingsFocusStep(step: TutorialStep): boolean {
@@ -585,11 +624,12 @@ export class TutorialModal {
   }
 
   show(): void {
+    this.onRequestCloseAuxiliaryModals?.();
+    modalManager.requestOpen("tutorial-modal");
     this.container.style.display = "flex";
     this.container.classList.remove("tutorial-modal--settings-focus");
     this.currentStep = 0;
     this.autoOpenSettingsRequested = false;
-    this.previousStepSettingsFocus = false;
     this.tutorialMusicPreviewStarted = false;
     this.tutorialMusicChoiceCommitted = false;
     this.tutorialMusicSnapshot = null;
@@ -597,7 +637,11 @@ export class TutorialModal {
   }
 
   hide(): void {
+    if (this.container.style.display === "none") {
+      return;
+    }
     this.container.style.display = "none";
+    modalManager.notifyClosed("tutorial-modal");
     this.hideSpotlight();
     this.clearTargetHighlights();
   }
