@@ -55,6 +55,8 @@ For upload-size optimization before publishing assets:
 - Optional cache policy flags:
   - `--asset-cache-control "public,max-age=86400"`
   - `--content-cache-control "public,max-age=300,must-revalidate"`
+- Verify published CDN paths:
+  - `npm run cdn:verify -- --url "<asset-url>"`
 
 ## Adding New Content
 
