@@ -35,10 +35,12 @@ import { playerDataSyncService } from "./services/playerDataSync.js";
 import { getLocalPlayerId } from "./services/playerIdentity.js";
 import {
   MultiplayerNetworkService,
+  type MultiplayerTurnAutoAdvancedMessage,
   type MultiplayerTurnActionMessage,
   type MultiplayerTurnEndMessage,
   type MultiplayerTurnPhase,
   type MultiplayerTurnStartMessage,
+  type MultiplayerTurnTimeoutWarningMessage,
 } from "./multiplayer/networkService.js";
 import { MultiplayerSessionService } from "./multiplayer/sessionService.js";
 import { environment } from "@env";
@@ -117,9 +119,11 @@ class Game implements GameCallbacks {
   private multiplayerTurnPlan: MultiplayerTurnPlan | null = null;
   private activeTurnPlayerId: string | null = null;
   private activeRollServerId: string | null = null;
+  private activeTurnDeadlineAt: number | null = null;
   private awaitingMultiplayerRoll = false;
   private pendingTurnEndSync = false;
   private lobbyRedirectInProgress = false;
+  private hudClockHandle: ReturnType<typeof setInterval> | null = null;
   private participantSeatById = new Map<string, number>();
   private participantLabelById = new Map<string, string>();
 
@@ -201,6 +205,16 @@ class Game implements GameCallbacks {
       if (!detail) return;
       this.handleMultiplayerTurnEnd(detail);
     }) as EventListener);
+    document.addEventListener("multiplayer:turn:timeoutWarning", ((event: Event) => {
+      const detail = (event as CustomEvent<MultiplayerTurnTimeoutWarningMessage>).detail;
+      if (!detail) return;
+      this.handleMultiplayerTurnTimeoutWarning(detail);
+    }) as EventListener);
+    document.addEventListener("multiplayer:turn:autoAdvanced", ((event: Event) => {
+      const detail = (event as CustomEvent<MultiplayerTurnAutoAdvancedMessage>).detail;
+      if (!detail) return;
+      this.handleMultiplayerTurnAutoAdvanced(detail);
+    }) as EventListener);
     document.addEventListener("multiplayer:turn:action", ((event: Event) => {
       const detail = (event as CustomEvent<MultiplayerTurnActionMessage>).detail;
       if (!detail) return;
@@ -280,6 +294,9 @@ class Game implements GameCallbacks {
     particleService.setIntensity(settings.display.particleIntensity);
     this.scene.updateTableContrast(settings.display.visual.tableContrast);
     this.hud = new HUD();
+    this.gameStartTime = Date.now();
+    this.hud.setGameClockStart(this.gameStartTime);
+    this.startHudClockTicker();
     this.diceRow = new DiceRow((dieId) => this.handleDieClick(dieId), this.diceRenderer as any);
 
     // Set initial hint mode based on game mode
@@ -437,6 +454,28 @@ class Game implements GameCallbacks {
 
     // Track game start time
     this.gameStartTime = Date.now();
+    this.hud.setGameClockStart(this.gameStartTime);
+  }
+
+  private startHudClockTicker(): void {
+    if (this.hudClockHandle) {
+      clearInterval(this.hudClockHandle);
+    }
+    this.hudClockHandle = setInterval(() => {
+      this.hud.tick();
+    }, 250);
+  }
+
+  private syncHudTurnTimer(): void {
+    this.hud.setTurnDeadline(this.activeTurnDeadlineAt);
+  }
+
+  private applyTurnTiming(deadlineAt?: number | null): void {
+    this.activeTurnDeadlineAt =
+      typeof deadlineAt === "number" && Number.isFinite(deadlineAt) && deadlineAt > 0
+        ? Math.floor(deadlineAt)
+        : null;
+    this.syncHudTurnTimer();
   }
 
   private getMultiplayerWsUrl(): string | undefined {
@@ -774,6 +813,7 @@ class Game implements GameCallbacks {
 
   private applyTurnStateFromSession(session: MultiplayerSessionRecord): void {
     this.awaitingMultiplayerRoll = false;
+    this.applyTurnTiming(session.turnState?.turnExpiresAt);
     const serverActiveTurnPlayerId = session.turnState?.activeTurnPlayerId ?? null;
     if (serverActiveTurnPlayerId) {
       this.activeTurnPlayerId = serverActiveTurnPlayerId;
@@ -798,6 +838,7 @@ class Game implements GameCallbacks {
     this.activeTurnPlayerId = fallbackActive;
     this.activeRollServerId = null;
     this.pendingTurnEndSync = false;
+    this.applyTurnTiming(null);
     this.updateTurnSeatHighlight(fallbackActive);
   }
 
@@ -830,6 +871,7 @@ class Game implements GameCallbacks {
 
   private handleMultiplayerTurnStart(message: MultiplayerTurnStartMessage): void {
     this.awaitingMultiplayerRoll = false;
+    this.applyTurnTiming(message.turnExpiresAt ?? null);
     this.activeTurnPlayerId = message.playerId;
     this.activeRollServerId =
       message.playerId === this.localPlayerId &&
@@ -862,6 +904,7 @@ class Game implements GameCallbacks {
 
   private handleMultiplayerTurnEnd(message: MultiplayerTurnEndMessage): void {
     this.pendingTurnEndSync = false;
+    this.applyTurnTiming(null);
     if (typeof message.playerId !== "string" || !message.playerId) {
       return;
     }
@@ -876,6 +919,48 @@ class Game implements GameCallbacks {
       "info",
       1200
     );
+  }
+
+  private handleMultiplayerTurnTimeoutWarning(
+    message: MultiplayerTurnTimeoutWarningMessage
+  ): void {
+    const expiresAt =
+      typeof message.turnExpiresAt === "number" && Number.isFinite(message.turnExpiresAt)
+        ? message.turnExpiresAt
+        : typeof message.remainingMs === "number" && Number.isFinite(message.remainingMs)
+          ? Date.now() + Math.max(0, Math.floor(message.remainingMs))
+          : null;
+    this.applyTurnTiming(expiresAt);
+
+    if (!message.playerId || message.playerId !== this.activeTurnPlayerId) {
+      return;
+    }
+
+    const remainingMs =
+      typeof message.remainingMs === "number" && Number.isFinite(message.remainingMs)
+        ? Math.max(0, Math.floor(message.remainingMs))
+        : expiresAt
+          ? Math.max(0, expiresAt - Date.now())
+          : 0;
+    const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+    const targetLabel = this.getParticipantLabel(message.playerId);
+    notificationService.show(
+      `${targetLabel} turn expires in ${remainingSeconds}s`,
+      "warning",
+      1600
+    );
+  }
+
+  private handleMultiplayerTurnAutoAdvanced(
+    message: MultiplayerTurnAutoAdvancedMessage
+  ): void {
+    this.applyTurnTiming(null);
+    const playerId = typeof message.playerId === "string" ? message.playerId : "";
+    if (!playerId) {
+      return;
+    }
+    const targetLabel = this.getParticipantLabel(playerId);
+    notificationService.show(`${targetLabel} turn timed out`, "warning", 1800);
   }
 
   private handleMultiplayerTurnAction(message: MultiplayerTurnActionMessage): void {
@@ -1229,8 +1314,13 @@ class Game implements GameCallbacks {
 
     this.multiplayerNetwork?.dispose();
     this.multiplayerNetwork = undefined;
+    if (this.hudClockHandle) {
+      clearInterval(this.hudClockHandle);
+      this.hudClockHandle = null;
+    }
     this.awaitingMultiplayerRoll = false;
     this.pendingTurnEndSync = false;
+    this.applyTurnTiming(null);
     playerDataSyncService.setSessionId(undefined);
     this.clearSessionQueryParam();
 
@@ -1326,6 +1416,8 @@ class Game implements GameCallbacks {
       GameFlowController.resetForNewGame(this.diceRenderer);
       this.animating = false;
       this.gameStartTime = Date.now();
+      this.hud.setGameClockStart(this.gameStartTime);
+      this.applyTurnTiming(null);
       this.updateUI();
       notificationService.show("New Game Started!", "success");
     } else if (result.modeUpdated) {
@@ -1603,6 +1695,8 @@ class Game implements GameCallbacks {
     GameFlowController.resetForNewGame(this.diceRenderer);
     this.animating = false;
     this.gameStartTime = Date.now();
+    this.hud.setGameClockStart(this.gameStartTime);
+    this.applyTurnTiming(null);
     this.updateUI();
     notificationService.show("New Game!", "success");
   }
@@ -1619,6 +1713,8 @@ class Game implements GameCallbacks {
     GameFlowController.resetForNewGame(this.diceRenderer);
     this.animating = false;
     this.gameStartTime = Date.now();
+    this.hud.setGameClockStart(this.gameStartTime);
+    this.applyTurnTiming(null);
     this.updateUI();
     notificationService.show("New Game Started!", "success");
   }

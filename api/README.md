@@ -14,6 +14,8 @@ Environment variables:
 - `WS_BASE_URL` (default: `ws://localhost:3000`)
 - `API_STORE_BACKEND` (`file` or `firestore`, default: `file`)
 - `API_FIRESTORE_PREFIX` (Firestore collection prefix, default: `api_v1`)
+- `TURN_TIMEOUT_MS` (active turn timeout window, default: `45000`)
+- `TURN_TIMEOUT_WARNING_MS` (pre-timeout warning lead, default: `10000`)
 - `FIREBASE_PROJECT_ID` (recommended for Firebase token audience validation)
 - `FIREBASE_AUTH_MODE` (`auto`, `admin`, or `legacy`, default: `auto`)
 - `FIREBASE_SERVICE_ACCOUNT_JSON` (optional inline service account JSON for Admin SDK init)
@@ -74,12 +76,13 @@ SQL files define the intended longer-term relational schema.
   - `player_notification` (`message` required, optional `targetPlayerId`)
 - Turn flow messages:
   - client -> server: `turn_action` (`roll` | `score`), `turn_end`
-  - server -> clients: `turn_action`, `turn_end`, `turn_start`
+  - server -> clients: `turn_action`, `turn_end`, `turn_start`, `turn_timeout_warning`, `turn_auto_advanced`
   - validation: only the current `activeTurnPlayerId` may send turn actions
   - order enforcement: `await_roll` -> `await_score` -> `ready_to_end`; `turn_end` is rejected until score is recorded
   - roll payload shape: `turn_action.action=roll` with `roll.rollIndex` and `roll.dice[]` (`dieId`, `sides`); server generates canonical `value`
   - server-issued roll id: accepted roll actions are stamped with `roll.serverRollId` and mirrored in `turn_start.activeRollServerId`
   - turn recovery sync: `turn_start` can include `phase` + `activeRoll` snapshot (`rollIndex`, `dice[]`, `serverRollId`) so reconnecting clients can resume `await_score` safely
+  - timeout metadata: `turn_start`/session `turnState` include `turnExpiresAt` and `turnTimeoutMs`; server emits `turn_timeout_warning` before `turn_auto_advanced` when a turn expires
   - score payload shape: `turn_action.action=score` with `score.selectedDiceIds[]`, `score.points`, and `score.rollServerId` (must match the server-issued id from the latest accepted roll)
 - Bot participants can emit periodic `player_notification`, `game_update`, and `chaos_attack` messages to connected humans.
 - Leaderboard ordering is deterministic:

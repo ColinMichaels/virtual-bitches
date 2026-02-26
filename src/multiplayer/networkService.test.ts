@@ -2,9 +2,11 @@ import {
   MultiplayerNetworkService,
   type MultiplayerGameUpdateMessage,
   type MultiplayerPlayerNotificationMessage,
+  type MultiplayerTurnAutoAdvancedMessage,
   type MultiplayerTurnActionMessage,
   type MultiplayerTurnEndMessage,
   type MultiplayerTurnStartMessage,
+  type MultiplayerTurnTimeoutWarningMessage,
   type WebSocketLike,
 } from "./networkService.js";
 import type { CameraAttackMessage } from "../chaos/types.js";
@@ -170,6 +172,33 @@ function createTurnEndMessage(): MultiplayerTurnEndMessage {
     playerId: "player-1",
     round: 1,
     turnNumber: 1,
+    timestamp: Date.now(),
+  };
+}
+
+function createTurnTimeoutWarningMessage(): MultiplayerTurnTimeoutWarningMessage {
+  return {
+    type: "turn_timeout_warning",
+    sessionId: "session-1",
+    playerId: "player-1",
+    round: 1,
+    turnNumber: 1,
+    remainingMs: 9000,
+    turnExpiresAt: Date.now() + 9000,
+    timeoutMs: 45000,
+    timestamp: Date.now(),
+  };
+}
+
+function createTurnAutoAdvancedMessage(): MultiplayerTurnAutoAdvancedMessage {
+  return {
+    type: "turn_auto_advanced",
+    sessionId: "session-1",
+    playerId: "player-1",
+    round: 1,
+    turnNumber: 1,
+    timeoutMs: 45000,
+    reason: "turn_timeout",
     timestamp: Date.now(),
   };
 }
@@ -502,6 +531,40 @@ await test("dispatches inbound multiplayer turn start/end events", () => {
   assertEqual(actioned!.action, "roll", "Expected turn action payload");
   assert(ended !== null, "Expected inbound turn end");
   assertEqual(ended!.playerId, "player-1", "Expected turn end player");
+});
+
+await test("dispatches inbound multiplayer timeout warning/auto-advance events", () => {
+  const eventTarget = new EventTarget();
+  let socket: MockWebSocket | null = null;
+  let warning: MultiplayerTurnTimeoutWarningMessage | null = null;
+  let autoAdvanced: MultiplayerTurnAutoAdvancedMessage | null = null;
+
+  eventTarget.addEventListener("multiplayer:turn:timeoutWarning", (event: Event) => {
+    warning = (event as CustomEvent<MultiplayerTurnTimeoutWarningMessage>).detail;
+  });
+  eventTarget.addEventListener("multiplayer:turn:autoAdvanced", (event: Event) => {
+    autoAdvanced = (event as CustomEvent<MultiplayerTurnAutoAdvancedMessage>).detail;
+  });
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local",
+    eventTarget,
+    autoReconnect: false,
+    webSocketFactory: () => {
+      socket = new MockWebSocket();
+      return socket;
+    },
+  });
+
+  network.connect();
+  socket!.emitOpen();
+  socket!.emitMessage(createTurnTimeoutWarningMessage());
+  socket!.emitMessage(createTurnAutoAdvancedMessage());
+
+  assert(warning !== null, "Expected inbound turn timeout warning");
+  assertEqual(warning!.type, "turn_timeout_warning", "Expected timeout warning payload");
+  assert(autoAdvanced !== null, "Expected inbound turn auto-advanced");
+  assertEqual(autoAdvanced!.type, "turn_auto_advanced", "Expected auto-advanced payload");
 });
 
 await test("dispatches inbound ws error event", () => {

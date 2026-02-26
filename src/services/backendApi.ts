@@ -7,6 +7,7 @@ import { authSessionService, type AuthTokenBundle } from "./authSession.js";
 const log = logger.create("BackendApi");
 
 const DEFAULT_TIMEOUT_MS = 8000;
+const FIREBASE_SESSION_EXPIRED_EVENT_COOLDOWN_MS = 10000;
 type RequestAuthMode = "none" | "session" | "firebase" | "firebaseOptional";
 
 export interface PlayerProfileRecord {
@@ -63,6 +64,8 @@ export interface MultiplayerSessionTurnState {
   turnNumber: number;
   phase?: "await_roll" | "await_score" | "ready_to_end";
   activeRollServerId?: string | null;
+  turnExpiresAt?: number | null;
+  turnTimeoutMs?: number;
   updatedAt: number;
 }
 
@@ -138,6 +141,7 @@ export class BackendApiService {
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
   private firebaseTokenProvider: () => Promise<string | null> | string | null;
+  private lastFirebaseSessionExpiredEventAt = 0;
 
   constructor(options: BackendApiOptions = {}) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl ?? environment.apiBaseUrl);
@@ -313,10 +317,10 @@ export class BackendApiService {
         return null;
       }
 
-      return this.parseJsonResponse<T>(retryResponse, options.method, path);
+      return this.parseJsonResponse<T>(retryResponse, options.method, path, authMode);
     }
 
-    return this.parseJsonResponse<T>(firstResponse, options.method, path);
+    return this.parseJsonResponse<T>(firstResponse, options.method, path, authMode);
   }
 
   private async executeRequest(
@@ -365,7 +369,8 @@ export class BackendApiService {
   private async parseJsonResponse<T>(
     response: Response,
     method: string,
-    path: string
+    path: string,
+    authMode: RequestAuthMode
   ): Promise<T | null> {
     if (response.status === 204) {
       return null;
@@ -377,6 +382,12 @@ export class BackendApiService {
 
     if (!response.ok) {
       const errorSummary = await readErrorSummary(response);
+      if (
+        response.status === 401 &&
+        (authMode === "firebase" || authMode === "firebaseOptional")
+      ) {
+        this.dispatchFirebaseSessionExpired(path, errorSummary);
+      }
       if (errorSummary) {
         log.warn(`API request failed: ${method} ${path} (${response.status}) - ${errorSummary}`);
       } else {
@@ -391,6 +402,30 @@ export class BackendApiService {
     }
 
     return (await response.json()) as T;
+  }
+
+  private dispatchFirebaseSessionExpired(path: string, reason?: string): void {
+    if (typeof document === "undefined" || typeof CustomEvent === "undefined") {
+      return;
+    }
+
+    const now = Date.now();
+    if (
+      this.lastFirebaseSessionExpiredEventAt > 0 &&
+      now - this.lastFirebaseSessionExpiredEventAt < FIREBASE_SESSION_EXPIRED_EVENT_COOLDOWN_MS
+    ) {
+      return;
+    }
+    this.lastFirebaseSessionExpiredEventAt = now;
+
+    document.dispatchEvent(
+      new CustomEvent("auth:firebaseSessionExpired", {
+        detail: {
+          path,
+          reason: reason ?? "http_401",
+        },
+      })
+    );
   }
 }
 

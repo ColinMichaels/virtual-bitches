@@ -189,6 +189,14 @@ h1, h2, h3, h4, h5, h6 {
   gap: 8px;
 }
 
+.stat-clock {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  min-width: 90px;
+}
+
 .stat-label-compact {
   font-size: 11px;
   opacity: 0.7;
@@ -200,6 +208,33 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 20px;
   font-weight: 700;
   color: #e94560;
+}
+
+.stat-clock-value {
+  color: #ffcc80;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.stat-clock-value.is-time-attack {
+  color: #8fd3ff;
+}
+
+.stat-subvalue-compact {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.4px;
+  line-height: 1;
+}
+
+.stat-subvalue-compact.is-warning {
+  color: #ffd27a;
+}
+
+.stat-subvalue-compact.is-critical {
+  color: #ff8f8f;
 }
 
 /* Mode indicator styling */
@@ -2867,6 +2902,14 @@ button.danger:hover:not(:disabled) {
 
   .stat-value-compact {
     font-size: 16px;
+  }
+
+  .stat-clock {
+    min-width: 70px;
+  }
+
+  .stat-subvalue-compact {
+    font-size: 10px;
   }
 
   /* HUD Details - Start collapsed on mobile */

@@ -266,6 +266,55 @@ await test("does not attempt session refresh for firebase-auth request", async (
   );
 });
 
+await test("dispatches firebase session-expired event on firebase 401", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () => jsonResponse({ error: "Unauthorized", reason: "firebase_token_expired" }, 401);
+
+  const originalDocument = (globalThis as { document?: Document }).document;
+  const dispatched: Array<{ path?: string; reason?: string }> = [];
+  const mockDocument = {
+    dispatchEvent(event: Event) {
+      if (event.type === "auth:firebaseSessionExpired") {
+        const detail = (event as CustomEvent<{ path?: string; reason?: string }>).detail;
+        dispatched.push(detail ?? {});
+      }
+      return true;
+    },
+  } as Document;
+  (globalThis as { document?: Document }).document = mockDocument;
+
+  try {
+    const api = new BackendApiService({
+      baseUrl: "https://api.example.com/api",
+      fetchImpl: mockFetch,
+      firebaseTokenProvider: () => "firebase-id-token",
+    });
+
+    const result = await api.submitLeaderboardScore({
+      scoreId: "score-auth-expired",
+      score: 11,
+      timestamp: Date.now(),
+      duration: 1200,
+      rollCount: 3,
+    });
+
+    assertEqual(result, null, "Expected null result on unauthorized firebase request");
+    assertEqual(dispatched.length, 1, "Expected one firebase session-expired event");
+    assertEqual(
+      dispatched[0].path,
+      "/leaderboard/scores",
+      "Expected firebase session-expired event path"
+    );
+  } finally {
+    if (typeof originalDocument === "undefined") {
+      delete (globalThis as { document?: Document }).document;
+    } else {
+      (globalThis as { document?: Document }).document = originalDocument;
+    }
+  }
+});
+
 await test("updates authenticated profile with firebase token", async () => {
   authSessionService.clear();
   fetchCalls.length = 0;

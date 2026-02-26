@@ -45,6 +45,11 @@ let alphaWarningModalPromise: Promise<AlphaWarningModal> | null = null;
 let updatesPanelPromise: Promise<UpdatesPanel> | null = null;
 
 const GUEST_MODE_KEY = `${environment.storage.prefix}-guest-mode-enabled`;
+const FIREBASE_REAUTH_PROMPT_COOLDOWN_MS = 15000;
+let firebaseReauthPromptInFlight = false;
+let lastFirebaseReauthPromptAt = 0;
+
+registerAuthSessionHandlers();
 
 bootLoadingScreen.show();
 setBootStatus("Loading theme catalog...", 8);
@@ -281,6 +286,64 @@ async function maybeShowAlphaWarning(): Promise<void> {
   setTimeout(() => {
     modal.show();
   }, 1000);
+}
+
+function registerAuthSessionHandlers(): void {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.addEventListener("auth:firebaseSessionExpired", ((event: Event) => {
+    const detail = (event as CustomEvent<{ reason?: string; path?: string }>).detail;
+    void promptForFirebaseReauth(detail?.reason);
+  }) as EventListener);
+}
+
+async function promptForFirebaseReauth(reason?: string): Promise<void> {
+  const now = Date.now();
+  if (
+    firebaseReauthPromptInFlight ||
+    (lastFirebaseReauthPromptAt > 0 &&
+      now - lastFirebaseReauthPromptAt < FIREBASE_REAUTH_PROMPT_COOLDOWN_MS)
+  ) {
+    return;
+  }
+
+  firebaseReauthPromptInFlight = true;
+  lastFirebaseReauthPromptAt = now;
+
+  try {
+    const { firebaseAuthService } = await getAuthServices();
+    await firebaseAuthService.initialize();
+    if (firebaseAuthService.isAuthenticated()) {
+      return;
+    }
+
+    const reasonSuffix = reason ? ` (${reason})` : "";
+    notificationService.show(
+      `Your sign-in session expired${reasonSuffix}. Please authenticate again.`,
+      "warning",
+      3200
+    );
+
+    const authGateModal = await getAuthGateModal();
+    const choice = await authGateModal.prompt();
+    if (choice === "google") {
+      const signedIn = await firebaseAuthService.signInWithGoogle();
+      if (signedIn) {
+        setGuestModeEnabled(false);
+        notificationService.show("Signed in successfully.", "success", 2200);
+      }
+      return;
+    }
+
+    if (choice === "guest") {
+      setGuestModeEnabled(true);
+      notificationService.show("Continuing in guest mode.", "info", 2400);
+    }
+  } finally {
+    firebaseReauthPromptInFlight = false;
+  }
 }
 
 async function ensurePlayerAccessChoice(firebaseAuthService: FirebaseAuthService): Promise<boolean> {
