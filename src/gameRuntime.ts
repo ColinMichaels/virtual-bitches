@@ -174,6 +174,7 @@ class Game implements GameCallbacks {
   private turnSyncWatchdogInFlight = false;
   private lastTurnSyncActivityAt = 0;
   private lastTurnSyncRequestAt = 0;
+  private pendingTurnTransitionSyncHandle: ReturnType<typeof setTimeout> | null = null;
   private participantSeatById = new Map<string, number>();
   private participantIdBySeat = new Map<number, string>();
   private participantLabelById = new Map<string, string>();
@@ -617,7 +618,42 @@ class Game implements GameCallbacks {
       clearInterval(this.turnSyncWatchdogHandle);
       this.turnSyncWatchdogHandle = null;
     }
+    this.clearPendingTurnTransitionSyncRecovery();
     this.turnSyncWatchdogInFlight = false;
+  }
+
+  private clearPendingTurnTransitionSyncRecovery(): void {
+    if (!this.pendingTurnTransitionSyncHandle) {
+      return;
+    }
+    clearTimeout(this.pendingTurnTransitionSyncHandle);
+    this.pendingTurnTransitionSyncHandle = null;
+  }
+
+  private scheduleTurnTransitionSyncRecovery(
+    reason: string,
+    expectedStalePlayerId?: string
+  ): void {
+    this.clearPendingTurnTransitionSyncRecovery();
+    this.pendingTurnTransitionSyncHandle = window.setTimeout(() => {
+      this.pendingTurnTransitionSyncHandle = null;
+      if (!this.isMultiplayerTurnEnforced()) {
+        return;
+      }
+      if (!this.multiplayerNetwork?.isConnected()) {
+        return;
+      }
+      const currentActivePlayerId = this.activeTurnPlayerId;
+      const shouldRefresh =
+        !currentActivePlayerId ||
+        (expectedStalePlayerId
+          ? currentActivePlayerId === expectedStalePlayerId
+          : !this.isLocalPlayersTurn());
+      if (!shouldRefresh) {
+        return;
+      }
+      void this.requestTurnSyncRefresh(reason);
+    }, 950);
   }
 
   private async runTurnSyncWatchdogTick(): Promise<void> {
@@ -1147,6 +1183,7 @@ class Game implements GameCallbacks {
 
     this.updateMultiplayerStandingsHud(session, seatedParticipants);
     this.applyTurnStateFromSession(session);
+    this.updateUI();
   }
 
   private applySoloSeatState(): void {
@@ -1421,6 +1458,7 @@ class Game implements GameCallbacks {
     const serverActiveTurnPlayerId = session.turnState?.activeTurnPlayerId ?? null;
     this.hud.setMultiplayerActiveTurn(serverActiveTurnPlayerId);
     if (serverActiveTurnPlayerId) {
+      this.clearPendingTurnTransitionSyncRecovery();
       this.activeTurnPlayerId = serverActiveTurnPlayerId;
       this.activeRollServerId =
         serverActiveTurnPlayerId === this.localPlayerId &&
@@ -1774,6 +1812,7 @@ class Game implements GameCallbacks {
     }
 
     this.touchMultiplayerTurnSyncActivity();
+    this.clearPendingTurnTransitionSyncRecovery();
     const previousActiveTurnPlayerId = this.activeTurnPlayerId;
     this.awaitingMultiplayerRoll = false;
     this.applyTurnTiming(message.turnExpiresAt ?? null);
@@ -1794,6 +1833,7 @@ class Game implements GameCallbacks {
     if (previousActiveTurnPlayerId && previousActiveTurnPlayerId !== message.playerId) {
       this.clearSpectatorRollingPreviewForPlayer(previousActiveTurnPlayerId);
     }
+    this.updateUI();
 
     if (message.playerId === this.localPlayerId) {
       const suffix =
@@ -1816,21 +1856,35 @@ class Game implements GameCallbacks {
     }
 
     this.touchMultiplayerTurnSyncActivity();
+    const previousActiveTurnPlayerId = this.activeTurnPlayerId;
     this.pendingTurnEndSync = false;
     this.applyTurnTiming(null);
     this.hud.setMultiplayerActiveTurn(null);
-    if (typeof message.playerId !== "string" || !message.playerId) {
+    const endedPlayerId = typeof message.playerId === "string" ? message.playerId : "";
+    if (!endedPlayerId) {
+      this.activeTurnPlayerId = null;
+      this.activeRollServerId = null;
+      this.updateTurnSeatHighlight(null);
+      this.scheduleTurnTransitionSyncRecovery("turn_end_missing_player");
+      this.updateUI();
       return;
     }
+    if (!previousActiveTurnPlayerId || previousActiveTurnPlayerId === endedPlayerId) {
+      this.activeTurnPlayerId = null;
+      this.activeRollServerId = null;
+      this.updateTurnSeatHighlight(null);
+      this.scheduleTurnTransitionSyncRecovery("turn_end_waiting_for_next", endedPlayerId);
+    }
+    this.updateUI();
 
-    if (message.playerId === this.localPlayerId) {
+    if (endedPlayerId === this.localPlayerId) {
       notificationService.show("Turn ended", "info", 1200);
       return;
     }
 
-    this.clearSpectatorRollingPreviewForPlayer(message.playerId);
+    this.clearSpectatorRollingPreviewForPlayer(endedPlayerId);
 
-    this.showSeatBubbleForPlayer(message.playerId, "Turn ended", {
+    this.showSeatBubbleForPlayer(endedPlayerId, "Turn ended", {
       tone: "info",
       durationMs: 1500,
     });
@@ -1880,13 +1934,25 @@ class Game implements GameCallbacks {
     this.applyTurnTiming(null);
     const playerId = typeof message.playerId === "string" ? message.playerId : "";
     if (!playerId) {
+      this.activeTurnPlayerId = null;
+      this.activeRollServerId = null;
+      this.updateTurnSeatHighlight(null);
+      this.scheduleTurnTransitionSyncRecovery("turn_auto_advanced_missing_player");
+      this.updateUI();
       return;
+    }
+    if (this.activeTurnPlayerId === playerId) {
+      this.activeTurnPlayerId = null;
+      this.activeRollServerId = null;
+      this.updateTurnSeatHighlight(null);
+      this.scheduleTurnTransitionSyncRecovery("turn_auto_advanced_waiting_for_next", playerId);
     }
     this.clearSpectatorRollingPreviewForPlayer(playerId);
     this.showSeatBubbleForPlayer(playerId, "Turn timed out", {
       tone: "warning",
       durationMs: 2000,
     });
+    this.updateUI();
   }
 
   private handleMultiplayerTurnAction(message: MultiplayerTurnActionMessage): void {
@@ -1978,6 +2044,14 @@ class Game implements GameCallbacks {
       return;
     }
 
+    if (code === "turn_unavailable" || code === "turn_advance_failed") {
+      this.awaitingMultiplayerRoll = false;
+      this.pendingTurnEndSync = false;
+      notificationService.show("Turn state unavailable. Resyncing...", "warning", 2000);
+      void this.requestTurnSyncRefresh(code);
+      return;
+    }
+
     if (code === "turn_action_required") {
       notificationService.show("Score before ending your turn.", "warning", 1800);
       return;
@@ -2057,11 +2131,17 @@ class Game implements GameCallbacks {
     }
 
     if (!this.activeTurnPlayerId) {
+      if (this.shouldRecoverTurnSyncForBlockedAction()) {
+        void this.requestTurnSyncRefresh("local_action_missing_active_turn");
+      }
       notificationService.show("Waiting for turn sync...", "warning", 1600);
       return false;
     }
 
     if (!this.isLocalPlayersTurn()) {
+      if (this.shouldRecoverTurnSyncForBlockedAction()) {
+        void this.requestTurnSyncRefresh("local_action_waiting_remote_turn");
+      }
       notificationService.show(
         `Waiting for ${this.getParticipantLabel(this.activeTurnPlayerId)} turn`,
         "warning",
@@ -2075,6 +2155,36 @@ class Game implements GameCallbacks {
 
   private isLocalPlayersTurn(): boolean {
     return this.activeTurnPlayerId === this.localPlayerId;
+  }
+
+  private shouldRecoverTurnSyncForBlockedAction(): boolean {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return false;
+    }
+    if (!this.multiplayerNetwork?.isConnected()) {
+      return false;
+    }
+
+    const now = Date.now();
+    const staleSinceActivity = now - this.lastTurnSyncActivityAt;
+    if (staleSinceActivity >= TURN_SYNC_STALE_RECOVERY_MS) {
+      return true;
+    }
+
+    const deadlinePassed =
+      typeof this.activeTurnDeadlineAt === "number" &&
+      Number.isFinite(this.activeTurnDeadlineAt) &&
+      this.activeTurnDeadlineAt > 0 &&
+      now > this.activeTurnDeadlineAt + 600;
+    if (deadlinePassed) {
+      return true;
+    }
+
+    if (!this.activeTurnPlayerId) {
+      return true;
+    }
+
+    return this.isBotParticipant(this.activeTurnPlayerId) && staleSinceActivity >= 1800;
   }
 
   private recoverLocalTurnFromSnapshot(
