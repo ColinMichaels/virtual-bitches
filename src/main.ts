@@ -361,11 +361,14 @@ class Game implements GameCallbacks {
       return undefined;
     }
 
-    const baseUrl = new URL(environment.wsUrl);
     const sessionId = query.get("session");
     if (sessionId) {
-      baseUrl.searchParams.set("session", sessionId);
+      // Session sockets require a short-lived player token returned by join/create APIs.
+      // Defer connection until initializeBackendSyncAndMultiplayerSession() rebinds it.
+      return undefined;
     }
+
+    const baseUrl = new URL(environment.wsUrl);
     baseUrl.searchParams.set("playerId", this.localPlayerId);
     return baseUrl.toString();
   }

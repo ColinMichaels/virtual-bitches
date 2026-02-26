@@ -20,6 +20,17 @@ const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MULTIPLAYER_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const MAX_STORED_GAME_LOGS = 10000;
+const MAX_WS_MESSAGE_BYTES = 16 * 1024;
+const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+const WS_CLOSE_CODES = {
+  normal: 1000,
+  badRequest: 4400,
+  unauthorized: 4401,
+  forbidden: 4403,
+  sessionExpired: 4408,
+  internalError: 1011,
+};
 
 const DEFAULT_STORE = {
   players: {},
@@ -36,10 +47,42 @@ await bootstrap();
 const server = createServer((req, res) => {
   void handleRequest(req, res);
 });
+const wsSessionClients = new Map();
+const wsClientMeta = new WeakMap();
+
+server.on("upgrade", (req, socket) => {
+  try {
+    const requestUrl = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+    if (requestUrl.pathname !== "/") {
+      rejectUpgrade(socket, 404, "Not Found");
+      return;
+    }
+
+    cleanupExpiredRecords();
+    const auth = authenticateSocketUpgrade(requestUrl);
+    if (!auth.ok) {
+      rejectUpgrade(socket, auth.status, auth.reason);
+      return;
+    }
+
+    const upgrade = validateSocketUpgradeHeaders(req);
+    if (!upgrade.ok) {
+      rejectUpgrade(socket, upgrade.status, upgrade.reason);
+      return;
+    }
+
+    completeSocketHandshake(socket, upgrade.acceptValue);
+    handleSocketConnection(socket, auth);
+  } catch (error) {
+    log.warn("Failed to process WebSocket upgrade", error);
+    rejectUpgrade(socket, 500, "Internal Server Error");
+  }
+});
 
 server.listen(PORT, () => {
   log.info(`Listening on http://localhost:${PORT}`);
   log.info(`Health endpoint: http://localhost:${PORT}/api/health`);
+  log.info(`WebSocket endpoint: ws://localhost:${PORT}/?session=<id>&playerId=<id>&token=<token>`);
 });
 
 async function bootstrap() {
@@ -372,8 +415,14 @@ async function handleLeaveSession(req, res, pathname) {
   }
 
   delete session.participants[playerId];
+  disconnectPlayerSockets(
+    sessionId,
+    playerId,
+    WS_CLOSE_CODES.normal,
+    "left_session"
+  );
   if (Object.keys(session.participants).length === 0) {
-    delete store.multiplayerSessions[sessionId];
+    expireSession(sessionId, "session_empty");
   }
 
   await persistStore();
@@ -538,9 +587,447 @@ function cleanupExpiredRecords() {
   });
   Object.entries(store.multiplayerSessions).forEach(([sessionId, session]) => {
     if (!session || session.expiresAt <= now) {
-      delete store.multiplayerSessions[sessionId];
+      expireSession(sessionId, "session_expired");
     }
   });
+}
+
+function rejectUpgrade(socket, status, reason) {
+  if (socket.destroyed) return;
+  socket.write(
+    `HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`
+  );
+  socket.destroy();
+}
+
+function validateSocketUpgradeHeaders(req) {
+  if (req.method !== "GET") {
+    return { ok: false, status: 405, reason: "Method Not Allowed" };
+  }
+
+  const upgrade = String(req.headers.upgrade ?? "").toLowerCase();
+  if (upgrade !== "websocket") {
+    return { ok: false, status: 400, reason: "Bad Request" };
+  }
+
+  const connectionHeader = String(req.headers.connection ?? "").toLowerCase();
+  const includesUpgrade = connectionHeader
+    .split(",")
+    .map((part) => part.trim())
+    .includes("upgrade");
+  if (!includesUpgrade) {
+    return { ok: false, status: 400, reason: "Bad Request" };
+  }
+
+  const version = String(req.headers["sec-websocket-version"] ?? "");
+  if (version !== "13") {
+    return { ok: false, status: 426, reason: "Upgrade Required" };
+  }
+
+  const key = String(req.headers["sec-websocket-key"] ?? "").trim();
+  if (!key) {
+    return { ok: false, status: 400, reason: "Bad Request" };
+  }
+
+  let decodedKey;
+  try {
+    decodedKey = Buffer.from(key, "base64");
+  } catch {
+    return { ok: false, status: 400, reason: "Bad Request" };
+  }
+  if (decodedKey.length !== 16) {
+    return { ok: false, status: 400, reason: "Bad Request" };
+  }
+
+  const acceptValue = createHash("sha1")
+    .update(`${key}${WS_GUID}`)
+    .digest("base64");
+
+  return { ok: true, acceptValue };
+}
+
+function completeSocketHandshake(socket, acceptValue) {
+  socket.write(
+    [
+      "HTTP/1.1 101 Switching Protocols",
+      "Upgrade: websocket",
+      "Connection: Upgrade",
+      `Sec-WebSocket-Accept: ${acceptValue}`,
+      "\r\n",
+    ].join("\r\n")
+  );
+}
+
+function authenticateSocketUpgrade(requestUrl) {
+  const sessionId = requestUrl.searchParams.get("session")?.trim() ?? "";
+  const playerId = requestUrl.searchParams.get("playerId")?.trim() ?? "";
+  const token = requestUrl.searchParams.get("token")?.trim() ?? "";
+
+  if (!sessionId || !playerId || !token) {
+    return { ok: false, status: 401, reason: "Unauthorized" };
+  }
+
+  const session = store.multiplayerSessions[sessionId];
+  if (!session || session.expiresAt <= Date.now()) {
+    return { ok: false, status: 410, reason: "Gone" };
+  }
+
+  if (!session.participants[playerId]) {
+    return { ok: false, status: 403, reason: "Forbidden" };
+  }
+
+  const accessRecord = verifyAccessToken(token);
+  if (!accessRecord) {
+    return { ok: false, status: 401, reason: "Unauthorized" };
+  }
+
+  if (accessRecord.playerId !== playerId || accessRecord.sessionId !== sessionId) {
+    return { ok: false, status: 403, reason: "Forbidden" };
+  }
+
+  return {
+    ok: true,
+    sessionId,
+    playerId,
+    tokenExpiresAt: accessRecord.expiresAt,
+  };
+}
+
+function handleSocketConnection(socket, auth) {
+  const client = {
+    socket,
+    sessionId: auth.sessionId,
+    playerId: auth.playerId,
+    readBuffer: Buffer.alloc(0),
+    tokenExpiryTimer: null,
+    closed: false,
+    registered: false,
+  };
+
+  wsClientMeta.set(socket, client);
+  registerSocketClient(client, client.sessionId);
+  log.info(`WebSocket connected: session=${client.sessionId} player=${client.playerId}`);
+
+  const msUntilExpiry = Math.max(0, auth.tokenExpiresAt - Date.now());
+  client.tokenExpiryTimer = setTimeout(() => {
+    sendSocketError(client, "session_expired", "access_token_expired");
+    safeCloseSocket(client, WS_CLOSE_CODES.unauthorized, "access_token_expired");
+  }, msUntilExpiry);
+
+  socket.on("data", (chunk) => {
+    if (!Buffer.isBuffer(chunk)) {
+      return;
+    }
+    handleSocketData(client, chunk);
+  });
+
+  socket.on("close", () => {
+    client.closed = true;
+    unregisterSocketClient(client);
+  });
+
+  socket.on("end", () => {
+    client.closed = true;
+    unregisterSocketClient(client);
+  });
+
+  socket.on("error", (error) => {
+    client.closed = true;
+    unregisterSocketClient(client);
+    log.warn("WebSocket error", error);
+  });
+}
+
+function handleSocketData(client, chunk) {
+  if (client.closed) return;
+
+  client.readBuffer = Buffer.concat([client.readBuffer, chunk]);
+  if (client.readBuffer.length > MAX_WS_MESSAGE_BYTES * 2) {
+    sendSocketError(client, "message_too_large", "message_too_large");
+    safeCloseSocket(client, WS_CLOSE_CODES.badRequest, "message_too_large");
+    return;
+  }
+
+  while (true) {
+    const frame = parseSocketFrame(client.readBuffer);
+    if (!frame) {
+      return;
+    }
+
+    if (frame.error) {
+      sendSocketError(client, "invalid_payload", frame.error);
+      safeCloseSocket(client, WS_CLOSE_CODES.badRequest, frame.error);
+      return;
+    }
+
+    client.readBuffer = client.readBuffer.subarray(frame.bytesConsumed);
+
+    if (frame.opcode === 0x1) {
+      const raw = frame.payload.toString("utf8");
+      if (raw.length > MAX_WS_MESSAGE_BYTES) {
+        sendSocketError(client, "message_too_large", "message_too_large");
+        safeCloseSocket(client, WS_CLOSE_CODES.badRequest, "message_too_large");
+        return;
+      }
+      handleSocketMessage(client, raw);
+      continue;
+    }
+
+    if (frame.opcode === 0x8) {
+      safeCloseSocket(client, WS_CLOSE_CODES.normal, "client_closed");
+      return;
+    }
+
+    if (frame.opcode === 0x9) {
+      writeSocketFrame(client.socket, 0xA, frame.payload.subarray(0, 125));
+      continue;
+    }
+
+    if (frame.opcode === 0xA) {
+      continue;
+    }
+
+    sendSocketError(client, "unsupported_message_type", "unsupported_opcode");
+    safeCloseSocket(client, WS_CLOSE_CODES.badRequest, "unsupported_opcode");
+    return;
+  }
+}
+
+function parseSocketFrame(buffer) {
+  if (buffer.length < 2) return null;
+
+  const byte1 = buffer[0];
+  const byte2 = buffer[1];
+  const fin = (byte1 & 0x80) !== 0;
+  const opcode = byte1 & 0x0f;
+  const masked = (byte2 & 0x80) !== 0;
+  let payloadLength = byte2 & 0x7f;
+  let offset = 2;
+
+  if (!fin) {
+    return { error: "fragmented_frames_not_supported", bytesConsumed: buffer.length };
+  }
+
+  if (payloadLength === 126) {
+    if (buffer.length < offset + 2) return null;
+    payloadLength = buffer.readUInt16BE(offset);
+    offset += 2;
+  } else if (payloadLength === 127) {
+    if (buffer.length < offset + 8) return null;
+    const big = buffer.readBigUInt64BE(offset);
+    if (big > BigInt(MAX_WS_MESSAGE_BYTES)) {
+      return { error: "message_too_large", bytesConsumed: buffer.length };
+    }
+    payloadLength = Number(big);
+    offset += 8;
+  }
+
+  if (payloadLength > MAX_WS_MESSAGE_BYTES) {
+    return { error: "message_too_large", bytesConsumed: buffer.length };
+  }
+
+  if (!masked) {
+    return { error: "client_frame_not_masked", bytesConsumed: buffer.length };
+  }
+
+  if (buffer.length < offset + 4 + payloadLength) {
+    return null;
+  }
+
+  const mask = buffer.subarray(offset, offset + 4);
+  offset += 4;
+  const payload = Buffer.from(buffer.subarray(offset, offset + payloadLength));
+  for (let i = 0; i < payload.length; i += 1) {
+    payload[i] ^= mask[i % 4];
+  }
+
+  return {
+    opcode,
+    payload,
+    bytesConsumed: offset + payloadLength,
+  };
+}
+
+function writeSocketFrame(socket, opcode, payload = Buffer.alloc(0)) {
+  const payloadLength = payload.length;
+  let header;
+
+  if (payloadLength < 126) {
+    header = Buffer.alloc(2);
+    header[0] = 0x80 | (opcode & 0x0f);
+    header[1] = payloadLength;
+  } else if (payloadLength <= 0xffff) {
+    header = Buffer.alloc(4);
+    header[0] = 0x80 | (opcode & 0x0f);
+    header[1] = 126;
+    header.writeUInt16BE(payloadLength, 2);
+  } else {
+    header = Buffer.alloc(10);
+    header[0] = 0x80 | (opcode & 0x0f);
+    header[1] = 127;
+    header.writeBigUInt64BE(BigInt(payloadLength), 2);
+  }
+
+  socket.write(Buffer.concat([header, payload]));
+}
+
+function handleSocketMessage(client, rawMessage) {
+  if (!wsClientMeta.get(client.socket)) return;
+
+  let payload;
+  try {
+    payload = JSON.parse(rawMessage);
+  } catch (error) {
+    log.warn("Ignoring malformed WebSocket JSON payload", error);
+    sendSocketError(client, "invalid_payload", "invalid_json");
+    return;
+  }
+
+  if (!isSupportedSocketPayload(payload)) {
+    sendSocketError(client, "unsupported_message_type", "unsupported_message_type");
+    return;
+  }
+
+  const session = store.multiplayerSessions[client.sessionId];
+  if (!session || session.expiresAt <= Date.now()) {
+    sendSocketError(client, "session_expired", "session_expired");
+    safeCloseSocket(client, WS_CLOSE_CODES.sessionExpired, "session_expired");
+    return;
+  }
+
+  if (!session.participants[client.playerId]) {
+    sendSocketError(client, "unauthorized", "player_not_in_session");
+    safeCloseSocket(client, WS_CLOSE_CODES.forbidden, "player_not_in_session");
+    return;
+  }
+
+  session.participants[client.playerId].lastHeartbeatAt = Date.now();
+  broadcastToSession(client.sessionId, rawMessage, client);
+}
+
+function isSupportedSocketPayload(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  const messageType = payload.type;
+  return messageType === "chaos_attack" || messageType === "particle:emit";
+}
+
+function registerSocketClient(client, sessionId) {
+  const clients = wsSessionClients.get(sessionId) ?? new Set();
+  clients.add(client);
+  wsSessionClients.set(sessionId, clients);
+  client.registered = true;
+}
+
+function unregisterSocketClient(client) {
+  if (!client?.registered) return;
+  client.registered = false;
+
+  if (client.tokenExpiryTimer) {
+    clearTimeout(client.tokenExpiryTimer);
+    client.tokenExpiryTimer = null;
+  }
+
+  wsClientMeta.delete(client.socket);
+  const clients = wsSessionClients.get(client.sessionId);
+  if (!clients) return;
+
+  clients.delete(client);
+  if (clients.size === 0) {
+    wsSessionClients.delete(client.sessionId);
+  }
+}
+
+function disconnectPlayerSockets(sessionId, playerId, closeCode, reason) {
+  const clients = wsSessionClients.get(sessionId);
+  if (!clients) return;
+
+  for (const client of clients) {
+    if (!client || client.playerId !== playerId) {
+      continue;
+    }
+
+    safeCloseSocket(client, closeCode, reason);
+  }
+}
+
+function expireSession(sessionId, reason) {
+  if (store.multiplayerSessions[sessionId]) {
+    delete store.multiplayerSessions[sessionId];
+  }
+
+  const clients = wsSessionClients.get(sessionId);
+  if (!clients || clients.size === 0) {
+    return;
+  }
+
+  for (const client of clients) {
+    if (reason === "session_expired") {
+      sendSocketError(client, "session_expired", "session_expired");
+      safeCloseSocket(client, WS_CLOSE_CODES.sessionExpired, "session_expired");
+      continue;
+    }
+
+    safeCloseSocket(client, WS_CLOSE_CODES.normal, reason);
+  }
+}
+
+function broadcastToSession(sessionId, rawMessage, sender) {
+  const clients = wsSessionClients.get(sessionId);
+  if (!clients || clients.size === 0) return;
+
+  for (const client of clients) {
+    if (client === sender || client.closed || client.socket.destroyed) {
+      continue;
+    }
+
+    try {
+      writeSocketFrame(client.socket, 0x1, Buffer.from(rawMessage, "utf8"));
+    } catch (error) {
+      log.warn("Failed to broadcast WebSocket message", error);
+      safeCloseSocket(client, WS_CLOSE_CODES.internalError, "send_failed");
+    }
+  }
+}
+
+function sendSocketError(client, code, message) {
+  if (client.closed || client.socket.destroyed) return;
+  const payload = JSON.stringify({
+    type: "error",
+    code,
+    message,
+  });
+
+  try {
+    writeSocketFrame(client.socket, 0x1, Buffer.from(payload, "utf8"));
+  } catch (error) {
+    log.warn("Failed to send WebSocket error payload", error);
+  }
+}
+
+function safeCloseSocket(client, closeCode, closeReason) {
+  if (!client || client.closed) return;
+  client.closed = true;
+  unregisterSocketClient(client);
+
+  if (client.socket.destroyed) {
+    return;
+  }
+
+  const reasonBuffer = Buffer.from(
+    String(closeReason ?? "closed").slice(0, 123),
+    "utf8"
+  );
+  const payload = Buffer.alloc(2 + reasonBuffer.length);
+  payload.writeUInt16BE(closeCode, 0);
+  reasonBuffer.copy(payload, 2);
+
+  try {
+    writeSocketFrame(client.socket, 0x8, payload);
+    client.socket.end();
+  } catch (error) {
+    log.warn("Failed to close WebSocket cleanly", error);
+    client.socket.destroy();
+  }
 }
 
 async function parseJsonBody(req) {

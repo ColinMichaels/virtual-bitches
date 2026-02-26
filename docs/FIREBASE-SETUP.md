@@ -74,6 +74,12 @@ Notes:
 - This command requires Google Cloud SDK (`gcloud`) auth and project selection.
 - WebSocket traffic should connect directly to Cloud Run/domain (`VITE_WS_URL`), not through Hosting rewrites.
 
+Optional smoke test against deployed API + WebSocket:
+
+```bash
+E2E_API_BASE_URL="https://<cloud-run-service-url>" npm run test:e2e:api
+```
+
 ## 7) GitHub Actions auto-deploy (master/dev)
 
 Workflow file:

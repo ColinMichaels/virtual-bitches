@@ -287,6 +287,17 @@ jobs:
             NODE_ENV=production
             WS_BASE_URL=${{ steps.target.outputs.ws_url }}
 
+      - name: Smoke Test Cloud Run API + WebSocket
+        env:
+          E2E_API_BASE_URL: ${{ steps.deploy-api.outputs.url }}
+        run: |
+          set -euo pipefail
+          if [ -z "${E2E_API_BASE_URL:-}" ]; then
+            echo "Missing deploy-cloudrun output URL."
+            exit 1
+          fi
+          node api/e2e/smoke.mjs
+
       - name: Deploy Firebase Hosting + Firestore
         env:
           PROJECT_ID: ${{ steps.target.outputs.project_id }}
