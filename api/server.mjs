@@ -247,7 +247,7 @@ async function handleRefreshToken(req, res) {
 async function handleAuthMe(req, res) {
   const authCheck = await authorizeIdentityRequest(req, { allowSessionToken: true });
   if (!authCheck.ok) {
-    sendJson(res, 401, { error: "Unauthorized" });
+    sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "invalid_auth" });
     return;
   }
 
@@ -263,7 +263,7 @@ async function handleAuthMe(req, res) {
 async function handleSubmitLeaderboardScore(req, res) {
   const authCheck = await authorizeIdentityRequest(req, { allowSessionToken: true });
   if (!authCheck.ok) {
-    sendJson(res, 401, { error: "Unauthorized" });
+    sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "invalid_auth" });
     return;
   }
 
@@ -581,12 +581,12 @@ async function handleRefreshSessionAuth(req, res, pathname) {
 async function authorizeIdentityRequest(req, options = {}) {
   const header = req.headers.authorization;
   if (!header) {
-    return { ok: false };
+    return { ok: false, reason: "missing_authorization_header" };
   }
 
   const token = extractBearerToken(header);
   if (!token) {
-    return { ok: false };
+    return { ok: false, reason: "invalid_bearer_header" };
   }
 
   if (options.allowSessionToken) {
@@ -603,10 +603,11 @@ async function authorizeIdentityRequest(req, options = {}) {
     }
   }
 
-  const firebaseClaims = await verifyFirebaseIdToken(token);
-  if (!firebaseClaims) {
-    return { ok: false };
+  const firebaseVerification = await verifyFirebaseIdToken(token);
+  if (!firebaseVerification.ok) {
+    return { ok: false, reason: firebaseVerification.reason };
   }
+  const firebaseClaims = firebaseVerification.claims;
 
   return {
     ok: true,
@@ -648,7 +649,10 @@ async function verifyFirebaseIdToken(idToken) {
   const cached = firebaseTokenCache.get(idToken);
   const now = Date.now();
   if (cached && cached.expiresAt > now + 5000) {
-    return cached;
+    return {
+      ok: true,
+      claims: cached,
+    };
   }
 
   const endpoint = new URL("https://oauth2.googleapis.com/tokeninfo");
@@ -659,11 +663,17 @@ async function verifyFirebaseIdToken(idToken) {
     response = await fetch(endpoint, { method: "GET" });
   } catch (error) {
     log.warn("Failed to call Google tokeninfo endpoint", error);
-    return null;
+    return {
+      ok: false,
+      reason: "firebase_tokeninfo_request_failed",
+    };
   }
 
   if (!response.ok) {
-    return null;
+    return {
+      ok: false,
+      reason: `firebase_tokeninfo_http_${response.status}`,
+    };
   }
 
   let payload;
@@ -671,7 +681,10 @@ async function verifyFirebaseIdToken(idToken) {
     payload = await response.json();
   } catch (error) {
     log.warn("Invalid tokeninfo JSON response", error);
-    return null;
+    return {
+      ok: false,
+      reason: "firebase_tokeninfo_invalid_json",
+    };
   }
 
   const uid = String(payload.user_id ?? payload.sub ?? "").trim();
@@ -680,12 +693,20 @@ async function verifyFirebaseIdToken(idToken) {
   const expiresAt = Number.isFinite(exp) ? exp * 1000 : now + 60000;
 
   if (!uid) {
-    return null;
+    return {
+      ok: false,
+      reason: "firebase_token_missing_uid",
+    };
   }
 
   if (FIREBASE_PROJECT_ID && aud && aud !== FIREBASE_PROJECT_ID) {
-    log.warn("Rejected Firebase token with mismatched project audience");
-    return null;
+    log.warn(
+      `Rejected Firebase token with mismatched project audience (expected=${FIREBASE_PROJECT_ID}, actual=${aud})`
+    );
+    return {
+      ok: false,
+      reason: "firebase_audience_mismatch",
+    };
   }
 
   const claims = {
@@ -697,7 +718,10 @@ async function verifyFirebaseIdToken(idToken) {
   };
 
   firebaseTokenCache.set(idToken, claims);
-  return claims;
+  return {
+    ok: true,
+    claims,
+  };
 }
 
 function issueAuthTokenBundle(playerId, sessionId) {

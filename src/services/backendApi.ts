@@ -332,7 +332,12 @@ export class BackendApiService {
     }
 
     if (!response.ok) {
-      log.warn(`API request failed: ${method} ${path} (${response.status})`);
+      const errorSummary = await readErrorSummary(response);
+      if (errorSummary) {
+        log.warn(`API request failed: ${method} ${path} (${response.status}) - ${errorSummary}`);
+      } else {
+        log.warn(`API request failed: ${method} ${path} (${response.status})`);
+      }
       return null;
     }
 
@@ -347,6 +352,34 @@ export class BackendApiService {
 
 function normalizeBaseUrl(url: string): string {
   return url.endsWith("/") ? url.slice(0, -1) : url;
+}
+
+async function readErrorSummary(response: Response): Promise<string> {
+  try {
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      const parsed = (await response.json()) as
+        | { error?: unknown; reason?: unknown; message?: unknown }
+        | null;
+
+      const parts: string[] = [];
+      if (parsed && typeof parsed.error === "string") {
+        parts.push(parsed.error);
+      }
+      if (parsed && typeof parsed.reason === "string") {
+        parts.push(parsed.reason);
+      }
+      if (parsed && typeof parsed.message === "string") {
+        parts.push(parsed.message);
+      }
+      return parts.join(" | ").slice(0, 220);
+    }
+
+    const raw = await response.text();
+    return raw.trim().slice(0, 220);
+  } catch {
+    return "";
+  }
 }
 
 function isExpectedNotFound(method: string, path: string): boolean {

@@ -166,6 +166,22 @@ jobs:
             exit 1
           fi
 
+          if [[ "$FB_AUTH_DOMAIN" != *"$FB_PROJECT_ID"* ]]; then
+            echo "Configuration mismatch detected for branch '$BRANCH_NAME' (GitHub Environment: '$EXPECTED_ENV_NAME'):"
+            echo " - VITE_FIREBASE_AUTH_DOMAIN resolved to: $FB_AUTH_DOMAIN"
+            echo " - VITE_FIREBASE_PROJECT_ID resolved to: $FB_PROJECT_ID"
+            echo "Auth domain should belong to the same Firebase project (usually ${FB_PROJECT_ID}.firebaseapp.com)."
+            exit 1
+          fi
+
+          if [[ "$FB_STORAGE_BUCKET" != *"$FB_PROJECT_ID"* ]]; then
+            echo "Configuration mismatch detected for branch '$BRANCH_NAME' (GitHub Environment: '$EXPECTED_ENV_NAME'):"
+            echo " - VITE_FIREBASE_STORAGE_BUCKET resolved to: $FB_STORAGE_BUCKET"
+            echo " - VITE_FIREBASE_PROJECT_ID resolved to: $FB_PROJECT_ID"
+            echo "Storage bucket should belong to the same Firebase project."
+            exit 1
+          fi
+
           echo "project_id=$PROJECT_ID" >> "$GITHUB_OUTPUT"
           echo "api_base_url=$API_BASE_URL" >> "$GITHUB_OUTPUT"
           echo "ws_url=$WS_URL" >> "$GITHUB_OUTPUT"
