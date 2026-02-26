@@ -23,6 +23,15 @@ const FIREBASE_PROJECT_ID =
     "").trim();
 const FIREBASE_WEB_API_KEY = (process.env.FIREBASE_WEB_API_KEY ?? "").trim();
 const FIREBASE_AUTH_MODE = (process.env.FIREBASE_AUTH_MODE ?? "auto").trim().toLowerCase();
+const NODE_ENV = (process.env.NODE_ENV ?? "development").trim().toLowerCase();
+const ADMIN_ACCESS_MODE = normalizeAdminAccessMode(process.env.API_ADMIN_ACCESS_MODE);
+const ADMIN_TOKEN = (process.env.API_ADMIN_TOKEN ?? "").trim();
+const ADMIN_OWNER_UID_ALLOWLIST = parseDelimitedEnvSet(process.env.API_ADMIN_OWNER_UIDS, (value) =>
+  value.replace(/\s+/g, "")
+);
+const ADMIN_OWNER_EMAIL_ALLOWLIST = parseDelimitedEnvSet(process.env.API_ADMIN_OWNER_EMAILS, (value) =>
+  value.toLowerCase()
+);
 const log = logger.create("Server");
 const ALLOW_SHORT_SESSION_TTLS = process.env.ALLOW_SHORT_SESSION_TTLS === "1";
 const SESSION_IDLE_TTL_MIN_MS = ALLOW_SHORT_SESSION_TTLS ? 2000 : 60 * 1000;
@@ -39,6 +48,8 @@ const MULTIPLAYER_ROOM_ACTIVE_WINDOW_MS = normalizeSessionIdleTtlValue(
 );
 const MULTIPLAYER_ROOM_LIST_LIMIT_MAX = 100;
 const MULTIPLAYER_ROOM_LIST_LIMIT_DEFAULT = 24;
+const ADMIN_ROOM_LIST_LIMIT_MAX = 200;
+const ADMIN_ROOM_LIST_LIMIT_DEFAULT = 60;
 const MAX_MULTIPLAYER_HUMAN_PLAYERS = normalizeHumanPlayerLimitValue(
   process.env.MULTIPLAYER_MAX_HUMAN_PLAYERS,
   8
@@ -100,6 +111,16 @@ const ROOM_KINDS = {
   private: "private",
   publicDefault: "public_default",
   publicOverflow: "public_overflow",
+};
+const ADMIN_ROLES = {
+  viewer: "viewer",
+  operator: "operator",
+  owner: "owner",
+};
+const ADMIN_ROLE_LEVELS = {
+  [ADMIN_ROLES.viewer]: 1,
+  [ADMIN_ROLES.operator]: 2,
+  [ADMIN_ROLES.owner]: 3,
 };
 
 const WS_CLOSE_CODES = {
@@ -183,6 +204,10 @@ async function bootstrap() {
   store = await storeAdapter.load();
   log.info(`Using ${storeAdapter.name} store backend`);
   log.info(`Firebase auth verifier mode: ${FIREBASE_AUTH_MODE}`);
+  log.info(`Admin API access mode: ${resolveAdminAccessMode()}`);
+  log.info(
+    `Admin bootstrap owners: uids=${ADMIN_OWNER_UID_ALLOWLIST.size} emails=${ADMIN_OWNER_EMAIL_ALLOWLIST.size}`
+  );
   const publicRoomsChanged = reconcilePublicRoomInventory(Date.now());
   Object.keys(store.multiplayerSessions).forEach((sessionId) => {
     reconcileSessionLoops(sessionId);
@@ -219,6 +244,44 @@ async function handleRequest(req, res) {
         sessions: Object.keys(store.multiplayerSessions).length,
         leaderboardEntries: Object.keys(store.leaderboardScores).length,
       });
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/api/admin/overview") {
+      await handleAdminOverview(req, res, url);
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/api/admin/rooms") {
+      await handleAdminRooms(req, res, url);
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/api/admin/metrics") {
+      await handleAdminMetrics(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/api/admin/roles") {
+      await handleAdminRoles(req, res, url);
+      return;
+    }
+
+    if (req.method === "PUT" && /^\/api\/admin\/roles\/[^/]+$/.test(pathname)) {
+      await handleAdminRoleUpsert(req, res, pathname);
+      return;
+    }
+
+    if (req.method === "POST" && /^\/api\/admin\/sessions\/[^/]+\/expire$/.test(pathname)) {
+      await handleAdminExpireSession(req, res, pathname);
+      return;
+    }
+
+    if (
+      req.method === "POST" &&
+      /^\/api\/admin\/sessions\/[^/]+\/participants\/[^/]+\/remove$/.test(pathname)
+    ) {
+      await handleAdminRemoveParticipant(req, res, pathname);
       return;
     }
 
@@ -340,12 +403,14 @@ async function handleAuthMe(req, res) {
   }
 
   upsertFirebasePlayer(authCheck.uid, {
+    displayName: authCheck.displayName,
     email: authCheck.email,
     provider: authCheck.provider,
     isAnonymous: authCheck.isAnonymous,
   });
 
   const playerRecord = store.firebasePlayers[authCheck.uid] ?? null;
+  const adminAccess = resolveAdminRoleForIdentity(authCheck.uid, authCheck.email);
   sendJson(res, 200, {
     uid: authCheck.uid,
     displayName: authCheck.displayName,
@@ -353,6 +418,11 @@ async function handleAuthMe(req, res) {
     email: authCheck.email,
     isAnonymous: authCheck.isAnonymous,
     provider: authCheck.provider,
+    admin: {
+      role: adminAccess.role,
+      isAdmin: Boolean(adminAccess.role),
+      source: adminAccess.source,
+    },
   });
 }
 
@@ -383,6 +453,7 @@ async function handleUpdateAuthMe(req, res) {
     isAnonymous: false,
   });
   await persistStore();
+  const adminAccess = resolveAdminRoleForIdentity(authCheck.uid, authCheck.email);
 
   sendJson(res, 200, {
     uid: authCheck.uid,
@@ -391,6 +462,11 @@ async function handleUpdateAuthMe(req, res) {
     email: authCheck.email,
     isAnonymous: false,
     provider: authCheck.provider,
+    admin: {
+      role: adminAccess.role,
+      isAdmin: Boolean(adminAccess.role),
+      source: adminAccess.source,
+    },
   });
 }
 
@@ -818,11 +894,6 @@ async function handleSessionHeartbeat(req, res, pathname) {
 
 async function handleLeaveSession(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
-  const session = store.multiplayerSessions[sessionId];
-  if (!session) {
-    sendJson(res, 200, { ok: true });
-    return;
-  }
 
   const body = await parseJsonBody(req);
   const playerId = typeof body?.playerId === "string" ? body.playerId : "";
@@ -830,16 +901,55 @@ async function handleLeaveSession(req, res, pathname) {
     sendJson(res, 400, { error: "playerId is required" });
     return;
   }
+  const removal = removeParticipantFromSession(sessionId, playerId, {
+    source: "leave",
+    socketReason: "left_session",
+  });
+  if (!removal.ok && removal.reason === "unknown_session") {
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+  if (!removal.ok && removal.reason === "unknown_player") {
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+  if (!removal.ok) {
+    sendJson(res, 404, { error: "Player not found in session", reason: removal.reason });
+    return;
+  }
+  await persistStore();
+  sendJson(res, 200, { ok: true });
+}
+
+function removeParticipantFromSession(
+  sessionId,
+  playerId,
+  options = { source: "leave", socketReason: "left_session" }
+) {
+  const session = store.multiplayerSessions[sessionId];
+  if (!session) {
+    return {
+      ok: false,
+      reason: "unknown_session",
+    };
+  }
+  if (!session.participants?.[playerId]) {
+    return {
+      ok: false,
+      reason: "unknown_player",
+    };
+  }
 
   delete session.participants[playerId];
   disconnectPlayerSockets(
     sessionId,
     playerId,
     WS_CLOSE_CODES.normal,
-    "left_session"
+    options.socketReason ?? "left_session"
   );
   ensureSessionTurnState(session);
   const now = Date.now();
+
   if (getHumanParticipantCount(session) === 0) {
     const roomKind = getSessionRoomKind(session);
     if (roomKind === ROOM_KINDS.private) {
@@ -847,6 +957,7 @@ async function handleLeaveSession(req, res, pathname) {
     } else {
       resetPublicRoomForIdle(session, now);
       reconcileSessionLoops(sessionId);
+      broadcastSessionState(session, options.source ?? "leave");
     }
   } else {
     markSessionActivity(session, undefined, now);
@@ -855,12 +966,15 @@ async function handleLeaveSession(req, res, pathname) {
     if (turnStart) {
       broadcastToSession(sessionId, JSON.stringify(turnStart), null);
     }
-    broadcastSessionState(session, "leave");
+    broadcastSessionState(session, options.source ?? "leave");
   }
 
-  reconcilePublicRoomInventory(now);
-  await persistStore();
-  sendJson(res, 200, { ok: true });
+  const roomInventoryChanged = reconcilePublicRoomInventory(now);
+  return {
+    ok: true,
+    roomInventoryChanged,
+    sessionExpired: !store.multiplayerSessions[sessionId],
+  };
 }
 
 async function handleRefreshSessionAuth(req, res, pathname) {
@@ -882,6 +996,713 @@ async function handleRefreshSessionAuth(req, res, pathname) {
   const response = buildSessionResponse(session, playerId, auth);
   await persistStore();
   sendJson(res, 200, response);
+}
+
+async function handleAdminOverview(req, res, url) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.viewer });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const now = Date.now();
+  const limit = parseAdminRoomLimit(url.searchParams.get("limit"));
+  const rooms = collectAdminRoomDiagnostics(now).slice(0, limit);
+  sendJson(res, 200, {
+    timestamp: now,
+    accessMode: auth.mode,
+    principal: buildAdminPrincipal(auth),
+    metrics: buildAdminMetricsSnapshot(now),
+    rooms,
+  });
+}
+
+async function handleAdminRooms(req, res, url) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.viewer });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const now = Date.now();
+  const limit = parseAdminRoomLimit(url.searchParams.get("limit"));
+  sendJson(res, 200, {
+    timestamp: now,
+    accessMode: auth.mode,
+    principal: buildAdminPrincipal(auth),
+    rooms: collectAdminRoomDiagnostics(now).slice(0, limit),
+  });
+}
+
+async function handleAdminMetrics(req, res) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.viewer });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const now = Date.now();
+  sendJson(res, 200, {
+    timestamp: now,
+    accessMode: auth.mode,
+    principal: buildAdminPrincipal(auth),
+    metrics: buildAdminMetricsSnapshot(now),
+  });
+}
+
+async function handleAdminRoles(req, res, url) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.owner });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const parsedLimit = Number(url.searchParams.get("limit"));
+  const limit = Number.isFinite(parsedLimit)
+    ? Math.max(1, Math.min(500, Math.floor(parsedLimit)))
+    : 250;
+  const roleRecords = collectAdminRoleRecords()
+    .sort((left, right) => {
+      const leftLevel = left.role ? ADMIN_ROLE_LEVELS[left.role] : 0;
+      const rightLevel = right.role ? ADMIN_ROLE_LEVELS[right.role] : 0;
+      if (leftLevel !== rightLevel) {
+        return rightLevel - leftLevel;
+      }
+      const updatedDelta = Number(right.updatedAt ?? 0) - Number(left.updatedAt ?? 0);
+      if (updatedDelta !== 0) {
+        return updatedDelta;
+      }
+      return String(left.uid).localeCompare(String(right.uid));
+    })
+    .slice(0, limit);
+
+  sendJson(res, 200, {
+    timestamp: Date.now(),
+    accessMode: auth.mode,
+    principal: buildAdminPrincipal(auth),
+    roles: roleRecords,
+  });
+}
+
+async function handleAdminRoleUpsert(req, res, pathname) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.owner });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const targetUid = decodeURIComponent(pathname.split("/")[4] ?? "").trim();
+  if (!targetUid) {
+    sendJson(res, 400, {
+      error: "Invalid UID",
+      reason: "invalid_uid",
+    });
+    return;
+  }
+
+  const body = await parseJsonBody(req);
+  const hasRoleField =
+    body && typeof body === "object" && Object.prototype.hasOwnProperty.call(body, "role");
+  if (!hasRoleField) {
+    sendJson(res, 400, {
+      error: "Role is required",
+      reason: "missing_admin_role",
+    });
+    return;
+  }
+  const requestedRole = normalizeAdminRole(body?.role);
+  const rawRole = typeof body?.role === "string" ? body.role.trim() : "";
+  if (rawRole && !requestedRole) {
+    sendJson(res, 400, {
+      error: "Invalid role",
+      reason: "invalid_admin_role",
+    });
+    return;
+  }
+
+  if (isBootstrapOwnerUid(targetUid) && requestedRole !== ADMIN_ROLES.owner) {
+    sendJson(res, 409, {
+      error: "Bootstrap owner role is fixed",
+      reason: "bootstrap_owner_locked",
+    });
+    return;
+  }
+
+  const now = Date.now();
+  const current = store.firebasePlayers[targetUid] ?? { uid: targetUid };
+  const next = {
+    ...current,
+    uid: targetUid,
+    updatedAt: now,
+  };
+  if (requestedRole) {
+    next.adminRole = requestedRole;
+  } else {
+    delete next.adminRole;
+  }
+  next.adminRoleUpdatedAt = now;
+  next.adminRoleUpdatedBy = auth.uid ?? auth.authType;
+  store.firebasePlayers[targetUid] = next;
+  await persistStore();
+
+  sendJson(res, 200, {
+    ok: true,
+    roleRecord: buildAdminRoleRecord(targetUid, next),
+    principal: buildAdminPrincipal(auth),
+  });
+}
+
+async function handleAdminExpireSession(req, res, pathname) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.operator });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const sessionId = decodeURIComponent(pathname.split("/")[4] ?? "").trim();
+  if (!sessionId) {
+    sendJson(res, 400, {
+      error: "Invalid session ID",
+      reason: "invalid_session_id",
+    });
+    return;
+  }
+  if (!store.multiplayerSessions[sessionId]) {
+    sendJson(res, 404, {
+      error: "Session not found",
+      reason: "unknown_session",
+    });
+    return;
+  }
+
+  expireSession(sessionId, "admin_expired");
+  const roomInventoryChanged = reconcilePublicRoomInventory(Date.now());
+  await persistStore();
+
+  log.info(
+    `Admin expired session ${sessionId} by ${auth.uid ?? auth.authType ?? "unknown"} (${auth.role ?? "n/a"})`
+  );
+  sendJson(res, 200, {
+    ok: true,
+    sessionId,
+    roomInventoryChanged,
+    principal: buildAdminPrincipal(auth),
+  });
+}
+
+async function handleAdminRemoveParticipant(req, res, pathname) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.operator });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const segments = pathname.split("/");
+  const sessionId = decodeURIComponent(segments[4] ?? "").trim();
+  const playerId = decodeURIComponent(segments[6] ?? "").trim();
+  if (!sessionId) {
+    sendJson(res, 400, {
+      error: "Invalid session ID",
+      reason: "invalid_session_id",
+    });
+    return;
+  }
+  if (!playerId) {
+    sendJson(res, 400, {
+      error: "Invalid player ID",
+      reason: "invalid_player_id",
+    });
+    return;
+  }
+
+  const removal = removeParticipantFromSession(sessionId, playerId, {
+    source: "admin_remove",
+    socketReason: "removed_by_admin",
+  });
+  if (!removal.ok) {
+    const status = removal.reason === "unknown_session" || removal.reason === "unknown_player" ? 404 : 409;
+    sendJson(res, status, {
+      error: "Failed to remove participant",
+      reason: removal.reason,
+    });
+    return;
+  }
+
+  await persistStore();
+  log.info(
+    `Admin removed participant ${playerId} from ${sessionId} by ${auth.uid ?? auth.authType ?? "unknown"} (${auth.role ?? "n/a"})`
+  );
+  sendJson(res, 200, {
+    ok: true,
+    sessionId,
+    playerId,
+    sessionExpired: removal.sessionExpired,
+    roomInventoryChanged: removal.roomInventoryChanged,
+    principal: buildAdminPrincipal(auth),
+  });
+}
+
+function collectAdminRoomDiagnostics(now = Date.now()) {
+  return Object.entries(store.multiplayerSessions)
+    .map(([sessionId, session]) => buildAdminRoomDiagnostic(sessionId, session, now))
+    .filter((room) => room !== null)
+    .sort((left, right) => {
+      const activeDelta = Number(right.hasConnectedHumans) - Number(left.hasConnectedHumans);
+      if (activeDelta !== 0) {
+        return activeDelta;
+      }
+      const readyDelta = right.readyHumanCount - left.readyHumanCount;
+      if (readyDelta !== 0) {
+        return readyDelta;
+      }
+      const humanDelta = right.humanCount - left.humanCount;
+      if (humanDelta !== 0) {
+        return humanDelta;
+      }
+      return right.lastActivityAt - left.lastActivityAt;
+    });
+}
+
+function buildAdminRoomDiagnostic(sessionId, session, now = Date.now()) {
+  if (!session || typeof session !== "object") {
+    return null;
+  }
+  const room = buildRoomListing(session, now);
+  if (!room) {
+    return null;
+  }
+
+  const participants = serializeSessionParticipants(session);
+  const turnState = ensureSessionTurnState(session);
+  const connectedPlayerIds = new Set(getConnectedSessionPlayerIds(sessionId));
+  const hasConnectedHumans = participants.some(
+    (participant) => !participant.isBot && connectedPlayerIds.has(participant.playerId)
+  );
+
+  return {
+    sessionId: room.sessionId,
+    roomCode: room.roomCode,
+    roomType: room.roomType,
+    isPublic: room.isPublic,
+    sessionComplete: room.sessionComplete,
+    createdAt: room.createdAt,
+    lastActivityAt: room.lastActivityAt,
+    expiresAt: room.expiresAt,
+    idleMs: Math.max(0, now - room.lastActivityAt),
+    humanCount: room.humanCount,
+    readyHumanCount: room.readyHumanCount,
+    activeHumanCount: room.activeHumanCount,
+    botCount: room.botCount,
+    participantCount: room.participantCount,
+    maxHumanCount: room.maxHumanCount,
+    availableHumanSlots: room.availableHumanSlots,
+    connectedSocketCount: connectedPlayerIds.size,
+    hasConnectedHumans,
+    participants: participants.map((participant) => ({
+      playerId: participant.playerId,
+      displayName: participant.displayName,
+      isBot: participant.isBot,
+      isReady: participant.isReady,
+      isComplete: participant.isComplete,
+      score: participant.score,
+      remainingDice: participant.remainingDice,
+      lastHeartbeatAt: participant.lastHeartbeatAt,
+      connected: connectedPlayerIds.has(participant.playerId),
+    })),
+    turnState: turnState
+      ? {
+          activeTurnPlayerId: turnState.activeTurnPlayerId,
+          round: turnState.round,
+          turnNumber: turnState.turnNumber,
+          phase: normalizeTurnPhase(turnState.phase),
+          orderLength: Array.isArray(turnState.order) ? turnState.order.length : 0,
+          turnExpiresAt:
+            typeof turnState.turnExpiresAt === "number" && Number.isFinite(turnState.turnExpiresAt)
+              ? Math.floor(turnState.turnExpiresAt)
+              : null,
+          turnTimeoutMs: normalizeTurnTimeoutMs(turnState.turnTimeoutMs),
+        }
+      : null,
+  };
+}
+
+function buildAdminMetricsSnapshot(now = Date.now()) {
+  const sessions = Object.values(store.multiplayerSessions);
+  const activeSessions = sessions.filter(
+    (session) =>
+      session &&
+      typeof session === "object" &&
+      Number.isFinite(session.expiresAt) &&
+      session.expiresAt > now
+  );
+  const publicDefaultCount = activeSessions.filter(
+    (session) => getSessionRoomKind(session) === ROOM_KINDS.publicDefault
+  ).length;
+  const publicOverflowCount = activeSessions.filter(
+    (session) => getSessionRoomKind(session) === ROOM_KINDS.publicOverflow
+  ).length;
+  const privateRoomCount = activeSessions.filter(
+    (session) => getSessionRoomKind(session) === ROOM_KINDS.private
+  ).length;
+
+  let participantCount = 0;
+  let humanCount = 0;
+  let botCount = 0;
+  let readyHumanCount = 0;
+  let connectedSocketCount = 0;
+
+  activeSessions.forEach((session) => {
+    const participants = serializeSessionParticipants(session);
+    participantCount += participants.length;
+    participants.forEach((participant) => {
+      if (participant.isBot) {
+        botCount += 1;
+        return;
+      }
+      humanCount += 1;
+      if (participant.isReady) {
+        readyHumanCount += 1;
+      }
+    });
+    connectedSocketCount += getConnectedSessionPlayerIds(session.sessionId).length;
+  });
+
+  return {
+    activeSessionCount: activeSessions.length,
+    totalSessionRecords: sessions.length,
+    publicDefaultCount,
+    publicOverflowCount,
+    privateRoomCount,
+    participantCount,
+    humanCount,
+    botCount,
+    readyHumanCount,
+    connectedSocketCount,
+    activeTurnTimeoutLoops: sessionTurnTimeoutLoops.size,
+    activeBotLoops: botSessionLoops.size,
+  };
+}
+
+function getConnectedSessionPlayerIds(sessionId) {
+  const clients = wsSessionClients.get(sessionId);
+  if (!clients || clients.size === 0) {
+    return [];
+  }
+
+  const ids = new Set();
+  for (const client of clients) {
+    if (!client || client.closed || client.socket.destroyed) {
+      continue;
+    }
+    if (typeof client.playerId === "string" && client.playerId) {
+      ids.add(client.playerId);
+    }
+  }
+
+  return Array.from(ids.values());
+}
+
+function parseAdminRoomLimit(rawValue) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return ADMIN_ROOM_LIST_LIMIT_DEFAULT;
+  }
+  return Math.max(1, Math.min(ADMIN_ROOM_LIST_LIMIT_MAX, Math.floor(parsed)));
+}
+
+async function authorizeAdminRequest(req, options = {}) {
+  const minimumRole = normalizeAdminRole(options.minimumRole) ?? ADMIN_ROLES.viewer;
+  const mode = resolveAdminAccessMode();
+  if (mode === "disabled") {
+    return {
+      ok: false,
+      status: 403,
+      reason: "admin_disabled",
+      mode,
+    };
+  }
+  if (mode === "open") {
+    return {
+      ok: true,
+      mode,
+      authType: "open",
+      role: ADMIN_ROLES.owner,
+      roleSource: "open",
+    };
+  }
+
+  const adminToken = extractAdminTokenFromRequest(req);
+  if (mode === "token") {
+    if (!adminToken) {
+      return {
+        ok: false,
+        status: 401,
+        reason: "missing_admin_token",
+        mode,
+      };
+    }
+    if (adminToken !== ADMIN_TOKEN) {
+      return {
+        ok: false,
+        status: 401,
+        reason: "invalid_admin_token",
+        mode,
+      };
+    }
+    return {
+      ok: true,
+      mode,
+      authType: "token",
+      role: ADMIN_ROLES.owner,
+      roleSource: "token",
+    };
+  }
+
+  if (mode === "hybrid" && adminToken && adminToken === ADMIN_TOKEN) {
+    return {
+      ok: true,
+      mode,
+      authType: "token",
+      role: ADMIN_ROLES.owner,
+      roleSource: "token",
+    };
+  }
+
+  const identity = await authorizeIdentityRequest(req, {
+    allowSessionToken: false,
+    requireNonAnonymous: true,
+  });
+  if (!identity.ok) {
+    return {
+      ok: false,
+      status: 401,
+      reason: identity.reason ?? "invalid_auth",
+      mode,
+    };
+  }
+
+  upsertFirebasePlayer(identity.uid, {
+    displayName: identity.displayName,
+    email: identity.email,
+    provider: identity.provider,
+    isAnonymous: false,
+  });
+
+  const roleInfo = resolveAdminRoleForIdentity(identity.uid, identity.email);
+  if (!roleInfo.role) {
+    return {
+      ok: false,
+      status: 403,
+      reason: "admin_role_required",
+      mode,
+      uid: identity.uid,
+      email: identity.email,
+    };
+  }
+  if (!hasRequiredAdminRole(roleInfo.role, minimumRole)) {
+    return {
+      ok: false,
+      status: 403,
+      reason: "admin_role_forbidden",
+      mode,
+      uid: identity.uid,
+      email: identity.email,
+      role: roleInfo.role,
+      roleSource: roleInfo.source,
+    };
+  }
+
+  return {
+    ok: true,
+    mode,
+    authType: "role",
+    uid: identity.uid,
+    email: identity.email,
+    role: roleInfo.role,
+    roleSource: roleInfo.source,
+  };
+}
+
+function resolveAdminAccessMode() {
+  if (ADMIN_ACCESS_MODE === "disabled") {
+    return "disabled";
+  }
+  if (ADMIN_ACCESS_MODE === "open") {
+    return "open";
+  }
+  if (ADMIN_ACCESS_MODE === "token") {
+    return ADMIN_TOKEN ? "token" : "disabled";
+  }
+  if (ADMIN_ACCESS_MODE === "role") {
+    return "role";
+  }
+  if (ADMIN_ACCESS_MODE === "hybrid") {
+    return ADMIN_TOKEN ? "hybrid" : "role";
+  }
+  if (ADMIN_TOKEN) {
+    return "hybrid";
+  }
+  if (hasBootstrapAdminOwnersConfigured()) {
+    return "role";
+  }
+  return NODE_ENV === "production" ? "role" : "open";
+}
+
+function buildAdminPrincipal(authResult) {
+  if (!authResult?.ok) {
+    return null;
+  }
+  return {
+    authType: authResult.authType ?? "unknown",
+    uid: authResult.uid ?? null,
+    role: authResult.role ?? null,
+    roleSource: authResult.roleSource ?? "none",
+  };
+}
+
+function collectAdminRoleRecords() {
+  const records = [];
+  const seenUids = new Set();
+
+  Object.entries(store.firebasePlayers).forEach(([uid, playerRecord]) => {
+    const record = buildAdminRoleRecord(uid, playerRecord);
+    if (!record) {
+      return;
+    }
+    records.push(record);
+    seenUids.add(uid);
+  });
+
+  ADMIN_OWNER_UID_ALLOWLIST.forEach((uid) => {
+    if (seenUids.has(uid)) {
+      return;
+    }
+    records.push(
+      buildAdminRoleRecord(uid, {
+        uid,
+      })
+    );
+  });
+
+  return records;
+}
+
+function buildAdminRoleRecord(uid, playerRecord) {
+  if (typeof uid !== "string" || !uid.trim()) {
+    return null;
+  }
+  const record = playerRecord && typeof playerRecord === "object" ? playerRecord : {};
+  const normalizedUid = uid.trim();
+  const roleInfo = resolveAdminRoleForIdentity(normalizedUid, record.email);
+  return {
+    uid: normalizedUid,
+    displayName: typeof record.displayName === "string" ? record.displayName : undefined,
+    email: typeof record.email === "string" ? record.email : undefined,
+    provider: typeof record.provider === "string" ? record.provider : undefined,
+    role: roleInfo.role,
+    source: roleInfo.source,
+    updatedAt: Number.isFinite(record.updatedAt) ? Math.floor(record.updatedAt) : undefined,
+    roleUpdatedAt: Number.isFinite(record.adminRoleUpdatedAt)
+      ? Math.floor(record.adminRoleUpdatedAt)
+      : undefined,
+    roleUpdatedBy:
+      typeof record.adminRoleUpdatedBy === "string" ? record.adminRoleUpdatedBy : undefined,
+  };
+}
+
+function resolveAdminRoleForIdentity(uid, email) {
+  const normalizedUid = typeof uid === "string" ? uid.trim() : "";
+  const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+  if (normalizedUid && ADMIN_OWNER_UID_ALLOWLIST.has(normalizedUid)) {
+    return {
+      role: ADMIN_ROLES.owner,
+      source: "bootstrap",
+    };
+  }
+  if (normalizedEmail && ADMIN_OWNER_EMAIL_ALLOWLIST.has(normalizedEmail)) {
+    return {
+      role: ADMIN_ROLES.owner,
+      source: "bootstrap",
+    };
+  }
+  const storedRole = normalizeAdminRole(store.firebasePlayers?.[normalizedUid]?.adminRole);
+  if (storedRole) {
+    return {
+      role: storedRole,
+      source: "assigned",
+    };
+  }
+  return {
+    role: null,
+    source: "none",
+  };
+}
+
+function normalizeAdminRole(rawValue) {
+  const normalized = typeof rawValue === "string" ? rawValue.trim().toLowerCase() : "";
+  if (normalized === ADMIN_ROLES.viewer) {
+    return ADMIN_ROLES.viewer;
+  }
+  if (normalized === ADMIN_ROLES.operator) {
+    return ADMIN_ROLES.operator;
+  }
+  if (normalized === ADMIN_ROLES.owner) {
+    return ADMIN_ROLES.owner;
+  }
+  return null;
+}
+
+function hasRequiredAdminRole(actualRole, requiredRole) {
+  const actual = normalizeAdminRole(actualRole);
+  const required = normalizeAdminRole(requiredRole) ?? ADMIN_ROLES.viewer;
+  if (!actual) {
+    return false;
+  }
+  return ADMIN_ROLE_LEVELS[actual] >= ADMIN_ROLE_LEVELS[required];
+}
+
+function isBootstrapOwnerUid(uid) {
+  const normalizedUid = typeof uid === "string" ? uid.trim() : "";
+  return Boolean(normalizedUid) && ADMIN_OWNER_UID_ALLOWLIST.has(normalizedUid);
+}
+
+function hasBootstrapAdminOwnersConfigured() {
+  return ADMIN_OWNER_UID_ALLOWLIST.size > 0 || ADMIN_OWNER_EMAIL_ALLOWLIST.size > 0;
+}
+
+function extractAdminTokenFromRequest(req) {
+  const headerToken =
+    typeof req?.headers?.["x-admin-token"] === "string"
+      ? req.headers["x-admin-token"].trim()
+      : "";
+  if (headerToken) {
+    return headerToken;
+  }
+
+  const authHeader = typeof req?.headers?.authorization === "string" ? req.headers.authorization : "";
+  const bearer = extractBearerToken(authHeader);
+  return bearer || "";
 }
 
 async function authorizeIdentityRequest(req, options = {}) {
@@ -2627,6 +3448,32 @@ function normalizePublicRoomCodePrefix(rawValue, fallback = "LBY") {
     return fallback;
   }
   return normalized.slice(0, 4);
+}
+
+function parseDelimitedEnvSet(rawValue, normalizer = (value) => value) {
+  if (typeof rawValue !== "string" || !rawValue.trim()) {
+    return new Set();
+  }
+  const values = rawValue
+    .split(/[,\s]+/)
+    .map((value) => normalizer(value.trim()))
+    .filter((value) => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim());
+  return new Set(values);
+}
+
+function normalizeAdminAccessMode(rawValue) {
+  const normalized = typeof rawValue === "string" ? rawValue.trim().toLowerCase() : "auto";
+  if (
+    normalized === "open" ||
+    normalized === "token" ||
+    normalized === "role" ||
+    normalized === "hybrid" ||
+    normalized === "disabled"
+  ) {
+    return normalized;
+  }
+  return "auto";
 }
 
 function normalizeTurnTimeoutValue(rawValue, fallback) {

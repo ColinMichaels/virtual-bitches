@@ -20,6 +20,10 @@ Environment variables:
 - `FIREBASE_AUTH_MODE` (`auto`, `admin`, or `legacy`, default: `auto`)
 - `FIREBASE_SERVICE_ACCOUNT_JSON` (optional inline service account JSON for Admin SDK init)
 - `FIREBASE_WEB_API_KEY` (required only for legacy lookup fallback mode)
+- `API_ADMIN_ACCESS_MODE` (`auto`, `open`, `token`, `role`, `hybrid`, or `disabled`; default: `auto`)
+- `API_ADMIN_TOKEN` (required when `API_ADMIN_ACCESS_MODE=token`; optional in `auto`)
+- `API_ADMIN_OWNER_UIDS` (comma/space-delimited Firebase UID allowlist bootstrapped as `owner`)
+- `API_ADMIN_OWNER_EMAILS` (comma/space-delimited email allowlist bootstrapped as `owner`)
 
 ## Storage
 
@@ -44,6 +48,13 @@ SQL files define the intended longer-term relational schema.
 - `POST /api/logs/batch`
 - `POST /api/leaderboard/scores`
 - `GET /api/leaderboard/global`
+- `GET /api/admin/overview`
+- `GET /api/admin/rooms`
+- `GET /api/admin/metrics`
+- `GET /api/admin/roles`
+- `PUT /api/admin/roles/:uid`
+- `POST /api/admin/sessions/:sessionId/expire`
+- `POST /api/admin/sessions/:sessionId/participants/:playerId/remove`
 - `POST /api/multiplayer/sessions`
 - `POST /api/multiplayer/sessions/:sessionId/join`
 - `POST /api/multiplayer/rooms/:roomCode/join`
@@ -73,6 +84,16 @@ Planned (not implemented yet):
   - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `phase`, `activeRollServerId`, optional `activeRoll`, `updatedAt`)
 - `POST /api/multiplayer/sessions` accepts optional `botCount` (`0..4`) to add lightweight AI bot participants for websocket testing.
 - Bot turn strategy is isolated in [`api/bot/engine.mjs`](./bot/engine.mjs) behind `createBotEngine()` so implementations can be swapped without rewriting websocket/session orchestration.
+- Admin endpoints include monitoring plus role management scaffolds:
+  - In `auto` mode:
+    - when `API_ADMIN_TOKEN` is set: `hybrid` (token or role)
+    - otherwise: role-based in production, and role-based in non-production when bootstrap owners are configured (fallback `open`)
+  - Role mode requires Firebase-authenticated users with assigned roles (`viewer`, `operator`, `owner`).
+  - `owner` role can assign/revoke roles via `PUT /api/admin/roles/:uid`.
+  - `operator` and `owner` may run room control mutations:
+    - expire room session
+    - remove participant from room
+  - Pass `x-admin-token: <token>` (or bearer token) when token mode is enabled.
 - Friends/presence architecture plan lives in `docs/FRIENDS-SYSTEM-PLAN.md`; endpoints above are intentionally deferred until multiplayer stability gate completion.
 - `GET /api/players/:playerId/profile` returns `204 No Content` when profile does not exist yet.
 - WS endpoint is available at `/` and expects query params:

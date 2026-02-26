@@ -9,6 +9,7 @@ import { hapticsService } from "../services/haptics.js";
 import { notificationService } from "./notifications.js";
 import { ThemeSwitcher } from "./themeSwitcher.js";
 import { GameDifficulty } from "../engine/types.js";
+import { environment } from "@env";
 import { firebaseAuthService } from "../services/firebaseAuth.js";
 import {
   leaderboardService,
@@ -20,11 +21,18 @@ import {
 } from "../services/playerDataSync.js";
 import { scoreHistoryService } from "../services/score-history.js";
 import type { AuthenticatedUserProfile } from "../services/backendApi.js";
+import {
+  adminApiService,
+  type AdminMonitorOverview,
+  type AdminRoleRecord,
+  type AdminUserRole,
+} from "../services/adminApi.js";
 import { logger } from "../utils/logger.js";
 import { confirmAction } from "./confirmModal.js";
 import { modalManager } from "./modalManager.js";
 
 const log = logger.create("SettingsModal");
+const ADMIN_MONITOR_REFRESH_MS = 5000;
 
 type SettingsTab = "game" | "graphics" | "audio" | "account";
 type SyncIndicatorTone = "ok" | "syncing" | "pending" | "offline" | "error";
@@ -40,7 +48,10 @@ export class SettingsModal {
   private checkGameInProgress: (() => boolean) | null = null;
   private activeTab: SettingsTab = "game";
   private savingLeaderboardName = false;
+  private savingAdminRole = false;
+  private savingAdminMutation = false;
   private accountRenderVersion = 0;
+  private adminMonitorRefreshHandle?: ReturnType<typeof setInterval>;
   private readonly onFirebaseAuthChanged = () => {
     leaderboardService.clearCachedProfile();
     void this.refreshAccountSection();
@@ -656,8 +667,11 @@ export class SettingsModal {
     });
 
     if (tab === "account") {
+      this.startAdminMonitorRefresh();
       void this.refreshAccountSection();
+      return;
     }
+    this.stopAdminMonitorRefresh();
   }
 
   /**
@@ -699,12 +713,61 @@ export class SettingsModal {
       const email = accountProfile?.email?.trim() || firebaseProfile?.email?.trim() || "";
       const provider = accountProfile?.provider?.trim() || (isAuthenticated ? "google" : "guest");
       const leaderboardName = accountProfile?.leaderboardName?.trim() ?? "";
+      const accountAdminRole = this.normalizeAdminRoleValue(accountProfile?.admin?.role);
+      const firebaseIdToken = isAuthenticated ? (await firebaseAuthService.getIdToken()) ?? "" : "";
       const authLabel = authConfigured
         ? isAuthenticated
           ? "Signed In"
           : "Guest Mode"
         : "Auth Not Configured";
       const syncIndicator = this.getSyncIndicatorState();
+      let adminMonitorMarkup = "";
+      if (environment.debug) {
+        const adminToken = adminApiService.getAdminToken();
+        const adminAuthOptions = {
+          firebaseIdToken,
+          adminToken,
+        };
+        const canRequestAdmin = Boolean(firebaseIdToken || adminToken);
+        const adminResult = canRequestAdmin
+          ? await adminApiService.getOverview(18, adminAuthOptions)
+          : {
+              overview: null,
+              reason: "missing_admin_auth",
+              status: 401,
+            };
+        if (renderVersion !== this.accountRenderVersion) {
+          return;
+        }
+        const profileRole = this.normalizeAdminRoleValue(accountProfile?.admin?.role);
+        const resolvedRole = this.normalizeAdminRoleValue(
+          profileRole ?? adminResult.overview?.principal?.role
+        );
+        let roleRecords: AdminRoleRecord[] | null = null;
+        let roleReason: string | undefined;
+        let roleStatus: number | undefined;
+        if (resolvedRole === "owner" && canRequestAdmin) {
+          const rolesResult = await adminApiService.getRoles(250, adminAuthOptions);
+          if (renderVersion !== this.accountRenderVersion) {
+            return;
+          }
+          roleRecords = rolesResult.roles;
+          roleReason = rolesResult.reason;
+          roleStatus = rolesResult.status;
+        }
+        adminMonitorMarkup = this.renderAdminMonitorMarkup(
+          adminResult.overview,
+          adminResult.reason,
+          adminResult.status,
+          {
+            currentRole: resolvedRole,
+            roleSource: accountProfile?.admin?.source ?? undefined,
+            roleRecords,
+            roleReason,
+            roleStatus,
+          }
+        );
+      }
 
       panel.innerHTML = `
         <div class="settings-account-header">
@@ -713,6 +776,13 @@ export class SettingsModal {
             <div class="settings-account-badge">${escapeHtml(authLabel)}</div>
             ${email ? `<div class="settings-account-email">${escapeHtml(email)}</div>` : ""}
             <div class="settings-account-provider">Provider: ${escapeHtml(provider)}</div>
+            ${
+              environment.debug
+                ? `<div class="settings-account-provider">Admin Role: ${escapeHtml(
+                    accountAdminRole ?? "none"
+                  )}</div>`
+                : ""
+            }
             <div
               id="settings-sync-indicator"
               class="sync-indicator sync-indicator--${syncIndicator.tone}"
@@ -775,6 +845,8 @@ export class SettingsModal {
             <strong>${this.formatDuration(stats.totalPlayTime)}</strong>
           </div>
         </div>
+
+        ${adminMonitorMarkup}
       `;
 
       this.bindAccountActions(panel);
@@ -791,6 +863,11 @@ export class SettingsModal {
 
   private bindAccountActions(panel: HTMLElement): void {
     panel.querySelector('[data-action="settings-refresh"]')?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      void this.refreshAccountSection();
+    });
+
+    panel.querySelector('[data-action="settings-admin-refresh"]')?.addEventListener("click", () => {
       audioService.playSfx("click");
       void this.refreshAccountSection();
     });
@@ -835,6 +912,592 @@ export class SettingsModal {
           void this.refreshAccountSection();
         });
     });
+
+    const adminTokenInput = panel.querySelector("#settings-admin-token") as HTMLInputElement | null;
+    const saveAdminToken = () => {
+      adminApiService.setAdminToken(adminTokenInput?.value ?? "");
+      void this.refreshAccountSection();
+    };
+
+    panel.querySelector('[data-action="settings-admin-save-token"]')?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      saveAdminToken();
+    });
+
+    panel.querySelector('[data-action="settings-admin-clear-token"]')?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      if (adminTokenInput) {
+        adminTokenInput.value = "";
+      }
+      adminApiService.setAdminToken("");
+      void this.refreshAccountSection();
+    });
+
+    adminTokenInput?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+      saveAdminToken();
+    });
+
+    panel.querySelectorAll('[data-action="settings-admin-save-role"]').forEach((buttonNode) => {
+      const button = buttonNode as HTMLButtonElement;
+      button.addEventListener("click", () => {
+        if (this.savingAdminRole) {
+          return;
+        }
+        const row = button.closest(".settings-admin-role-row") as HTMLElement | null;
+        const targetUid = row?.dataset.adminRoleTarget?.trim() ?? "";
+        const select = row?.querySelector(
+          "select[data-admin-role-select]"
+        ) as HTMLSelectElement | null;
+        if (!targetUid || !select) {
+          return;
+        }
+        const nextRole = this.normalizeAdminRoleValue(select.value);
+        this.savingAdminRole = true;
+        audioService.playSfx("click");
+        void firebaseAuthService
+          .getIdToken()
+          .then((firebaseIdToken) =>
+            adminApiService.setRole(targetUid, nextRole, {
+              firebaseIdToken,
+              adminToken: adminApiService.getAdminToken(),
+            })
+          )
+          .then((result) => {
+            if (!result.roleRecord) {
+              notificationService.show(
+                this.getAdminMonitorFailureMessage(result.reason, result.status),
+                "error",
+                2400
+              );
+              return;
+            }
+            const roleLabel = result.roleRecord.role ?? "none";
+            notificationService.show(`Updated ${targetUid} role to ${roleLabel}`, "success", 1800);
+          })
+          .finally(() => {
+            this.savingAdminRole = false;
+            void this.refreshAccountSection();
+          });
+      });
+    });
+
+    panel.querySelectorAll('[data-action="settings-admin-expire-room"]').forEach((buttonNode) => {
+      const button = buttonNode as HTMLButtonElement;
+      button.addEventListener("click", () => {
+        if (this.savingAdminMutation) {
+          return;
+        }
+        const sessionId = button.dataset.sessionId?.trim() ?? "";
+        if (!sessionId) {
+          return;
+        }
+        this.savingAdminMutation = true;
+        audioService.playSfx("click");
+        void confirmAction({
+          title: "Expire Room?",
+          message: `Force close room ${sessionId}? Connected players will be disconnected.`,
+          confirmLabel: "Expire Room",
+          cancelLabel: "Cancel",
+          tone: "danger",
+        })
+          .then((confirmed) => {
+            if (!confirmed) {
+              return null;
+            }
+            return this.getAdminRequestAuthOptions().then((authOptions) =>
+              adminApiService.expireSession(sessionId, authOptions)
+            );
+          })
+          .then((result) => {
+            if (!result) {
+              return;
+            }
+            if (!result.ok) {
+              notificationService.show(
+                this.getAdminMonitorFailureMessage(result.reason, result.status),
+                "error",
+                2500
+              );
+              return;
+            }
+            notificationService.show("Room expired", "success", 1800);
+          })
+          .finally(() => {
+            this.savingAdminMutation = false;
+            void this.refreshAccountSection();
+          });
+      });
+    });
+
+    panel.querySelectorAll('[data-action="settings-admin-remove-player"]').forEach((buttonNode) => {
+      const button = buttonNode as HTMLButtonElement;
+      button.addEventListener("click", () => {
+        if (this.savingAdminMutation) {
+          return;
+        }
+        const sessionId = button.dataset.sessionId?.trim() ?? "";
+        const card = button.closest(".settings-admin-room-card") as HTMLElement | null;
+        const select = card?.querySelector(
+          "select[data-admin-remove-player]"
+        ) as HTMLSelectElement | null;
+        const playerId = select?.value?.trim() ?? "";
+        if (!sessionId || !playerId) {
+          return;
+        }
+        this.savingAdminMutation = true;
+        audioService.playSfx("click");
+        void confirmAction({
+          title: "Remove Player?",
+          message: `Remove ${playerId} from room ${sessionId}?`,
+          confirmLabel: "Remove Player",
+          cancelLabel: "Cancel",
+          tone: "danger",
+        })
+          .then((confirmed) => {
+            if (!confirmed) {
+              return null;
+            }
+            return this.getAdminRequestAuthOptions().then((authOptions) =>
+              adminApiService.removeParticipant(sessionId, playerId, authOptions)
+            );
+          })
+          .then((result) => {
+            if (!result) {
+              return;
+            }
+            if (!result.ok) {
+              notificationService.show(
+                this.getAdminMonitorFailureMessage(result.reason, result.status),
+                "error",
+                2500
+              );
+              return;
+            }
+            notificationService.show("Player removed from room", "success", 1800);
+          })
+          .finally(() => {
+            this.savingAdminMutation = false;
+            void this.refreshAccountSection();
+          });
+      });
+    });
+  }
+
+  private renderAdminMonitorMarkup(
+    overview: AdminMonitorOverview | null,
+    reason?: string,
+    status?: number,
+    options: {
+      currentRole?: AdminUserRole | null;
+      roleSource?: string;
+      roleRecords?: AdminRoleRecord[] | null;
+      roleReason?: string;
+      roleStatus?: number;
+    } = {}
+  ): string {
+    const tokenValue = adminApiService.getAdminToken();
+    const now = Date.now();
+    const currentRole = this.normalizeAdminRoleValue(options.currentRole);
+    const canOperate = currentRole === "owner" || currentRole === "operator";
+    const statusText = overview
+      ? `Connected (${this.formatAdminAccessMode(overview.accessMode)})`
+      : this.getAdminMonitorFailureMessage(reason, status);
+    const statusTone = overview ? "ok" : reason === "network_error" ? "warn" : "error";
+    const metricsMarkup = overview
+      ? `
+        <div class="settings-admin-metrics-grid">
+          <div class="settings-admin-metric">
+            <span>Active Rooms</span>
+            <strong>${overview.metrics.activeSessionCount}</strong>
+          </div>
+          <div class="settings-admin-metric">
+            <span>Humans</span>
+            <strong>${overview.metrics.humanCount}</strong>
+          </div>
+          <div class="settings-admin-metric">
+            <span>Bots</span>
+            <strong>${overview.metrics.botCount}</strong>
+          </div>
+          <div class="settings-admin-metric">
+            <span>Public Base</span>
+            <strong>${overview.metrics.publicDefaultCount}</strong>
+          </div>
+          <div class="settings-admin-metric">
+            <span>Overflow</span>
+            <strong>${overview.metrics.publicOverflowCount}</strong>
+          </div>
+          <div class="settings-admin-metric">
+            <span>Private</span>
+            <strong>${overview.metrics.privateRoomCount}</strong>
+          </div>
+        </div>
+      `
+      : "";
+    const roomsMarkup = overview
+      ? this.renderAdminRoomListMarkup(overview, now, canOperate)
+      : `
+        <p class="settings-admin-empty">
+          Monitor data is unavailable right now. Configure token access or retry.
+        </p>
+      `;
+    const roleLine = currentRole
+      ? `Role: ${currentRole}${options.roleSource ? ` (${options.roleSource})` : ""}`
+      : "Role: none";
+    const roleManagerMarkup =
+      currentRole === "owner"
+        ? this.renderAdminRoleManagerMarkup(options.roleRecords, options.roleReason, options.roleStatus)
+        : currentRole
+          ? `<p class="settings-admin-empty">Role manager requires owner access.</p>`
+          : `<p class="settings-admin-empty">Sign in with an admin role to manage endpoint access.</p>`;
+
+    return `
+      <div class="settings-admin-monitor">
+        <div class="settings-admin-header">
+          <div class="settings-admin-title">Dev Monitor</div>
+          <div class="settings-admin-status settings-admin-status--${statusTone}">
+            ${escapeHtml(statusText)}
+          </div>
+        </div>
+        <div class="settings-admin-role">${escapeHtml(roleLine)}</div>
+        <div class="settings-admin-actions">
+          <button type="button" class="btn btn-secondary settings-account-btn" data-action="settings-admin-refresh">
+            Refresh Monitor
+          </button>
+        </div>
+        <div class="settings-admin-token-row">
+          <label for="settings-admin-token">Admin Token</label>
+          <div class="settings-account-name-inputs">
+            <input
+              id="settings-admin-token"
+              type="password"
+              placeholder="Optional for open mode"
+              autocomplete="off"
+              spellcheck="false"
+              value="${escapeAttribute(tokenValue)}"
+            />
+            <button type="button" class="btn btn-primary settings-account-btn" data-action="settings-admin-save-token">
+              Save
+            </button>
+            <button type="button" class="btn btn-outline settings-account-btn" data-action="settings-admin-clear-token">
+              Clear
+            </button>
+          </div>
+        </div>
+        ${metricsMarkup}
+        ${roomsMarkup}
+        ${roleManagerMarkup}
+      </div>
+    `;
+  }
+
+  private renderAdminRoleManagerMarkup(
+    roleRecords: AdminRoleRecord[] | null | undefined,
+    roleReason?: string,
+    roleStatus?: number
+  ): string {
+    if (!roleRecords) {
+      return `
+        <p class="settings-admin-empty">
+          Role list unavailable: ${escapeHtml(this.getAdminMonitorFailureMessage(roleReason, roleStatus))}
+        </p>
+      `;
+    }
+    if (!roleRecords.length) {
+      return `
+        <p class="settings-admin-empty">
+          No known users yet. Ask users to sign in once before assigning roles.
+        </p>
+      `;
+    }
+
+    const rows = roleRecords
+      .map((record) => {
+        const normalizedRole = this.normalizeAdminRoleValue(record.role);
+        const locked = record.source === "bootstrap";
+        const label = record.displayName?.trim() || record.email?.trim() || record.uid;
+        return `
+          <div class="settings-admin-role-row" data-admin-role-target="${escapeAttribute(record.uid)}">
+            <div class="settings-admin-role-user">
+              <strong>${escapeHtml(label)}</strong>
+              <span>${escapeHtml(record.uid)}</span>
+            </div>
+            <div class="settings-admin-role-controls">
+              <select data-admin-role-select ${locked ? "disabled" : ""}>
+                <option value="" ${normalizedRole === null ? "selected" : ""}>none</option>
+                <option value="viewer" ${normalizedRole === "viewer" ? "selected" : ""}>viewer</option>
+                <option value="operator" ${normalizedRole === "operator" ? "selected" : ""}>operator</option>
+                <option value="owner" ${normalizedRole === "owner" ? "selected" : ""}>owner</option>
+              </select>
+              <button
+                type="button"
+                class="btn btn-secondary settings-account-btn"
+                data-action="settings-admin-save-role"
+                ${locked ? "disabled" : ""}
+              >
+                ${locked ? "Locked" : "Apply"}
+              </button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    return `
+      <div class="settings-admin-role-manager">
+        <div class="settings-admin-role-manager-title">Role Management</div>
+        ${rows}
+      </div>
+    `;
+  }
+
+  private renderAdminRoomListMarkup(
+    overview: AdminMonitorOverview,
+    now: number,
+    canOperate: boolean
+  ): string {
+    if (!overview.rooms.length) {
+      return `
+        <p class="settings-admin-empty">
+          No active rooms currently.
+        </p>
+      `;
+    }
+
+    const roomCards = overview.rooms
+      .map((room) => {
+        const activeTurnPlayerId = room.turnState?.activeTurnPlayerId ?? null;
+        const activeTurnPlayer = activeTurnPlayerId
+          ? room.participants.find((participant) => participant.playerId === activeTurnPlayerId)
+          : null;
+        const activeTurnLabel =
+          activeTurnPlayer?.displayName?.trim() || activeTurnPlayerId || "No active player";
+        const phaseLabel = room.turnState ? this.formatAdminTurnPhase(room.turnState.phase) : "Waiting";
+        const secondsToTurnExpire =
+          room.turnState && typeof room.turnState.turnExpiresAt === "number"
+            ? Math.max(0, Math.ceil((room.turnState.turnExpiresAt - now) / 1000))
+            : null;
+        const secondsToSessionExpire = Math.max(0, Math.ceil((room.expiresAt - now) / 1000));
+        const roomTypeLabel = this.formatAdminRoomType(room.roomType);
+        const removablePlayers = room.participants.filter((participant) => !participant.isBot);
+        const removeOptionsMarkup = removablePlayers
+          .map((participant) => {
+            const participantLabel =
+              participant.displayName?.trim() || participant.playerId;
+            return `<option value="${escapeAttribute(participant.playerId)}">${escapeHtml(participantLabel)}</option>`;
+          })
+          .join("");
+        const adminActionsMarkup = canOperate
+          ? `
+            <div class="settings-admin-room-actions">
+              <button
+                type="button"
+                class="btn btn-danger settings-account-btn"
+                data-action="settings-admin-expire-room"
+                data-session-id="${escapeAttribute(room.sessionId)}"
+              >
+                Expire Room
+              </button>
+              ${
+                removablePlayers.length > 0
+                  ? `
+                    <div class="settings-admin-remove-row">
+                      <select data-admin-remove-player>
+                        ${removeOptionsMarkup}
+                      </select>
+                      <button
+                        type="button"
+                        class="btn btn-secondary settings-account-btn"
+                        data-action="settings-admin-remove-player"
+                        data-session-id="${escapeAttribute(room.sessionId)}"
+                      >
+                        Remove Player
+                      </button>
+                    </div>
+                  `
+                  : `<div class="settings-admin-empty">No human players to remove.</div>`
+              }
+            </div>
+          `
+          : "";
+
+        return `
+          <div class="settings-admin-room-card">
+            <div class="settings-admin-room-top">
+              <div class="settings-admin-room-code">${escapeHtml(room.roomCode)}</div>
+              <div class="settings-admin-room-type">${escapeHtml(roomTypeLabel)}</div>
+            </div>
+            <div class="settings-admin-room-meta">
+              Humans ${room.humanCount}/${room.maxHumanCount} • Ready ${room.readyHumanCount} • Bots ${room.botCount} • Connected ${room.connectedSocketCount}
+            </div>
+            <div class="settings-admin-room-turn">
+              <strong>${escapeHtml(activeTurnLabel)}</strong> • ${escapeHtml(phaseLabel)}
+              ${secondsToTurnExpire === null ? "" : ` • turn ${secondsToTurnExpire}s`}
+              • idle ${Math.floor(room.idleMs / 1000)}s • room ${secondsToSessionExpire}s
+            </div>
+            ${adminActionsMarkup}
+          </div>
+        `;
+      })
+      .join("");
+
+    return `
+      <div class="settings-admin-room-list">
+        ${roomCards}
+      </div>
+    `;
+  }
+
+  private getAdminMonitorFailureMessage(reason?: string, status?: number): string {
+    switch (reason) {
+      case "missing_admin_auth":
+        return "Sign in or provide admin token";
+      case "missing_admin_token":
+        return "Admin token required by API";
+      case "invalid_admin_token":
+        return "Admin token rejected";
+      case "missing_admin_role":
+        return "Role value is required";
+      case "invalid_session_id":
+        return "Invalid session ID";
+      case "invalid_player_id":
+        return "Invalid player ID";
+      case "unknown_session":
+        return "Session not found";
+      case "unknown_player":
+        return "Player not found in room";
+      case "admin_role_required":
+        return "Admin role is required";
+      case "admin_role_forbidden":
+        return "Your role does not have permission";
+      case "bootstrap_owner_locked":
+        return "Bootstrap owner role is locked";
+      case "missing_authorization_header":
+      case "invalid_bearer_header":
+      case "invalid_auth":
+      case "anonymous_not_allowed":
+        return "Sign in to access admin endpoints";
+      case "invalid_admin_payload":
+        return "Admin response shape was invalid";
+      case "admin_disabled":
+        return "Admin monitoring is disabled on server";
+      case "network_error":
+        return "Monitor request failed (network)";
+      default: {
+        if (status === 401) {
+          return "Unauthorized (check auth token/role)";
+        }
+        if (status === 403) {
+          return "Admin access denied";
+        }
+        if (status && Number.isFinite(status)) {
+          return `Monitor request failed (HTTP ${status})`;
+        }
+        return "Monitor unavailable";
+      }
+    }
+  }
+
+  private formatAdminAccessMode(mode: string | undefined): string {
+    switch (mode) {
+      case "open":
+        return "open mode";
+      case "token":
+        return "token mode";
+      case "role":
+        return "role mode";
+      case "hybrid":
+        return "hybrid mode";
+      case "disabled":
+        return "disabled";
+      default:
+        return "unknown";
+    }
+  }
+
+  private normalizeAdminRoleValue(role: unknown): AdminUserRole | null {
+    if (role === "viewer" || role === "operator" || role === "owner") {
+      return role;
+    }
+    return null;
+  }
+
+  private async getAdminRequestAuthOptions(): Promise<{
+    firebaseIdToken?: string | null;
+    adminToken?: string | null;
+  }> {
+    const firebaseIdToken = await firebaseAuthService.getIdToken();
+    const adminToken = adminApiService.getAdminToken();
+    return {
+      firebaseIdToken,
+      adminToken,
+    };
+  }
+
+  private formatAdminRoomType(roomType: string): string {
+    switch (roomType) {
+      case "public_default":
+        return "Public Base";
+      case "public_overflow":
+        return "Public Overflow";
+      default:
+        return "Private";
+    }
+  }
+
+  private formatAdminTurnPhase(phase: string): string {
+    switch (phase) {
+      case "await_roll":
+        return "Await Roll";
+      case "await_score":
+        return "Await Score";
+      case "ready_to_end":
+        return "Ready To End";
+      default:
+        return "Waiting";
+    }
+  }
+
+  private startAdminMonitorRefresh(): void {
+    if (!environment.debug) {
+      return;
+    }
+    this.stopAdminMonitorRefresh();
+    this.adminMonitorRefreshHandle = setInterval(() => {
+      if (
+        this.activeTab !== "account" ||
+        !this.isVisible() ||
+        this.isAccountFieldFocused() ||
+        this.savingAdminRole
+      ) {
+        return;
+      }
+      void this.refreshAccountSection();
+    }, ADMIN_MONITOR_REFRESH_MS);
+  }
+
+  private stopAdminMonitorRefresh(): void {
+    if (!this.adminMonitorRefreshHandle) {
+      return;
+    }
+    clearInterval(this.adminMonitorRefreshHandle);
+    this.adminMonitorRefreshHandle = undefined;
+  }
+
+  private isAccountFieldFocused(): boolean {
+    const activeElement = document.activeElement as HTMLElement | null;
+    if (!activeElement) {
+      return false;
+    }
+    return (
+      activeElement.id === "settings-leaderboard-name" ||
+      activeElement.id === "settings-admin-token" ||
+      activeElement.matches("select[data-admin-role-select]") ||
+      activeElement.matches("select[data-admin-remove-player]")
+    );
   }
 
   private updateAccountSyncIndicator(): void {
@@ -1014,8 +1677,11 @@ export class SettingsModal {
     this.refresh();
     this.container.style.display = "flex";
     if (this.activeTab === "account") {
+      this.startAdminMonitorRefresh();
       void this.refreshAccountSection();
+      return;
     }
+    this.stopAdminMonitorRefresh();
   }
 
   /**
@@ -1025,6 +1691,7 @@ export class SettingsModal {
     if (this.container.style.display === "none") {
       return;
     }
+    this.stopAdminMonitorRefresh();
     this.container.style.display = "none";
     modalManager.notifyClosed("settings-modal");
 

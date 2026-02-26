@@ -2183,6 +2183,257 @@ button.danger,
   font-size: 18px;
 }
 
+.settings-admin-monitor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(7, 10, 20, 0.65);
+}
+
+.settings-admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-admin-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(216, 228, 255, 0.9);
+}
+
+.settings-admin-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.settings-admin-status--ok {
+  background: rgba(109, 178, 138, 0.2);
+  color: rgba(178, 233, 203, 0.95);
+}
+
+.settings-admin-status--warn {
+  background: rgba(198, 164, 105, 0.2);
+  color: rgba(244, 220, 169, 0.95);
+}
+
+.settings-admin-status--error {
+  background: rgba(184, 108, 108, 0.2);
+  color: rgba(248, 187, 187, 0.95);
+}
+
+.settings-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-admin-token-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-admin-token-row label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.settings-admin-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-admin-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.settings-admin-metric span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.settings-admin-metric strong {
+  font-size: 15px;
+  color: #fff;
+}
+
+.settings-admin-room-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.settings-admin-room-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.settings-admin-room-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settings-admin-room-code {
+  color: #fff;
+  font-weight: 700;
+  font-family: "Courier New", monospace;
+  letter-spacing: 0.05em;
+}
+
+.settings-admin-room-type {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(176, 210, 255, 0.9);
+}
+
+.settings-admin-room-meta,
+.settings-admin-room-turn {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+}
+
+.settings-admin-room-turn strong {
+  color: #fff;
+}
+
+.settings-admin-room-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-admin-remove-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-admin-remove-row select {
+  flex: 1;
+  min-height: 34px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.32);
+  color: #fff;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.settings-admin-empty {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+}
+
+.settings-admin-role {
+  font-size: 12px;
+  color: rgba(205, 222, 255, 0.84);
+}
+
+.settings-admin-role-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.settings-admin-role-manager-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(228, 236, 255, 0.86);
+}
+
+.settings-admin-role-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.settings-admin-role-user {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-admin-role-user strong {
+  font-size: 12px;
+  color: #fff;
+  font-weight: 700;
+}
+
+.settings-admin-role-user span {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.65);
+  font-family: "Courier New", monospace;
+  overflow-wrap: anywhere;
+}
+
+.settings-admin-role-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-admin-role-controls select {
+  min-height: 34px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.32);
+  color: #fff;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
 /* Tutorial Modal */
 .tutorial-modal {
   position: fixed !important;
@@ -3829,6 +4080,31 @@ button.danger,
 
   .settings-account-stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .settings-admin-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-admin-room-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .settings-admin-role-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-admin-role-controls {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-admin-remove-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   /* Splash Screen */

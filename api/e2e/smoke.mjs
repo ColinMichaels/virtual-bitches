@@ -5,6 +5,8 @@ const WS_TIMEOUT_MS = Number(process.env.E2E_WS_TIMEOUT_MS ?? 10000);
 const firebaseIdToken = process.env.E2E_FIREBASE_ID_TOKEN?.trim() ?? "";
 const assertBotTraffic = process.env.E2E_ASSERT_BOTS === "1";
 const assertRoomExpiry = process.env.E2E_ASSERT_ROOM_EXPIRY === "1";
+const assertAdminMonitor = process.env.E2E_ASSERT_ADMIN_MONITOR === "1";
+const adminToken = process.env.E2E_ADMIN_TOKEN?.trim() ?? "";
 const roomExpiryWaitMs = Number(process.env.E2E_ROOM_EXPIRY_WAIT_MS ?? 9000);
 
 const baseInput = (process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:3000").trim();
@@ -24,6 +26,11 @@ async function run() {
   log(`WS base URL:  ${targets.wsBaseUrl}`);
 
   await apiRequest("/health", { method: "GET" });
+  if (assertAdminMonitor) {
+    await runAdminMonitorChecks();
+  } else {
+    log("Skipping admin monitor checks (set E2E_ASSERT_ADMIN_MONITOR=1 to enable).");
+  }
 
   const runSuffix = randomUUID().slice(0, 8);
   await runRoomLifecycleChecks(runSuffix);
@@ -579,6 +586,111 @@ async function runRoomLifecycleChecks(runSuffix) {
   log("Room lifecycle checks passed.");
 }
 
+async function runAdminMonitorChecks() {
+  log("Running admin monitor checks...");
+  const adminHeaders = adminToken ? { "x-admin-token": adminToken } : undefined;
+
+  const overview = await apiRequest("/admin/overview?limit=5", {
+    method: "GET",
+    headers: adminHeaders,
+  });
+  assert(typeof overview?.timestamp === "number", "admin overview missing timestamp");
+  assert(overview?.metrics && typeof overview.metrics === "object", "admin overview missing metrics");
+  assert(Array.isArray(overview?.rooms), "admin overview missing rooms[]");
+
+  const rooms = await apiRequest("/admin/rooms?limit=5", {
+    method: "GET",
+    headers: adminHeaders,
+  });
+  assert(typeof rooms?.timestamp === "number", "admin rooms missing timestamp");
+  assert(Array.isArray(rooms?.rooms), "admin rooms missing rooms[]");
+
+  const metrics = await apiRequest("/admin/metrics", {
+    method: "GET",
+    headers: adminHeaders,
+  });
+  assert(typeof metrics?.timestamp === "number", "admin metrics missing timestamp");
+  assert(metrics?.metrics && typeof metrics.metrics === "object", "admin metrics missing metrics object");
+  assert(
+    Number.isFinite(Number(metrics.metrics.activeSessionCount)),
+    "admin metrics missing activeSessionCount"
+  );
+
+  const rolesBefore = await apiRequest("/admin/roles?limit=10", {
+    method: "GET",
+    headers: adminHeaders,
+  });
+  assert(Array.isArray(rolesBefore?.roles), "admin roles missing roles[]");
+
+  const roleProbeUid = `e2e-role-${randomUUID().slice(0, 8)}`;
+  const roleUpsert = await apiRequest(`/admin/roles/${encodeURIComponent(roleProbeUid)}`, {
+    method: "PUT",
+    headers: adminHeaders,
+    body: {
+      role: "viewer",
+    },
+  });
+  assert(roleUpsert?.ok === true, "admin role upsert did not report success");
+  assert(
+    roleUpsert?.roleRecord?.uid === roleProbeUid,
+    "admin role upsert returned unexpected uid"
+  );
+  assert(
+    roleUpsert?.roleRecord?.role === "viewer",
+    "admin role upsert returned unexpected role"
+  );
+
+  const adminHostId = `e2e-admin-host-${randomUUID().slice(0, 8)}`;
+  const adminGuestId = `e2e-admin-guest-${randomUUID().slice(0, 8)}`;
+  const adminSession = await apiRequest("/multiplayer/sessions", {
+    method: "POST",
+    body: {
+      playerId: adminHostId,
+      displayName: "Admin Host",
+    },
+  });
+  assert(typeof adminSession?.sessionId === "string", "admin mutation probe session missing id");
+
+  const adminJoin = await apiRequest(
+    `/multiplayer/sessions/${encodeURIComponent(adminSession.sessionId)}/join`,
+    {
+      method: "POST",
+      body: {
+        playerId: adminGuestId,
+        displayName: "Admin Guest",
+      },
+    }
+  );
+  assert(Array.isArray(adminJoin?.participants), "admin mutation probe join missing participants[]");
+
+  const removePlayerResult = await apiRequest(
+    `/admin/sessions/${encodeURIComponent(adminSession.sessionId)}/participants/${encodeURIComponent(adminGuestId)}/remove`,
+    {
+      method: "POST",
+      headers: adminHeaders,
+    }
+  );
+  assert(removePlayerResult?.ok === true, "admin participant remove did not report success");
+  assert(
+    removePlayerResult?.playerId === adminGuestId,
+    "admin participant remove returned unexpected player"
+  );
+
+  const expireRoomResult = await apiRequest(
+    `/admin/sessions/${encodeURIComponent(adminSession.sessionId)}/expire`,
+    {
+      method: "POST",
+      headers: adminHeaders,
+    }
+  );
+  assert(expireRoomResult?.ok === true, "admin room expire did not report success");
+  assert(
+    expireRoomResult?.sessionId === adminSession.sessionId,
+    "admin room expire returned unexpected session"
+  );
+  log("Admin monitor checks passed.");
+}
+
 run()
   .catch((error) => {
     fail(error instanceof Error ? error.message : String(error));
@@ -633,6 +745,9 @@ async function apiRequestWithStatus(path, options) {
   };
   if (options.accessToken) {
     headers.authorization = `Bearer ${options.accessToken}`;
+  }
+  if (options.headers && typeof options.headers === "object") {
+    Object.assign(headers, options.headers);
   }
 
   const url = `${targets.apiBaseUrl}${path}`;
