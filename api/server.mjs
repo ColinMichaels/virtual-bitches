@@ -267,6 +267,11 @@ async function handleRequest(req, res) {
       return;
     }
 
+    if (req.method === "POST" && /^\/api\/multiplayer\/rooms\/[^/]+\/join$/.test(pathname)) {
+      await handleJoinRoomByCode(req, res, pathname);
+      return;
+    }
+
     if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/join$/.test(pathname)) {
       await handleJoinSession(req, res, pathname);
       return;
@@ -626,10 +631,22 @@ async function handleCreateSession(req, res) {
   }
 
   const sessionId = randomUUID();
-  const roomCode = normalizeRoomCode(body?.roomCode);
   const botCount = normalizeBotCount(body?.botCount);
   const gameDifficulty = normalizeGameDifficulty(body?.gameDifficulty);
   const now = Date.now();
+  const requestedRoomCode = normalizeOptionalRoomCode(body?.roomCode);
+  if (requestedRoomCode && isRoomCodeInUse(requestedRoomCode, now)) {
+    sendJson(res, 409, {
+      error: "Room code unavailable",
+      reason: "room_code_taken",
+    });
+    return;
+  }
+  const roomCode = requestedRoomCode || generateUniquePrivateRoomCode(now);
+  if (!roomCode) {
+    sendJson(res, 500, { error: "Failed to allocate room code" });
+    return;
+  }
   const expiresAt = now + MULTIPLAYER_SESSION_IDLE_TTL_MS;
   const participants = {
     [playerId]: {
@@ -688,9 +705,43 @@ async function handleCreateSession(req, res) {
 
 async function handleJoinSession(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
-  const session = store.multiplayerSessions[sessionId];
-  if (!session || session.expiresAt <= Date.now()) {
-    sendJson(res, 410, { error: "Session expired" });
+  await handleJoinSessionByTarget(req, res, {
+    sessionId,
+  });
+}
+
+async function handleJoinRoomByCode(req, res, pathname) {
+  const roomCode = decodeURIComponent(pathname.split("/")[4]);
+  await handleJoinSessionByTarget(req, res, {
+    roomCode,
+  });
+}
+
+async function handleJoinSessionByTarget(req, res, target) {
+  const now = Date.now();
+  let session = null;
+  if (typeof target?.sessionId === "string" && target.sessionId.trim().length > 0) {
+    const sessionId = target.sessionId.trim();
+    const sessionById = store.multiplayerSessions[sessionId];
+    if (!sessionById || sessionById.expiresAt <= now) {
+      sendJson(res, 410, { error: "Session expired", reason: "session_expired" });
+      return;
+    }
+    session = sessionById;
+  } else if (typeof target?.roomCode === "string" && target.roomCode.trim().length > 0) {
+    const normalizedRoomCode = normalizeOptionalRoomCode(target.roomCode);
+    if (!normalizedRoomCode) {
+      sendJson(res, 404, { error: "Room code not found", reason: "room_not_found" });
+      return;
+    }
+    const sessionByRoomCode = findJoinableSessionByRoomCode(normalizedRoomCode, now);
+    if (!sessionByRoomCode) {
+      sendJson(res, 404, { error: "Room code not found", reason: "room_not_found" });
+      return;
+    }
+    session = sessionByRoomCode;
+  } else {
+    sendJson(res, 400, { error: "sessionId or roomCode is required" });
     return;
   }
 
@@ -701,7 +752,6 @@ async function handleJoinSession(req, res, pathname) {
     return;
   }
 
-  const now = Date.now();
   const existingParticipant = session.participants[playerId];
   const isReturningParticipant = Boolean(existingParticipant && !isBotParticipant(existingParticipant));
   if (!isReturningParticipant && getHumanParticipantCount(session) >= MAX_MULTIPLAYER_HUMAN_PLAYERS) {
@@ -720,6 +770,7 @@ async function handleJoinSession(req, res, pathname) {
     isComplete: existingParticipant?.isComplete === true,
     completedAt: normalizeParticipantCompletedAt(existingParticipant?.completedAt),
   };
+  const sessionId = session.sessionId;
   markSessionActivity(session, playerId, now);
   ensureSessionTurnState(session);
   reconcileSessionLoops(sessionId);
@@ -2600,11 +2651,102 @@ function normalizeTurnTimeoutMs(value) {
   return Math.max(5000, Math.floor(parsed));
 }
 
+function normalizeOptionalRoomCode(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return trimmed.toUpperCase().slice(0, 8);
+}
+
 function normalizeRoomCode(value) {
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value.trim().toUpperCase().slice(0, 8);
+  const normalized = normalizeOptionalRoomCode(value);
+  if (normalized) {
+    return normalized;
   }
   return randomToken().slice(0, 6).toUpperCase();
+}
+
+function findJoinableSessionByRoomCode(roomCode, now = Date.now()) {
+  const normalizedRoomCode = normalizeOptionalRoomCode(roomCode);
+  if (!normalizedRoomCode) {
+    return null;
+  }
+
+  let selectedSession = null;
+  let selectedPriority = -1;
+  let selectedLastActivityAt = -1;
+  let selectedCreatedAt = -1;
+
+  Object.values(store.multiplayerSessions).forEach((session) => {
+    if (!session || typeof session !== "object") {
+      return;
+    }
+    if (!Number.isFinite(session.expiresAt) || session.expiresAt <= now) {
+      return;
+    }
+    if (normalizeOptionalRoomCode(session.roomCode) !== normalizedRoomCode) {
+      return;
+    }
+
+    const roomKind = getSessionRoomKind(session);
+    const priority = roomKind === ROOM_KINDS.private ? 2 : 1;
+    const lastActivityAt = resolveSessionLastActivityAt(session);
+    const createdAt =
+      Number.isFinite(session.createdAt) && session.createdAt > 0
+        ? Math.floor(session.createdAt)
+        : 0;
+    if (
+      priority > selectedPriority ||
+      (priority === selectedPriority && lastActivityAt > selectedLastActivityAt) ||
+      (priority === selectedPriority &&
+        lastActivityAt === selectedLastActivityAt &&
+        createdAt > selectedCreatedAt)
+    ) {
+      selectedSession = session;
+      selectedPriority = priority;
+      selectedLastActivityAt = lastActivityAt;
+      selectedCreatedAt = createdAt;
+    }
+  });
+
+  return selectedSession;
+}
+
+function isRoomCodeInUse(roomCode, now = Date.now(), options = {}) {
+  const normalizedRoomCode = normalizeOptionalRoomCode(roomCode);
+  if (!normalizedRoomCode) {
+    return false;
+  }
+
+  const excludedSessionId =
+    typeof options?.excludeSessionId === "string" ? options.excludeSessionId.trim() : "";
+  return Object.values(store.multiplayerSessions).some((session) => {
+    if (!session || typeof session !== "object") {
+      return false;
+    }
+    if (excludedSessionId && session.sessionId === excludedSessionId) {
+      return false;
+    }
+    if (!Number.isFinite(session.expiresAt) || session.expiresAt <= now) {
+      return false;
+    }
+    return normalizeOptionalRoomCode(session.roomCode) === normalizedRoomCode;
+  });
+}
+
+function generateUniquePrivateRoomCode(now = Date.now()) {
+  for (let attempt = 0; attempt < 48; attempt += 1) {
+    const candidate = randomToken().slice(0, 6).toUpperCase();
+    if (!isRoomCodeInUse(candidate, now)) {
+      return candidate;
+    }
+  }
+
+  return "";
 }
 
 function normalizeBotCount(value) {

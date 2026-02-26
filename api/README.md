@@ -46,6 +46,7 @@ SQL files define the intended longer-term relational schema.
 - `GET /api/leaderboard/global`
 - `POST /api/multiplayer/sessions`
 - `POST /api/multiplayer/sessions/:sessionId/join`
+- `POST /api/multiplayer/rooms/:roomCode/join`
 - `POST /api/multiplayer/sessions/:sessionId/heartbeat`
 - `POST /api/multiplayer/sessions/:sessionId/leave`
 - `POST /api/multiplayer/sessions/:sessionId/auth/refresh`

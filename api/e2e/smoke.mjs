@@ -498,6 +498,23 @@ async function runRoomLifecycleChecks(runSuffix) {
     (room) => room?.sessionId === privateCreated.sessionId
   );
   assert(!privateRoomListed, "expected private room to be excluded from public room listing");
+  const privateJoinerId = `e2e-private-join-${runSuffix}`;
+  const privateJoinedByCode = await apiRequest(
+    `/multiplayer/rooms/${encodeURIComponent(privateCreated.roomCode)}/join`,
+    {
+      method: "POST",
+      body: {
+        playerId: privateJoinerId,
+        displayName: "E2E Private Joiner",
+      },
+    }
+  );
+  assertEqual(
+    privateJoinedByCode?.sessionId,
+    privateCreated.sessionId,
+    "expected join-by-room-code to resolve private room session"
+  );
+  await safeLeave(privateCreated.sessionId, privateJoinerId);
   await safeLeave(privateCreated.sessionId, privateCreatorId);
 
   const fullJoinProbe = await apiRequestWithStatus(

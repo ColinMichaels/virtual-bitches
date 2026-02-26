@@ -143,7 +143,11 @@ export interface JoinMultiplayerSessionRequest {
   displayName?: string;
 }
 
-export type MultiplayerJoinFailureReason = "room_full" | "session_expired" | "unknown";
+export type MultiplayerJoinFailureReason =
+  | "room_full"
+  | "session_expired"
+  | "room_not_found"
+  | "unknown";
 
 export interface MultiplayerJoinSessionResult {
   session: MultiplayerSessionRecord | null;
@@ -270,35 +274,22 @@ export class BackendApiService {
     request: JoinMultiplayerSessionRequest
   ): Promise<MultiplayerJoinSessionResult> {
     const path = `/multiplayer/sessions/${encodeURIComponent(sessionId)}/join`;
-    const requestOptions = {
-      method: "POST",
-      body: request,
-    };
+    return this.joinMultiplayerByPath(path, request);
+  }
 
-    const firstResponse = await this.executeRequest(path, requestOptions, "session");
-    if (!firstResponse) {
-      return { session: null, reason: "unknown" };
+  async joinMultiplayerRoomByCode(
+    roomCode: string,
+    request: JoinMultiplayerSessionRequest
+  ): Promise<MultiplayerJoinSessionResult> {
+    const normalizedRoomCode = roomCode.trim().toUpperCase();
+    if (!normalizedRoomCode) {
+      return {
+        session: null,
+        reason: "room_not_found",
+      };
     }
-
-    if (firstResponse.status === 401) {
-      const refreshed = await authSessionService.refreshTokens({
-        baseUrl: this.baseUrl,
-        fetchImpl: this.fetchImpl,
-        timeoutMs: this.timeoutMs,
-      });
-      if (!refreshed) {
-        authSessionService.markSessionExpired("http_401_refresh_failed");
-        return { session: null, reason: "session_expired", status: 401 };
-      }
-
-      const retryResponse = await this.executeRequest(path, requestOptions, "session");
-      if (!retryResponse) {
-        return { session: null, reason: "unknown" };
-      }
-      return this.parseJoinSessionResponse(retryResponse, path);
-    }
-
-    return this.parseJoinSessionResponse(firstResponse, path);
+    const path = `/multiplayer/rooms/${encodeURIComponent(normalizedRoomCode)}/join`;
+    return this.joinMultiplayerByPath(path, request);
   }
 
   async heartbeatMultiplayerSession(
@@ -533,6 +524,41 @@ export class BackendApiService {
     };
   }
 
+  private async joinMultiplayerByPath(
+    path: string,
+    request: JoinMultiplayerSessionRequest
+  ): Promise<MultiplayerJoinSessionResult> {
+    const requestOptions = {
+      method: "POST",
+      body: request,
+    };
+
+    const firstResponse = await this.executeRequest(path, requestOptions, "session");
+    if (!firstResponse) {
+      return { session: null, reason: "unknown" };
+    }
+
+    if (firstResponse.status === 401) {
+      const refreshed = await authSessionService.refreshTokens({
+        baseUrl: this.baseUrl,
+        fetchImpl: this.fetchImpl,
+        timeoutMs: this.timeoutMs,
+      });
+      if (!refreshed) {
+        authSessionService.markSessionExpired("http_401_refresh_failed");
+        return { session: null, reason: "session_expired", status: 401 };
+      }
+
+      const retryResponse = await this.executeRequest(path, requestOptions, "session");
+      if (!retryResponse) {
+        return { session: null, reason: "unknown" };
+      }
+      return this.parseJoinSessionResponse(retryResponse, path);
+    }
+
+    return this.parseJoinSessionResponse(firstResponse, path);
+  }
+
   private dispatchFirebaseSessionExpired(path: string, reason?: string): void {
     if (typeof document === "undefined" || typeof CustomEvent === "undefined") {
       return;
@@ -576,6 +602,13 @@ function resolveJoinFailureReason(
     normalized.includes("session_expired")
   ) {
     return "session_expired";
+  }
+  if (
+    status === 404 ||
+    normalized.includes("room_not_found") ||
+    normalized.includes("room code not found")
+  ) {
+    return "room_not_found";
   }
   return "unknown";
 }

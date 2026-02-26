@@ -254,4 +254,53 @@ await test("tracks room_full join failure reason", async () => {
   }
 });
 
+await test("joins by room code and tracks room_not_found failures", async () => {
+  const service = new MultiplayerSessionService("player-alpha");
+  const originalJoinByCode = backendApiService.joinMultiplayerRoomByCode.bind(backendApiService);
+
+  let callCount = 0;
+  (
+    backendApiService as {
+      joinMultiplayerRoomByCode: typeof backendApiService.joinMultiplayerRoomByCode;
+    }
+  ).joinMultiplayerRoomByCode = async () => {
+    callCount += 1;
+    if (callCount === 1) {
+      return {
+        session: createSession({
+          sessionId: "session-by-code",
+          roomCode: "AB12CD",
+        }),
+      };
+    }
+    return {
+      session: null,
+      reason: "room_not_found",
+      status: 404,
+    };
+  };
+
+  try {
+    const joined = await service.joinRoomByCode("ab12cd");
+    assert(joined !== null, "Expected room-code join success");
+    assertEqual(joined?.sessionId, "session-by-code", "Expected joined room-code session");
+    assertEqual(service.getLastJoinFailureReason(), null, "Expected no join failure after success");
+
+    const missing = await service.joinRoomByCode("missing");
+    assertEqual(missing, null, "Expected room-code join failure");
+    assertEqual(
+      service.getLastJoinFailureReason(),
+      "room_not_found",
+      "Expected room_not_found join failure reason"
+    );
+  } finally {
+    service.dispose();
+    (
+      backendApiService as {
+        joinMultiplayerRoomByCode: typeof backendApiService.joinMultiplayerRoomByCode;
+      }
+    ).joinMultiplayerRoomByCode = originalJoinByCode;
+  }
+});
+
 console.log("\nMultiplayerSessionService tests passed! ✓");
