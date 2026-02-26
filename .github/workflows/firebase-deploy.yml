@@ -157,6 +157,15 @@ jobs:
             exit 1
           fi
 
+          if [ "$PROJECT_ID" != "$FB_PROJECT_ID" ]; then
+            echo "Configuration mismatch detected for branch '$BRANCH_NAME' (GitHub Environment: '$EXPECTED_ENV_NAME'):"
+            echo " - FIREBASE_PROJECT_ID resolved to: $PROJECT_ID"
+            echo " - VITE_FIREBASE_PROJECT_ID resolved to: $FB_PROJECT_ID"
+            echo "These must match to avoid mixed-project auth and unauthorized-domain failures."
+            echo "Update FIREBASE_PROJECT_ID_${EXPECTED_ENV_SUFFIX}/FIREBASE_PROJECT_ID and VITE_FIREBASE_PROJECT_ID_${EXPECTED_ENV_SUFFIX}/VITE_FIREBASE_PROJECT_ID to the same project."
+            exit 1
+          fi
+
           echo "project_id=$PROJECT_ID" >> "$GITHUB_OUTPUT"
           echo "api_base_url=$API_BASE_URL" >> "$GITHUB_OUTPUT"
           echo "ws_url=$WS_URL" >> "$GITHUB_OUTPUT"
