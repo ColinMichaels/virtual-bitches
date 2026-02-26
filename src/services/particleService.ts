@@ -14,6 +14,7 @@ import {
 import { logger } from "../utils/logger.js";
 
 const log = logger.create("ParticleService");
+const PARTICLE_LOG_THROTTLE_MS = 12000;
 
 /**
  * Particle effect types
@@ -93,6 +94,11 @@ interface ParticleInstance {
   cameraAttached?: boolean;
 }
 
+interface ThrottledLogEntry {
+  lastLoggedAt: number;
+  suppressedCount: number;
+}
+
 /**
  * Network event for multiplayer synchronization
  */
@@ -123,6 +129,7 @@ export class ParticleService {
   private maxParticlesPerEffect = 200;
   private networkSyncEnabled = false;
   private instanceCounter = 0;
+  private throttledLogs: Map<string, ThrottledLogEntry> = new Map();
 
   // Quality multipliers
   private qualityMultipliers = {
@@ -200,7 +207,6 @@ export class ParticleService {
    */
   registerEffect(effect: ParticleEffect): void {
     this.effectRegistry.set(effect.id, effect);
-    log.debug(`Registered effect: ${effect.id}`);
   }
 
   /**
@@ -228,13 +234,21 @@ export class ParticleService {
     }
 
     if (!this.canEmit()) {
-      log.warn("Cannot emit - max particles reached");
+      this.logThrottled(
+        "warn",
+        "emit:max-particles-reached",
+        "Cannot emit - max particles reached"
+      );
       return "";
     }
 
     const effect = this.getEffect(event.effectId);
     if (!effect) {
-      log.error(`Effect not found: ${event.effectId}`);
+      this.logThrottled(
+        "error",
+        `emit:missing-effect:${event.effectId}`,
+        `Effect not found: ${event.effectId}`
+      );
       return "";
     }
 
@@ -279,8 +293,6 @@ export class ParticleService {
       this.broadcastParticleEvent(event);
     }
 
-    log.debug(`Emitted ${event.effectId} (${instanceId})`);
-
     return instanceId;
   }
 
@@ -304,7 +316,11 @@ export class ParticleService {
 
     const effectId = eventEffectMap[eventType];
     if (!effectId) {
-      log.warn(`No effect mapped for event: ${eventType}`);
+      this.logThrottled(
+        "warn",
+        `emitForEvent:missing-map:${eventType}`,
+        `No effect mapped for event: ${eventType}`
+      );
       return "";
     }
 
@@ -346,7 +362,7 @@ export class ParticleService {
   attachToCamera(effectId: string, offset?: Vector3): string {
     const camera = this.scene.activeCamera;
     if (!camera) {
-      log.error("No active camera");
+      this.logThrottled("error", "attachToCamera:no-camera", "No active camera");
       return "";
     }
 
@@ -399,7 +415,11 @@ export class ParticleService {
 
     const effectId = attackEffectMap[attackType];
     if (!effectId) {
-      log.warn(`No effect for attack type: ${attackType}`);
+      this.logThrottled(
+        "warn",
+        `createAttackImpact:missing-attack:${attackType}`,
+        `No effect for attack type: ${attackType}`
+      );
       return "";
     }
 
@@ -444,7 +464,6 @@ export class ParticleService {
       this.activeParticles.delete(instanceId);
     }, instance.system.maxLifeTime * 1000);
 
-    log.debug(`Stopped ${instanceId}`);
   }
 
   /**
@@ -589,16 +608,22 @@ export class ParticleService {
    * Set particle quality tier
    */
   setQuality(quality: ParticleQuality): void {
+    if (this.quality === quality) {
+      return;
+    }
     this.quality = quality;
-    log.info(`Quality set to: ${quality}`);
+    log.debug(`Quality set to: ${quality}`);
   }
 
   /**
    * Set particle intensity level
    */
   setIntensity(intensity: ParticleIntensity): void {
+    if (this.intensity === intensity) {
+      return;
+    }
     this.intensity = intensity;
-    log.info(`Intensity set to: ${intensity}`);
+    log.debug(`Intensity set to: ${intensity}`);
   }
 
   /**
@@ -619,8 +644,10 @@ export class ParticleService {
    * Enable/disable network synchronization
    */
   enableNetworkSync(enabled: boolean): void {
+    if (this.networkSyncEnabled === enabled) {
+      return;
+    }
     this.networkSyncEnabled = enabled;
-    log.info(`Network sync ${enabled ? "enabled" : "disabled"}`);
   }
 
   /**
@@ -646,7 +673,39 @@ export class ParticleService {
     this.particlePool.forEach((system) => system.dispose());
     this.particlePool = [];
     this.effectRegistry.clear();
-    log.info("Disposed");
+    this.throttledLogs.clear();
+    log.debug("Disposed");
+  }
+
+  private logThrottled(
+    level: "warn" | "error",
+    key: string,
+    message: string
+  ): void {
+    const now = Date.now();
+    const entry = this.throttledLogs.get(key);
+
+    if (!entry || now - entry.lastLoggedAt >= PARTICLE_LOG_THROTTLE_MS) {
+      const suffix =
+        entry && entry.suppressedCount > 0
+          ? ` (${entry.suppressedCount} similar log${entry.suppressedCount === 1 ? "" : "s"} suppressed)`
+          : "";
+      if (level === "error") {
+        log.error(`${message}${suffix}`);
+      } else {
+        log.warn(`${message}${suffix}`);
+      }
+      this.throttledLogs.set(key, {
+        lastLoggedAt: now,
+        suppressedCount: 0,
+      });
+      return;
+    }
+
+    this.throttledLogs.set(key, {
+      lastLoggedAt: entry.lastLoggedAt,
+      suppressedCount: entry.suppressedCount + 1,
+    });
   }
 }
 
@@ -660,5 +719,5 @@ export let particleService: ParticleService;
  */
 export function initParticleService(scene: Scene): void {
   particleService = new ParticleService(scene);
-  log.info("Initialized");
+  log.debug("Initialized");
 }
