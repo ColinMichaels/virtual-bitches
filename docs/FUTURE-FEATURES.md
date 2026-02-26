@@ -157,13 +157,16 @@ This document captures future feature ideas, enhancements, and expansion possibi
 ### Tutorial System
 - **Complexity**: Medium
 - **Description**: Interactive tutorial for new players
+- **Status**: 🟡 Partially Complete (interactive flow + replay shipped; continued content polish pending)
 - **Features**:
-  - Step-by-step guided play
-  - Highlight relevant UI elements
-  - Practice mode with no penalty
-  - Skip option for returning players
-- **Current**: Basic text tutorial exists
-- **Enhancement**: Make it interactive with pointer tooltips
+  - ✅ Step-by-step guided play
+  - ✅ Highlight relevant UI elements
+  - ✅ Practice mode with no penalty
+  - ✅ Replay entry points from How To Play and Splash
+  - [ ] Expand advanced multiplayer onboarding steps (turn sync edge cases, reconnect strategy)
+  - [ ] Optional compressed tutorial path for returning players
+- **Current**: Interactive tutorial is in production, including guided settings/audio steps and post-tutorial rollback assist.
+- **Enhancement**: Continue reducing friction for experienced players while preserving first-time clarity.
 - **AI Prompt**:
   ```
   Enhance the BISCUITS tutorial with interactive step-by-step guidance. Implement a tutorial state machine in src/render/components/Tutorial.ts that highlights UI elements, waits for player actions, and provides contextual tips. Add spotlight/overlay effects for focus.
@@ -187,12 +190,14 @@ This document captures future feature ideas, enhancements, and expansion possibi
 ### Undo/Redo System
 - **Complexity**: Low
 - **Description**: Allow players to undo dice selections
+- **Status**: 🟡 Partially Complete (`Undo` shipped in Easy mode; redo/history UX pending)
 - **Features**:
-  - Undo last selection (Ctrl+Z)
-  - Redo (Ctrl+Shift+Z)
-  - Show action history
-  - Limit undo depth (last 5 actions)
-- **Technical**: Action log already exists, just need UI
+  - ✅ Undo last selection (Easy mode + UI button flow)
+  - ✅ Tutorial-completion rollback calls undo so players can re-pick optimally
+  - [ ] Redo (Ctrl+Shift+Z)
+  - [ ] Show action history
+  - [ ] Limit undo depth (last 5 actions)
+- **Technical**: Action log foundations exist; redo + explicit history UI are remaining.
 - **AI Prompt**:
   ```
   Add undo/redo functionality to BISCUITS dice selection. Use the existing action log in src/game/state.ts to implement time-travel debugging. Add keyboard shortcuts and visual history in ScorePanel showing last 5 actions with undo/redo buttons.
@@ -201,15 +206,18 @@ This document captures future feature ideas, enhancements, and expansion possibi
 ### Settings Panel
 - **Complexity**: Low
 - **Description**: Centralized settings management
+- **Status**: ✅ Core Delivered (expanded and actively used)
 - **Features**:
-  - Sound volume controls
-  - Graphics quality (shadow resolution, anti-aliasing)
-  - Autoplay options
-  - Data management (clear history, export data)
-  - Credits/about section
+  - ✅ Sound volume controls (master/music/sfx + toggles)
+  - ✅ Graphics quality and visual readability controls
+  - ✅ Gameplay and accessibility toggles
+  - ✅ Account/profile section with sync indicators
+  - ✅ Admin Console launcher from Account tab (feature-flagged)
+  - [ ] Data management (clear/export user data)
+  - [ ] Credits/about section
 - **AI Prompt**:
   ```
-  Create a settings panel for BISCUITS. Add src/render/components/SettingsPanel.ts with controls for audio volume, graphics quality, and data management. Persist settings to localStorage and apply changes dynamically to engine/render systems.
+  Extend BISCUITS settings with account data-management controls and credits/about metadata. Keep the current tabbed settings architecture and add safe export/reset actions with confirmation modals and analytics-safe logging.
   ```
 
 ### Statistics Dashboard
@@ -266,11 +274,21 @@ This document captures future feature ideas, enhancements, and expansion possibi
 ### Front Admin Control + Monitoring Dashboard
 - **Complexity**: High
 - **Description**: Internal dashboard for live room oversight, moderation controls, and operational health checks.
+- **Status**: 🟡 Phase 1 Delivered (monitoring + core moderation actions shipped; dedicated web dashboard still pending)
 - **Initial Scope**:
   - Room/session table (active players, room type, turn state, idle timers)
   - Global counters (active sessions, ws connections, join failures, turn timeout rate)
   - Room actions (expire room, remove participant, toggle room visibility)
   - Incident panel (error spikes, auth failures, reconnect churn)
+- **Delivered Foundation**:
+  - ✅ Role-gated `/api/admin/*` endpoint suite (overview/metrics/rooms/storage/audit/roles)
+  - ✅ In-app Admin Console modal with live room monitor and owner role management
+  - ✅ Controlled moderation actions: expire room, remove participant
+  - ✅ Audit trail logging for admin mutations
+- **Remaining for Full Target**:
+  - [ ] Room visibility toggle
+  - [ ] Turn recovery/admin-assisted desync repair actions
+  - [ ] Separate internal web dashboard with historical trends/incidents
 - **Technical Notes**:
   - Add admin-only API namespace (e.g., `/api/admin/*`) with strict auth/role checks
   - Emit lightweight operational metrics from API loop/session manager
@@ -613,6 +631,7 @@ This document captures future feature ideas, enhancements, and expansion possibi
   - 10 saved position slots (up from 3)
   - Smooth camera transitions with Bezier interpolation
   - Configurable easing functions (ease-in, ease-out, elastic)
+  - ✅ Mobile quick camera slots now surface top pinned/saved positions (fallback to default presets)
   - Per-player seat positions for multiplayer (8 seats)
   - Replay timeline system with scrubbing
   - Community sharing (export/import preset packs)

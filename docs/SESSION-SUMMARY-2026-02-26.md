@@ -1,6 +1,6 @@
 # BISCUITS - Session Summary
 **Date:** February 26, 2026  
-**Focus:** Multiplayer session reliability, in-game modal UX, tutorial replay flow, and rules documentation refresh
+**Focus:** Multiplayer session reliability, in-game modal UX, tutorial replay flow, mobile/iOS responsive hardening, and documentation refresh
 
 ---
 
@@ -31,6 +31,20 @@
   - Tutorial replay behavior
 - Added structured layout support (cards, callouts, keyboard key styling, responsive tables).
 
+### Mobile Menu + iOS Responsiveness Pass
+- Reworked burger menu into grouped sections (`Game`, `Social`, `Extras`) for faster scanability.
+- Added mobile `Return To Lobby` action.
+- Added camera quick slots in mobile menu using pinned/saved positions (fallback to defaults).
+- Added viewport/orientation-change handling for mobile menu state refresh.
+- Hardened iOS viewport/safe-area behavior:
+  - `100dvh` + `-webkit-fill-available` support
+  - short-height landscape compaction rules
+  - iPad touch breakpoint tuning for control density and modal fit
+
+### Admin Console UX Split
+- Moved admin monitor/debug controls out of the Account tab body into a dedicated `Admin Console` modal launched from `Settings > Account`.
+- Kept role/auth flows and mutation controls intact while improving layout and responsive safety.
+
 ### Friends System Planning + Scaffold (Deferred for Stability)
 - Added a dedicated friends system architecture doc with:
   - data model direction
@@ -49,6 +63,9 @@
 - `docs/TODO.md` updated with:
   - Newly completed work for 2026-02-26
   - Follow-up tasks for testing, reconnect flow, bot behavior, and tutorial entry points
+- `docs/FUTURE-FEATURES.md` updated with:
+  - feature-status checkoffs for delivered tutorial/settings/undo/admin foundations
+  - refreshed remaining-scope bullets for partially delivered roadmap items
 
 ---
 

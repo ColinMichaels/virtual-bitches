@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Multiplayer UX iteration + turn-sync hardening + room bot seeding/cleanup + admin metrics expansion + friends model scaffold planning)
+**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Multiplayer UX iteration + admin console split + mobile camera quick slots + iOS responsive hardening + docs sync)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -127,6 +127,24 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ Added optional replay-tutorial entry point from splash screen (pre-game)
   - [ ] Add regression test ensuring no browser `confirm/prompt` remains in gameplay paths
 
+### Mobile Menu + iOS Responsive + Admin Console UX Pass (2026-02-26)
+- **Status**: ✅ Complete
+- **Scope**: Mobile menu information hierarchy, camera quick-access ergonomics, iOS safe-area behavior, and admin tooling separation.
+- **Completed**:
+  - ✅ Reworked mobile burger menu into grouped sections (`Game`, `Social`, `Extras`) for cleaner scanability.
+  - ✅ Added mobile `Return To Lobby` action directly in the burger menu.
+  - ✅ Added mobile camera quick slots based on player pinned/saved camera positions (top 4), with preset fallback when no saved positions exist.
+  - ✅ Updated mobile camera quick-slot selection ordering to prioritize pinned favorites first.
+  - ✅ Hardened mobile menu behavior across viewport/orientation changes (auto-close + slot refresh).
+  - ✅ Added iOS Safari viewport-safe handling (`100dvh` + `-webkit-fill-available`) and improved safe-area spacing behavior for control clusters.
+  - ✅ Added short-height iPhone landscape-specific menu compaction to avoid clipping.
+  - ✅ Added iPad touch breakpoint tuning for control density and modal safe-zone fit.
+  - ✅ Moved admin monitor/debug controls out of Account tab body into a dedicated `Admin Console` modal launched from `Settings > Account`.
+  - ✅ Standardized Settings footer action buttons to equalized heights and cleaner responsive layout.
+- **Follow-up TODO**:
+  - [ ] Device QA sweep on physical iPhone/iPad targets (SE, Plus/Max, iPad Mini, iPad Pro) with screenshot diff checklist.
+  - [ ] Consider adding optional compact-label mode for burger-menu actions on ultra-short landscape devices.
+
 ### Theme Asset Copying and Deployment Robustness (2026-02-26)
 - **Status**: ✅ COMPLETE
 - **Completed**:
@@ -186,7 +204,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ Added configurable admin access modes (`auto` | `open` | `token` | `role` | `hybrid` | `disabled`)
   - ✅ Added role-protected admin access (Firebase-authenticated `viewer`/`operator`/`owner`)
   - ✅ Added owner role assignment API (`GET /api/admin/roles`, `PUT /api/admin/roles/:uid`) with bootstrap owner allowlists
-  - ✅ Added dev-facing in-app monitor panel under `Settings > Account` with:
+  - ✅ Added dev-facing in-app monitor tooling launched from `Settings > Account` into dedicated `Admin Console` modal with:
     - room/participant/turn snapshots
     - aggregate room metrics
     - refresh control + persisted admin-token input
@@ -625,11 +643,14 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   ```
 
 #### Responsive UI
-- **Status**: Layouts adapt but need polish
-- **Issues**:
-  - Score panel too small on mobile
-  - Theme selector cramped
-  - Tutorial text hard to read
+- **Status**: 🟡 Significant iOS/mobile polish complete; targeted refinements remain
+- **Current State**:
+  - ✅ Mobile burger menu grouped/restructured for readability
+  - ✅ iPhone/iPad safe-area spacing hardened for control clusters and menus
+  - ✅ Tutorial/settings modal fit behavior improved for mobile safe zones
+- **Remaining Issues**:
+  - [ ] Score panel clarity on very small phones
+  - [ ] Theme selector density on narrow-width layouts
 - **AI Prompt**:
   ```
   Improve responsive design for BISCUITS mobile layout. Focus on score panel visibility, theme selector usability, and tutorial text readability on small screens. Update CSS in src/render/components/*.ts files.
@@ -877,9 +898,10 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 1. **Firestore Deploy Cutover Verification**: ✅ Workflow default now deploys API with `API_STORE_BACKEND=firestore`; next validate env-specific prefixes and post-deploy section counts via `GET /api/admin/storage`.
 2. **Auth Hardening Finalization**: Run production with `FIREBASE_AUTH_MODE=admin` and remove legacy lookup fallback after cutover validation.
 3. **Multiplayer Consistency Guardrail**: Keep Cloud Run `API_MAX_INSTANCES=1` until shared-state coordination is implemented for multi-instance websocket rooms.
-4. **Multiplayer Rollout (Server Authoritative)**: Implement room/lobby lifecycle, ready states, and canonical game-state messaging.
+4. **Multiplayer Rollout (Server Authoritative)**: ✅ Room/lobby lifecycle, ready states, and canonical game-state messaging shipped (turn-sync hardening and expiry recovery included).
 5. **Leaderboard UX**: Add filters (mode/difficulty), pagination, and player history views.
 6. **Theme Polish Follow-up**: Finish remaining UV/lighting consistency checks across all die types.
+7. **iOS Device QA Pass**: Execute physical-device validation for new mobile menu and safe-area responsive behavior.
 
 ---
 

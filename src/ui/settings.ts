@@ -42,6 +42,8 @@ type SyncIndicatorTone = "ok" | "syncing" | "pending" | "offline" | "error";
 
 export class SettingsModal {
   private container: HTMLElement;
+  private adminModalContainer: HTMLElement;
+  private adminModalBody: HTMLElement | null = null;
   private settings: Settings;
   private themeSwitcher: ThemeSwitcher;
   private onClose: (() => void) | null = null;
@@ -54,10 +56,15 @@ export class SettingsModal {
   private savingAdminRole = false;
   private savingAdminMutation = false;
   private accountRenderVersion = 0;
+  private adminModalRenderVersion = 0;
   private adminMonitorRefreshHandle?: ReturnType<typeof setInterval>;
+  private adminModalRefreshHandle?: ReturnType<typeof setInterval>;
   private readonly onFirebaseAuthChanged = () => {
     leaderboardService.clearCachedProfile();
     void this.refreshAccountSection();
+    if (this.isAdminModalVisible()) {
+      void this.refreshAdminMonitorPanel();
+    }
   };
   private readonly onDataSyncStatusChanged = () => {
     this.updateAccountSyncIndicator();
@@ -280,10 +287,11 @@ export class SettingsModal {
     `;
 
     document.body.appendChild(this.container);
+    this.adminModalContainer = this.createAdminModal();
     modalManager.register({
       id: "settings-modal",
       close: () => this.hide(),
-      canStackWith: ["tutorial-modal"],
+      canStackWith: ["tutorial-modal", "settings-admin-modal"],
       allowStackOnMobile: true,
     });
 
@@ -734,91 +742,25 @@ export class SettingsModal {
       const provider = accountProfile?.provider?.trim() || (isAuthenticated ? "google" : "guest");
       const leaderboardName = accountProfile?.leaderboardName?.trim() ?? "";
       const accountAdminRole = this.normalizeAdminRoleValue(accountProfile?.admin?.role);
-      const firebaseIdToken = isAuthenticated ? (await firebaseAuthService.getIdToken()) ?? "" : "";
       const authLabel = authConfigured
         ? isAuthenticated
           ? "Signed In"
           : "Guest Mode"
         : "Auth Not Configured";
       const syncIndicator = this.getSyncIndicatorState();
-      let adminMonitorMarkup = "";
-      if (this.isAdminMonitorEnabled()) {
-        const adminToken = adminApiService.getAdminToken();
-        const adminAuthOptions = {
-          firebaseIdToken,
-          adminToken,
-        };
-        const canRequestAdmin = Boolean(firebaseIdToken || adminToken);
-        const adminResult = canRequestAdmin
-          ? await adminApiService.getOverview(18, adminAuthOptions)
-          : {
-              overview: null,
-              reason: "missing_admin_auth",
-              status: 401,
-            };
-        if (renderVersion !== this.accountRenderVersion) {
-          return;
-        }
-        const profileRole = this.normalizeAdminRoleValue(accountProfile?.admin?.role);
-        const resolvedRole = this.normalizeAdminRoleValue(
-          profileRole ?? adminResult.overview?.principal?.role
-        );
-        let roleRecords: AdminRoleRecord[] | null = null;
-        let roleReason: string | undefined;
-        let roleStatus: number | undefined;
-        let auditEntries: AdminAuditEntry[] | null = null;
-        let auditReason: string | undefined;
-        let auditStatus: number | undefined;
-        let storage: AdminStorageDiagnostics | null = null;
-        let storageSections: AdminStorageSectionSummary[] | null = null;
-        let storageReason: string | undefined;
-        let storageStatus: number | undefined;
-        if (resolvedRole === "owner" && canRequestAdmin) {
-          const rolesResult = await adminApiService.getRoles(250, adminAuthOptions);
-          if (renderVersion !== this.accountRenderVersion) {
-            return;
-          }
-          roleRecords = rolesResult.roles;
-          roleReason = rolesResult.reason;
-          roleStatus = rolesResult.status;
-        }
-        if (canRequestAdmin) {
-          const auditResult = await adminApiService.getAudit(40, adminAuthOptions);
-          if (renderVersion !== this.accountRenderVersion) {
-            return;
-          }
-          auditEntries = auditResult.entries;
-          auditReason = auditResult.reason;
-          auditStatus = auditResult.status;
-          const storageResult = await adminApiService.getStorage(adminAuthOptions);
-          if (renderVersion !== this.accountRenderVersion) {
-            return;
-          }
-          storage = storageResult.storage;
-          storageSections = storageResult.sections;
-          storageReason = storageResult.reason;
-          storageStatus = storageResult.status;
-        }
-        adminMonitorMarkup = this.renderAdminMonitorMarkup(
-          adminResult.overview,
-          adminResult.reason,
-          adminResult.status,
-          {
-            currentRole: resolvedRole,
-            roleSource: accountProfile?.admin?.source ?? undefined,
-            roleRecords,
-            roleReason,
-            roleStatus,
-            auditEntries,
-            auditReason,
-            auditStatus,
-            storage,
-            storageSections,
-            storageReason,
-            storageStatus,
-          }
-        );
-      }
+      const adminConsoleMarkup = this.isAdminMonitorEnabled()
+        ? `
+          <div class="settings-account-admin-launch">
+            <div class="settings-account-admin-launch-info">
+              <strong>Admin Console</strong>
+              <span>Live room monitor, roles, audit trail, and storage diagnostics.</span>
+            </div>
+            <button type="button" class="btn btn-secondary settings-account-btn" data-action="settings-open-admin-console">
+              Open Admin Console
+            </button>
+          </div>
+        `
+        : "";
 
       panel.innerHTML = `
         <div class="settings-account-header">
@@ -897,7 +839,7 @@ export class SettingsModal {
           </div>
         </div>
 
-        ${adminMonitorMarkup}
+        ${adminConsoleMarkup}
       `;
 
       this.bindAccountActions(panel);
@@ -914,11 +856,6 @@ export class SettingsModal {
 
   private bindAccountActions(panel: HTMLElement): void {
     panel.querySelector('[data-action="settings-refresh"]')?.addEventListener("click", () => {
-      audioService.playSfx("click");
-      void this.refreshAccountSection();
-    });
-
-    panel.querySelector('[data-action="settings-admin-refresh"]')?.addEventListener("click", () => {
       audioService.playSfx("click");
       void this.refreshAccountSection();
     });
@@ -964,10 +901,24 @@ export class SettingsModal {
         });
     });
 
+    panel
+      .querySelector('[data-action="settings-open-admin-console"]')
+      ?.addEventListener("click", () => {
+        audioService.playSfx("click");
+        this.showAdminMonitorModal();
+      });
+  }
+
+  private bindAdminActions(panel: HTMLElement): void {
+    panel.querySelector('[data-action="settings-admin-refresh"]')?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      void this.refreshAdminMonitorPanel();
+    });
+
     const adminTokenInput = panel.querySelector("#settings-admin-token") as HTMLInputElement | null;
     const saveAdminToken = () => {
       adminApiService.setAdminToken(adminTokenInput?.value ?? "");
-      void this.refreshAccountSection();
+      void this.refreshAdminMonitorPanel();
     };
 
     panel.querySelector('[data-action="settings-admin-save-token"]')?.addEventListener("click", () => {
@@ -981,7 +932,7 @@ export class SettingsModal {
         adminTokenInput.value = "";
       }
       adminApiService.setAdminToken("");
-      void this.refreshAccountSection();
+      void this.refreshAdminMonitorPanel();
     });
 
     adminTokenInput?.addEventListener("keydown", (event) => {
@@ -1031,6 +982,7 @@ export class SettingsModal {
           })
           .finally(() => {
             this.savingAdminRole = false;
+            void this.refreshAdminMonitorPanel();
             void this.refreshAccountSection();
           });
       });
@@ -1079,6 +1031,7 @@ export class SettingsModal {
           })
           .finally(() => {
             this.savingAdminMutation = false;
+            void this.refreshAdminMonitorPanel();
             void this.refreshAccountSection();
           });
       });
@@ -1132,10 +1085,213 @@ export class SettingsModal {
           })
           .finally(() => {
             this.savingAdminMutation = false;
+            void this.refreshAdminMonitorPanel();
             void this.refreshAccountSection();
           });
       });
     });
+  }
+
+  private createAdminModal(): HTMLElement {
+    const container = document.createElement("div");
+    container.id = "settings-admin-modal";
+    container.innerHTML = `
+      <div class="settings-admin-modal-backdrop"></div>
+      <div class="settings-admin-modal-content">
+        <div class="settings-admin-modal-header">
+          <h2>Admin Console</h2>
+          <div class="settings-admin-modal-actions">
+            <button type="button" class="btn btn-secondary settings-account-btn" data-action="settings-admin-refresh">
+              Refresh
+            </button>
+            <button type="button" class="btn btn-primary settings-account-btn" data-action="settings-admin-close">
+              Close
+            </button>
+          </div>
+        </div>
+        <div id="settings-admin-modal-body" class="settings-admin-modal-body">
+          <p class="settings-account-loading">Loading admin console...</p>
+        </div>
+      </div>
+    `;
+    container.style.display = "none";
+    document.body.appendChild(container);
+    this.adminModalBody = container.querySelector("#settings-admin-modal-body");
+
+    container
+      .querySelector(".settings-admin-modal-backdrop")
+      ?.addEventListener("click", () => this.hideAdminMonitorModal());
+    container
+      .querySelector('[data-action="settings-admin-close"]')
+      ?.addEventListener("click", () => {
+        audioService.playSfx("click");
+        this.hideAdminMonitorModal();
+      });
+    container
+      .querySelector(".settings-admin-modal-actions [data-action=\"settings-admin-refresh\"]")
+      ?.addEventListener("click", () => {
+        audioService.playSfx("click");
+        void this.refreshAdminMonitorPanel();
+      });
+
+    modalManager.register({
+      id: "settings-admin-modal",
+      close: () => this.hideAdminMonitorModal(),
+      canStackWith: ["settings-modal"],
+      allowStackOnMobile: true,
+    });
+
+    return container;
+  }
+
+  private showAdminMonitorModal(): void {
+    if (!this.isAdminMonitorEnabled()) {
+      return;
+    }
+    modalManager.requestOpen("settings-admin-modal");
+    this.adminModalContainer.style.display = "flex";
+    this.startAdminModalRefresh();
+    void this.refreshAdminMonitorPanel();
+  }
+
+  private hideAdminMonitorModal(): void {
+    if (this.adminModalContainer.style.display === "none") {
+      return;
+    }
+    this.adminModalContainer.style.display = "none";
+    this.stopAdminModalRefresh();
+    modalManager.notifyClosed("settings-admin-modal");
+  }
+
+  private isAdminModalVisible(): boolean {
+    return this.adminModalContainer.style.display === "flex";
+  }
+
+  private startAdminModalRefresh(): void {
+    this.stopAdminModalRefresh();
+    this.adminModalRefreshHandle = setInterval(() => {
+      if (!this.isAdminModalVisible() || this.savingAdminRole || this.savingAdminMutation) {
+        return;
+      }
+      void this.refreshAdminMonitorPanel();
+    }, ADMIN_MONITOR_REFRESH_MS);
+  }
+
+  private stopAdminModalRefresh(): void {
+    if (!this.adminModalRefreshHandle) {
+      return;
+    }
+    clearInterval(this.adminModalRefreshHandle);
+    this.adminModalRefreshHandle = undefined;
+  }
+
+  private async refreshAdminMonitorPanel(): Promise<void> {
+    const panel = this.adminModalBody;
+    if (!panel) {
+      return;
+    }
+
+    const renderVersion = ++this.adminModalRenderVersion;
+    panel.innerHTML = `<p class="settings-account-loading">Loading admin console...</p>`;
+
+    try {
+      await firebaseAuthService.initialize();
+      const firebaseProfile = firebaseAuthService.getCurrentUserProfile();
+      const isAuthenticated = Boolean(firebaseProfile && !firebaseProfile.isAnonymous);
+      const accountProfile = isAuthenticated
+        ? await leaderboardService.getAccountProfile(true)
+        : null;
+      if (renderVersion !== this.adminModalRenderVersion) {
+        return;
+      }
+
+      const firebaseIdToken = isAuthenticated ? (await firebaseAuthService.getIdToken()) ?? "" : "";
+      const adminToken = adminApiService.getAdminToken();
+      const adminAuthOptions = {
+        firebaseIdToken,
+        adminToken,
+      };
+      const canRequestAdmin = Boolean(firebaseIdToken || adminToken);
+      const adminResult = canRequestAdmin
+        ? await adminApiService.getOverview(18, adminAuthOptions)
+        : {
+            overview: null,
+            reason: "missing_admin_auth",
+            status: 401,
+          };
+      if (renderVersion !== this.adminModalRenderVersion) {
+        return;
+      }
+
+      const profileRole = this.normalizeAdminRoleValue(accountProfile?.admin?.role);
+      const resolvedRole = this.normalizeAdminRoleValue(
+        profileRole ?? adminResult.overview?.principal?.role
+      );
+      let roleRecords: AdminRoleRecord[] | null = null;
+      let roleReason: string | undefined;
+      let roleStatus: number | undefined;
+      let auditEntries: AdminAuditEntry[] | null = null;
+      let auditReason: string | undefined;
+      let auditStatus: number | undefined;
+      let storage: AdminStorageDiagnostics | null = null;
+      let storageSections: AdminStorageSectionSummary[] | null = null;
+      let storageReason: string | undefined;
+      let storageStatus: number | undefined;
+      if (resolvedRole === "owner" && canRequestAdmin) {
+        const rolesResult = await adminApiService.getRoles(250, adminAuthOptions);
+        if (renderVersion !== this.adminModalRenderVersion) {
+          return;
+        }
+        roleRecords = rolesResult.roles;
+        roleReason = rolesResult.reason;
+        roleStatus = rolesResult.status;
+      }
+      if (canRequestAdmin) {
+        const auditResult = await adminApiService.getAudit(40, adminAuthOptions);
+        if (renderVersion !== this.adminModalRenderVersion) {
+          return;
+        }
+        auditEntries = auditResult.entries;
+        auditReason = auditResult.reason;
+        auditStatus = auditResult.status;
+        const storageResult = await adminApiService.getStorage(adminAuthOptions);
+        if (renderVersion !== this.adminModalRenderVersion) {
+          return;
+        }
+        storage = storageResult.storage;
+        storageSections = storageResult.sections;
+        storageReason = storageResult.reason;
+        storageStatus = storageResult.status;
+      }
+      panel.innerHTML = this.renderAdminMonitorMarkup(
+        adminResult.overview,
+        adminResult.reason,
+        adminResult.status,
+        {
+          currentRole: resolvedRole,
+          roleSource: accountProfile?.admin?.source ?? undefined,
+          roleRecords,
+          roleReason,
+          roleStatus,
+          auditEntries,
+          auditReason,
+          auditStatus,
+          storage,
+          storageSections,
+          storageReason,
+          storageStatus,
+        }
+      );
+      this.bindAdminActions(panel);
+    } catch (error) {
+      if (renderVersion !== this.adminModalRenderVersion) {
+        return;
+      }
+      log.warn("Failed to refresh admin monitor panel", error);
+      panel.innerHTML = `
+        <p class="settings-account-loading">Unable to load admin console right now.</p>
+      `;
+    }
   }
 
   private renderAdminMonitorMarkup(
@@ -1711,12 +1867,7 @@ export class SettingsModal {
     if (!activeElement) {
       return false;
     }
-    return (
-      activeElement.id === "settings-leaderboard-name" ||
-      activeElement.id === "settings-admin-token" ||
-      activeElement.matches("select[data-admin-role-select]") ||
-      activeElement.matches("select[data-admin-remove-player]")
-    );
+    return activeElement.id === "settings-leaderboard-name";
   }
 
   private updateAccountSyncIndicator(): void {
@@ -1912,6 +2063,7 @@ export class SettingsModal {
     if (this.container.style.display === "none") {
       return;
     }
+    this.hideAdminMonitorModal();
     this.stopAdminMonitorRefresh();
     this.container.style.display = "none";
     modalManager.notifyClosed("settings-modal");
