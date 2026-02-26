@@ -55,13 +55,17 @@ export interface MultiplayerPlayerNotificationMessage {
   timestamp?: number;
 }
 
+export type MultiplayerTurnPhase = "await_roll" | "await_score" | "ready_to_end";
+
 export interface MultiplayerTurnStartMessage {
   type: "turn_start";
   sessionId?: string;
   playerId: string;
   round?: number;
   turnNumber?: number;
+  phase?: MultiplayerTurnPhase;
   activeRollServerId?: string | null;
+  activeRoll?: MultiplayerTurnRollPayload | null;
   timestamp?: number;
   order?: string[];
   source?: string;

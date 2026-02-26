@@ -60,7 +60,7 @@ SQL files define the intended longer-term relational schema.
   - `playerToken` for WS query auth
   - `auth` bundle (`accessToken`, `refreshToken`, `expiresAt`, `tokenType`)
   - `participants[]` snapshot (`playerId`, `displayName`, `isBot`, `joinedAt`, `lastHeartbeatAt`)
-  - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `phase`, `updatedAt`)
+  - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `phase`, `activeRollServerId`, optional `activeRoll`, `updatedAt`)
 - `POST /api/multiplayer/sessions` accepts optional `botCount` (`0..4`) to add lightweight AI bot participants for websocket testing.
 - `GET /api/players/:playerId/profile` returns `204 No Content` when profile does not exist yet.
 - WS endpoint is available at `/` and expects query params:
@@ -79,6 +79,7 @@ SQL files define the intended longer-term relational schema.
   - order enforcement: `await_roll` -> `await_score` -> `ready_to_end`; `turn_end` is rejected until score is recorded
   - roll payload shape: `turn_action.action=roll` with `roll.rollIndex` and `roll.dice[]` (`dieId`, `sides`); server generates canonical `value`
   - server-issued roll id: accepted roll actions are stamped with `roll.serverRollId` and mirrored in `turn_start.activeRollServerId`
+  - turn recovery sync: `turn_start` can include `phase` + `activeRoll` snapshot (`rollIndex`, `dice[]`, `serverRollId`) so reconnecting clients can resume `await_score` safely
   - score payload shape: `turn_action.action=score` with `score.selectedDiceIds[]`, `score.points`, and `score.rollServerId` (must match the server-issued id from the latest accepted roll)
 - Bot participants can emit periodic `player_notification`, `game_update`, and `chaos_attack` messages to connected humans.
 - Leaderboard ordering is deterministic:
