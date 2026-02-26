@@ -349,28 +349,10 @@ class Game implements GameCallbacks {
   }
 
   private getMultiplayerWsUrl(): string | undefined {
-    if (!environment.features.multiplayer || !environment.wsUrl) {
-      return undefined;
-    }
-
-    // Prevent automatic reconnect loops during normal single-player sessions.
-    // Enable with ?multiplayer=1, or include ?session=<id> for session join flows.
-    const query = new URLSearchParams(window.location.search);
-    const multiplayerEnabled = query.get("multiplayer") === "1" || !!query.get("session");
-    if (!multiplayerEnabled) {
-      return undefined;
-    }
-
-    const sessionId = query.get("session");
-    if (sessionId) {
-      // Session sockets require a short-lived player token returned by join/create APIs.
-      // Defer connection until initializeBackendSyncAndMultiplayerSession() rebinds it.
-      return undefined;
-    }
-
-    const baseUrl = new URL(environment.wsUrl);
-    baseUrl.searchParams.set("playerId", this.localPlayerId);
-    return baseUrl.toString();
+    // Socket auth requires session + token from join/create API responses.
+    // Boot with networking disabled, then rebind after session join in
+    // initializeBackendSyncAndMultiplayerSession().
+    return undefined;
   }
 
   private setMultiplayerNetwork(wsUrl: string | undefined): void {
