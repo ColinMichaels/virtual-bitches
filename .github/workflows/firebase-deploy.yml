@@ -300,8 +300,32 @@ jobs:
           echo "Hosting site target: $SITE_ID"
 
           SITE_LIST_JSON="$(npx firebase-tools hosting:sites:list --project "$PROJECT_ID" --json)"
-          if ! printf '%s' "$SITE_LIST_JSON" | jq -e --arg site "$SITE_ID" '(.result // []) | any(.name | endswith("/sites/\($site)"))' >/dev/null; then
+          if ! printf '%s' "$SITE_LIST_JSON" | jq -e --arg site "$SITE_ID" '
+            def rows:
+              if type == "array" then .
+              elif (.result? | type) == "array" then .result
+              elif (.sites? | type) == "array" then .sites
+              else [] end;
+            rows
+            | any(
+                if type == "object" then
+                  ((.name? // "") | tostring | endswith("/sites/\($site)"))
+                  or ((.site? // .siteId? // .id? // "") | tostring == $site)
+                else
+                  (tostring == $site)
+                end
+              )
+          ' >/dev/null; then
             echo "Firebase Hosting site '$SITE_ID' was not found in project '$PROJECT_ID'."
+            echo "Available hosting sites:"
+            printf '%s' "$SITE_LIST_JSON" | jq -r '
+              if type == "array" then .
+              elif (.result? | type) == "array" then .result
+              elif (.sites? | type) == "array" then .sites
+              else [] end
+              | .[]
+              | if type == "object" then (.site // .siteId // .name // .id // tostring) else tostring end
+            ' || true
             echo "Create it once with:"
             echo "  npx firebase-tools hosting:sites:create $SITE_ID --project $PROJECT_ID"
             exit 1
