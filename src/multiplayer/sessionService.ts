@@ -1,5 +1,9 @@
 import { logger } from "../utils/logger.js";
-import { backendApiService, type MultiplayerSessionRecord } from "../services/backendApi.js";
+import {
+  backendApiService,
+  type MultiplayerGameDifficulty,
+  type MultiplayerSessionRecord,
+} from "../services/backendApi.js";
 import { getLocalPlayerId } from "../services/playerIdentity.js";
 import { authSessionService } from "../services/authSession.js";
 
@@ -28,12 +32,14 @@ export class MultiplayerSessionService {
     options: {
       roomCode?: string;
       botCount?: number;
+      gameDifficulty?: MultiplayerGameDifficulty;
     } = {}
   ): Promise<MultiplayerSessionRecord | null> {
     const created = await backendApiService.createMultiplayerSession({
       playerId: this.playerId,
       roomCode: options.roomCode,
       botCount: options.botCount,
+      gameDifficulty: options.gameDifficulty,
     });
     if (!created) return null;
 
@@ -87,6 +93,7 @@ export class MultiplayerSessionService {
     sessionComplete?: boolean;
     completedAt?: number | null;
     expiresAt?: number;
+    gameDifficulty?: MultiplayerGameDifficulty;
   }): MultiplayerSessionRecord | null {
     const current = this.activeSession;
     if (!current) return null;
@@ -126,6 +133,9 @@ export class MultiplayerSessionService {
     }
     if (typeof update.expiresAt === "number" && Number.isFinite(update.expiresAt)) {
       nextSession.expiresAt = Math.floor(update.expiresAt);
+    }
+    if (typeof update.gameDifficulty === "string") {
+      nextSession.gameDifficulty = update.gameDifficulty;
     }
 
     this.activeSession = nextSession;

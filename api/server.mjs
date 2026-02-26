@@ -46,6 +46,7 @@ const BOT_TICK_MIN_MS = 4500;
 const BOT_TICK_MAX_MS = 9000;
 const BOT_NAMES = ["Byte Bessie", "Lag Larry", "Packet Patty", "Dicebot Dave"];
 const BOT_PROFILES = ["cautious", "balanced", "aggressive"];
+const GAME_DIFFICULTIES = new Set(["easy", "normal", "hard"]);
 const BOT_CAMERA_EFFECTS = ["shake"];
 const BOT_TURN_ADVANCE_MIN_MS = 1600;
 const BOT_TURN_ADVANCE_MAX_MS = 3200;
@@ -584,6 +585,7 @@ async function handleCreateSession(req, res) {
   const sessionId = randomUUID();
   const roomCode = normalizeRoomCode(body?.roomCode);
   const botCount = normalizeBotCount(body?.botCount);
+  const gameDifficulty = normalizeGameDifficulty(body?.gameDifficulty);
   const now = Date.now();
   const expiresAt = now + MULTIPLAYER_SESSION_IDLE_TTL_MS;
   const participants = {
@@ -621,6 +623,7 @@ async function handleCreateSession(req, res) {
   const session = {
     sessionId,
     roomCode,
+    gameDifficulty,
     wsUrl: WS_BASE_URL,
     createdAt: now,
     lastActivityAt: now,
@@ -1210,6 +1213,7 @@ function buildSessionResponse(session, playerId, auth) {
   return {
     sessionId: snapshot.sessionId,
     roomCode: snapshot.roomCode,
+    gameDifficulty: snapshot.gameDifficulty,
     wsUrl: session.wsUrl,
     playerToken: auth.accessToken,
     auth,
@@ -1233,6 +1237,7 @@ function buildSessionSnapshot(session) {
   return {
     sessionId: session.sessionId,
     roomCode: session.roomCode,
+    gameDifficulty: resolveSessionGameDifficulty(session),
     participants,
     turnState: serializeTurnState(turnState),
     standings,
@@ -1279,6 +1284,7 @@ function buildRoomListing(session, now = Date.now()) {
   return {
     sessionId: session.sessionId,
     roomCode: session.roomCode,
+    gameDifficulty: resolveSessionGameDifficulty(session),
     createdAt: Number.isFinite(session.createdAt) ? Math.floor(session.createdAt) : now,
     lastActivityAt,
     expiresAt: Math.max(now, Math.floor(session.expiresAt)),
@@ -1289,6 +1295,13 @@ function buildRoomListing(session, now = Date.now()) {
     botCount,
     sessionComplete,
   };
+}
+
+function resolveSessionGameDifficulty(session) {
+  if (!session || typeof session !== "object") {
+    return "normal";
+  }
+  return normalizeGameDifficulty(session.gameDifficulty);
 }
 
 function isRoomParticipantActive(sessionId, participant, now = Date.now()) {
@@ -2208,6 +2221,17 @@ function normalizeBotProfile(value) {
   return "balanced";
 }
 
+function normalizeGameDifficulty(value) {
+  if (typeof value !== "string") {
+    return "normal";
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!GAME_DIFFICULTIES.has(normalized)) {
+    return "normal";
+  }
+  return normalized;
+}
+
 function normalizeParticipantScore(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
@@ -2428,6 +2452,7 @@ function executeBotTurn(session, activePlayerId) {
   if (!isBotParticipant(participant)) {
     return null;
   }
+  const gameDifficulty = resolveSessionGameDifficulty(session);
   participant.lastHeartbeatAt = Date.now();
 
   if (isParticipantComplete(participant)) {
@@ -2485,6 +2510,7 @@ function executeBotTurn(session, activePlayerId) {
     rollSnapshot: parsedRoll.value,
     remainingDice,
     botProfile: participant.botProfile,
+    gameDifficulty,
     turnNumber: turnState.turnNumber,
     sessionParticipants: session.participants,
     playerId: activePlayerId,
@@ -2584,6 +2610,7 @@ function scheduleBotTurnIfNeeded(sessionId) {
 
   const delayMs = botEngine.resolveTurnDelayMs({
     botProfile: activeParticipant.botProfile,
+    gameDifficulty: resolveSessionGameDifficulty(session),
     remainingDice: activeParticipant.remainingDice,
     turnNumber: turnState.turnNumber,
     sessionParticipants: session.participants,

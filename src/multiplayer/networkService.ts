@@ -56,6 +56,7 @@ export interface MultiplayerPlayerNotificationMessage {
 }
 
 export type MultiplayerTurnPhase = "await_roll" | "await_score" | "ready_to_end";
+export type MultiplayerGameDifficulty = "easy" | "normal" | "hard";
 
 export interface MultiplayerTurnStartMessage {
   type: "turn_start";
@@ -197,6 +198,7 @@ export interface MultiplayerSessionStateMessage {
   type: "session_state";
   sessionId: string;
   roomCode: string;
+  gameDifficulty?: MultiplayerGameDifficulty;
   participants: MultiplayerSessionStateParticipant[];
   standings?: MultiplayerSessionStateStanding[];
   turnState: MultiplayerSessionStateTurnSnapshot | null;

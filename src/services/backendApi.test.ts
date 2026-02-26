@@ -106,7 +106,7 @@ await test("posts log batch payload", async () => {
   assert(typeof fetchCalls[0].init?.body === "string", "Expected JSON request body");
 });
 
-await test("passes botCount in multiplayer session create payload", async () => {
+await test("passes botCount and difficulty in multiplayer session create payload", async () => {
   authSessionService.clear();
   fetchCalls.length = 0;
   fetchResponder = () =>
@@ -125,13 +125,15 @@ await test("passes botCount in multiplayer session create payload", async () => 
   const result = await api.createMultiplayerSession({
     playerId: "player-1",
     botCount: 2,
+    gameDifficulty: "hard",
   });
 
   assert(result !== null, "Expected create session response");
   assertEqual(fetchCalls.length, 1, "Expected one fetch call");
   const rawBody = String(fetchCalls[0].init?.body ?? "");
-  const parsedBody = JSON.parse(rawBody) as { botCount?: number };
+  const parsedBody = JSON.parse(rawBody) as { botCount?: number; gameDifficulty?: string };
   assertEqual(parsedBody.botCount, 2, "Expected botCount in request payload");
+  assertEqual(parsedBody.gameDifficulty, "hard", "Expected gameDifficulty in request payload");
 });
 
 await test("lists multiplayer rooms with bounded limit", async () => {

@@ -123,19 +123,22 @@ export function createBotEngine(options = {}) {
         input.remainingDice,
         defaultParticipantDiceCount
       );
+      const gameDifficulty = normalizeGameDifficulty(input.gameDifficulty);
       const strategyContext = buildBotTurnContext(input.sessionParticipants, input.playerId);
       const selectionTarget = resolveBotSelectionCount(
         input.botProfile,
         remainingDice,
         scoredCandidates.length,
         input.turnNumber,
-        strategyContext
+        strategyContext,
+        gameDifficulty
       );
       const pointTolerance = resolveBotPointTolerance(
         input.botProfile,
         input.turnNumber,
         remainingDice,
-        strategyContext
+        strategyContext,
+        gameDifficulty
       );
 
       let safeDiceCount = 0;
@@ -181,6 +184,7 @@ export function createBotEngine(options = {}) {
         input.remainingDice,
         defaultParticipantDiceCount
       );
+      const gameDifficulty = normalizeGameDifficulty(input.gameDifficulty);
 
       return resolveBotTurnDelayMs(
         input.botProfile,
@@ -190,7 +194,8 @@ export function createBotEngine(options = {}) {
         {
           defaultRange: defaultTurnDelayRange,
           byProfile: turnDelayByProfile,
-        }
+        },
+        gameDifficulty
       );
     },
   };
@@ -255,11 +260,19 @@ function buildBotTurnContext(sessionParticipants, playerId) {
   };
 }
 
-function resolveBotSelectionCount(botProfile, remainingDice, availableDice, turnNumber, context = {}) {
+function resolveBotSelectionCount(
+  botProfile,
+  remainingDice,
+  availableDice,
+  turnNumber,
+  context = {},
+  gameDifficulty = "normal"
+) {
   const remaining = Math.max(1, normalizeParticipantRemainingDice(remainingDice, availableDice));
   const available = Math.max(1, Math.min(availableDice, remaining));
   const safeTurnNumber = normalizeTurnNumber(turnNumber);
   const profile = normalizeBotProfile(botProfile);
+  const difficulty = normalizeGameDifficulty(gameDifficulty);
 
   if (remaining <= 2) {
     return Math.min(remaining, available);
@@ -296,7 +309,30 @@ function resolveBotSelectionCount(botProfile, remainingDice, availableDice, turn
     selectionCount -= 1;
   }
 
-  const profileMax = profile === "cautious" ? 3 : profile === "aggressive" ? 7 : 5;
+  if (difficulty === "easy") {
+    selectionCount += 1;
+    if (safeTurnNumber >= 4) {
+      selectionCount += 1;
+    }
+    if (context.isLeading === true) {
+      selectionCount += 1;
+    }
+  } else if (difficulty === "hard") {
+    selectionCount -= 1;
+    if (context.isLeading === true) {
+      selectionCount -= 1;
+    }
+    if (context.isTrailing === true && safeTurnNumber >= 6) {
+      selectionCount += 1;
+    }
+  }
+
+  let profileMax = profile === "cautious" ? 3 : profile === "aggressive" ? 7 : 5;
+  if (difficulty === "easy") {
+    profileMax += 1;
+  } else if (difficulty === "hard") {
+    profileMax = Math.max(2, profileMax - 1);
+  }
   if (remaining <= 3) {
     selectionCount = remaining;
   }
@@ -304,10 +340,17 @@ function resolveBotSelectionCount(botProfile, remainingDice, availableDice, turn
   return Math.max(1, Math.min(selectionCount, profileMax, available, remaining));
 }
 
-function resolveBotPointTolerance(botProfile, turnNumber, remainingDice, context = {}) {
+function resolveBotPointTolerance(
+  botProfile,
+  turnNumber,
+  remainingDice,
+  context = {},
+  gameDifficulty = "normal"
+) {
   const profile = normalizeBotProfile(botProfile);
   const remaining = Math.max(1, normalizeParticipantRemainingDice(remainingDice));
   const safeTurnNumber = normalizeTurnNumber(turnNumber);
+  const difficulty = normalizeGameDifficulty(gameDifficulty);
 
   let tolerance = profile === "cautious" ? 2 : profile === "aggressive" ? 6 : 4;
   if (safeTurnNumber >= 8) {
@@ -327,14 +370,34 @@ function resolveBotPointTolerance(botProfile, turnNumber, remainingDice, context
     tolerance += 3;
   }
 
+  if (difficulty === "easy") {
+    tolerance += 3;
+    if (context.isLeading === true) {
+      tolerance += 1;
+    }
+  } else if (difficulty === "hard") {
+    tolerance -= 2;
+    if (context.isTrailing === true) {
+      tolerance += 1;
+    }
+  }
+
   return Math.max(0, Math.min(20, tolerance));
 }
 
-function resolveBotTurnDelayMs(botProfile, remainingDice, turnNumber, context = {}, timingConfig) {
+function resolveBotTurnDelayMs(
+  botProfile,
+  remainingDice,
+  turnNumber,
+  context = {},
+  timingConfig,
+  gameDifficulty = "normal"
+) {
   const profile = normalizeBotProfile(botProfile);
   const range = timingConfig.byProfile[profile] ?? timingConfig.defaultRange;
   let minDelay = range.min;
   let maxDelay = range.max;
+  const difficulty = normalizeGameDifficulty(gameDifficulty);
 
   const safeRemainingDice = Math.max(1, normalizeParticipantRemainingDice(remainingDice));
   const safeTurnNumber = normalizeTurnNumber(turnNumber);
@@ -352,7 +415,26 @@ function resolveBotTurnDelayMs(botProfile, remainingDice, turnNumber, context = 
     maxDelay += 350;
   }
 
+  if (difficulty === "easy") {
+    minDelay += 350;
+    maxDelay += 700;
+  } else if (difficulty === "hard") {
+    minDelay = Math.max(250, minDelay - 250);
+    maxDelay = Math.max(minDelay, maxDelay - 450);
+  }
+
   return randomDelayInRange(minDelay, maxDelay);
+}
+
+function normalizeGameDifficulty(value) {
+  if (typeof value !== "string") {
+    return "normal";
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "easy" || normalized === "hard") {
+    return normalized;
+  }
+  return "normal";
 }
 
 function normalizeBotProfile(value) {
