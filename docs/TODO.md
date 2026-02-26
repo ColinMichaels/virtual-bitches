@@ -727,14 +727,16 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - ✅ Wired game-over score submission + global leaderboard UI rendering path
 - ✅ Added profile access in HUD/mobile menu + dedicated Player Profile modal (stats + account actions)
 - ✅ Reorganized settings into dedicated tabs (`Game`, `Graphics`, `Audio`, `Account`) for cleaner UX scaling
+- ✅ Added pluggable API store backend (`file` / `firestore`) with Firestore sync adapter (`API_STORE_BACKEND`)
+- ✅ Added Firebase Admin token verification path in API (`FIREBASE_AUTH_MODE=admin|auto|legacy`)
 
 ---
 
 ## 🎯 Next Sprint Goals
 
-1. **Firestore Persistence**: Move leaderboard/profile persistence from JSON file store to Firestore-backed storage.
-2. **Auth Hardening**: Replace tokeninfo-based verification with Firebase Admin/JWKS verification + stricter issuer checks.
-3. **Identity UX (Phase 1 Complete)**: Profile/account UI now exists in HUD + Settings + Profile modal; next is profile-edit flows/avatar polish.
+1. **Enable Firestore Backend in Deploy Envs**: Set `API_STORE_BACKEND=firestore` (+ optional `API_FIRESTORE_PREFIX`) and verify data migration from `api/data/store.json`.
+2. **Auth Hardening Finalization**: Run production with `FIREBASE_AUTH_MODE=admin` and remove legacy lookup fallback after cutover validation.
+3. **Multiplayer Rollout (Server Authoritative)**: Implement room/lobby lifecycle, ready states, and canonical game-state messaging.
 4. **Leaderboard UX**: Add filters (mode/difficulty), pagination, and player history views.
 5. **Theme Polish Follow-up**: Finish remaining UV/lighting consistency checks across all die types.
 

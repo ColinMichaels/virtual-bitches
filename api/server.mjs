@@ -1,10 +1,9 @@
 import { createServer } from "node:http";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "./logger.mjs";
+import { createStoreAdapter, DEFAULT_STORE } from "./storage/index.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,12 +13,15 @@ const API_PREFIX = "/api";
 const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "store.json");
 const WS_BASE_URL = process.env.WS_BASE_URL ?? "ws://localhost:3000";
+const STORE_BACKEND = (process.env.API_STORE_BACKEND ?? "file").trim().toLowerCase();
+const FIRESTORE_COLLECTION_PREFIX = (process.env.API_FIRESTORE_PREFIX ?? "api_v1").trim();
 const FIREBASE_PROJECT_ID =
   (process.env.FIREBASE_PROJECT_ID ??
     process.env.GOOGLE_CLOUD_PROJECT ??
     process.env.GCLOUD_PROJECT ??
     "").trim();
 const FIREBASE_WEB_API_KEY = (process.env.FIREBASE_WEB_API_KEY ?? "").trim();
+const FIREBASE_AUTH_MODE = (process.env.FIREBASE_AUTH_MODE ?? "auto").trim().toLowerCase();
 const log = logger.create("Server");
 
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -39,18 +41,10 @@ const WS_CLOSE_CODES = {
   internalError: 1011,
 };
 
-const DEFAULT_STORE = {
-  players: {},
-  gameLogs: {},
-  multiplayerSessions: {},
-  refreshTokens: {},
-  accessTokens: {},
-  leaderboardScores: {},
-  firebasePlayers: {},
-};
-
 let store = structuredClone(DEFAULT_STORE);
 const firebaseTokenCache = new Map();
+let storeAdapter = null;
+let firebaseAdminAuthClientPromise = null;
 
 await bootstrap();
 
@@ -96,32 +90,17 @@ server.listen(PORT, () => {
 });
 
 async function bootstrap() {
-  await mkdir(DATA_DIR, { recursive: true });
-
-  if (!existsSync(DATA_FILE)) {
-    await writeStore(DEFAULT_STORE);
-    store = structuredClone(DEFAULT_STORE);
-    return;
-  }
-
-  try {
-    const raw = await readFile(DATA_FILE, "utf8");
-    const parsed = JSON.parse(raw);
-    store = {
-      ...structuredClone(DEFAULT_STORE),
-      ...parsed,
-      players: parsed.players ?? {},
-      gameLogs: parsed.gameLogs ?? {},
-      multiplayerSessions: parsed.multiplayerSessions ?? {},
-      refreshTokens: parsed.refreshTokens ?? {},
-      accessTokens: parsed.accessTokens ?? {},
-      leaderboardScores: parsed.leaderboardScores ?? {},
-      firebasePlayers: parsed.firebasePlayers ?? {},
-    };
-  } catch (error) {
-    log.warn("Failed to load store, using default", error);
-    store = structuredClone(DEFAULT_STORE);
-  }
+  storeAdapter = await createStoreAdapter({
+    backend: STORE_BACKEND,
+    dataDir: DATA_DIR,
+    dataFile: DATA_FILE,
+    firebaseProjectId: FIREBASE_PROJECT_ID,
+    firestorePrefix: FIRESTORE_COLLECTION_PREFIX,
+    logger: log,
+  });
+  store = await storeAdapter.load();
+  log.info(`Using ${storeAdapter.name} store backend`);
+  log.info(`Firebase auth verifier mode: ${FIREBASE_AUTH_MODE}`);
 }
 
 async function handleRequest(req, res) {
@@ -721,19 +700,164 @@ function authorizeRequest(req, expectedPlayerId, expectedSessionId) {
 }
 
 async function verifyFirebaseIdToken(idToken) {
-  if (!FIREBASE_WEB_API_KEY) {
-    return {
-      ok: false,
-      reason: "firebase_api_key_not_configured",
-    };
-  }
-
-  const cached = firebaseTokenCache.get(idToken);
   const now = Date.now();
+  const cached = firebaseTokenCache.get(idToken);
   if (cached && cached.expiresAt > now + 5000) {
     return {
       ok: true,
       claims: cached,
+    };
+  }
+
+  const adminResult = await verifyFirebaseIdTokenWithAdmin(idToken);
+  if (adminResult) {
+    if (adminResult.ok) {
+      firebaseTokenCache.set(idToken, adminResult.claims);
+    }
+    return adminResult;
+  }
+
+  return verifyFirebaseIdTokenWithLegacyLookup(idToken, now);
+}
+
+async function verifyFirebaseIdTokenWithAdmin(idToken) {
+  if (FIREBASE_AUTH_MODE === "legacy") {
+    return null;
+  }
+
+  const authClient = await getFirebaseAdminAuthClient();
+  if (!authClient) {
+    if (FIREBASE_AUTH_MODE === "admin") {
+      return {
+        ok: false,
+        reason: "firebase_admin_unavailable",
+      };
+    }
+    return null;
+  }
+
+  try {
+    const decoded = await authClient.verifyIdToken(idToken, true);
+    const audience = typeof decoded?.aud === "string" ? decoded.aud : "";
+    const issuer = typeof decoded?.iss === "string" ? decoded.iss : "";
+    if (FIREBASE_PROJECT_ID && audience && audience !== FIREBASE_PROJECT_ID) {
+      return {
+        ok: false,
+        reason: "firebase_audience_mismatch",
+      };
+    }
+    if (FIREBASE_PROJECT_ID && issuer) {
+      const expectedIssuer = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
+      if (issuer !== expectedIssuer) {
+        return {
+          ok: false,
+          reason: "firebase_issuer_mismatch",
+        };
+      }
+    }
+
+    const signInProvider =
+      typeof decoded?.firebase?.sign_in_provider === "string"
+        ? decoded.firebase.sign_in_provider
+        : "";
+    const claims = {
+      uid: typeof decoded?.uid === "string" ? decoded.uid : "",
+      email: typeof decoded?.email === "string" ? decoded.email : undefined,
+      name: typeof decoded?.name === "string" ? decoded.name : undefined,
+      picture: typeof decoded?.picture === "string" ? decoded.picture : undefined,
+      signInProvider,
+      isAnonymous: signInProvider === "anonymous",
+      expiresAt:
+        typeof decoded?.exp === "number"
+          ? decoded.exp * 1000
+          : Date.now() + 5 * 60 * 1000,
+    };
+
+    if (!claims.uid) {
+      return {
+        ok: false,
+        reason: "firebase_token_missing_uid",
+      };
+    }
+
+    return {
+      ok: true,
+      claims,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: normalizeFirebaseAdminReason(error),
+    };
+  }
+}
+
+async function getFirebaseAdminAuthClient() {
+  if (firebaseAdminAuthClientPromise) {
+    return firebaseAdminAuthClientPromise;
+  }
+
+  firebaseAdminAuthClientPromise = (async () => {
+    try {
+      const [{ getApps, initializeApp, applicationDefault, cert }, { getAuth }] =
+        await Promise.all([
+          import("firebase-admin/app"),
+          import("firebase-admin/auth"),
+        ]);
+
+      const existing = getApps()[0];
+      const app =
+        existing ??
+        initializeApp(
+          buildFirebaseAdminOptions({
+            applicationDefault,
+            cert,
+          })
+        );
+
+      return getAuth(app);
+    } catch (error) {
+      const logMethod = FIREBASE_AUTH_MODE === "admin" ? "error" : "warn";
+      log[logMethod]("Failed to initialize Firebase Admin auth verifier", error);
+      return null;
+    }
+  })();
+
+  return firebaseAdminAuthClientPromise;
+}
+
+function buildFirebaseAdminOptions({ applicationDefault, cert }) {
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+  if (!serviceAccountJson) {
+    return {
+      credential: applicationDefault(),
+      projectId: FIREBASE_PROJECT_ID || undefined,
+    };
+  }
+
+  const parsed = JSON.parse(serviceAccountJson);
+  return {
+    credential: cert(parsed),
+    projectId: FIREBASE_PROJECT_ID || parsed.project_id || undefined,
+  };
+}
+
+function normalizeFirebaseAdminReason(error) {
+  const maybeCode =
+    typeof error?.code === "string"
+      ? error.code
+      : typeof error?.errorInfo?.code === "string"
+        ? error.errorInfo.code
+        : "verification_failed";
+  const normalizedCode = String(maybeCode).replace(/^auth\//, "");
+  return `firebase_admin_${normalizeReason(normalizedCode)}`;
+}
+
+async function verifyFirebaseIdTokenWithLegacyLookup(idToken, now) {
+  if (!FIREBASE_WEB_API_KEY) {
+    return {
+      ok: false,
+      reason: "firebase_api_key_not_configured",
     };
   }
 
@@ -1602,9 +1726,8 @@ function sendJson(res, status, payload) {
 }
 
 async function persistStore() {
-  await writeStore(store);
-}
-
-async function writeStore(nextStore) {
-  await writeFile(DATA_FILE, JSON.stringify(nextStore, null, 2), "utf8");
+  if (!storeAdapter) {
+    return;
+  }
+  await storeAdapter.save(store);
 }

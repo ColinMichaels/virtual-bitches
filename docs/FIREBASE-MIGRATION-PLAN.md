@@ -152,10 +152,10 @@ Exit criteria:
 - [x] Add Hosting rewrites for `/api/**`.
 - [x] Add Dockerfile + `api/package.json` for Cloud Run deploy.
 - [x] Add Firebase + Cloud Run deploy scripts in `package.json`.
-- [ ] Add Firebase Admin verification middleware in API.
+- [x] Add Firebase Admin verification middleware in API.
 - [x] Add Firebase client SDK bootstrap in frontend.
 - [x] Update environment files for Firebase/Cloud Run endpoints.
-- [ ] Add Firestore adapter for profile/log/session persistence.
+- [x] Add Firestore adapter for profile/log/session persistence.
 - [ ] Add WS reconnection/backoff tests for Cloud Run timeout behavior.
 - [x] Add GitHub Actions deploy pipeline for branch-based `master`/`dev` Firebase + Cloud Run deploy.
 
