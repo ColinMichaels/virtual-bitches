@@ -87,6 +87,7 @@ Required GitHub secrets:
 Shared:
 - `GCP_SA_KEY` (raw JSON service account key with Firebase Hosting/Firestore + Cloud Run deploy permissions)
   - optional fallback: `GCP_SA_KEY_B64` (base64-encoded JSON key)
+- optional: `FIREBASE_HOSTING_SITE` (explicit Hosting site ID; defaults to `FIREBASE_PROJECT_ID` if omitted)
 
 Recommended setup (GitHub Environments):
 - Create two GitHub Environments: `prod` and `dev`.
@@ -155,3 +156,9 @@ If workflow fails with `failed to parse service account key JSON credentials`:
 1. Ensure `GCP_SA_KEY` contains raw JSON (starts with `{`), not a file path and not encrypted/binary content.
 2. If you only have base64 text, store it in `GCP_SA_KEY_B64` instead.
 3. Re-run workflow; the pipeline now validates and decodes base64 keys automatically.
+
+If workflow fails with Firebase Hosting `404 Requested entity was not found` on `/sites/.../versions`:
+1. The hosting site ID being targeted does not exist in that Firebase project.
+2. Set `FIREBASE_HOSTING_SITE` to the correct site ID (or let it default to project ID if your site matches project ID).
+3. If needed, create the site once:
+   - `npx firebase-tools hosting:sites:create <site-id> --project <project-id>`
