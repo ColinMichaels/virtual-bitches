@@ -286,6 +286,7 @@ jobs:
           env_vars: |
             NODE_ENV=production
             WS_BASE_URL=${{ steps.target.outputs.ws_url }}
+            FIREBASE_PROJECT_ID=${{ steps.target.outputs.fb_project_id }}
 
       - name: Smoke Test Cloud Run API + WebSocket
         env:

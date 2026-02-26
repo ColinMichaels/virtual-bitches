@@ -41,6 +41,9 @@ import { MultiplayerNetworkService } from "./multiplayer/networkService.js";
 import { MultiplayerSessionService } from "./multiplayer/sessionService.js";
 import { environment } from "@env";
 import type { MultiplayerSessionRecord } from "./services/backendApi.js";
+import { backendApiService } from "./services/backendApi.js";
+import { firebaseAuthService } from "./services/firebaseAuth.js";
+import { leaderboardService } from "./services/leaderboard.js";
 
 const log = logger.create('Game');
 
@@ -402,6 +405,7 @@ class Game implements GameCallbacks {
 
   private initializeBackendSyncAndMultiplayerSession(): void {
     playerDataSyncService.start();
+    void leaderboardService.flushPendingScores();
 
     const query = new URLSearchParams(window.location.search);
     const sessionId = query.get("session");
@@ -806,6 +810,9 @@ let splash: SplashScreen;
 let alphaWarning: AlphaWarningModal;
 let updatesPanel: UpdatesPanel;
 
+backendApiService.setFirebaseTokenProvider(() => firebaseAuthService.getIdToken());
+void firebaseAuthService.initialize();
+
 themeManager.initialize().then(() => {
   log.info("Theme manager initialized successfully");
 
@@ -830,7 +837,7 @@ themeManager.initialize().then(() => {
   splash = new SplashScreen(
     () => {
       // On start game
-      new Game();
+      void startGame();
     },
     () => {
       // On settings
@@ -868,7 +875,7 @@ themeManager.initialize().then(() => {
   splash = new SplashScreen(
     () => {
       // On start game
-      new Game();
+      void startGame();
     },
     () => {
       // On settings
@@ -884,3 +891,8 @@ themeManager.initialize().then(() => {
     }
   );
 });
+
+async function startGame(): Promise<void> {
+  await firebaseAuthService.initialize();
+  new Game();
+}

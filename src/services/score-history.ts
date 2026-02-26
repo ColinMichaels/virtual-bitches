@@ -20,6 +20,7 @@ export interface GameScore {
   mode: GameMode; // Game mode (difficulty + variant)
   playerName?: string; // Optional player identification
   synced: boolean; // Track if uploaded to backend
+  globalSynced: boolean; // Track if uploaded to global leaderboard
 }
 
 export interface ScoreStats {
@@ -51,7 +52,26 @@ export class ScoreHistoryService {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        return JSON.parse(stored);
+        const parsed = JSON.parse(stored) as Array<Partial<GameScore>>;
+        if (!Array.isArray(parsed)) {
+          return [];
+        }
+
+        return parsed
+          .filter((entry) => entry && typeof entry.id === "string")
+          .map((entry) => ({
+            id: entry.id!,
+            score: Number(entry.score ?? 0),
+            timestamp: Number(entry.timestamp ?? Date.now()),
+            seed: typeof entry.seed === "string" ? entry.seed : "",
+            actionLog: Array.isArray(entry.actionLog) ? entry.actionLog : [],
+            duration: Number(entry.duration ?? 0),
+            rollCount: Number(entry.rollCount ?? 0),
+            mode: (entry.mode ?? { difficulty: "normal", variant: "classic" }) as GameMode,
+            playerName: typeof entry.playerName === "string" ? entry.playerName : undefined,
+            synced: Boolean(entry.synced),
+            globalSynced: Boolean(entry.globalSynced),
+          }));
       }
     } catch (error) {
       log.error("Failed to load score history:", error);
@@ -97,6 +117,7 @@ export class ScoreHistoryService {
       mode,
       playerName,
       synced: false,
+      globalSynced: false,
     };
 
     const scores = this.loadScores();
@@ -171,6 +192,26 @@ export class ScoreHistoryService {
     const scores = this.loadScores().map((score) => {
       if (scoreIds.includes(score.id)) {
         return { ...score, synced: true };
+      }
+      return score;
+    });
+    this.saveScores(scores);
+  }
+
+  /**
+   * Get scores not yet submitted to global leaderboard
+   */
+  getUnsyncedGlobalScores(): GameScore[] {
+    return this.loadScores().filter((s) => !s.globalSynced);
+  }
+
+  /**
+   * Mark scores as uploaded to global leaderboard
+   */
+  markGlobalSynced(scoreIds: string[]): void {
+    const scores = this.loadScores().map((score) => {
+      if (scoreIds.includes(score.id)) {
+        return { ...score, globalSynced: true };
       }
       return score;
     });

@@ -7,6 +7,7 @@ import { authSessionService, type AuthTokenBundle } from "./authSession.js";
 const log = logger.create("BackendApi");
 
 const DEFAULT_TIMEOUT_MS = 8000;
+type RequestAuthMode = "none" | "session" | "firebase" | "firebaseOptional";
 
 export interface PlayerProfileRecord {
   playerId: string;
@@ -57,16 +58,52 @@ export interface JoinMultiplayerSessionRequest {
   displayName?: string;
 }
 
+export interface LeaderboardScoreSubmission {
+  scoreId: string;
+  score: number;
+  timestamp: number;
+  seed?: string;
+  duration: number;
+  rollCount: number;
+  mode?: {
+    difficulty?: string;
+    variant?: string;
+  };
+}
+
+export interface GlobalLeaderboardEntry {
+  id: string;
+  uid: string;
+  displayName: string;
+  score: number;
+  timestamp: number;
+  duration: number;
+  rollCount: number;
+  mode?: {
+    difficulty?: string;
+    variant?: string;
+  };
+}
+
+export interface AuthenticatedUserProfile {
+  uid: string;
+  displayName?: string;
+  email?: string;
+  isAnonymous: boolean;
+}
+
 export interface BackendApiOptions {
   baseUrl?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  firebaseTokenProvider?: () => Promise<string | null> | string | null;
 }
 
 export class BackendApiService {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
+  private firebaseTokenProvider: () => Promise<string | null> | string | null;
 
   constructor(options: BackendApiOptions = {}) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl ?? environment.apiBaseUrl);
@@ -78,6 +115,11 @@ export class BackendApiService {
       }
       return fetch(input, init);
     }) as typeof fetch;
+    this.firebaseTokenProvider = options.firebaseTokenProvider ?? (() => null);
+  }
+
+  setFirebaseTokenProvider(provider: () => Promise<string | null> | string | null): void {
+    this.firebaseTokenProvider = provider;
   }
 
   async getPlayerProfile(playerId: string): Promise<PlayerProfileRecord | null> {
@@ -166,16 +208,46 @@ export class BackendApiService {
     );
   }
 
+  async submitLeaderboardScore(
+    submission: LeaderboardScoreSubmission
+  ): Promise<GlobalLeaderboardEntry | null> {
+    return this.request<GlobalLeaderboardEntry>("/leaderboard/scores", {
+      method: "POST",
+      body: submission,
+      authMode: "firebase",
+    });
+  }
+
+  async getGlobalLeaderboard(limit: number = 25): Promise<GlobalLeaderboardEntry[] | null> {
+    const bounded = Math.max(1, Math.min(100, Math.floor(limit)));
+    const response = await this.request<{ entries: GlobalLeaderboardEntry[] }>(
+      `/leaderboard/global?limit=${bounded}`,
+      {
+        method: "GET",
+        authMode: "none",
+      }
+    );
+    return response?.entries ?? null;
+  }
+
+  async getAuthenticatedUserProfile(): Promise<AuthenticatedUserProfile | null> {
+    return this.request<AuthenticatedUserProfile>("/auth/me", {
+      method: "GET",
+      authMode: "firebase",
+    });
+  }
+
   private async request<T>(
     path: string,
-    options: { method: string; body?: unknown }
+    options: { method: string; body?: unknown; authMode?: RequestAuthMode }
   ): Promise<T | null> {
-    const firstResponse = await this.executeRequest(path, options);
+    const authMode = options.authMode ?? "session";
+    const firstResponse = await this.executeRequest(path, options, authMode);
     if (!firstResponse) {
       return null;
     }
 
-    if (firstResponse.status === 401) {
+    if (firstResponse.status === 401 && authMode === "session") {
       const refreshed = await authSessionService.refreshTokens({
         baseUrl: this.baseUrl,
         fetchImpl: this.fetchImpl,
@@ -186,7 +258,7 @@ export class BackendApiService {
         return null;
       }
 
-      const retryResponse = await this.executeRequest(path, options);
+      const retryResponse = await this.executeRequest(path, options, authMode);
       if (!retryResponse) {
         return null;
       }
@@ -205,18 +277,31 @@ export class BackendApiService {
 
   private async executeRequest(
     path: string,
-    options: { method: string; body?: unknown }
+    options: { method: string; body?: unknown; authMode?: RequestAuthMode },
+    authMode: RequestAuthMode
   ): Promise<Response | null> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
-      const headers: Record<string, string> = {
-        "content-type": "application/json",
-      };
-      const accessToken = authSessionService.getAccessToken();
-      if (accessToken) {
-        headers.authorization = `Bearer ${accessToken}`;
+      const headers: Record<string, string> = {};
+      if (options.body !== undefined) {
+        headers["content-type"] = "application/json";
+      }
+
+      if (authMode === "session") {
+        const accessToken = authSessionService.getAccessToken();
+        if (accessToken) {
+          headers.authorization = `Bearer ${accessToken}`;
+        }
+      } else if (authMode === "firebase" || authMode === "firebaseOptional") {
+        const firebaseToken = await this.firebaseTokenProvider();
+        if (firebaseToken) {
+          headers.authorization = `Bearer ${firebaseToken}`;
+        } else if (authMode === "firebase") {
+          log.warn(`Missing Firebase auth token for ${options.method} ${path}`);
+          return null;
+        }
       }
 
       return await this.fetchImpl(`${this.baseUrl}${path}`, {
@@ -238,6 +323,10 @@ export class BackendApiService {
     method: string,
     path: string
   ): Promise<T | null> {
+    if (response.status === 204) {
+      return null;
+    }
+
     if (response.status === 404 && isExpectedNotFound(method, path)) {
       return null;
     }

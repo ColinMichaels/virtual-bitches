@@ -14,6 +14,11 @@ const API_PREFIX = "/api";
 const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "store.json");
 const WS_BASE_URL = process.env.WS_BASE_URL ?? "ws://localhost:3000";
+const FIREBASE_PROJECT_ID =
+  (process.env.FIREBASE_PROJECT_ID ??
+    process.env.GOOGLE_CLOUD_PROJECT ??
+    process.env.GCLOUD_PROJECT ??
+    "").trim();
 const log = logger.create("Server");
 
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -38,9 +43,12 @@ const DEFAULT_STORE = {
   multiplayerSessions: {},
   refreshTokens: {},
   accessTokens: {},
+  leaderboardScores: {},
+  firebasePlayers: {},
 };
 
 let store = structuredClone(DEFAULT_STORE);
+const firebaseTokenCache = new Map();
 
 await bootstrap();
 
@@ -105,6 +113,8 @@ async function bootstrap() {
       multiplayerSessions: parsed.multiplayerSessions ?? {},
       refreshTokens: parsed.refreshTokens ?? {},
       accessTokens: parsed.accessTokens ?? {},
+      leaderboardScores: parsed.leaderboardScores ?? {},
+      firebasePlayers: parsed.firebasePlayers ?? {},
     };
   } catch (error) {
     log.warn("Failed to load store, using default", error);
@@ -137,12 +147,18 @@ async function handleRequest(req, res) {
         now: Date.now(),
         players: Object.keys(store.players).length,
         sessions: Object.keys(store.multiplayerSessions).length,
+        leaderboardEntries: Object.keys(store.leaderboardScores).length,
       });
       return;
     }
 
     if (req.method === "POST" && pathname === "/api/auth/token/refresh") {
       await handleRefreshToken(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/api/auth/me") {
+      await handleAuthMe(req, res);
       return;
     }
 
@@ -158,6 +174,16 @@ async function handleRequest(req, res) {
 
     if (req.method === "POST" && pathname === "/api/logs/batch") {
       await handleAppendLogs(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/api/leaderboard/scores") {
+      await handleSubmitLeaderboardScore(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/api/leaderboard/global") {
+      await handleGetGlobalLeaderboard(res, url);
       return;
     }
 
@@ -215,6 +241,105 @@ async function handleRefreshToken(req, res) {
     refreshToken: tokens.refreshToken,
     expiresAt: tokens.expiresAt,
     tokenType: "Bearer",
+  });
+}
+
+async function handleAuthMe(req, res) {
+  const authCheck = await authorizeIdentityRequest(req, { allowSessionToken: true });
+  if (!authCheck.ok) {
+    sendJson(res, 401, { error: "Unauthorized" });
+    return;
+  }
+
+  sendJson(res, 200, {
+    uid: authCheck.uid,
+    displayName: authCheck.displayName,
+    email: authCheck.email,
+    isAnonymous: authCheck.isAnonymous,
+    provider: authCheck.provider,
+  });
+}
+
+async function handleSubmitLeaderboardScore(req, res) {
+  const authCheck = await authorizeIdentityRequest(req, { allowSessionToken: true });
+  if (!authCheck.ok) {
+    sendJson(res, 401, { error: "Unauthorized" });
+    return;
+  }
+
+  const body = await parseJsonBody(req);
+  const parsed = parseLeaderboardPayload(body);
+  if (!parsed) {
+    sendJson(res, 400, { error: "Invalid leaderboard score payload" });
+    return;
+  }
+
+  const timestamp = parsed.timestamp ?? Date.now();
+  const scoreKey = `${authCheck.uid}:${parsed.scoreId}`;
+  const displayName =
+    parsed.playerName ??
+    authCheck.displayName ??
+    store.firebasePlayers[authCheck.uid]?.displayName ??
+    `Player ${authCheck.uid.slice(0, 8)}`;
+
+  const entry = {
+    id: scoreKey,
+    uid: authCheck.uid,
+    displayName,
+    score: parsed.score,
+    timestamp,
+    duration: parsed.duration,
+    rollCount: parsed.rollCount,
+    seed: parsed.seed,
+    mode: parsed.mode,
+  };
+
+  store.leaderboardScores[scoreKey] = entry;
+  store.firebasePlayers[authCheck.uid] = {
+    uid: authCheck.uid,
+    displayName,
+    email: authCheck.email,
+    provider: authCheck.provider,
+    updatedAt: Date.now(),
+  };
+
+  await persistStore();
+  sendJson(res, 200, entry);
+}
+
+async function handleGetGlobalLeaderboard(res, requestUrl) {
+  const rawLimit = Number(requestUrl.searchParams.get("limit") ?? 25);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.max(1, Math.min(100, Math.floor(rawLimit)))
+    : 25;
+
+  const entries = Object.values(store.leaderboardScores)
+    .filter((entry) => Number.isFinite(entry?.score))
+    .sort((a, b) => {
+      if (a.score !== b.score) {
+        return a.score - b.score;
+      }
+      return (a.timestamp ?? 0) - (b.timestamp ?? 0);
+    })
+    .slice(0, limit)
+    .map((entry) => ({
+      id: entry.id,
+      uid: entry.uid,
+      displayName:
+        entry.displayName ??
+        store.firebasePlayers[entry.uid]?.displayName ??
+        `Player ${entry.uid.slice(0, 8)}`,
+      score: entry.score,
+      timestamp: entry.timestamp,
+      duration: entry.duration,
+      rollCount: entry.rollCount,
+      mode: entry.mode,
+    }));
+
+  sendJson(res, 200, {
+    entries,
+    total: Object.keys(store.leaderboardScores).length,
+    generatedAt: Date.now(),
   });
 }
 
@@ -453,6 +578,46 @@ async function handleRefreshSessionAuth(req, res, pathname) {
   sendJson(res, 200, response);
 }
 
+async function authorizeIdentityRequest(req, options = {}) {
+  const header = req.headers.authorization;
+  if (!header) {
+    return { ok: false };
+  }
+
+  const token = extractBearerToken(header);
+  if (!token) {
+    return { ok: false };
+  }
+
+  if (options.allowSessionToken) {
+    const accessRecord = verifyAccessToken(token);
+    if (accessRecord) {
+      return {
+        ok: true,
+        uid: `local:${accessRecord.playerId}`,
+        displayName: accessRecord.playerId,
+        email: undefined,
+        isAnonymous: true,
+        provider: "session",
+      };
+    }
+  }
+
+  const firebaseClaims = await verifyFirebaseIdToken(token);
+  if (!firebaseClaims) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    uid: firebaseClaims.uid,
+    displayName: firebaseClaims.name,
+    email: firebaseClaims.email,
+    isAnonymous: false,
+    provider: "firebase",
+  };
+}
+
 function authorizeRequest(req, expectedPlayerId, expectedSessionId) {
   const header = req.headers.authorization;
   if (!header) {
@@ -477,6 +642,62 @@ function authorizeRequest(req, expectedPlayerId, expectedSessionId) {
   }
 
   return { ok: true, playerId: record.playerId, sessionId: record.sessionId };
+}
+
+async function verifyFirebaseIdToken(idToken) {
+  const cached = firebaseTokenCache.get(idToken);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now + 5000) {
+    return cached;
+  }
+
+  const endpoint = new URL("https://oauth2.googleapis.com/tokeninfo");
+  endpoint.searchParams.set("id_token", idToken);
+
+  let response;
+  try {
+    response = await fetch(endpoint, { method: "GET" });
+  } catch (error) {
+    log.warn("Failed to call Google tokeninfo endpoint", error);
+    return null;
+  }
+
+  if (!response.ok) {
+    return null;
+  }
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    log.warn("Invalid tokeninfo JSON response", error);
+    return null;
+  }
+
+  const uid = String(payload.user_id ?? payload.sub ?? "").trim();
+  const aud = String(payload.aud ?? "").trim();
+  const exp = Number(payload.exp ?? 0);
+  const expiresAt = Number.isFinite(exp) ? exp * 1000 : now + 60000;
+
+  if (!uid) {
+    return null;
+  }
+
+  if (FIREBASE_PROJECT_ID && aud && aud !== FIREBASE_PROJECT_ID) {
+    log.warn("Rejected Firebase token with mismatched project audience");
+    return null;
+  }
+
+  const claims = {
+    uid,
+    email: typeof payload.email === "string" ? payload.email : undefined,
+    name: typeof payload.name === "string" ? payload.name : undefined,
+    picture: typeof payload.picture === "string" ? payload.picture : undefined,
+    expiresAt,
+  };
+
+  firebaseTokenCache.set(idToken, claims);
+  return claims;
 }
 
 function issueAuthTokenBundle(playerId, sessionId) {
@@ -557,6 +778,59 @@ function normalizeRoomCode(value) {
     return value.trim().toUpperCase().slice(0, 8);
   }
   return randomToken().slice(0, 6).toUpperCase();
+}
+
+function parseLeaderboardPayload(body) {
+  if (!body || typeof body !== "object") {
+    return null;
+  }
+
+  const scoreId = normalizeIdentifier(body.scoreId, `score-${randomUUID()}`);
+  const score = Number(body.score);
+  const duration = Number(body.duration ?? 0);
+  const rollCount = Number(body.rollCount ?? 0);
+  if (!Number.isFinite(score) || score < 0) {
+    return null;
+  }
+
+  const parsed = {
+    scoreId,
+    score,
+    timestamp: Number.isFinite(Number(body.timestamp)) ? Number(body.timestamp) : undefined,
+    seed: typeof body.seed === "string" ? body.seed.slice(0, 120) : undefined,
+    duration: Number.isFinite(duration) && duration >= 0 ? duration : 0,
+    rollCount: Number.isFinite(rollCount) && rollCount >= 0 ? Math.floor(rollCount) : 0,
+    playerName:
+      typeof body.playerName === "string" && body.playerName.trim().length > 0
+        ? body.playerName.trim().slice(0, 80)
+        : undefined,
+    mode: sanitizeLeaderboardMode(body.mode),
+  };
+
+  return parsed;
+}
+
+function sanitizeLeaderboardMode(mode) {
+  if (!mode || typeof mode !== "object") {
+    return undefined;
+  }
+
+  const difficulty = typeof mode.difficulty === "string" ? mode.difficulty.trim() : "";
+  const variant = typeof mode.variant === "string" ? mode.variant.trim() : "";
+
+  return {
+    difficulty: difficulty || "normal",
+    variant: variant || "classic",
+  };
+}
+
+function normalizeIdentifier(rawValue, fallback) {
+  if (typeof rawValue !== "string") {
+    return fallback;
+  }
+
+  const normalized = rawValue.trim().replace(/[^a-zA-Z0-9_.:-]/g, "").slice(0, 120);
+  return normalized || fallback;
 }
 
 function compactLogStore() {

@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-25 (Alpha Release Ready - Music Muted)
+**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Cloud Run + Firebase Deploy Stabilized)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -497,12 +497,12 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ### Mobile Experience
 
 #### Touch Controls
-- **Status**: Basic tap/swipe working
+- **Status**: Core touch UX complete; advanced gestures pending
 - **Improvements Needed**:
-  - [ ] Add haptic feedback for rolls/selections
-  - [ ] Improve touch target sizes (min 44x44px)
+  - [x] Add haptic feedback for rolls/selections
+  - [x] Improve touch target sizes (min 44x44px)
   - [ ] Add multi-touch gesture support
-  - [ ] Better visual feedback for touch events
+  - [x] Better visual feedback for touch events
 - **AI Prompt**:
   ```
   Enhance mobile touch controls for BISCUITS. Add haptic feedback, increase touch target sizes for die selection, and improve visual feedback. Update src/render/components/DiceRenderer.ts pointer event handlers.
@@ -522,7 +522,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ### Code Quality
 
 #### Test Coverage
-- **Current**: 0% (no tests)
+- **Current**: Unit-style and e2e smoke tests exist, but no unified coverage metric yet
 - **Target**: >80% coverage
 - **Priority**:
   - [ ] Unit tests for engine layer (pure functions)
@@ -576,7 +576,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ### Build System
 
 - [x] Add development/production environment configs
-- [ ] Set up automated deployment pipeline (GitHub Actions)
+- [x] Set up automated deployment pipeline (GitHub Actions)
 - [x] Add bundle size monitoring
 - [x] Configure source maps for production debugging
 - [ ] Add pre-commit hooks (lint, format, type-check)
@@ -715,15 +715,26 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - ✅ Created comprehensive ARCHITECTURE.md
 - ✅ Created TODO.md (this file)
 
+### Firebase + Cloud Run Stabilization (2026-02-26)
+- ✅ Fixed Cloud Run API startup/deploy path and required IAM/API wiring
+- ✅ Implemented authenticated WebSocket upgrade/runtime path in API
+- ✅ Added API+WebSocket smoke tests (local + deployed Cloud Run)
+- ✅ Added Cloud Run smoke test step to GitHub Actions deploy workflow
+- ✅ Fixed stale PWA cache behavior causing old bundles/runtime errors
+- ✅ Reduced noisy expected runtime warnings (profile 404, transient WS close/info)
+- ✅ Added Firebase auth bootstrap service (anonymous default + Google sign-in upgrade path)
+- ✅ Added backend identity endpoint + leaderboard submit/query API scaffolding
+- ✅ Wired game-over score submission + global leaderboard UI rendering path
+
 ---
 
 ## 🎯 Next Sprint Goals
 
-1. **Fix color material transparency** (HIGH - blocks 3 themes)
-2. **Complete documentation** (TODO.md ✅, FUTURE-FEATURES.md, THEME-SYSTEM.md)
-3. **Fine-tune all theme UV coordinates** (MEDIUM)
-4. **Add 2-3 new themes** (LOW)
-5. **Improve mobile touch controls** (MEDIUM)
+1. **Firestore Persistence**: Move leaderboard/profile persistence from JSON file store to Firestore-backed storage.
+2. **Auth Hardening**: Replace tokeninfo-based verification with Firebase Admin/JWKS verification + stricter issuer checks.
+3. **Identity UX**: Add explicit account/profile UI (display name/avatar, signed-in state in HUD/settings).
+4. **Leaderboard UX**: Add filters (mode/difficulty), pagination, and player history views.
+5. **Theme Polish Follow-up**: Finish remaining UV/lighting consistency checks across all die types.
 
 ---
 

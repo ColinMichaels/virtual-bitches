@@ -91,6 +91,33 @@ async function run() {
   );
   assert(heartbeat?.ok === true, "heartbeat response was not ok=true");
 
+  const scoreSubmission = await apiRequest("/leaderboard/scores", {
+    method: "POST",
+    accessToken: created.auth.accessToken,
+    body: {
+      scoreId: `e2e-score-${runSuffix}`,
+      score: 42,
+      timestamp: Date.now(),
+      duration: 180000,
+      rollCount: 7,
+      playerName: "E2E Host",
+      mode: {
+        difficulty: "normal",
+        variant: "classic",
+      },
+    },
+  });
+  assert(scoreSubmission?.score === 42, "leaderboard score submission failed");
+
+  const leaderboard = await apiRequest("/leaderboard/global?limit=5", {
+    method: "GET",
+  });
+  assert(Array.isArray(leaderboard?.entries), "global leaderboard did not return entries[]");
+  assert(
+    leaderboard.entries.some((entry) => entry?.id === scoreSubmission.id),
+    "submitted score was not present in global leaderboard response"
+  );
+
   log("Smoke test passed.");
 }
 
