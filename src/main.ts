@@ -13,6 +13,7 @@ import { UpdatesPanel } from "./ui/updates.js";
 import { CameraControlsPanel } from "./ui/cameraControls.js";
 import { ChaosUpgradeMenu } from "./ui/chaosUpgradeMenu.js";
 import { EffectHUD } from "./ui/effectHUD.js";
+import { AuthGateModal } from "./ui/authGate.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
 import { GameState, Action, GameDifficulty } from "./engine/types.js";
@@ -809,6 +810,9 @@ let tutorialModal: TutorialModal;
 let splash: SplashScreen;
 let alphaWarning: AlphaWarningModal;
 let updatesPanel: UpdatesPanel;
+let authGateModal: AuthGateModal;
+
+const GUEST_MODE_KEY = `${environment.storage.prefix}-guest-mode-enabled`;
 
 backendApiService.setFirebaseTokenProvider(() => firebaseAuthService.getIdToken());
 void firebaseAuthService.initialize();
@@ -821,6 +825,7 @@ themeManager.initialize().then(() => {
   leaderboardModal = new LeaderboardModal();
   rulesModal = new RulesModal();
   tutorialModal = new TutorialModal();
+  authGateModal = new AuthGateModal();
 
   // Initialize alpha warning and updates panel
   alphaWarning = new AlphaWarningModal();
@@ -837,7 +842,7 @@ themeManager.initialize().then(() => {
   splash = new SplashScreen(
     () => {
       // On start game
-      void startGame();
+      return startGame();
     },
     () => {
       // On settings
@@ -860,6 +865,7 @@ themeManager.initialize().then(() => {
   leaderboardModal = new LeaderboardModal();
   rulesModal = new RulesModal();
   tutorialModal = new TutorialModal();
+  authGateModal = new AuthGateModal();
 
   // Initialize alpha warning and updates panel (even on error)
   alphaWarning = new AlphaWarningModal();
@@ -875,7 +881,7 @@ themeManager.initialize().then(() => {
   splash = new SplashScreen(
     () => {
       // On start game
-      void startGame();
+      return startGame();
     },
     () => {
       // On settings
@@ -892,7 +898,73 @@ themeManager.initialize().then(() => {
   );
 });
 
-async function startGame(): Promise<void> {
+async function startGame(): Promise<boolean> {
   await firebaseAuthService.initialize();
+  const canStart = await ensurePlayerAccessChoice();
+  if (!canStart) {
+    return false;
+  }
+
   new Game();
+  return true;
+}
+
+async function ensurePlayerAccessChoice(): Promise<boolean> {
+  const existing = firebaseAuthService.getCurrentUserProfile();
+  if (existing && !existing.isAnonymous) {
+    setGuestModeEnabled(false);
+    return true;
+  }
+
+  if (isGuestModeEnabled()) {
+    return true;
+  }
+
+  const choice = await authGateModal.prompt();
+  if (choice === "cancel") {
+    return false;
+  }
+
+  if (choice === "guest") {
+    setGuestModeEnabled(true);
+    notificationService.show("Guest mode enabled. Leaderboard posting is disabled.", "info", 2600);
+    return true;
+  }
+
+  const signedIn = await firebaseAuthService.signInWithGoogle();
+  if (!signedIn) {
+    notificationService.show("Google sign-in failed. Try again or continue as guest.", "warning", 2800);
+    return false;
+  }
+
+  setGuestModeEnabled(false);
+  return true;
+}
+
+function isGuestModeEnabled(): boolean {
+  if (typeof localStorage === "undefined") {
+    return false;
+  }
+
+  try {
+    return localStorage.getItem(GUEST_MODE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setGuestModeEnabled(enabled: boolean): void {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  try {
+    if (enabled) {
+      localStorage.setItem(GUEST_MODE_KEY, "1");
+    } else {
+      localStorage.removeItem(GUEST_MODE_KEY);
+    }
+  } catch {
+    // no-op
+  }
 }
