@@ -85,7 +85,8 @@ Trigger:
 Required GitHub secrets:
 
 Shared:
-- `GCP_SA_KEY` (JSON service account key with Firebase Hosting/Firestore + Cloud Run deploy permissions)
+- `GCP_SA_KEY` (raw JSON service account key with Firebase Hosting/Firestore + Cloud Run deploy permissions)
+  - optional fallback: `GCP_SA_KEY_B64` (base64-encoded JSON key)
 
 Recommended setup (GitHub Environments):
 - Create two GitHub Environments: `prod` and `dev`.
@@ -149,3 +150,8 @@ If workflow fails with `Missing required secret/output: PROJECT_ID`:
    - `VITE_FIREBASE_PROJECT_ID_<ENV>` (fallback), or
    - environment key `FIREBASE_PROJECT_ID` / `VITE_FIREBASE_PROJECT_ID`.
 4. Re-run workflow.
+
+If workflow fails with `failed to parse service account key JSON credentials`:
+1. Ensure `GCP_SA_KEY` contains raw JSON (starts with `{`), not a file path and not encrypted/binary content.
+2. If you only have base64 text, store it in `GCP_SA_KEY_B64` instead.
+3. Re-run workflow; the pipeline now validates and decodes base64 keys automatically.

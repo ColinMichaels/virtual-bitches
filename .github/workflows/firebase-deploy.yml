@@ -180,20 +180,64 @@ jobs:
           FB_SENDER_ID: ${{ steps.target.outputs.fb_messaging_sender_id }}
           FB_APP_ID: ${{ steps.target.outputs.fb_app_id }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_SA_KEY_B64: ${{ secrets.GCP_SA_KEY_B64 }}
         run: |
           set -euo pipefail
-          for key in PROJECT_ID API_BASE_URL WS_URL FB_API_KEY FB_AUTH_DOMAIN FB_PROJECT_ID FB_STORAGE_BUCKET FB_SENDER_ID FB_APP_ID GCP_SA_KEY; do
+          for key in PROJECT_ID API_BASE_URL WS_URL FB_API_KEY FB_AUTH_DOMAIN FB_PROJECT_ID FB_STORAGE_BUCKET FB_SENDER_ID FB_APP_ID; do
             value="${!key:-}"
             if [ -z "$value" ]; then
               echo "Missing required secret/output: $key"
               exit 1
             fi
           done
+          if [ -z "${GCP_SA_KEY:-}" ] && [ -z "${GCP_SA_KEY_B64:-}" ]; then
+            echo "Missing required secret: GCP_SA_KEY (raw JSON) or GCP_SA_KEY_B64 (base64 JSON)"
+            exit 1
+          fi
+
+      - name: Normalize Google credentials
+        id: gcp-creds
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_SA_KEY_B64: ${{ secrets.GCP_SA_KEY_B64 }}
+        run: |
+          set -euo pipefail
+
+          RAW="${GCP_SA_KEY:-}"
+          if [ -z "$RAW" ] && [ -n "${GCP_SA_KEY_B64:-}" ]; then
+            RAW="$GCP_SA_KEY_B64"
+          fi
+
+          if printf '%s' "$RAW" | jq -e . >/dev/null 2>&1; then
+            CREDENTIALS_JSON="$RAW"
+          else
+            DECODED="$(printf '%s' "$RAW" | base64 --decode 2>/dev/null || true)"
+            if [ -z "$DECODED" ]; then
+              DECODED="$(printf '%s' "$RAW" | base64 -d 2>/dev/null || true)"
+            fi
+            if [ -z "$DECODED" ] || ! printf '%s' "$DECODED" | jq -e . >/dev/null 2>&1; then
+              echo "Service account key is not valid JSON."
+              echo "Set GCP_SA_KEY to raw JSON or GCP_SA_KEY_B64 to base64(JSON)."
+              exit 1
+            fi
+            CREDENTIALS_JSON="$DECODED"
+          fi
+
+          if ! printf '%s' "$CREDENTIALS_JSON" | jq -e '.type == "service_account" and (.client_email|type=="string") and (.private_key|type=="string")' >/dev/null 2>&1; then
+            echo "Credentials JSON is missing required service account fields."
+            exit 1
+          fi
+
+          {
+            echo "credentials_json<<EOF"
+            printf '%s\n' "$CREDENTIALS_JSON"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ steps.gcp-creds.outputs.credentials_json }}
           project_id: ${{ steps.target.outputs.project_id }}
 
       - name: Setup gcloud CLI
