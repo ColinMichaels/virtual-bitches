@@ -1,12 +1,57 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0 • Last Updated: 2026-02-24 (Code Refactoring Complete)
+**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-25 (Alpha Release Ready - Music Muted)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
 ---
 
 ## 🔴 High Priority
+
+### Camera System & Machinima Tools (Phase 1 COMPLETE, Phase 2 PARTIAL) 📷
+- **Status**: ✅ Phase 1 COMPLETE (2026-02-24) • 🟡 Phase 2 PARTIAL (2026-02-25 foundation work)
+- **Complexity**: Medium (Phase 1), Very High (Full System)
+- **Description**: Camera position management system with progressive unlocks and machinima tools
+- **Documentation**:
+  - Complete specification in `docs/CAMERA-SYSTEM.md` (800+ lines)
+  - **NEW**: Camera Attack Integration in `docs/CAMERA-ATTACKS-INTEGRATION.md` (1000+ lines)
+- **Phase 1 Implementation**:
+  - ✅ CameraService with save/load/import/export (3 slots free tier)
+  - ✅ Camera Controls Panel UI with teaser for locked features
+  - ✅ Integration with GameScene (save/load positions)
+  - ✅ Keyboard shortcut (C key) and button access
+  - ✅ localStorage persistence
+  - ✅ Tier-based access control (free/unlocked/premium)
+- **Phase 2 Foundation Implemented**:
+  - ✅ Smooth camera transition plumbing in `GameScene.setCameraPosition(..., animate)` (settings-gated)
+  - ✅ Babylon animation/easing integration for alpha, beta, radius, and target interpolation
+  - ✅ `SettingsService` camera schema defaults (`smoothTransitions`, `transitionDuration`, unlock flags)
+  - ✅ `CameraService` testability improvements (injectable storage, state validation, explicit `off()` listener removal)
+  - ✅ Camera service test suite scaffold (`src/services/cameraService.test.ts`)
+  - ✅ Non-browser/runtime-safe storage fallback for `cameraService` singleton
+- **Future Phases**:
+  - 🟡 Phase 2: Enhanced Camera (in progress - smooth transitions core done; 10 slots/replay/per-seat still pending)
+  - 🔒 Phase 3: Flying Mode (WASD controls, no-clip - Post-Multiplayer)
+  - 🔒 Phase 4: Machinima Pro (paths, director mode, export - Premium Feature)
+- **Files Created**:
+  - `src/services/cameraService.ts` - Core service (500+ lines)
+  - `src/ui/cameraControls.ts` - UI panel (430 lines)
+  - `docs/CAMERA-SYSTEM.md` - Complete specification (800+ lines)
+  - CSS styles added to `src/styles.css` (400+ lines)
+- **Files Modified**:
+  - `src/render/scene.ts` - Added settings-gated smooth transition animation support
+  - `src/services/settings.ts` - Added/merged camera settings defaults
+  - `src/services/cameraService.ts` - Added storage injection, validation, and listener unsubscribe helper
+  - `src/main.ts` - Integrated camera panel
+  - `src/controllers/InputController.ts` - Added C key and button handler
+  - `index.html` - Added camera positions button
+  - `package.json` - Added `test:camera` script
+- **New Files in 2026-02-25 Update**:
+  - `src/services/cameraService.test.ts` - Camera service unit-style test script
+- **Result**: Players can save up to 3 camera positions now, and smooth camera transitions are partially implemented at engine/settings level
+- **Immediate Next Work**:
+  - 🔲 Expose camera smooth-transition controls in UI with proper unlock gating
+  - 🔲 Complete remaining Phase 2 features (10 slots, replay timeline, per-player seat positions)
 
 ### Active Bugs
 
@@ -46,6 +91,89 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ---
 
 ## 🟡 Medium Priority
+
+### Visual Settings & Dice Visibility Enhancement (COMPLETE) 🎨
+- **Status**: ✅ Phase 1 COMPLETE (2026-02-25)
+- **Complexity**: Medium
+- **Description**: User-configurable table contrast settings for improved dice readability
+- **Documentation**: Complete specification in `docs/VISUAL-SETTINGS.md` (500+ lines)
+- **Phase 1 Implementation** (Table Contrast System):
+  - ✅ Added VisualSettings interface with tableContrast property
+  - ✅ Four contrast levels: low (brighter), normal, high (darker), maximum (darkest)
+  - ✅ Dramatic diffuse color changes (0.7x to 1.2x multipliers)
+  - ✅ Real-time material updates without scene reload
+  - ✅ User notification feedback on setting changes
+  - ✅ localStorage persistence with backwards compatibility
+  - ✅ Enhanced dice materials (ambient + emissive colors)
+  - ✅ Brightened dice color palette (~30% increase)
+  - ✅ Added dedicated dice spotlights for improved visibility
+  - ✅ Enhanced shadow properties (2048 resolution, sharper edges)
+- **Files Created**:
+  - `docs/VISUAL-SETTINGS.md` - Complete documentation with architecture
+- **Files Modified**:
+  - `src/services/settings.ts` - Added VisualSettings interface and updateVisual()
+  - `src/render/scene.ts` - Added updateTableContrast() with diffuse color control
+  - `src/ui/settings.ts` - Added Visual Settings section with notification feedback
+  - `src/main.ts` - Apply contrast on startup and real-time onChange updates
+  - `src/render/dice.ts` - Enhanced dice materials and brightened color palette
+- **Future Work** (TODO):
+  - 🔲 Fine-tune diffuse multiplier range if too extreme (consider 0.85-1.15)
+  - 🔲 Add additional visual settings (dice brightness, lighting intensity, shadow strength)
+  - 🔲 Implement color blind mode presets
+  - 🔲 User testing and feedback collection on contrast effectiveness
+  - 🔲 Consider ambient color adjustments for softer contrast changes
+- **Result**: Users can now dramatically adjust table brightness with instant visual feedback!
+
+### Particle System (Phase 1 & 2 - COMPLETE) ✨
+- **Status**: ✅ Phases 1 & 2 COMPLETE (2026-02-24)
+- **Complexity**: High
+- **Description**: Centralized, event-driven particle system integrated with gameplay
+- **Documentation**:
+  - Complete specification in `docs/PARTICLE-SYSTEM.md` (2000+ lines)
+  - Integration docs updated in `docs/CAMERA-ATTACKS-INTEGRATION.md`
+- **Phase 1 Implementation** (Core System):
+  - ✅ ParticleService with effect registry and pooling
+  - ✅ Event-driven architecture with custom events
+  - ✅ Quality settings (low/medium/high/ultra) with auto-detection
+  - ✅ Network synchronization hooks for multiplayer
+  - ✅ Integration with Camera, Player, and Chaos systems
+  - ✅ Particle effect definitions (burst, trail, ambient, attack)
+  - ✅ Preset helpers for game events, player actions, and chaos attacks
+  - ✅ Refactored existing scene.ts particle usage
+- **Phase 2 Implementation** (Gameplay Integration):
+  - ✅ Dice score particles - gold burst when dice land in score area
+  - ✅ Dice roll landing particles - white burst when dice hit table
+  - ✅ Perfect roll celebration - confetti burst (already working)
+  - ✅ Game completion celebration - confetti burst (already working)
+- **Phase 2.5 Implementation** (Intensity Controls):
+  - ✅ Added `particleIntensity` setting ("off" | "minimal" | "normal" | "enthusiastic")
+  - ✅ Intensity multipliers in ParticleService (0%, 30%, 60%, 100%)
+  - ✅ Reduced baseline particle scales: roll 0.25 (was 0.4), score 0.6 (was 1.0)
+  - ✅ Reduced celebration scales: perfect 1.2 (was 2.0), complete 1.0 (was 1.6)
+  - ✅ Adaptive burst counts: minimal=0, normal=2-3, enthusiastic=4
+  - ✅ Default "normal" intensity = 60% of previous particle amount
+- **Files Created**:
+  - `src/services/particleService.ts` - Core service (800+ lines)
+  - `src/particles/effects/burstEffects.ts` - Burst particle definitions
+  - `src/particles/effects/trailEffects.ts` - Trail particle definitions
+  - `src/particles/effects/ambientEffects.ts` - Ambient particle definitions
+  - `src/particles/effects/attackEffects.ts` - Attack particle definitions
+  - `src/particles/presets/gameEffects.ts` - Game event helpers
+  - `src/particles/presets/playerEffects.ts` - Player action helpers
+  - `src/particles/presets/chaosEffects.ts` - Chaos attack helpers
+  - `docs/PARTICLE-SYSTEM.md` - Complete documentation with intensity section
+- **Files Modified**:
+  - `src/main.ts` - Initialize ParticleService, register effects, apply intensity
+  - `src/render/scene.ts` - Refactored particles, added intensity-aware celebrations
+  - `src/render/dice.ts` - Added particles with reduced baseline scales
+  - `src/services/settings.ts` - Added particleIntensity to DisplaySettings
+  - `src/services/particleService.ts` - Added intensity system with multipliers
+  - `docs/CAMERA-ATTACKS-INTEGRATION.md` - Added particle integration details
+- **Future Phases**:
+  - 🔒 Phase 3: Advanced effects (custom shaders, animated sprites, mesh particles)
+  - 🔒 Phase 4: Particle editor for custom effects
+  - 🔒 Phase 5: Settings UI dropdown for particle intensity control
+- **Result**: Balanced, configurable particle system with 60% less visual noise by default! 🎉
 
 ### Recently Completed (Session 2026-02-24)
 
@@ -189,6 +317,94 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 
 ## 🟢 Low Priority / Backlog
 
+### Future Features (See FUTURE-FEATURES.md)
+
+#### Camera Attack Integration System 💥📷
+- **Status**: 🟡 PHASE 4 CLIENT INTEGRATION IN PROGRESS (2026-02-25)
+- **Complexity**: Very High
+- **Description**: Weaponized camera manipulation for multiplayer psychological warfare
+- **Documentation**: Complete specification in `docs/CAMERA-ATTACKS-INTEGRATION.md` (1000+ lines)
+- **Implemented Foundation**:
+  - ✅ `CameraEffectsService` runtime (`src/services/cameraEffects.ts`) with shake/spin/zoom/drunk effects
+  - ✅ Drunk vision post-processing pipeline (`src/chaos/effects/postProcessingPipeline.ts`) with blur/double-vision/vignette/blackout hooks
+  - ✅ Effect conflict queue/stacking policy (per-type caps, queued drain, drunk-child reserved stacking lane)
+  - ✅ Active camera effect HUD (`src/ui/effectHUD.ts`) with live timers/intensity/queue indicators
+  - ✅ Effect lifecycle controls (active list, stop, clear) + timing/cleanup handling
+  - ✅ Particle integration hooks for shake/spin/drunk effects
+  - ✅ `CameraAttackExecutor` (`src/chaos/cameraAttackExecutor.ts`) for typed message → camera effect mapping
+  - ✅ Main-thread event bridge (`chaos:cameraAttack`) wired in `src/main.ts`
+  - ✅ Multiplayer WebSocket bridge (`src/multiplayer/networkService.ts`) for camera attack + particle delivery
+  - ✅ Unit-style tests for attack mapping (`src/chaos/cameraAttackExecutor.test.ts`)
+  - ✅ Unit-style tests for network bridge routing (`src/multiplayer/networkService.test.ts`)
+  - ✅ Unit-style tests for camera effect queue/post-processing behavior (`src/services/cameraEffects.test.ts`)
+  - ✅ Upgrade progression scaffolding (`src/chaos/upgrades/progressionService.ts`) with XP/tokens/unlock validation + persistence
+  - ✅ Upgrade definitions for three attack families (`src/chaos/upgrades/definitions.ts`)
+  - ✅ Unit-style tests for progression scaffolding (`src/chaos/upgrades/progressionService.test.ts`)
+  - ✅ `ChaosUpgradeMenu` UI scaffold (`src/ui/chaosUpgradeMenu.ts`) wired to desktop/mobile controls + `U` hotkey
+  - ✅ Progression-to-execution profile mapping + message builder (`src/chaos/upgrades/executionProfile.ts`)
+  - ✅ Upgrade menu local cast bridge (`chaos:cameraAttack`) using unlocked level stats
+  - ✅ Control inversion runtime (`src/services/controlInversion.ts`) wired into input and drunk attacks
+  - ✅ Accessibility safeguards in settings + executor (`reduceChaosCameraEffects`, `allowChaosControlInversion`)
+  - ✅ Unit-style tests for execution profile mapping (`src/chaos/upgrades/executionProfile.test.ts`)
+  - ✅ Unit-style tests for control inversion behavior (`src/services/controlInversion.test.ts`)
+  - ✅ Typed backend API client scaffold (`src/services/backendApi.ts`) for profile/log/session routes
+  - ✅ Player data sync scaffold (`src/services/playerDataSync.ts`) for settings/progression/log queue sync
+  - ✅ Sync reliability foundation in `PlayerDataSyncService` (dirty-profile sync + retry backoff/jitter + queue compaction/dedupe + deterministic score log IDs)
+  - ✅ Service worker log upload bridge (`src/services/pwa.ts` + `public/sw.js`)
+  - ✅ Multiplayer session API scaffold (`src/multiplayer/sessionService.ts`) with join/create/heartbeat/leave hooks
+  - ✅ Session-aware multiplayer socket rebinding in `main.ts` (API session `wsUrl`/`playerToken` now updates live network connection)
+  - ✅ Auth session service + 401 recovery (`src/services/authSession.ts`, `src/services/backendApi.ts`) with token refresh and session-expired handling
+  - ✅ WebSocket auth-expiry recovery path (`src/multiplayer/networkService.ts`) with session auth refresh callback
+  - ✅ Multiplayer attack feedback loop (`sent`/`sendFailed`/`received`/`applied`) wired to HUD notifications in `src/main.ts`
+  - ✅ Backend skeleton started in `/api` (HTTP server scaffold + SQL schema/migrations + profile/log/session/auth endpoints)
+  - ✅ Firebase migration strategy documented (`docs/FIREBASE-MIGRATION-PLAN.md`) for moving from GitHub Pages to Firebase Hosting + Cloud Run
+  - ✅ Firebase Phase 1 bootstrap files added (`firebase.json`, `.firebaserc`, `firestore.rules`, `firestore.indexes.json`, `.env.firebase.example`, `docs/FIREBASE-SETUP.md`)
+  - ✅ GitHub Actions deploy workflow added (`.github/workflows/firebase-deploy.yml`) for auto-deploy on `master`/`dev` using GitHub Secrets
+  - ✅ Unit-style tests for backend API request handling (`src/services/backendApi.test.ts`)
+- **Key Features**:
+  - Camera Effects API (shake, spin, zoom, tilt, drunk vision)
+  - Drunk Vision system (3 severity levels: Tipsy, Hammered, Blackout)
+  - 5-level upgrade trees for each attack family
+  - XP progression + Chaos Token economy
+  - Premium "Party Mode" & "Spell Pack" DLC effects
+  - Anti-frustration safeguards (diminishing returns, immunity, rage quit protection)
+- **Attack Families**:
+  - Screen Shake (5 levels: Basic → Aftershock → Earthquake → Tremor → Catastrophe)
+  - Drunk Vision (5 levels: Tipsy → Double Shot → Long Island → Keg Stand → Alcohol Poisoning)
+  - Camera Spin (5 levels: Dizzy Spell → Vertigo → Washing Machine → Blender → Inception)
+- **Dependencies**:
+  - Requires Camera System (Phase 1 ✅ complete)
+  - Requires Chaos Gameplay Mechanics infrastructure
+  - Requires Multiplayer system for networked attacks
+  - Requires WebSocket server for cross-client attack delivery
+  - BabylonJS Post-Processing pipeline (implemented client-side; tuning pending)
+- **Implementation Timeline**: ~10 weeks (5 phases)
+- **Monetization**: Chaos Pass ($4.99/mo), IAP packs, Battle Pass
+- **Implementation Priority**: Next up is production backend/API+DB implementation (profiles/settings/logs), authenticated sync/conflict semantics, and multiplayer backend/session rollout
+
+#### Chaos Gameplay Mechanics System
+- **Status**: DOCUMENTED (not yet implemented)
+- **Complexity**: Very High
+- **Description**: Multiplayer "psychosocial warfare" system with player attacks, distractions, and time pressure
+- **Documentation**: Complete specification in `docs/CHAOS-GAMEPLAY-MECHANICS.md` (700+ lines)
+- **Key Features**:
+  - 50+ attack abilities (Visual, Audio, UI, Dice, Time manipulation)
+  - Time Attack game mode variants (7 different formats)
+  - Insult & Taunt System (300+ taunts, AI generation, emotes)
+  - Chaos Points economy with ability progression
+  - 7 game modes including Team Chaos and Survival
+  - Comprehensive anti-toxicity systems
+- **Dependencies**:
+  - Requires 8-player multiplayer mode complete
+  - Backend WebSocket infrastructure
+  - User authentication and profiles
+  - Time attack game mode implementation
+- **Implementation Priority**: Post-multiplayer (Phase 4+)
+- **AI Prompt**:
+  ```
+  Implement Chaos Gameplay Mechanics per docs/CHAOS-GAMEPLAY-MECHANICS.md. Start with ability system (src/chaos/abilities.ts), Chaos Points economy (src/chaos/economy.ts), and ability bar UI (src/chaos/ui/AbilityBar.ts). Follow the technical implementation section for file structure and type definitions. Ensure all anti-toxicity safeguards are implemented.
+  ```
+
 ### Performance Optimizations
 
 #### Reduce Bundle Size
@@ -216,6 +432,35 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - **AI Prompt**:
   ```
   Profile and optimize BISCUITS rendering performance. Focus on mobile devices where frame rate drops to ~40fps. Consider shadow optimization, LOD systems, and physics calculation improvements in src/render/diceRenderer.ts.
+  ```
+
+### Music Player System 🎵
+- **Status**: ⚠️ MUTED BY DEFAULT (functionality preserved, disabled until proper system developed)
+- **Complexity**: Medium
+- **Description**: Develop full music player system with track selection and controls
+- **Current State** (2026-02-25):
+  - ✅ Music generation system complete (procedural ambient drone)
+  - ✅ Audio API functional (playMusic/stopMusic)
+  - ✅ Settings UI present (volume slider + enable checkbox)
+  - ⚠️ Music DISABLED by default (musicEnabled: false, musicVolume: 0)
+  - All functionality preserved for future development
+- **Future Features**:
+  - [ ] Multiple music tracks
+  - [ ] Track selection UI
+  - [ ] Play/pause controls in HUD
+  - [ ] Playlist management
+  - [ ] Volume fade in/out
+  - [ ] Context-aware music (menu vs gameplay vs game over)
+  - [ ] User-uploaded music support
+  - [ ] Spotify/streaming integration (premium feature?)
+- **Files Involved**:
+  - `src/services/audio.ts` - Music generation and playback
+  - `src/services/settings.ts` - Music settings (line 57-59: defaults set to 0/false)
+  - `src/ui/settings.ts` - Music controls UI
+- **Implementation Priority**: Post-alpha (after core gameplay polish)
+- **AI Prompt**:
+  ```
+  Implement a music player system for BISCUITS. Create multiple ambient music tracks, add UI controls for track selection and playback, and integrate with the existing audio service in src/services/audio.ts. Consider context-aware music that changes based on game state.
   ```
 
 ### Additional Themes
@@ -346,6 +591,43 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ---
 
 ## ✅ Recently Completed
+
+### Octagon Table Texture & Asset Loading Infrastructure (2026-02-24 Late Evening)
+- ✅ **Custom octagon table texture implementation**
+  - Applied user-provided 1024×1024 square felt texture to octagon play area
+  - Perfect radial UV mapping (1:1 scale, no distortion or stretching)
+  - Automatic procedural fallback if texture fails to load
+  - Error handling with console logging for debugging
+- ✅ **Splash screen gradient background**
+  - Added atmospheric gradient matching game scene (blue-gray to dark)
+  - Visual consistency across splash → loading → game screens
+- ✅ **Loading screen component system**
+  - Created `src/ui/loadingScreen.ts` with progress tracking
+  - Task-based and manual progress modes
+  - Animated dice spinner with gradient background
+  - Ready for integration with asset loading
+- ✅ **Service worker & asset loading strategy documentation**
+  - Created `docs/SERVICE-WORKER-STRATEGY.md` (450+ lines)
+  - Comprehensive PWA optimization roadmap
+  - PRPL pattern implementation guide
+  - Multiplayer preparation with Web Workers strategy
+  - Phase-based implementation timeline
+- ✅ **Texture optimization documentation**
+  - Created `docs/TEXTURE-OPTIMIZATION.md`
+  - WebP conversion guidelines (2.2 MB → 300 KB)
+  - Power-of-2 dimension recommendations
+  - KTX2/Basis Universal for future scaling
+  - Tool recommendations and comparison tables
+- **Files Created**:
+  - `src/ui/loadingScreen.ts` - Progress tracking loading screen
+  - `docs/SERVICE-WORKER-STRATEGY.md` - Comprehensive asset loading strategy
+  - `docs/TEXTURE-OPTIMIZATION.md` - Texture optimization guide
+  - `public/assets/textures/table-felt.png` - Custom 1024×1024 table texture
+- **Files Modified**:
+  - `src/ui/splash.ts` - Added gradient background
+  - `src/render/scene.ts` - Custom texture loading with fallback
+  - `src/styles.css` - Loading screen styles
+- **Result**: Production-ready custom branding on game table, infrastructure for future loading optimization
 
 ### Fallback Theme System & Debug Enhancements (2026-02-24 Evening)
 - ✅ **Implemented fallback theme system**

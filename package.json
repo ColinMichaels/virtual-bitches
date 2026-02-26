@@ -11,18 +11,35 @@
     "build:prod": "npm run copy:assets && tsc && vite build --mode production",
     "preview": "vite preview",
     "test": "tsx src/engine/rules.test.ts",
+    "test:camera": "tsx src/services/cameraService.test.ts",
+    "test:camera-effects": "tsx src/services/cameraEffects.test.ts",
+    "test:backend-api": "tsx src/services/backendApi.test.ts",
+    "test:chaos-camera": "tsx src/chaos/cameraAttackExecutor.test.ts",
+    "test:chaos-execution": "tsx src/chaos/upgrades/executionProfile.test.ts",
+    "test:chaos-upgrades": "tsx src/chaos/upgrades/progressionService.test.ts",
+    "test:controls": "tsx src/services/controlInversion.test.ts",
+    "test:network": "tsx src/multiplayer/networkService.test.ts",
+    "api:dev": "node api/server.mjs",
+    "firebase:login": "npx firebase-tools login",
+    "firebase:use:prod": "npx firebase-tools use prod",
+    "firebase:emulators": "npx firebase-tools emulators:start",
+    "firebase:deploy:hosting": "npm run build:prod && npx firebase-tools deploy --only hosting",
+    "firebase:deploy:firestore": "npx firebase-tools deploy --only firestore:rules,firestore:indexes",
+    "firebase:deploy": "npm run build:prod && npx firebase-tools deploy --only hosting,firestore",
+    "cloudrun:deploy:api": "gcloud run deploy biscuits-api --source api --region us-central1 --allow-unauthenticated",
     "deploy": "npm run build && npx gh-pages -d dist"
   },
   "dependencies": {
     "@babylonjs/core": "^7.0.0",
     "@babylonjs/loaders": "^7.0.0",
+    "firebase": "^12.9.0",
     "marked": "^17.0.3"
   },
   "devDependencies": {
     "gh-pages": "^6.3.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
-    "vite": "^5.0.0",
+    "vite": "^5.4.21",
     "vite-plugin-static-copy": "^3.2.0"
   }
 }

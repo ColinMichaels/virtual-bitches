@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "biscuits-b427f",
+    "prod": "biscuits-b427f",
+    "staging": "biscuits-b427f-staging"
+  }
+}

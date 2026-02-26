@@ -10,6 +10,9 @@ import {
   Vector3,
   HemisphericLight,
   Color3,
+  Color4,
+  DynamicTexture,
+  Layer,
 } from "@babylonjs/core";
 import { audioService } from "../services/audio.js";
 import { environment } from "../environments/environment.js";
@@ -79,7 +82,10 @@ export class SplashScreen {
   private initializeBackground(): void {
     this.engine = new Engine(this.canvas, true);
     this.scene = new Scene(this.engine);
-    this.scene.clearColor = new Color3(0.1, 0.1, 0.18).toColor4();
+
+    // Create gradient background with atmospheric depth (matches game scene)
+    this.scene.clearColor = new Color4(0, 0, 0, 0); // Transparent for gradient
+    this.createGradientBackground();
 
     // Camera
     const camera = new ArcRotateCamera(
@@ -142,6 +148,46 @@ export class SplashScreen {
       this.container.style.display = "none";
       this.animationRunning = false;
     }, 500);
+  }
+
+  /**
+   * Create gradient background with atmospheric depth
+   * Matches the game scene gradient for visual consistency
+   */
+  private createGradientBackground(): void {
+    const gradientTexture = new DynamicTexture(
+      "splashGradient",
+      { width: 512, height: 512 },
+      this.scene,
+      false
+    );
+
+    const ctx = gradientTexture.getContext() as CanvasRenderingContext2D;
+
+    // Create vertical gradient (top to bottom)
+    const gradient = ctx.createLinearGradient(0, 0, 0, 512);
+
+    // Top: Lighter atmospheric blue-gray (ceiling/sky)
+    gradient.addColorStop(0, "#2a3545"); // Medium blue-gray
+    gradient.addColorStop(0.3, "#1f2935"); // Darker
+    gradient.addColorStop(0.6, "#151c26"); // Even darker
+    gradient.addColorStop(1, "#0a0f16"); // Very dark at bottom (floor)
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 512, 512);
+    gradientTexture.update();
+
+    // Create background layer
+    const backgroundLayer = new Layer(
+      "splashBackgroundLayer",
+      null, // Pass null for imgUrl, assign texture directly
+      this.scene,
+      true
+    );
+
+    // Assign DynamicTexture to Layer's texture property
+    backgroundLayer.texture = gradientTexture;
+    backgroundLayer.isBackground = true;
   }
 
   /**

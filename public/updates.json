@@ -1,0 +1,52 @@
+{
+  "updates": [
+    {
+      "id": "feature-music-muted-2026-02-25",
+      "date": "2026-02-25",
+      "title": "🔇 Music Disabled by Default",
+      "content": "<p>Background music is now muted by default while we develop a proper music player system.</p><p><strong>What Changed:</strong></p><ul style=\"margin: 10px 0; padding-left: 20px;\"><li>Music is disabled on first launch (new users)</li><li>All music functionality preserved in Settings</li><li>You can still enable music manually in Settings → Audio</li><li>Existing users keep their saved music preferences</li></ul><p>We're planning a full music player with track selection, playlists, and controls in a future update!</p>",
+      "version": "0.1.0-alpha",
+      "type": "feature"
+    },
+    {
+      "id": "alpha-release-2026-02-25",
+      "date": "2026-02-25",
+      "title": "🎉 Alpha Release - Welcome to BISCUITS!",
+      "content": "<p>Welcome to the alpha version of BISCUITS! This pre-beta release includes:</p><ul style=\"margin: 10px 0; padding-left: 20px;\"><li>Core gameplay: Roll, select, and score dice</li><li>Three difficulty modes: Easy, Normal, and Hard</li><li>Visual settings for better dice readability</li><li>Score history and leaderboard tracking</li><li>8 beautiful dice themes to choose from</li><li>Particle effects and celebrations</li><li>Mobile-responsive design</li></ul><p>This is an early build, so please report any bugs or feedback!</p>",
+      "version": "0.1.0-alpha",
+      "type": "announcement"
+    },
+    {
+      "id": "feature-visual-settings-2026-02-25",
+      "date": "2026-02-25",
+      "title": "✨ New Feature: Visual Settings",
+      "content": "<p>Added table contrast settings to improve dice visibility! Choose from four levels:</p><ul style=\"margin: 10px 0; padding-left: 20px;\"><li><strong>Low:</strong> Brighter table (low contrast)</li><li><strong>Normal:</strong> Balanced appearance</li><li><strong>High:</strong> Darker table (good readability)</li><li><strong>Maximum:</strong> Maximum contrast for best dice visibility</li></ul><p>Access this in Settings → Visual Settings → Table Contrast.</p>",
+      "version": "0.1.0-alpha",
+      "type": "feature"
+    },
+    {
+      "id": "feature-particle-system-2026-02-25",
+      "date": "2026-02-25",
+      "title": "🎆 Particle System Enhancements",
+      "content": "<p>Particle effects now have adjustable intensity levels:</p><ul style=\"margin: 10px 0; padding-left: 20px;\"><li><strong>Off:</strong> No particles (best performance)</li><li><strong>Minimal:</strong> Subtle effects only</li><li><strong>Normal:</strong> Standard celebration effects</li><li><strong>Enthusiastic:</strong> Maximum particle explosions!</li></ul><p>Perfect for balancing visual flair with performance on mobile devices.</p>",
+      "version": "0.1.0-alpha",
+      "type": "feature"
+    },
+    {
+      "id": "feature-game-modes-2026-02",
+      "date": "2026-02-20",
+      "title": "🎮 Three Difficulty Modes Added",
+      "content": "<p>Choose your preferred play style:</p><ul style=\"margin: 10px 0; padding-left: 20px;\"><li><strong>Easy Mode:</strong> Hints show optimal dice, undo mistakes allowed</li><li><strong>Normal Mode:</strong> Standard rules, balanced gameplay</li><li><strong>Hard Mode:</strong> No hints or undo, pure skill!</li></ul><p>Switch modes anytime from the HUD or Settings.</p>",
+      "version": "0.1.0-alpha",
+      "type": "feature"
+    },
+    {
+      "id": "bugfix-build-errors-2026-02-25",
+      "date": "2026-02-25",
+      "title": "🐛 Fixed Production Build Issues",
+      "content": "<p>Resolved 12 TypeScript compilation errors that were blocking production builds. The game now builds cleanly and is ready for deployment.</p>",
+      "version": "0.1.0-alpha",
+      "type": "bugfix"
+    }
+  ]
+}

@@ -231,6 +231,43 @@ This document captures future feature ideas, enhancements, and expansion possibi
 
 ## 🌐 Social Features
 
+### Chaos Gameplay Mechanics System
+- **Complexity**: Very High
+- **Description**: Multiplayer "psychosocial warfare" mechanics system with player attacks, distractions, and time pressure
+- **Documentation**:
+  - See `docs/CHAOS-GAMEPLAY-MECHANICS.md` for complete specification (700+ lines)
+  - **Camera Integration**: See `docs/CAMERA-ATTACKS-INTEGRATION.md` for weaponized camera effects (1000+ lines)
+- **Features**:
+  - 50+ attack abilities across 5 categories (Visual, Audio, UI, Dice, Time)
+  - Time Attack variants (Countdown, Speed Bonus, Sudden Death, Time Bomb, etc.)
+  - Insult & Taunt System (300+ pre-written taunts, AI generation, emotes, voice lines)
+  - Chaos Points economy with ability unlocks and progression
+  - 7 game modes (Casual, Competitive, Survival, Team Chaos, etc.)
+  - Anti-toxicity systems (report, mute, safe mode, AI moderation)
+  - Network protocol for real-time attack broadcasting
+- **Design Philosophy**: "Fun frustration" - psychological pressure without toxicity
+- **Example Abilities**:
+  - **Screen Shake**: Intense camera movement during opponent's turn
+  - **Dice Fog**: Semi-transparent overlay obscuring dice visibility
+  - **Time Thief**: Steal 5 seconds from opponent's turn timer
+  - **Fake Bust**: Display false "BUST!" message
+  - **Ghost Dice**: Make opponent's dice semi-transparent
+- **Technical Notes**:
+  - Requires full multiplayer infrastructure
+  - WebSocket protocol for real-time attacks
+  - Client-side attack rendering with server validation
+  - Balance considerations (cooldowns, diminishing returns, karma system)
+  - Extensive playtesting required
+- **Dependencies**:
+  - Multiplayer mode must be complete
+  - User profiles and authentication
+  - Backend infrastructure (WebSocket server, database)
+  - Time attack game mode variants
+- **AI Prompt**:
+  ```
+  Implement the Chaos Gameplay Mechanics System for BISCUITS multiplayer. Follow the complete specification in docs/CHAOS-GAMEPLAY-MECHANICS.md. Start with core infrastructure: create ability system in src/chaos/abilities.ts with 50+ attack definitions, implement Chaos Points economy in src/chaos/economy.ts, and build UI components in src/chaos/ui/ for ability bar and attack notifications. Ensure all attacks have proper cooldowns, resource costs, and anti-toxicity safeguards.
+  ```
+
 ### Daily Challenges
 - **Complexity**: High
 - **Description**: Daily seeded challenges with global leaderboards
@@ -249,37 +286,119 @@ This document captures future feature ideas, enhancements, and expansion possibi
   Implement daily challenges for BISCUITS. Create a backend API (Supabase/Firebase) to serve daily seeds and store scores. Add src/game/dailyChallenge.ts to fetch challenges, submit scores, and display global leaderboards. Use deterministic RNG to ensure all players get identical rolls.
   ```
 
-### Multiplayer Mode
+### 8-Player Octagon Multiplayer
 - **Complexity**: Very High
-- **Description**: Real-time multiplayer dice battles
+- **Description**: Real-time multiplayer with 8 player seats around octagon game board
 - **Features**:
-  - 2-4 player simultaneous play
-  - Turn-based or real-time variants
-  - Matchmaking system
-  - In-game chat/emotes
-  - Spectator mode
+  - 8 player seats positioned around octagon table
+  - Player avatars with customization (profile pic, username, rank badge)
+  - Live player info displays (current score, turn indicator, status)
+  - Real-time game state synchronization
+  - Turn-based or simultaneous roll variants
+  - Player emotes and reactions
+  - Spectator mode with free camera orbit around table
+  - Seat selection and room management
 - **Technical Notes**:
-  - WebSocket or WebRTC for networking
-  - State synchronization challenges
-  - Cheat prevention (server-authoritative rolls)
+  - WebSocket server (Socket.io or Colyseus recommended)
+  - State synchronization protocol for 8 concurrent players
+  - Server-authoritative dice rolls for cheat prevention
+  - Player session management and reconnection handling
+  - Octagon geometry provides natural 8-seat layout (45° spacing)
+- **Dependencies**:
+  - Requires octagon game board implementation (see Phase 1)
+  - Player profile system with avatar storage
+  - Backend infrastructure (API + database + WebSocket server)
 - **AI Prompt**:
   ```
-  Design and implement multiplayer mode for BISCUITS. Create WebSocket server using Socket.io or Colyseus for real-time state sync. Implement matchmaking in src/multiplayer/matchmaking.ts, turn management, and spectator view. Ensure server-authoritative dice rolls to prevent cheating.
+  Design 8-player multiplayer mode for BISCUITS around octagon game board. Create WebSocket server with room management supporting 8 concurrent players. Implement player seat assignment using octagon's 8 positions (calculated at 45° intervals). Build UI for player avatars and info displays positioned around octagon perimeter in src/multiplayer/PlayerSeats.ts. Sync game state across all clients with turn management in src/multiplayer/TurnManager.ts. Ensure server-authoritative dice rolls to prevent cheating.
   ```
 
-### Leaderboard v2
+### Live Player Updates Notification System
 - **Complexity**: Medium
-- **Description**: Enhanced leaderboards beyond current implementation
-- **Current**: Stored in localStorage (local-only)
-- **Enhancement**:
-  - Global leaderboards (all-time, weekly, monthly)
-  - Friend leaderboards
-  - Theme-specific leaderboards
-  - Verified scores (replay validation)
+- **Description**: Real-time feed of other players' actions during multiplayer games
+- **Features**:
+  - Live notifications for player actions ("{Player} rolled 3 dice!")
+  - Score celebration notifications ("{Player} scored 50 points!")
+  - Positional notifications appearing near player's seat
+  - Color-coded per player for easy identification
+  - Queue system with priority (extends existing notification service)
+  - Animations for dramatic moments (big scores, busts)
+  - Filter options (show all players vs. only friends)
+- **Technical Notes**:
+  - Extends existing `src/ui/notifications.ts` system
+  - WebSocket events trigger notifications
+  - 3D positioning relative to octagon player seats
+  - Mobile-responsive (collapsible to icon badges)
+- **Dependencies**:
+  - Requires multiplayer infrastructure
+  - Existing notification system provides foundation
 - **AI Prompt**:
   ```
-  Upgrade BISCUITS leaderboards to global system. Create backend API for score submission with replay validation (verify action log produces claimed score). Add src/services/leaderboardService.ts to fetch/display global, friend, and theme-specific rankings with pagination.
+  Extend BISCUITS notification system for multiplayer player updates. Enhance src/ui/notifications.ts to support 3D-positioned notifications around octagon player seats. Add WebSocket event listeners in src/multiplayer/EventHandler.ts to trigger notifications for player actions (rolls, scores, emotes). Implement player-specific color coding and priority queue for high-traffic games.
   ```
+
+### Global Leaderboard Integration
+- **Complexity**: High
+- **Description**: Persistent global rankings with friend competition features
+- **Current**: Local-only leaderboard in localStorage
+- **Enhancement**:
+  - Global leaderboards (all-time, weekly, monthly, daily)
+  - Friend rankings and direct challenges
+  - Theme-specific leaderboards
+  - Mode-specific leaderboards (Easy/Normal/Hard)
+  - Verified scores via replay validation
+  - Achievement badges displayed on profiles
+  - "Beat your friends" competitive features
+  - Real-time rank updates during multiplayer
+  - Leaderboard spectator mode (watch top players)
+- **Technical Notes**:
+  - Backend API for score submission and retrieval
+  - Replay validation ensures legitimate scores
+  - Caching strategy for performance (Redis recommended)
+  - Pagination for large datasets
+  - Friend system with social graph
+- **Dependencies**:
+  - Requires user authentication system
+  - Replay system for score verification
+  - Backend infrastructure
+- **AI Prompt**:
+  ```
+  Upgrade BISCUITS leaderboards to global system with friend competition. Create backend API (Supabase or Firebase) for score submission with replay validation - verify action log produces claimed score before accepting. Build src/services/leaderboardService.ts to fetch/display global, friend, theme-specific, and mode-specific rankings with pagination. Add friend challenge system where players can compete for highest score. Implement real-time rank updates during multiplayer sessions.
+  ```
+
+### Tournament Racing System
+- **Complexity**: Very High
+- **Description**: Competitive tournament mode with live racing events
+- **Features**:
+  - Tournament lobby with active/upcoming events
+  - Race format: fastest to reach target score wins
+  - Bracket tournaments (single/double elimination)
+  - Swiss-system round-robin tournaments
+  - Live tournament feed showing all match results
+  - Prize pools (virtual currency or real rewards)
+  - Tournament archives and replay library
+  - Anti-cheat via server-authoritative validation
+  - Tournament spectator mode with split-screen views
+  - Entry fees and buy-ins (virtual currency)
+  - Automatic bracket generation and seeding
+  - Tiebreaker rules (time-to-complete, total rolls)
+- **Technical Notes**:
+  - Requires full multiplayer infrastructure
+  - Bracket generation algorithms (Berger tables for Swiss)
+  - Real-time tournament state management
+  - Replay storage for all tournament games
+  - Payment integration for prize tournaments (Stripe)
+  - Tournament scheduling and time zone handling
+- **Dependencies**:
+  - Multiplayer system must be complete
+  - Replay system for verification
+  - User profiles and authentication
+  - Payment processing (optional, for real prizes)
+- **AI Prompt**:
+  ```
+  Design tournament racing system for BISCUITS. Create bracket generation in src/tournament/BracketManager.ts supporting single/double elimination and Swiss-system formats. Implement tournament lobby in src/tournament/TournamentLobby.ts with registration, match scheduling, and live results feed. Build race-format game mode where players compete to reach target score fastest. Add spectator mode with multi-player camera switching. Ensure all matches use server-authoritative rolls and replay validation for anti-cheat. Integrate with global leaderboard for tournament rankings.
+  ```
+
 
 ### Replay System
 - **Complexity**: Medium
@@ -438,18 +557,71 @@ This document captures future feature ideas, enhancements, and expansion possibi
   Implement advanced graphics options for BISCUITS. Add SSAO, bloom, and depth-of-field post-processing to src/render/scene.ts using BabylonJS rendering pipeline. Create graphics quality presets (Low/Medium/High/Ultra) with automatic detection based on device capabilities.
   ```
 
-### Camera Controls
+### Camera System & Machinima Tools
+- **Complexity**: Very High
+- **Description**: Progressive camera system with position management, flying mode, and professional machinima tools
+- **Documentation**: See `docs/CAMERA-SYSTEM.md` for complete specification (800+ lines)
+- **Current Status**: ✅ Phase 1 Complete (Basic position management with 3 slots)
+- **Feature Tiers**:
+
+#### Phase 1: Basic Camera Positions (✅ COMPLETE)
+- Save/load camera positions (3 slots free tier)
+- Import/export position JSON
+- Keyboard shortcut (C key) access
+- Tier-based unlock system (free/unlocked/premium)
+
+#### Phase 2: Enhanced Camera System (Post-TODO)
 - **Complexity**: Medium
-- **Description**: Player-controlled camera movement
+- **Unlock**: Complete 10 games OR earn "Cinematographer" achievement
 - **Features**:
-  - Free orbit around table
-  - Zoom in/out
-  - Preset camera angles
-  - First-person view of dice
-  - Cinematic camera on big rolls
+  - 10 saved position slots (up from 3)
+  - Smooth camera transitions with Bezier interpolation
+  - Configurable easing functions (ease-in, ease-out, elastic)
+  - Per-player seat positions for multiplayer (8 seats)
+  - Replay timeline system with scrubbing
+  - Community sharing (export/import preset packs)
+
+#### Phase 3: Flying Camera Mode (Post-Multiplayer)
+- **Complexity**: High
+- **Unlock**: Achievement "Sky Walker" OR item unlock OR $4.99 Camera Pro pack
+- **Features**:
+  - Free-flying camera (UniversalCamera)
+  - WASD + mouse look controls
+  - Q/E for up/down movement
+  - Shift for sprint (3x speed), Ctrl for slow (0.3x speed)
+  - No-clip mode (pass through geometry)
+  - FOV adjustment (60-120°)
+  - Optional gamepad support
+
+#### Phase 4: Machinima Pro Tools (Premium Feature)
+- **Complexity**: Very High
+- **Unlock**: $14.99 Machinima Pro pack OR Player Level 50
+- **Features**:
+  - **Camera Path Editor**: Keyframe system with timeline UI
+  - **Automated Movements**: Orbit, dolly, crane, shake, follow
+  - **Cinematic Effects**: Depth of field, vignette, letterbox, color grading, motion blur
+  - **Director Mode**: Multi-camera live switching with hotkeys
+  - **Picture-in-Picture**: Show multiple angles simultaneously
+  - **Recording & Export**: MP4/WebM video rendering, GIF creation, screenshot gallery
+  - **OBS Integration**: Virtual camera output for streaming
+  - **Lower Thirds**: Custom text overlays for player names
+
+- **Monetization Strategy**:
+  - Free: 3 positions, basic controls
+  - Earned: 10 positions via gameplay (10 games completed)
+  - Camera Pro ($4.99): Flying mode, 20 positions, FOV control
+  - Machinima Pro ($14.99 or $2.99/month): Full toolkit, unlimited positions, video export
+
+- **Use Cases**:
+  - Casual players: Better viewing angles during gameplay
+  - Competitive players: Consistent tournament views
+  - Content creators: Dynamic shots for YouTube/TikTok
+  - Esports broadcasters: Professional multi-camera production
+  - Machinima artists: Full cinematic control for short films
+
 - **AI Prompt**:
   ```
-  Add advanced camera controls to BISCUITS. Implement orbit camera in src/render/scene.ts allowing zoom and rotation. Add preset views (top-down, isometric, close-up) with smooth transitions. Create cinematic camera animation for high-scoring rolls.
+  Implement Camera System Phase 2 per docs/CAMERA-SYSTEM.md. Add smooth camera transitions using Bezier interpolation in src/services/cameraService.ts. Create CameraInterpolator class with easing functions (linear, ease-in-out, elastic). Update CameraControlsPanel to show transition speed slider. Unlock 10 position slots when player completes 10 games or earns Cinematographer achievement.
   ```
 
 ### Customizable Table

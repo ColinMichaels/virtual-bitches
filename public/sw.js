@@ -172,4 +172,49 @@ self.addEventListener('message', (event) => {
       cache.addAll(urls);
     });
   }
+
+  if (event.data && event.data.type === 'SYNC_GAME_LOGS') {
+    const endpoint = event.data.endpoint;
+    const logs = Array.isArray(event.data.logs) ? event.data.logs : [];
+    const replyPort = event.ports && event.ports[0] ? event.ports[0] : null;
+
+    if (!endpoint || logs.length === 0) {
+      if (replyPort) {
+        replyPort.postMessage({ ok: false, accepted: 0 });
+      }
+      return;
+    }
+
+    fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ logs }),
+    })
+      .then(async (response) => {
+        if (!replyPort) return;
+        if (!response.ok) {
+          replyPort.postMessage({ ok: false, accepted: 0 });
+          return;
+        }
+
+        let accepted = logs.length;
+        try {
+          const body = await response.json();
+          if (typeof body.accepted === 'number') {
+            accepted = Math.max(0, Math.floor(body.accepted));
+          }
+        } catch (error) {
+          // Keep default accepted count when response body is empty/non-JSON.
+        }
+
+        replyPort.postMessage({ ok: true, accepted });
+      })
+      .catch(() => {
+        if (replyPort) {
+          replyPort.postMessage({ ok: false, accepted: 0 });
+        }
+      });
+  }
 });

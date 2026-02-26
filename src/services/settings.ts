@@ -16,14 +16,31 @@ export interface AudioSettings {
   musicEnabled: boolean;
 }
 
+export interface VisualSettings {
+  tableContrast: "low" | "normal" | "high" | "maximum";
+}
+
 export interface DisplaySettings {
   graphicsQuality: "low" | "medium" | "high";
   shadowsEnabled: boolean;
   particlesEnabled: boolean;
+  particleIntensity: "off" | "minimal" | "normal" | "enthusiastic";
+  visual: VisualSettings;
 }
 
 export interface ControlSettings {
   cameraSensitivity: number; // 0.5-2.0
+  reduceChaosCameraEffects: boolean;
+  allowChaosControlInversion: boolean;
+}
+
+export interface CameraSettings {
+  sensitivity: number; // 0.5-2.0 (mirror of controls.cameraSensitivity)
+  smoothTransitions: boolean;
+  transitionDuration: number; // seconds
+  savedPositionSlots?: number; // optional override (defaults determined by tier)
+  flyingModeEnabled?: boolean;
+  machinimaModeEnabled?: boolean;
 }
 
 export interface GameSettings {
@@ -40,6 +57,7 @@ export interface Settings {
   audio: AudioSettings;
   display: DisplaySettings;
   controls: ControlSettings;
+  camera?: CameraSettings;
   game: GameSettings;
   haptics?: boolean; // Optional for backwards compatibility
 }
@@ -48,17 +66,31 @@ const DEFAULT_SETTINGS: Settings = {
   audio: {
     masterVolume: 0.7,
     sfxVolume: 0.8,
-    musicVolume: 0.5,
+    musicVolume: 0,
     sfxEnabled: true,
-    musicEnabled: true,
+    musicEnabled: false,
   },
   display: {
     graphicsQuality: "high",
     shadowsEnabled: true,
     particlesEnabled: true,
+    particleIntensity: "normal",
+    visual: {
+      tableContrast: "high",
+    },
   },
   controls: {
     cameraSensitivity: 1.0,
+    reduceChaosCameraEffects: false,
+    allowChaosControlInversion: true,
+  },
+  camera: {
+    sensitivity: 1.0,
+    smoothTransitions: false,
+    transitionDuration: 0.75,
+    // savedPositionSlots left undefined to be driven by CameraService tier limits
+    flyingModeEnabled: false,
+    machinimaModeEnabled: false,
   },
   game: {
     showTutorial: true,
@@ -105,8 +137,16 @@ export class SettingsService {
   private mergeWithDefaults(loaded: any): Settings {
     return {
       audio: { ...DEFAULT_SETTINGS.audio, ...loaded.audio },
-      display: { ...DEFAULT_SETTINGS.display, ...loaded.display },
+      display: {
+        ...DEFAULT_SETTINGS.display,
+        ...loaded.display,
+        visual: {
+          ...DEFAULT_SETTINGS.display.visual,
+          ...(loaded.display?.visual || {})
+        }
+      },
       controls: { ...DEFAULT_SETTINGS.controls, ...loaded.controls },
+      camera: { ...DEFAULT_SETTINGS.camera, ...(loaded.camera || {}) },
       game: { ...DEFAULT_SETTINGS.game, ...loaded.game },
     };
   }
@@ -142,7 +182,21 @@ export class SettingsService {
    * Update display settings
    */
   updateDisplay(display: Partial<DisplaySettings>): void {
+    // Handle nested visual settings merge
+    if (display.visual) {
+      this.settings.display.visual = { ...this.settings.display.visual, ...display.visual };
+      delete display.visual; // Prevent shallow overwrite
+    }
     this.settings.display = { ...this.settings.display, ...display };
+    this.saveSettings();
+    this.notifyListeners();
+  }
+
+  /**
+   * Update visual settings (convenience method)
+   */
+  updateVisual(visual: Partial<VisualSettings>): void {
+    this.settings.display.visual = { ...this.settings.display.visual, ...visual };
     this.saveSettings();
     this.notifyListeners();
   }
@@ -170,6 +224,15 @@ export class SettingsService {
    */
   updateGame(game: Partial<GameSettings>): void {
     this.settings.game = { ...this.settings.game, ...game };
+    this.saveSettings();
+    this.notifyListeners();
+  }
+
+  /**
+   * Replace full settings snapshot (used by remote profile sync)
+   */
+  replaceSettings(nextSettings: Settings): void {
+    this.settings = this.mergeWithDefaults(nextSettings);
     this.saveSettings();
     this.notifyListeners();
   }

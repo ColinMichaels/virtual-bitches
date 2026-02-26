@@ -6,6 +6,7 @@
 import { settingsService, Settings } from "../services/settings.js";
 import { audioService } from "../services/audio.js";
 import { hapticsService } from "../services/haptics.js";
+import { notificationService } from "./notifications.js";
 import { ThemeSwitcher } from "./themeSwitcher.js";
 import { GameDifficulty } from "../engine/types.js";
 
@@ -88,6 +89,48 @@ export class SettingsModal {
             <label>
               <input type="checkbox" id="shadows-enabled" ${this.settings.display.shadowsEnabled ? "checked" : ""}>
               Enable Shadows
+            </label>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Visual Settings</h3>
+          <p class="setting-description">Adjust table contrast for better dice visibility</p>
+
+          <div class="setting-row">
+            <label for="table-contrast">Table Contrast</label>
+            <select id="table-contrast">
+              <option value="low" ${this.settings.display.visual.tableContrast === "low" ? "selected" : ""}>Low (Brighter Table)</option>
+              <option value="normal" ${this.settings.display.visual.tableContrast === "normal" ? "selected" : ""}>Normal (Balanced)</option>
+              <option value="high" ${this.settings.display.visual.tableContrast === "high" ? "selected" : ""}>High (Good Readability)</option>
+              <option value="maximum" ${this.settings.display.visual.tableContrast === "maximum" ? "selected" : ""}>Maximum (Best Readability)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Accessibility (Chaos Effects)</h3>
+          <p class="setting-description">Reduce disruptive camera effects when needed</p>
+
+          <div class="setting-row">
+            <label>
+              <input
+                type="checkbox"
+                id="reduce-chaos-camera-effects"
+                ${this.settings.controls.reduceChaosCameraEffects ? "checked" : ""}
+              >
+              Reduce camera attack effects
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <label>
+              <input
+                type="checkbox"
+                id="allow-control-inversion"
+                ${this.settings.controls.allowChaosControlInversion ? "checked" : ""}
+              >
+              Allow control inversion during drunk attacks
             </label>
           </div>
         </div>
@@ -244,6 +287,61 @@ export class SettingsModal {
     const shadowsEnabled = document.getElementById("shadows-enabled") as HTMLInputElement;
     shadowsEnabled.addEventListener("change", () => {
       settingsService.updateDisplay({ shadowsEnabled: shadowsEnabled.checked });
+      audioService.playSfx("click");
+    });
+
+    // Table Contrast
+    const tableContrast = document.getElementById("table-contrast") as HTMLSelectElement;
+    tableContrast.addEventListener("change", () => {
+      const value = tableContrast.value as "low" | "normal" | "high" | "maximum";
+      settingsService.updateVisual({ tableContrast: value });
+
+      // User feedback - show confirmation notification
+      const labels = {
+        low: "Low Contrast (Brighter Table)",
+        normal: "Normal Contrast (Balanced)",
+        high: "High Contrast (Darker Table)",
+        maximum: "Maximum Contrast (Darkest Table)"
+      };
+      notificationService.show(`Table contrast: ${labels[value]}`, "info", 2000);
+
+      // Briefly hide settings modal so user can see the table change
+      this.container.style.opacity = "0";
+      this.container.style.pointerEvents = "none";
+      setTimeout(() => {
+        this.container.style.opacity = "1";
+        this.container.style.pointerEvents = "auto";
+      }, 800); // Show change for 800ms
+
+      audioService.playSfx("click");
+    });
+
+    // Chaos accessibility safeguards
+    const reduceChaosEffects = document.getElementById("reduce-chaos-camera-effects") as HTMLInputElement;
+    reduceChaosEffects.addEventListener("change", () => {
+      settingsService.updateControls({ reduceChaosCameraEffects: reduceChaosEffects.checked });
+      notificationService.show(
+        reduceChaosEffects.checked
+          ? "Chaos camera effects reduced"
+          : "Chaos camera effects restored",
+        "info",
+        2000
+      );
+      audioService.playSfx("click");
+    });
+
+    const allowControlInversion = document.getElementById("allow-control-inversion") as HTMLInputElement;
+    allowControlInversion.addEventListener("change", () => {
+      settingsService.updateControls({
+        allowChaosControlInversion: allowControlInversion.checked,
+      });
+      notificationService.show(
+        allowControlInversion.checked
+          ? "Control inversion enabled for drunk attacks"
+          : "Control inversion blocked by accessibility setting",
+        "info",
+        2200
+      );
       audioService.playSfx("click");
     });
 
@@ -436,6 +534,12 @@ export class SettingsModal {
       this.settings.display.graphicsQuality;
     (document.getElementById("shadows-enabled") as HTMLInputElement).checked =
       this.settings.display.shadowsEnabled;
+    (document.getElementById("table-contrast") as HTMLSelectElement).value =
+      this.settings.display.visual.tableContrast;
+    (document.getElementById("reduce-chaos-camera-effects") as HTMLInputElement).checked =
+      this.settings.controls.reduceChaosCameraEffects;
+    (document.getElementById("allow-control-inversion") as HTMLInputElement).checked =
+      this.settings.controls.allowChaosControlInversion;
 
     // Update game variants
     (document.getElementById("variant-d20") as HTMLInputElement).checked =

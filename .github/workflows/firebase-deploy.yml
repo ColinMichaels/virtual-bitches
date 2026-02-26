@@ -1,0 +1,304 @@
+name: Deploy Firebase + Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - dev
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'dev' && 'dev' || 'prod' }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Resolve Deployment Target
+        id: target
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+          FIREBASE_PROJECT_ID_ENV_SECRET: ${{ secrets.FIREBASE_PROJECT_ID }}
+          VITE_API_BASE_URL_ENV_SECRET: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_WS_URL_ENV_SECRET: ${{ secrets.VITE_WS_URL }}
+          VITE_FIREBASE_API_KEY_ENV_SECRET: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN_ENV_SECRET: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID_ENV_SECRET: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET_ENV_SECRET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID_ENV_SECRET: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID_ENV_SECRET: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_MEASUREMENT_ID_ENV_SECRET: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
+          FIREBASE_PROJECT_ID_PROD_SECRET: ${{ secrets.FIREBASE_PROJECT_ID_PROD }}
+          FIREBASE_PROJECT_ID_DEV_SECRET: ${{ secrets.FIREBASE_PROJECT_ID_DEV }}
+          VITE_API_BASE_URL_PROD_SECRET: ${{ secrets.VITE_API_BASE_URL_PROD }}
+          VITE_API_BASE_URL_DEV_SECRET: ${{ secrets.VITE_API_BASE_URL_DEV }}
+          VITE_WS_URL_PROD_SECRET: ${{ secrets.VITE_WS_URL_PROD }}
+          VITE_WS_URL_DEV_SECRET: ${{ secrets.VITE_WS_URL_DEV }}
+          VITE_FIREBASE_API_KEY_PROD_SECRET: ${{ secrets.VITE_FIREBASE_API_KEY_PROD }}
+          VITE_FIREBASE_API_KEY_DEV_SECRET: ${{ secrets.VITE_FIREBASE_API_KEY_DEV }}
+          VITE_FIREBASE_AUTH_DOMAIN_PROD_SECRET: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN_PROD }}
+          VITE_FIREBASE_AUTH_DOMAIN_DEV_SECRET: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN_DEV }}
+          VITE_FIREBASE_PROJECT_ID_PROD_SECRET: ${{ secrets.VITE_FIREBASE_PROJECT_ID_PROD }}
+          VITE_FIREBASE_PROJECT_ID_DEV_SECRET: ${{ secrets.VITE_FIREBASE_PROJECT_ID_DEV }}
+          VITE_FIREBASE_STORAGE_BUCKET_PROD_SECRET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET_PROD }}
+          VITE_FIREBASE_STORAGE_BUCKET_DEV_SECRET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET_DEV }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID_PROD_SECRET: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID_PROD }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID_DEV_SECRET: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID_DEV }}
+          VITE_FIREBASE_APP_ID_PROD_SECRET: ${{ secrets.VITE_FIREBASE_APP_ID_PROD }}
+          VITE_FIREBASE_APP_ID_DEV_SECRET: ${{ secrets.VITE_FIREBASE_APP_ID_DEV }}
+          VITE_FIREBASE_MEASUREMENT_ID_PROD_SECRET: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID_PROD }}
+          VITE_FIREBASE_MEASUREMENT_ID_DEV_SECRET: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID_DEV }}
+          FIREBASE_PROJECT_ID_ENV_VAR: ${{ vars.FIREBASE_PROJECT_ID }}
+          VITE_API_BASE_URL_ENV_VAR: ${{ vars.VITE_API_BASE_URL }}
+          VITE_WS_URL_ENV_VAR: ${{ vars.VITE_WS_URL }}
+          VITE_FIREBASE_API_KEY_ENV_VAR: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN_ENV_VAR: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID_ENV_VAR: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET_ENV_VAR: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID_ENV_VAR: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID_ENV_VAR: ${{ vars.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_MEASUREMENT_ID_ENV_VAR: ${{ vars.VITE_FIREBASE_MEASUREMENT_ID }}
+          FIREBASE_PROJECT_ID_PROD_VAR: ${{ vars.FIREBASE_PROJECT_ID_PROD }}
+          FIREBASE_PROJECT_ID_DEV_VAR: ${{ vars.FIREBASE_PROJECT_ID_DEV }}
+          VITE_API_BASE_URL_PROD_VAR: ${{ vars.VITE_API_BASE_URL_PROD }}
+          VITE_API_BASE_URL_DEV_VAR: ${{ vars.VITE_API_BASE_URL_DEV }}
+          VITE_WS_URL_PROD_VAR: ${{ vars.VITE_WS_URL_PROD }}
+          VITE_WS_URL_DEV_VAR: ${{ vars.VITE_WS_URL_DEV }}
+          VITE_FIREBASE_API_KEY_PROD_VAR: ${{ vars.VITE_FIREBASE_API_KEY_PROD }}
+          VITE_FIREBASE_API_KEY_DEV_VAR: ${{ vars.VITE_FIREBASE_API_KEY_DEV }}
+          VITE_FIREBASE_AUTH_DOMAIN_PROD_VAR: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN_PROD }}
+          VITE_FIREBASE_AUTH_DOMAIN_DEV_VAR: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN_DEV }}
+          VITE_FIREBASE_PROJECT_ID_PROD_VAR: ${{ vars.VITE_FIREBASE_PROJECT_ID_PROD }}
+          VITE_FIREBASE_PROJECT_ID_DEV_VAR: ${{ vars.VITE_FIREBASE_PROJECT_ID_DEV }}
+          VITE_FIREBASE_STORAGE_BUCKET_PROD_VAR: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET_PROD }}
+          VITE_FIREBASE_STORAGE_BUCKET_DEV_VAR: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET_DEV }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID_PROD_VAR: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID_PROD }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID_DEV_VAR: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID_DEV }}
+          VITE_FIREBASE_APP_ID_PROD_VAR: ${{ vars.VITE_FIREBASE_APP_ID_PROD }}
+          VITE_FIREBASE_APP_ID_DEV_VAR: ${{ vars.VITE_FIREBASE_APP_ID_DEV }}
+          VITE_FIREBASE_MEASUREMENT_ID_PROD_VAR: ${{ vars.VITE_FIREBASE_MEASUREMENT_ID_PROD }}
+          VITE_FIREBASE_MEASUREMENT_ID_DEV_VAR: ${{ vars.VITE_FIREBASE_MEASUREMENT_ID_DEV }}
+        run: |
+          set -euo pipefail
+
+          resolve_value() {
+            local candidate=""
+            for candidate in "$@"; do
+              if [ -n "${candidate:-}" ]; then
+                printf '%s' "$candidate"
+                return 0
+              fi
+            done
+            printf ''
+          }
+
+          if [ "$BRANCH_NAME" = "master" ] || [ "$BRANCH_NAME" = "main" ]; then
+            PROJECT_ID="$(resolve_value "$FIREBASE_PROJECT_ID_PROD_SECRET" "$FIREBASE_PROJECT_ID_ENV_SECRET" "$FIREBASE_PROJECT_ID_PROD_VAR" "$FIREBASE_PROJECT_ID_ENV_VAR")"
+            if [ -z "$PROJECT_ID" ]; then
+              PROJECT_ID="$(resolve_value "$VITE_FIREBASE_PROJECT_ID_PROD_SECRET" "$VITE_FIREBASE_PROJECT_ID_ENV_SECRET" "$VITE_FIREBASE_PROJECT_ID_PROD_VAR" "$VITE_FIREBASE_PROJECT_ID_ENV_VAR")"
+            fi
+            API_BASE_URL="$(resolve_value "$VITE_API_BASE_URL_PROD_SECRET" "$VITE_API_BASE_URL_ENV_SECRET" "$VITE_API_BASE_URL_PROD_VAR" "$VITE_API_BASE_URL_ENV_VAR")"
+            WS_URL="$(resolve_value "$VITE_WS_URL_PROD_SECRET" "$VITE_WS_URL_ENV_SECRET" "$VITE_WS_URL_PROD_VAR" "$VITE_WS_URL_ENV_VAR")"
+            FB_API_KEY="$(resolve_value "$VITE_FIREBASE_API_KEY_PROD_SECRET" "$VITE_FIREBASE_API_KEY_ENV_SECRET" "$VITE_FIREBASE_API_KEY_PROD_VAR" "$VITE_FIREBASE_API_KEY_ENV_VAR")"
+            FB_AUTH_DOMAIN="$(resolve_value "$VITE_FIREBASE_AUTH_DOMAIN_PROD_SECRET" "$VITE_FIREBASE_AUTH_DOMAIN_ENV_SECRET" "$VITE_FIREBASE_AUTH_DOMAIN_PROD_VAR" "$VITE_FIREBASE_AUTH_DOMAIN_ENV_VAR")"
+            FB_PROJECT_ID="$(resolve_value "$VITE_FIREBASE_PROJECT_ID_PROD_SECRET" "$VITE_FIREBASE_PROJECT_ID_ENV_SECRET" "$VITE_FIREBASE_PROJECT_ID_PROD_VAR" "$VITE_FIREBASE_PROJECT_ID_ENV_VAR")"
+            FB_STORAGE_BUCKET="$(resolve_value "$VITE_FIREBASE_STORAGE_BUCKET_PROD_SECRET" "$VITE_FIREBASE_STORAGE_BUCKET_ENV_SECRET" "$VITE_FIREBASE_STORAGE_BUCKET_PROD_VAR" "$VITE_FIREBASE_STORAGE_BUCKET_ENV_VAR")"
+            FB_SENDER_ID="$(resolve_value "$VITE_FIREBASE_MESSAGING_SENDER_ID_PROD_SECRET" "$VITE_FIREBASE_MESSAGING_SENDER_ID_ENV_SECRET" "$VITE_FIREBASE_MESSAGING_SENDER_ID_PROD_VAR" "$VITE_FIREBASE_MESSAGING_SENDER_ID_ENV_VAR")"
+            FB_APP_ID="$(resolve_value "$VITE_FIREBASE_APP_ID_PROD_SECRET" "$VITE_FIREBASE_APP_ID_ENV_SECRET" "$VITE_FIREBASE_APP_ID_PROD_VAR" "$VITE_FIREBASE_APP_ID_ENV_VAR")"
+            FB_MEASUREMENT_ID="$(resolve_value "$VITE_FIREBASE_MEASUREMENT_ID_PROD_SECRET" "$VITE_FIREBASE_MEASUREMENT_ID_ENV_SECRET" "$VITE_FIREBASE_MEASUREMENT_ID_PROD_VAR" "$VITE_FIREBASE_MEASUREMENT_ID_ENV_VAR")"
+            EXPECTED_ENV_SUFFIX="PROD"
+            EXPECTED_ENV_NAME="prod"
+          elif [ "$BRANCH_NAME" = "dev" ]; then
+            PROJECT_ID="$(resolve_value "$FIREBASE_PROJECT_ID_DEV_SECRET" "$FIREBASE_PROJECT_ID_ENV_SECRET" "$FIREBASE_PROJECT_ID_DEV_VAR" "$FIREBASE_PROJECT_ID_ENV_VAR")"
+            if [ -z "$PROJECT_ID" ]; then
+              PROJECT_ID="$(resolve_value "$VITE_FIREBASE_PROJECT_ID_DEV_SECRET" "$VITE_FIREBASE_PROJECT_ID_ENV_SECRET" "$VITE_FIREBASE_PROJECT_ID_DEV_VAR" "$VITE_FIREBASE_PROJECT_ID_ENV_VAR")"
+            fi
+            API_BASE_URL="$(resolve_value "$VITE_API_BASE_URL_DEV_SECRET" "$VITE_API_BASE_URL_ENV_SECRET" "$VITE_API_BASE_URL_DEV_VAR" "$VITE_API_BASE_URL_ENV_VAR")"
+            WS_URL="$(resolve_value "$VITE_WS_URL_DEV_SECRET" "$VITE_WS_URL_ENV_SECRET" "$VITE_WS_URL_DEV_VAR" "$VITE_WS_URL_ENV_VAR")"
+            FB_API_KEY="$(resolve_value "$VITE_FIREBASE_API_KEY_DEV_SECRET" "$VITE_FIREBASE_API_KEY_ENV_SECRET" "$VITE_FIREBASE_API_KEY_DEV_VAR" "$VITE_FIREBASE_API_KEY_ENV_VAR")"
+            FB_AUTH_DOMAIN="$(resolve_value "$VITE_FIREBASE_AUTH_DOMAIN_DEV_SECRET" "$VITE_FIREBASE_AUTH_DOMAIN_ENV_SECRET" "$VITE_FIREBASE_AUTH_DOMAIN_DEV_VAR" "$VITE_FIREBASE_AUTH_DOMAIN_ENV_VAR")"
+            FB_PROJECT_ID="$(resolve_value "$VITE_FIREBASE_PROJECT_ID_DEV_SECRET" "$VITE_FIREBASE_PROJECT_ID_ENV_SECRET" "$VITE_FIREBASE_PROJECT_ID_DEV_VAR" "$VITE_FIREBASE_PROJECT_ID_ENV_VAR")"
+            FB_STORAGE_BUCKET="$(resolve_value "$VITE_FIREBASE_STORAGE_BUCKET_DEV_SECRET" "$VITE_FIREBASE_STORAGE_BUCKET_ENV_SECRET" "$VITE_FIREBASE_STORAGE_BUCKET_DEV_VAR" "$VITE_FIREBASE_STORAGE_BUCKET_ENV_VAR")"
+            FB_SENDER_ID="$(resolve_value "$VITE_FIREBASE_MESSAGING_SENDER_ID_DEV_SECRET" "$VITE_FIREBASE_MESSAGING_SENDER_ID_ENV_SECRET" "$VITE_FIREBASE_MESSAGING_SENDER_ID_DEV_VAR" "$VITE_FIREBASE_MESSAGING_SENDER_ID_ENV_VAR")"
+            FB_APP_ID="$(resolve_value "$VITE_FIREBASE_APP_ID_DEV_SECRET" "$VITE_FIREBASE_APP_ID_ENV_SECRET" "$VITE_FIREBASE_APP_ID_DEV_VAR" "$VITE_FIREBASE_APP_ID_ENV_VAR")"
+            FB_MEASUREMENT_ID="$(resolve_value "$VITE_FIREBASE_MEASUREMENT_ID_DEV_SECRET" "$VITE_FIREBASE_MEASUREMENT_ID_ENV_SECRET" "$VITE_FIREBASE_MEASUREMENT_ID_DEV_VAR" "$VITE_FIREBASE_MEASUREMENT_ID_ENV_VAR")"
+            EXPECTED_ENV_SUFFIX="DEV"
+            EXPECTED_ENV_NAME="dev"
+          else
+            echo "Unsupported branch: $BRANCH_NAME"
+            exit 1
+          fi
+
+          missing=()
+          [ -z "${PROJECT_ID:-}" ] && missing+=("FIREBASE_PROJECT_ID_${EXPECTED_ENV_SUFFIX} or FIREBASE_PROJECT_ID (fallback: VITE_FIREBASE_PROJECT_ID_${EXPECTED_ENV_SUFFIX} / VITE_FIREBASE_PROJECT_ID)")
+          [ -z "${API_BASE_URL:-}" ] && missing+=("VITE_API_BASE_URL_${EXPECTED_ENV_SUFFIX} or VITE_API_BASE_URL")
+          [ -z "${WS_URL:-}" ] && missing+=("VITE_WS_URL_${EXPECTED_ENV_SUFFIX} or VITE_WS_URL")
+          [ -z "${FB_API_KEY:-}" ] && missing+=("VITE_FIREBASE_API_KEY_${EXPECTED_ENV_SUFFIX} or VITE_FIREBASE_API_KEY")
+          [ -z "${FB_AUTH_DOMAIN:-}" ] && missing+=("VITE_FIREBASE_AUTH_DOMAIN_${EXPECTED_ENV_SUFFIX} or VITE_FIREBASE_AUTH_DOMAIN")
+          [ -z "${FB_PROJECT_ID:-}" ] && missing+=("VITE_FIREBASE_PROJECT_ID_${EXPECTED_ENV_SUFFIX} or VITE_FIREBASE_PROJECT_ID")
+          [ -z "${FB_STORAGE_BUCKET:-}" ] && missing+=("VITE_FIREBASE_STORAGE_BUCKET_${EXPECTED_ENV_SUFFIX} or VITE_FIREBASE_STORAGE_BUCKET")
+          [ -z "${FB_SENDER_ID:-}" ] && missing+=("VITE_FIREBASE_MESSAGING_SENDER_ID_${EXPECTED_ENV_SUFFIX} or VITE_FIREBASE_MESSAGING_SENDER_ID")
+          [ -z "${FB_APP_ID:-}" ] && missing+=("VITE_FIREBASE_APP_ID_${EXPECTED_ENV_SUFFIX} or VITE_FIREBASE_APP_ID")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing required config for branch '$BRANCH_NAME' (GitHub Environment: '$EXPECTED_ENV_NAME'):"
+            printf ' - %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+          echo "project_id=$PROJECT_ID" >> "$GITHUB_OUTPUT"
+          echo "api_base_url=$API_BASE_URL" >> "$GITHUB_OUTPUT"
+          echo "ws_url=$WS_URL" >> "$GITHUB_OUTPUT"
+          echo "fb_api_key=$FB_API_KEY" >> "$GITHUB_OUTPUT"
+          echo "fb_auth_domain=$FB_AUTH_DOMAIN" >> "$GITHUB_OUTPUT"
+          echo "fb_project_id=$FB_PROJECT_ID" >> "$GITHUB_OUTPUT"
+          echo "fb_storage_bucket=$FB_STORAGE_BUCKET" >> "$GITHUB_OUTPUT"
+          echo "fb_messaging_sender_id=$FB_SENDER_ID" >> "$GITHUB_OUTPUT"
+          echo "fb_app_id=$FB_APP_ID" >> "$GITHUB_OUTPUT"
+          echo "fb_measurement_id=$FB_MEASUREMENT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Validate required secrets
+        env:
+          PROJECT_ID: ${{ steps.target.outputs.project_id }}
+          API_BASE_URL: ${{ steps.target.outputs.api_base_url }}
+          WS_URL: ${{ steps.target.outputs.ws_url }}
+          FB_API_KEY: ${{ steps.target.outputs.fb_api_key }}
+          FB_AUTH_DOMAIN: ${{ steps.target.outputs.fb_auth_domain }}
+          FB_PROJECT_ID: ${{ steps.target.outputs.fb_project_id }}
+          FB_STORAGE_BUCKET: ${{ steps.target.outputs.fb_storage_bucket }}
+          FB_SENDER_ID: ${{ steps.target.outputs.fb_messaging_sender_id }}
+          FB_APP_ID: ${{ steps.target.outputs.fb_app_id }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_SA_KEY_B64: ${{ secrets.GCP_SA_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          for key in PROJECT_ID API_BASE_URL WS_URL FB_API_KEY FB_AUTH_DOMAIN FB_PROJECT_ID FB_STORAGE_BUCKET FB_SENDER_ID FB_APP_ID; do
+            value="${!key:-}"
+            if [ -z "$value" ]; then
+              echo "Missing required secret/output: $key"
+              exit 1
+            fi
+          done
+          if [ -z "${GCP_SA_KEY:-}" ] && [ -z "${GCP_SA_KEY_B64:-}" ]; then
+            echo "Missing required secret: GCP_SA_KEY (raw JSON) or GCP_SA_KEY_B64 (base64 JSON)"
+            exit 1
+          fi
+
+      - name: Normalize Google credentials
+        id: gcp-creds
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_SA_KEY_B64: ${{ secrets.GCP_SA_KEY_B64 }}
+        run: |
+          set -euo pipefail
+
+          RAW="${GCP_SA_KEY:-}"
+          if [ -z "$RAW" ] && [ -n "${GCP_SA_KEY_B64:-}" ]; then
+            RAW="$GCP_SA_KEY_B64"
+          fi
+
+          if printf '%s' "$RAW" | jq -e . >/dev/null 2>&1; then
+            CREDENTIALS_JSON="$RAW"
+          else
+            DECODED="$(printf '%s' "$RAW" | base64 --decode 2>/dev/null || true)"
+            if [ -z "$DECODED" ]; then
+              DECODED="$(printf '%s' "$RAW" | base64 -d 2>/dev/null || true)"
+            fi
+            if [ -z "$DECODED" ] || ! printf '%s' "$DECODED" | jq -e . >/dev/null 2>&1; then
+              echo "Service account key is not valid JSON."
+              echo "Set GCP_SA_KEY to raw JSON or GCP_SA_KEY_B64 to base64(JSON)."
+              exit 1
+            fi
+            CREDENTIALS_JSON="$DECODED"
+          fi
+
+          if ! printf '%s' "$CREDENTIALS_JSON" | jq -e '.type == "service_account" and (.client_email|type=="string") and (.private_key|type=="string")' >/dev/null 2>&1; then
+            echo "Credentials JSON is missing required service account fields."
+            exit 1
+          fi
+
+          {
+            echo "credentials_json<<EOF"
+            printf '%s\n' "$CREDENTIALS_JSON"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ steps.gcp-creds.outputs.credentials_json }}
+          project_id: ${{ steps.target.outputs.project_id }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ steps.target.outputs.project_id }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate build env
+        env:
+          API_BASE_URL: ${{ steps.target.outputs.api_base_url }}
+          WS_URL: ${{ steps.target.outputs.ws_url }}
+          FB_API_KEY: ${{ steps.target.outputs.fb_api_key }}
+          FB_AUTH_DOMAIN: ${{ steps.target.outputs.fb_auth_domain }}
+          FB_PROJECT_ID: ${{ steps.target.outputs.fb_project_id }}
+          FB_STORAGE_BUCKET: ${{ steps.target.outputs.fb_storage_bucket }}
+          FB_SENDER_ID: ${{ steps.target.outputs.fb_messaging_sender_id }}
+          FB_APP_ID: ${{ steps.target.outputs.fb_app_id }}
+          FB_MEASUREMENT_ID: ${{ steps.target.outputs.fb_measurement_id }}
+        run: |
+          cat > .env.production <<EOF
+          VITE_API_BASE_URL=$API_BASE_URL
+          VITE_WS_URL=$WS_URL
+          VITE_FIREBASE_API_KEY=$FB_API_KEY
+          VITE_FIREBASE_AUTH_DOMAIN=$FB_AUTH_DOMAIN
+          VITE_FIREBASE_PROJECT_ID=$FB_PROJECT_ID
+          VITE_FIREBASE_STORAGE_BUCKET=$FB_STORAGE_BUCKET
+          VITE_FIREBASE_MESSAGING_SENDER_ID=$FB_SENDER_ID
+          VITE_FIREBASE_APP_ID=$FB_APP_ID
+          VITE_FIREBASE_MEASUREMENT_ID=$FB_MEASUREMENT_ID
+          EOF
+
+      - name: Build frontend
+        run: npm run build:prod
+
+      - name: Deploy API to Cloud Run
+        id: deploy-api
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: biscuits-api
+          source: ./api
+          region: us-central1
+          flags: --allow-unauthenticated
+          env_vars: |
+            NODE_ENV=production
+            WS_BASE_URL=${{ steps.target.outputs.ws_url }}
+
+      - name: Deploy Firebase Hosting + Firestore
+        env:
+          PROJECT_ID: ${{ steps.target.outputs.project_id }}
+          FIREBASE_HOSTING_SITE_SECRET: ${{ secrets.FIREBASE_HOSTING_SITE }}
+          FIREBASE_HOSTING_SITE_VAR: ${{ vars.FIREBASE_HOSTING_SITE }}
+        run: |
+          set -euo pipefail
+          SITE_ID="${FIREBASE_HOSTING_SITE_SECRET:-${FIREBASE_HOSTING_SITE_VAR:-$PROJECT_ID}}"
+
+          echo "Deploy project: $PROJECT_ID"
+          echo "Hosting site target: $SITE_ID"
+
+          # Ensure a deterministic hosting target for this project in CI.
+          npx firebase-tools@15.8.0 target:apply hosting app "$SITE_ID" --project "$PROJECT_ID" --non-interactive
+          npx firebase-tools@15.8.0 deploy --project "$PROJECT_ID" --only firestore,hosting:app --non-interactive
