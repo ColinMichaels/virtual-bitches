@@ -627,6 +627,7 @@ class Game implements GameCallbacks {
     const createdSession = await this.multiplayerSessionService.createSession({
       roomCode: this.multiplayerOptions.roomCode,
       botCount: this.multiplayerOptions.botCount,
+      gameDifficulty: this.state.mode.difficulty,
     });
     if (!createdSession) {
       notificationService.show("Failed to create multiplayer session. Continuing in solo mode.", "warning", 2800);
@@ -1150,6 +1151,7 @@ class Game implements GameCallbacks {
     const syncedSession = this.multiplayerSessionService.syncSessionState({
       sessionId: message.sessionId,
       roomCode: message.roomCode,
+      gameDifficulty: message.gameDifficulty,
       participants: message.participants,
       ...(hasStandings ? { standings: message.standings } : {}),
       ...(hasTurnState ? { turnState: message.turnState ?? null } : {}),

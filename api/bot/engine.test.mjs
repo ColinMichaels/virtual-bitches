@@ -165,6 +165,101 @@ test("resolveTurnDelayMs honors per-profile timing contract", () => {
   assert(cautious > aggressive);
 });
 
+test("easy difficulty bots make weaker scoring choices than hard difficulty bots", () => {
+  const engine = createBotEngine();
+  const rollSnapshot = {
+    serverRollId: "roll-difficulty-1",
+    dice: [
+      { dieId: "d6-a", sides: 6, value: 6 }, // 0
+      { dieId: "d6-b", sides: 6, value: 5 }, // 1
+      { dieId: "d8-c", sides: 8, value: 5 }, // 3
+      { dieId: "d10-d", sides: 10, value: 4 }, // 6
+      { dieId: "d12-e", sides: 12, value: 2 }, // 10
+    ],
+  };
+  const sessionParticipants = [
+    { playerId: "bot-alpha", score: 3, remainingDice: 12, joinedAt: 1 },
+    { playerId: "human-1", score: 3, remainingDice: 12, joinedAt: 2 },
+  ];
+
+  const easy = engine.buildTurnScoreSummary({
+    rollSnapshot,
+    playerId: "bot-alpha",
+    remainingDice: 12,
+    turnNumber: 4,
+    botProfile: "balanced",
+    sessionParticipants,
+    gameDifficulty: "easy",
+  });
+  const hard = engine.buildTurnScoreSummary({
+    rollSnapshot,
+    playerId: "bot-alpha",
+    remainingDice: 12,
+    turnNumber: 4,
+    botProfile: "balanced",
+    sessionParticipants,
+    gameDifficulty: "hard",
+  });
+
+  assert(easy, "Expected easy score summary");
+  assert(hard, "Expected hard score summary");
+  assert(
+    easy.selectedDiceIds.length >= hard.selectedDiceIds.length,
+    "Expected easy bots to score at least as many dice as hard bots"
+  );
+  assert(easy.points >= hard.points, "Expected easy bots to take at least as many points as hard bots");
+});
+
+test("turn delay responds to difficulty level", () => {
+  const engine = createBotEngine({
+    defaultTurnDelayRange: { min: 1000, max: 1000 },
+    turnDelayByProfile: {
+      cautious: { min: 2000, max: 2000 },
+      balanced: { min: 1500, max: 1500 },
+      aggressive: { min: 800, max: 800 },
+    },
+  });
+
+  const sessionParticipants = [
+    { playerId: "leader", score: 2, remainingDice: 15, joinedAt: 1 },
+    { playerId: "bot-alpha", score: 7, remainingDice: 15, joinedAt: 2 },
+  ];
+
+  const easy = withMockRandom(0.5, () =>
+    engine.resolveTurnDelayMs({
+      playerId: "bot-alpha",
+      botProfile: "balanced",
+      remainingDice: 15,
+      turnNumber: 3,
+      sessionParticipants,
+      gameDifficulty: "easy",
+    })
+  );
+  const normal = withMockRandom(0.5, () =>
+    engine.resolveTurnDelayMs({
+      playerId: "bot-alpha",
+      botProfile: "balanced",
+      remainingDice: 15,
+      turnNumber: 3,
+      sessionParticipants,
+      gameDifficulty: "normal",
+    })
+  );
+  const hard = withMockRandom(0.5, () =>
+    engine.resolveTurnDelayMs({
+      playerId: "bot-alpha",
+      botProfile: "balanced",
+      remainingDice: 15,
+      turnNumber: 3,
+      sessionParticipants,
+      gameDifficulty: "hard",
+    })
+  );
+
+  assert(easy > normal, "Expected easy difficulty delay to be slower than normal");
+  assert(hard < normal, "Expected hard difficulty delay to be faster than normal");
+});
+
 let failed = 0;
 for (const { name, fn } of tests) {
   try {

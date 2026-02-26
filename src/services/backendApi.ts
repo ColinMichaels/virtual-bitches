@@ -9,6 +9,7 @@ const log = logger.create("BackendApi");
 const DEFAULT_TIMEOUT_MS = 8000;
 const FIREBASE_SESSION_EXPIRED_EVENT_COOLDOWN_MS = 10000;
 type RequestAuthMode = "none" | "session" | "firebase" | "firebaseOptional";
+export type MultiplayerGameDifficulty = "easy" | "normal" | "hard";
 
 export interface PlayerProfileRecord {
   playerId: string;
@@ -93,6 +94,7 @@ export interface MultiplayerSessionTurnState {
 export interface MultiplayerSessionRecord {
   sessionId: string;
   roomCode: string;
+  gameDifficulty?: MultiplayerGameDifficulty;
   wsUrl?: string;
   playerToken?: string;
   auth?: MultiplayerSessionAuth;
@@ -109,6 +111,7 @@ export interface MultiplayerSessionRecord {
 export interface MultiplayerRoomListing {
   sessionId: string;
   roomCode: string;
+  gameDifficulty?: MultiplayerGameDifficulty;
   createdAt: number;
   lastActivityAt: number;
   expiresAt: number;
@@ -124,6 +127,7 @@ export interface CreateMultiplayerSessionRequest {
   playerId: string;
   roomCode?: string;
   botCount?: number;
+  gameDifficulty?: MultiplayerGameDifficulty;
 }
 
 export interface JoinMultiplayerSessionRequest {
