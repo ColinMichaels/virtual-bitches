@@ -155,6 +155,8 @@ Recommended setup (GitHub Environments):
   - `VITE_FIREBASE_APP_ID`
   - `VITE_FIREBASE_MEASUREMENT_ID` (optional)
   - `VITE_ENABLE_ADMIN_UI` (optional)
+  - `CDN_ASSET_CACHE_CONTROL` (optional; default `public,max-age=86400`)
+  - `CDN_CONTENT_CACHE_CONTROL` (optional; default `public,max-age=300,must-revalidate`)
   - `API_STORE_BACKEND` (recommended: `firestore`)
   - `API_FIRESTORE_PREFIX` (optional; default `api_v1`)
   - `FIREBASE_AUTH_MODE` (recommended: `admin` for production)
