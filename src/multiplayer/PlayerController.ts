@@ -8,6 +8,9 @@ import type { GameState, Action, DieState } from "../engine/types.js";
 import type { GameScene } from "../render/scene.js";
 import type { DiceRenderer } from "../render/dice.js";
 import { reduce } from "../game/state.js";
+import { logger } from "../utils/logger.js";
+
+const log = logger.create("PlayerController");
 
 /**
  * Player HUD data displayed when clicking on a player
@@ -57,7 +60,7 @@ export class PlayerController {
    */
   handleAction(action: Action): void {
     if (!this.player.gameState) {
-      console.error("Cannot handle action: player has no game state");
+      log.error("Cannot handle action: player has no game state");
       return;
     }
 
@@ -113,7 +116,7 @@ export class PlayerController {
 
     // Future: Create 3D HUD overlay above player seat
     // For now, this is a placeholder
-    console.log("Show Player HUD:", hudData);
+    log.debug("Show Player HUD", hudData);
 
     this.hudVisible = true;
   }
@@ -180,7 +183,7 @@ export class PlayerController {
   async sendActionToServer(action: Action): Promise<void> {
     // Future: WebSocket implementation
     // await websocket.send({ type: 'action', playerId: this.player.id, action });
-    console.log("Send action to server:", action);
+    log.debug("Send action to server", action);
   }
 
   /**
@@ -190,7 +193,7 @@ export class PlayerController {
   receiveActionFromServer(action: Action): void {
     // Future: Apply action from remote player
     // this.handleAction(action);
-    console.log("Receive action from server:", action);
+    log.debug("Receive action from server", action);
   }
 
   /**

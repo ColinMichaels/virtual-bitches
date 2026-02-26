@@ -15,7 +15,7 @@
  *
  * // Listen for changes
  * const unsubscribe = themeManager.onThemeChange((themeName) => {
- *   console.log('Theme changed to:', themeName);
+ *   log.info('Theme changed to:', themeName);
  * });
  * ```
  */
@@ -347,11 +347,11 @@ class ThemeManager {
    * @returns True if theme was set, false if theme not available
    *
    * @example
-   * ```ts
-   * if (themeManager.setTheme('wooden')) {
-   *   console.log('Theme changed successfully');
-   * }
-   * ```
+ * ```ts
+ * if (themeManager.setTheme('wooden')) {
+ *   log.info('Theme changed successfully');
+ * }
+ * ```
    */
   setTheme(themeName: string): boolean {
     if (!this.availableThemes.has(themeName)) {
@@ -400,10 +400,10 @@ class ThemeManager {
    * @returns Unsubscribe function to remove the listener
    *
    * @example
-   * ```ts
-   * const unsubscribe = themeManager.onThemeChange((themeName) => {
-   *   console.log('Theme changed to:', themeName);
-   * });
+ * ```ts
+ * const unsubscribe = themeManager.onThemeChange((themeName) => {
+ *   log.info('Theme changed to:', themeName);
+ * });
    *
    * // Later, to stop listening:
    * unsubscribe();

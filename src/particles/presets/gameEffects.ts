@@ -8,6 +8,9 @@ import { particleService } from "../../services/particleService.js";
 import { burstEffects } from "../effects/burstEffects.js";
 import { trailEffects } from "../effects/trailEffects.js";
 import { ambientEffects } from "../effects/ambientEffects.js";
+import { logger } from "../../utils/logger.js";
+
+const log = logger.create("GameEffects");
 
 /**
  * Register all game-related particle effects
@@ -22,7 +25,7 @@ export function registerGameEffects(): void {
   // Register ambient effects
   ambientEffects.forEach((effect) => particleService.registerEffect(effect));
 
-  console.log("[GameEffects] Registered all game particle effects");
+  log.info("Registered all game particle effects");
 }
 
 /**

@@ -23,9 +23,11 @@ import { PlayerSeatRenderer } from "./playerSeats.js";
 import { cameraService, type CameraPosition } from "../services/cameraService.js";
 import { settingsService } from "../services/settings.js";
 import { particleService } from "../services/particleService.js";
+import { logger } from "../utils/logger.js";
 
 // Register custom shaders once at module load
 registerCustomShaders();
+const log = logger.create("GameScene");
 
 export class GameScene {
   engine: Engine;
@@ -217,11 +219,11 @@ export class GameScene {
       true, // invertY for proper orientation
       undefined,
       () => {
-        console.log("[Scene] Leather border texture loaded successfully");
+        log.debug("Leather border texture loaded successfully");
       },
       (message, exception) => {
-        console.warn("[Scene] Failed to load leather border texture, using procedural fallback");
-        console.warn("[Scene] Error:", message, exception);
+        log.warn("Failed to load leather border texture, using procedural fallback");
+        log.warn("Leather border load error", message, exception);
         this.createFallbackBorderTexture(mat);
       }
     );
@@ -264,12 +266,12 @@ export class GameScene {
       undefined,
       () => {
         // onLoad callback
-        console.log("[Scene] Custom table texture loaded successfully");
+        log.debug("Custom table texture loaded successfully");
       },
       (message, exception) => {
         // onError callback - fallback to procedural texture
-        console.warn("[Scene] Failed to load custom table texture, using procedural fallback");
-        console.warn("[Scene] Error:", message, exception);
+        log.warn("Failed to load custom table texture, using procedural fallback");
+        log.warn("Custom table texture load error", message, exception);
         this.createProceduralFeltTexture(trayMat);
       }
     );
@@ -490,7 +492,7 @@ export class GameScene {
     texture.update();
 
     material.diffuseTexture = texture;
-    console.log("[Scene] Fallback leather texture created");
+    log.debug("Fallback leather texture created");
   }
 
   /**
@@ -573,7 +575,7 @@ export class GameScene {
         return;
       } catch (error) {
         // Fallback to instant assignment on any error
-        console.warn('[GameScene] Camera animation failed, falling back to instant set', error);
+        log.warn("Camera animation failed, falling back to instant set", error);
       }
     }
 
@@ -794,7 +796,7 @@ export class GameScene {
     trayTexture.update();
 
     material.diffuseTexture = trayTexture;
-    console.log("[Scene] Procedural felt texture applied as fallback");
+    log.debug("Procedural felt texture applied as fallback");
   }
 
   /**

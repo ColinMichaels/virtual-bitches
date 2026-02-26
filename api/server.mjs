@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { logger } from "./logger.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,6 +14,7 @@ const API_PREFIX = "/api";
 const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "store.json");
 const WS_BASE_URL = process.env.WS_BASE_URL ?? "ws://localhost:3000";
+const log = logger.create("Server");
 
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -36,8 +38,8 @@ const server = createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[api] Listening on http://localhost:${PORT}`);
-  console.log(`[api] Health endpoint: http://localhost:${PORT}/api/health`);
+  log.info(`Listening on http://localhost:${PORT}`);
+  log.info(`Health endpoint: http://localhost:${PORT}/api/health`);
 });
 
 async function bootstrap() {
@@ -62,7 +64,7 @@ async function bootstrap() {
       accessTokens: parsed.accessTokens ?? {},
     };
   } catch (error) {
-    console.warn("[api] Failed to load store, using default", error);
+    log.warn("Failed to load store, using default", error);
     store = structuredClone(DEFAULT_STORE);
   }
 }
@@ -143,7 +145,7 @@ async function handleRequest(req, res) {
 
     sendJson(res, 404, { error: "Unknown endpoint" });
   } catch (error) {
-    console.error("[api] Request failed", error);
+    log.error("Request failed", error);
     sendJson(res, 500, { error: "Internal server error" });
   }
 }

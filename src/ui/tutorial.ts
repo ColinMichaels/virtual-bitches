@@ -6,6 +6,9 @@
 import { audioService } from "../services/audio.js";
 import { settingsService } from "../services/settings.js";
 import { GameDifficulty } from "../engine/types.js";
+import { logger } from "../utils/logger.js";
+
+const log = logger.create("Tutorial");
 
 type TutorialStep = {
   title: string;
@@ -259,16 +262,16 @@ export class TutorialModal {
    * Called by main game when player performs an action during tutorial
    */
   onPlayerAction(actionType: 'roll' | 'select' | 'score'): void {
-    console.log(`[Tutorial] Action detected: ${actionType}, waiting: ${this.isWaitingForAction}, current step: ${this.currentStep}`);
+    log.debug(`Action detected: ${actionType}, waiting: ${this.isWaitingForAction}, current step: ${this.currentStep}`);
 
     if (!this.isWaitingForAction) return;
 
     const step = this.steps[this.currentStep];
-    console.log(`[Tutorial] Step action type: ${step.actionType}, matches: ${step.actionType === actionType}`);
+    log.debug(`Step action type: ${step.actionType}, matches: ${step.actionType === actionType}`);
 
     if (step.waitForAction && step.actionType === actionType) {
       // Player performed the correct action, advance to next step
-      console.log(`[Tutorial] Advancing to next step`);
+      log.debug("Advancing to next step");
       audioService.playSfx("click");
       this.isWaitingForAction = false;
       this.currentStep++;
