@@ -49,9 +49,12 @@ import {
 } from "./multiplayer/networkService.js";
 import { MultiplayerSessionService } from "./multiplayer/sessionService.js";
 import { environment } from "@env";
-import type {
-  MultiplayerSessionParticipant,
-  MultiplayerSessionRecord,
+import {
+  backendApiService,
+  type MultiplayerJoinFailureReason,
+  type MultiplayerRoomListing,
+  type MultiplayerSessionParticipant,
+  type MultiplayerSessionRecord,
 } from "./services/backendApi.js";
 import { leaderboardService } from "./services/leaderboard.js";
 import {
@@ -172,6 +175,8 @@ class Game implements GameCallbacks {
   private actionBtn: HTMLButtonElement;
   private deselectBtn: HTMLButtonElement;
   private undoBtn: HTMLButtonElement;
+  private inviteLinkBtn: HTMLButtonElement | null = null;
+  private mobileInviteLinkBtn: HTMLButtonElement | null = null;
 
   constructor(sessionBootstrap: GameSessionBootstrapOptions) {
     this.playMode = sessionBootstrap.playMode;
@@ -367,6 +372,8 @@ class Game implements GameCallbacks {
     this.actionBtn = document.getElementById("action-btn") as HTMLButtonElement;
     this.deselectBtn = document.getElementById("deselect-btn") as HTMLButtonElement;
     this.undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
+    this.inviteLinkBtn = document.getElementById("invite-link-btn") as HTMLButtonElement | null;
+    this.mobileInviteLinkBtn = document.getElementById("mobile-invite-link-btn") as HTMLButtonElement | null;
 
     // Initialize modals (shared with splash)
     this.settingsModal = settingsModal;
@@ -545,6 +552,7 @@ class Game implements GameCallbacks {
     });
 
     this.inputController.initialize();
+    this.updateInviteLinkControlVisibility();
     this.setupDiceSelection();
     GameFlowController.initializeAudio();
     this.updateUI();
@@ -656,7 +664,20 @@ class Game implements GameCallbacks {
       if (joined || fromInviteLink) {
         return;
       }
-      notificationService.show("Selected room unavailable. Creating a new room instead.", "warning", 2800);
+
+      const joinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason();
+      const fallbackJoined = await this.tryJoinAlternativeRoom(targetSessionId, joinFailureReason);
+      if (fallbackJoined) {
+        return;
+      }
+
+      if (joinFailureReason === "room_full") {
+        notificationService.show("Selected room is full. Creating a new room instead.", "warning", 2800);
+      } else if (joinFailureReason === "session_expired") {
+        notificationService.show("Selected room expired. Creating a new room instead.", "warning", 2800);
+      } else {
+        notificationService.show("Selected room unavailable. Creating a new room instead.", "warning", 2800);
+      }
     }
 
     if (!environment.features.multiplayer || this.playMode !== "multiplayer") {
@@ -701,7 +722,14 @@ class Game implements GameCallbacks {
     if (!session) {
       playerDataSyncService.setSessionId(undefined);
       if (!options?.suppressFailureNotification) {
-        notificationService.show("Unable to join multiplayer session.", "error", 2600);
+        const joinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason();
+        if (joinFailureReason === "room_full") {
+          notificationService.show("Room is full. Pick another room or create a new one.", "warning", 2800);
+        } else if (joinFailureReason === "session_expired") {
+          notificationService.show("That room expired. Pick another room.", "warning", 2800);
+        } else {
+          notificationService.show("Unable to join multiplayer session.", "error", 2600);
+        }
       }
       return false;
     }
@@ -711,6 +739,82 @@ class Game implements GameCallbacks {
       notificationService.show(`Joined multiplayer room ${session.roomCode}.`, "success", 2600);
     }
     return true;
+  }
+
+  private async tryJoinAlternativeRoom(
+    excludedSessionId: string,
+    sourceReason: MultiplayerJoinFailureReason | null
+  ): Promise<boolean> {
+    if (this.playMode !== "multiplayer" || !environment.features.multiplayer) {
+      return false;
+    }
+    if (sourceReason !== "room_full" && sourceReason !== "session_expired") {
+      return false;
+    }
+
+    const rooms = await backendApiService.listMultiplayerRooms(24);
+    if (!Array.isArray(rooms) || rooms.length === 0) {
+      return false;
+    }
+
+    const candidate = this.selectAlternativeRoomCandidate(rooms, excludedSessionId);
+    if (!candidate) {
+      return false;
+    }
+
+    const joined = await this.joinMultiplayerSession(candidate.sessionId, false, {
+      suppressFailureNotification: true,
+    });
+    if (!joined) {
+      return false;
+    }
+
+    notificationService.show(
+      `Joined fallback room ${candidate.roomCode}.`,
+      "success",
+      2600
+    );
+    return true;
+  }
+
+  private selectAlternativeRoomCandidate(
+    rooms: MultiplayerRoomListing[],
+    excludedSessionId: string
+  ): MultiplayerRoomListing | null {
+    const excludedId = excludedSessionId.trim();
+    const candidates = rooms.filter((room) => {
+      if (!room || typeof room.sessionId !== "string" || room.sessionId === excludedId) {
+        return false;
+      }
+      if (room.sessionComplete === true) {
+        return false;
+      }
+      const maxPlayers =
+        typeof room.maxHumanCount === "number" && Number.isFinite(room.maxHumanCount)
+          ? Math.max(1, Math.floor(room.maxHumanCount))
+          : 8;
+      const availableSlots =
+        typeof room.availableHumanSlots === "number" && Number.isFinite(room.availableHumanSlots)
+          ? Math.max(0, Math.floor(room.availableHumanSlots))
+          : Math.max(0, maxPlayers - Math.max(0, Math.floor(room.humanCount)));
+      return availableSlots > 0;
+    });
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    candidates.sort((left, right) => {
+      const leftPriority =
+        left.roomType === "public_default" ? 0 : left.roomType === "public_overflow" ? 1 : 2;
+      const rightPriority =
+        right.roomType === "public_default" ? 0 : right.roomType === "public_overflow" ? 1 : 2;
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+      return right.activeHumanCount - left.activeHumanCount;
+    });
+
+    return candidates[0] ?? null;
   }
 
   private bindMultiplayerSession(
@@ -732,6 +836,7 @@ class Game implements GameCallbacks {
       this.updateSessionQueryParam(session.sessionId);
     }
 
+    this.updateInviteLinkControlVisibility();
     log.info(`Joined multiplayer session via API scaffold: ${session.sessionId}`);
   }
 
@@ -848,6 +953,7 @@ class Game implements GameCallbacks {
       });
     }
     this.scene.playerSeatRenderer.highlightSeat(currentSeatIndex);
+    this.scene.playerSeatRenderer.setActiveTurnSeat(currentSeatIndex);
     this.hud.setMultiplayerStandings([], null);
     this.hud.setMultiplayerActiveTurn(null);
   }
@@ -1135,16 +1241,19 @@ class Game implements GameCallbacks {
   private updateTurnSeatHighlight(activePlayerId: string | null): void {
     if (!activePlayerId) {
       this.scene.playerSeatRenderer.highlightSeat(this.scene.currentPlayerSeat);
+      this.scene.playerSeatRenderer.setActiveTurnSeat(this.scene.currentPlayerSeat);
       return;
     }
 
     const seatIndex = this.participantSeatById.get(activePlayerId);
     if (typeof seatIndex === "number") {
       this.scene.playerSeatRenderer.highlightSeat(seatIndex);
+      this.scene.playerSeatRenderer.setActiveTurnSeat(seatIndex);
       return;
     }
 
     this.scene.playerSeatRenderer.highlightSeat(this.scene.currentPlayerSeat);
+    this.scene.playerSeatRenderer.setActiveTurnSeat(this.scene.currentPlayerSeat);
   }
 
   private getSeatScoreZonePosition(playerId: string): { seatIndex: number; x: number; y: number; z: number } | null {
@@ -2100,6 +2209,7 @@ class Game implements GameCallbacks {
     playerDataSyncService.setSessionId(undefined);
     this.clearSessionQueryParam();
     this.applySoloSeatState();
+    this.updateInviteLinkControlVisibility();
     this.updateUI();
     notificationService.show("Continuing in solo mode.", "info", 2200);
   }
@@ -2131,6 +2241,7 @@ class Game implements GameCallbacks {
     this.hud.setMultiplayerStandings([], null);
     playerDataSyncService.setSessionId(undefined);
     this.clearSessionQueryParam();
+    this.updateInviteLinkControlVisibility();
 
     const redirectUrl = new URL(window.location.href);
     redirectUrl.searchParams.delete("session");
@@ -2147,6 +2258,7 @@ class Game implements GameCallbacks {
 
   private async copySessionInviteLink(sessionId: string): Promise<void> {
     if (typeof window === "undefined" || !window.navigator?.clipboard?.writeText) {
+      notificationService.show("Clipboard access unavailable on this device.", "warning", 2200);
       return;
     }
 
@@ -2154,9 +2266,21 @@ class Game implements GameCallbacks {
       const inviteUrl = new URL(window.location.href);
       inviteUrl.searchParams.set("session", sessionId);
       await window.navigator.clipboard.writeText(inviteUrl.toString());
-      notificationService.show("Invite link copied to clipboard.", "info", 1600);
+      notificationService.show("Invite link copied to clipboard.", "info", 1800);
     } catch {
-      // Clipboard APIs may be unavailable in some environments.
+      notificationService.show("Unable to copy invite link.", "warning", 2200);
+    }
+  }
+
+  private updateInviteLinkControlVisibility(): void {
+    const showInviteControl =
+      this.playMode === "multiplayer" &&
+      typeof this.multiplayerSessionService.getActiveSession()?.sessionId === "string";
+    if (this.inviteLinkBtn) {
+      this.inviteLinkBtn.style.display = showInviteControl ? "flex" : "none";
+    }
+    if (this.mobileInviteLinkBtn) {
+      this.mobileInviteLinkBtn.style.display = showInviteControl ? "flex" : "none";
     }
   }
 
@@ -2406,6 +2530,15 @@ class Game implements GameCallbacks {
     notificationService.show("Deselected All", "info");
   }
 
+  handleCopyInviteLink(): void {
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (this.playMode !== "multiplayer" || !activeSession?.sessionId) {
+      notificationService.show("Start or join a multiplayer room to copy an invite link.", "warning", 2400);
+      return;
+    }
+    void this.copySessionInviteLink(activeSession.sessionId);
+  }
+
   private queueTutorialCompletionUndo(): void {
     if (this.playMode !== "solo" || !canUndo(this.state)) {
       return;
@@ -2632,6 +2765,7 @@ class Game implements GameCallbacks {
   }
 
   private updateUI(): void {
+    this.updateInviteLinkControlVisibility();
     this.hud.update(this.state);
     this.scene.playerSeatRenderer.updateSeat(this.scene.currentPlayerSeat, {
       score: this.state.score,

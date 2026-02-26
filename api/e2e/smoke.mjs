@@ -4,6 +4,8 @@ const REQUEST_TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 10000);
 const WS_TIMEOUT_MS = Number(process.env.E2E_WS_TIMEOUT_MS ?? 10000);
 const firebaseIdToken = process.env.E2E_FIREBASE_ID_TOKEN?.trim() ?? "";
 const assertBotTraffic = process.env.E2E_ASSERT_BOTS === "1";
+const assertRoomExpiry = process.env.E2E_ASSERT_ROOM_EXPIRY === "1";
+const roomExpiryWaitMs = Number(process.env.E2E_ROOM_EXPIRY_WAIT_MS ?? 9000);
 
 const baseInput = (process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:3000").trim();
 const wsOverride = process.env.E2E_WS_URL?.trim();
@@ -24,6 +26,7 @@ async function run() {
   await apiRequest("/health", { method: "GET" });
 
   const runSuffix = randomUUID().slice(0, 8);
+  await runRoomLifecycleChecks(runSuffix);
   hostPlayerId = `e2e-host-${runSuffix}`;
   guestPlayerId = `e2e-guest-${runSuffix}`;
 
@@ -418,6 +421,147 @@ async function run() {
   log("Smoke test passed.");
 }
 
+async function runRoomLifecycleChecks(runSuffix) {
+  log("Running room lifecycle checks...");
+
+  const initialListing = await apiRequest("/multiplayer/rooms?limit=100", { method: "GET" });
+  assert(Array.isArray(initialListing?.rooms), "room listing missing rooms[]");
+  const initialRooms = initialListing.rooms;
+  const defaultRooms = initialRooms.filter((room) => room?.roomType === "public_default");
+  assert(defaultRooms.length >= 2, "expected at least two default public lobby rooms");
+
+  const joinablePublicRooms = initialRooms.filter((room) => {
+    if (!room || room.isPublic !== true || room.sessionComplete === true) {
+      return false;
+    }
+    const slots = Number.isFinite(room.availableHumanSlots)
+      ? Number(room.availableHumanSlots)
+      : Math.max(0, Number(room.maxHumanCount ?? 8) - Number(room.humanCount ?? 0));
+    return slots > 0;
+  });
+  assert(joinablePublicRooms.length > 0, "expected at least one joinable public room");
+
+  const targetRoom = joinablePublicRooms[0];
+  const targetRoomId = String(targetRoom.sessionId ?? "");
+  assert(targetRoomId.length > 0, "target public room missing sessionId");
+
+  const maxHumans = Number.isFinite(targetRoom.maxHumanCount)
+    ? Math.max(2, Math.floor(targetRoom.maxHumanCount))
+    : 8;
+  const joinedPlayerIds = [];
+  let roomFullObserved = false;
+  for (let index = 0; index < maxHumans + 2; index += 1) {
+    const playerId = `e2e-roomfill-${runSuffix}-${index + 1}`;
+    const joinAttempt = await apiRequestWithStatus(
+      `/multiplayer/sessions/${encodeURIComponent(targetRoomId)}/join`,
+      {
+        method: "POST",
+        body: {
+          playerId,
+          displayName: `E2E Fill ${index + 1}`,
+        },
+      }
+    );
+    if (joinAttempt.ok) {
+      joinedPlayerIds.push(playerId);
+      continue;
+    }
+    if (joinAttempt.status === 409 && joinAttempt.body?.reason === "room_full") {
+      roomFullObserved = true;
+      break;
+    }
+    throw new Error(
+      `unexpected room fill join result status=${joinAttempt.status} body=${JSON.stringify(joinAttempt.body)}`
+    );
+  }
+  assert(roomFullObserved, "expected room_full while filling target public room");
+
+  const privateCreatorId = `e2e-private-${runSuffix}`;
+  const privateCreated = await apiRequest("/multiplayer/sessions", {
+    method: "POST",
+    body: {
+      playerId: privateCreatorId,
+      displayName: "E2E Private Creator",
+    },
+  });
+  assert(
+    typeof privateCreated?.sessionId === "string" && privateCreated.sessionId.length > 0,
+    "expected private room creation to remain available when public rooms are saturated"
+  );
+  assert(
+    privateCreated?.roomType === "private" || privateCreated?.isPublic === false,
+    "expected explicit create-session flow to produce a private room"
+  );
+  const privateVisibilityListing = await apiRequest("/multiplayer/rooms?limit=100", { method: "GET" });
+  assert(Array.isArray(privateVisibilityListing?.rooms), "private visibility room listing missing rooms[]");
+  const privateRoomListed = privateVisibilityListing.rooms.some(
+    (room) => room?.sessionId === privateCreated.sessionId
+  );
+  assert(!privateRoomListed, "expected private room to be excluded from public room listing");
+  await safeLeave(privateCreated.sessionId, privateCreatorId);
+
+  const fullJoinProbe = await apiRequestWithStatus(
+    `/multiplayer/sessions/${encodeURIComponent(targetRoomId)}/join`,
+    {
+      method: "POST",
+      body: {
+        playerId: `e2e-roomfill-extra-${runSuffix}`,
+        displayName: "E2E Overflow Probe",
+      },
+    }
+  );
+  assertEqual(fullJoinProbe.status, 409, "expected room_full 409 once room is at capacity");
+  assertEqual(
+    fullJoinProbe.body?.reason,
+    "room_full",
+    "expected room_full reason in full-room join rejection"
+  );
+
+  const postFillListing = await apiRequest("/multiplayer/rooms?limit=100", { method: "GET" });
+  assert(Array.isArray(postFillListing?.rooms), "post-fill room listing missing rooms[]");
+  const postFillRooms = postFillListing.rooms;
+  const joinableOverflowRoom = postFillRooms.find((room) => {
+    if (!room || room.roomType !== "public_overflow" || room.sessionComplete === true) {
+      return false;
+    }
+    const slots = Number.isFinite(room.availableHumanSlots)
+      ? Number(room.availableHumanSlots)
+      : Math.max(0, Number(room.maxHumanCount ?? 8) - Number(room.humanCount ?? 0));
+    return slots > 0;
+  });
+  assert(joinableOverflowRoom, "expected at least one joinable overflow room after filling a public room");
+  const overflowRoomId = String(joinableOverflowRoom.sessionId ?? "");
+  assert(overflowRoomId.length > 0, "overflow room missing sessionId");
+
+  for (const playerId of joinedPlayerIds) {
+    await safeLeave(targetRoomId, playerId);
+  }
+
+  const resetListing = await apiRequest("/multiplayer/rooms?limit=100", { method: "GET" });
+  assert(Array.isArray(resetListing?.rooms), "reset room listing missing rooms[]");
+  const resetRoom = resetListing.rooms.find((room) => room?.sessionId === targetRoomId);
+  assert(resetRoom, "expected filled public room to remain listed after players leave");
+  const resetSlots = Number.isFinite(resetRoom.availableHumanSlots)
+    ? Number(resetRoom.availableHumanSlots)
+    : Math.max(0, Number(resetRoom.maxHumanCount ?? 8) - Number(resetRoom.humanCount ?? 0));
+  assert(resetSlots > 0, "expected emptied public room to be joinable again");
+
+  if (assertRoomExpiry) {
+    await waitMs(Math.max(1000, roomExpiryWaitMs));
+    const expiryListing = await apiRequest("/multiplayer/rooms?limit=100", { method: "GET" });
+    assert(Array.isArray(expiryListing?.rooms), "expiry room listing missing rooms[]");
+    const overflowStillPresent = expiryListing.rooms.some((room) => room?.sessionId === overflowRoomId);
+    assert(
+      !overflowStillPresent,
+      `expected overflow room ${overflowRoomId} to expire and disappear from room list`
+    );
+  } else {
+    log("Skipping room expiry assertion (set E2E_ASSERT_ROOM_EXPIRY=1 to enable).");
+  }
+
+  log("Room lifecycle checks passed.");
+}
+
 run()
   .catch((error) => {
     fail(error instanceof Error ? error.message : String(error));
@@ -455,6 +599,16 @@ function resolveTargets(rawApiBase, rawWsBase) {
 }
 
 async function apiRequest(path, options) {
+  const result = await apiRequestWithStatus(path, options);
+  if (!result.ok) {
+    throw new Error(
+      `request failed (${options.method} ${path}) status=${result.status} body=${JSON.stringify(result.body)}`
+    );
+  }
+  return result.body;
+}
+
+async function apiRequestWithStatus(path, options) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const headers = {
@@ -490,13 +644,11 @@ async function apiRequest(path, options) {
     }
   }
 
-  if (!response.ok) {
-    throw new Error(
-      `request failed (${options.method} ${path}) status=${response.status} body=${JSON.stringify(parsedBody)}`
-    );
-  }
-
-  return parsedBody;
+  return {
+    ok: response.ok,
+    status: response.status,
+    body: parsedBody,
+  };
 }
 
 function buildSocketUrl(sessionId, playerId, token) {
@@ -625,6 +777,12 @@ async function safeCloseSocket(socket) {
       { once: true }
     );
     socket.close(1000, "test_complete");
+  });
+}
+
+function waitMs(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
   });
 }
 

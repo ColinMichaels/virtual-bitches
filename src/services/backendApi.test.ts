@@ -173,6 +173,47 @@ await test("lists multiplayer rooms with bounded limit", async () => {
   );
 });
 
+await test("returns typed room_full reason when multiplayer join is rejected", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () => jsonResponse({ error: "Room is full", reason: "room_full" }, 409);
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.joinMultiplayerSession("session-1", {
+    playerId: "player-1",
+  });
+  assertEqual(result.session, null, "Expected null session on room_full");
+  assertEqual(result.reason, "room_full", "Expected room_full join failure reason");
+  assertEqual(result.status, 409, "Expected 409 status");
+});
+
+await test("returns joined session payload on successful multiplayer join", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    jsonResponse({
+      sessionId: "session-2",
+      roomCode: "ROOM2",
+      createdAt: Date.now(),
+    });
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.joinMultiplayerSession("session-2", {
+    playerId: "player-1",
+  });
+  assert(result.session !== null, "Expected joined session in result");
+  assertEqual(result.session?.sessionId, "session-2", "Expected joined session id");
+  assertEqual(result.reason, undefined, "Expected no join failure reason");
+});
+
 await test("returns null on non-ok responses", async () => {
   authSessionService.clear();
   fetchCalls.length = 0;

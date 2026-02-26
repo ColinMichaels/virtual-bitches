@@ -231,6 +231,21 @@ This document captures future feature ideas, enhancements, and expansion possibi
 
 ## 🌐 Social Features
 
+### Friends + Presence System (Planned, Deferred)
+- **Complexity**: High
+- **Description**: Persistent friend graph, online presence, and friend-to-room invites for multiplayer retention.
+- **Status**: Scaffolded contracts and architecture are documented; execution deferred until multiplayer mechanics stabilize.
+- **Primary Spec**: `docs/FRIENDS-SYSTEM-PLAN.md`
+- **Initial Deliverables (when unblocked)**:
+  - Friends graph endpoints (request/accept/decline/remove/block)
+  - Presence heartbeat + batched presence queries
+  - Private-room invites for accepted friends
+  - Lobby online-friends panel
+- **AI Prompt**:
+  ```
+  Implement Phase 1 of BISCUITS friends system using docs/FRIENDS-SYSTEM-PLAN.md. Start with backend friend graph endpoints and block-list semantics, then add client wiring to display friends/incoming/outgoing requests with no room-invite behavior yet.
+  ```
+
 ### Chaos Gameplay Mechanics System
 - **Complexity**: Very High
 - **Description**: Multiplayer "psychosocial warfare" mechanics system with player attacks, distractions, and time pressure

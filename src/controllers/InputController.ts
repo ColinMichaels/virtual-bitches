@@ -22,6 +22,7 @@ export interface GameCallbacks {
   handleAction: () => void;
   handleDeselectAll: () => void;
   handleUndo: () => void;
+  handleCopyInviteLink: () => void;
   handleNewGame: () => void;
   handleReturnToMainMenu: () => void;
   startNewGame: () => void;
@@ -54,6 +55,7 @@ export class InputController {
   private returnMainMenuBtn: HTMLButtonElement | null;
   private viewLeaderboardBtn: HTMLButtonElement;
   private settingsGearBtn: HTMLButtonElement;
+  private inviteLinkBtn: HTMLButtonElement | null;
   private leaderboardBtn: HTMLButtonElement;
   private profileBtn: HTMLButtonElement | null;
   private cameraPositionsBtn: HTMLButtonElement;
@@ -88,6 +90,7 @@ export class InputController {
     this.returnMainMenuBtn = document.getElementById("return-main-menu-btn") as HTMLButtonElement | null;
     this.viewLeaderboardBtn = document.getElementById("view-leaderboard-btn") as HTMLButtonElement;
     this.settingsGearBtn = document.getElementById("settings-gear-btn") as HTMLButtonElement;
+    this.inviteLinkBtn = document.getElementById("invite-link-btn") as HTMLButtonElement | null;
     this.leaderboardBtn = document.getElementById("leaderboard-btn") as HTMLButtonElement;
     this.profileBtn = document.getElementById("profile-btn") as HTMLButtonElement | null;
     this.cameraPositionsBtn = document.getElementById("camera-positions-btn") as HTMLButtonElement;
@@ -157,6 +160,12 @@ export class InputController {
       this.callbacks.togglePause();
     });
 
+    this.inviteLinkBtn?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      hapticsService.buttonPress();
+      this.callbacks.handleCopyInviteLink();
+    });
+
     // Leaderboard button
     this.leaderboardBtn.addEventListener("click", () => {
       audioService.playSfx("click");
@@ -216,6 +225,7 @@ export class InputController {
     const menuToggle = document.getElementById("mobile-menu-toggle");
     const mobileMenu = document.getElementById("mobile-controls-menu");
     const mobileSettingsBtn = document.getElementById("mobile-settings-btn");
+    const mobileInviteLinkBtn = document.getElementById("mobile-invite-link-btn");
     const mobileProfileBtn = document.getElementById("mobile-profile-btn");
     const mobileLeaderboardBtn = document.getElementById("mobile-leaderboard-btn");
     const mobileUpgradesBtn = document.getElementById("mobile-upgrades-btn");
@@ -236,6 +246,15 @@ export class InputController {
         audioService.playSfx("click");
         hapticsService.buttonPress();
         this.callbacks.togglePause();
+        this.closeMobileMenu();
+      });
+    }
+
+    if (mobileInviteLinkBtn) {
+      mobileInviteLinkBtn.addEventListener("click", () => {
+        audioService.playSfx("click");
+        hapticsService.buttonPress();
+        this.callbacks.handleCopyInviteLink();
         this.closeMobileMenu();
       });
     }

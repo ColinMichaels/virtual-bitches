@@ -942,6 +942,40 @@ h1, h2, h3, h4, h5, h6 {
   transform: rotate(90deg) scale(0.95);
 }
 
+#invite-link-btn {
+  position: absolute;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  right: max(260px, calc(env(safe-area-inset-right) + 240px));
+  width: 50px;
+  height: 50px;
+  padding: 12px;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+#invite-link-btn svg {
+  width: 24px;
+  height: 24px;
+  color: #fff;
+}
+
+#invite-link-btn:hover {
+  background: rgba(45, 156, 219, 0.85);
+  border-color: #2d9cdb;
+  transform: scale(1.1);
+}
+
+#invite-link-btn:active {
+  transform: scale(0.95);
+}
+
 #updates-toggle-btn {
   position: absolute;
   bottom: max(20px, env(safe-area-inset-bottom));
@@ -4197,6 +4231,19 @@ button.danger,
   }
 
   #settings-gear-btn svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  #invite-link-btn {
+    width: 44px;
+    height: 44px;
+    bottom: 5px;
+    right: 158px;
+    padding: 10px;
+  }
+
+  #invite-link-btn svg {
     width: 24px;
     height: 24px;
   }

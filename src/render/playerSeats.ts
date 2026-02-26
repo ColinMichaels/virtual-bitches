@@ -53,14 +53,21 @@ export class PlayerSeatRenderer {
   private chatBubbleMeshes: Map<number, Mesh> = new Map();
   private scoreZoneMeshes: Map<number, Mesh> = new Map();
   private turnMarkerMeshes: Map<number, Mesh> = new Map();
+  private turnBadgeMeshes: Map<number, Mesh> = new Map();
   private seatStates: Map<number, SeatState> = new Map();
   private scorePulseTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
   private chatBubbleHideTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
   private highlightedSeatIndex: number | null = null;
+  private activeTurnSeatIndex: number | null = null;
+  private readonly turnMarkerAnimator: () => void;
   private onSeatClickCallback?: (seatIndex: number) => void;
 
   constructor(scene: Scene) {
     this.scene = scene;
+    this.turnMarkerAnimator = () => {
+      this.animateActiveTurnMarker();
+    };
+    this.scene.registerBeforeRender(this.turnMarkerAnimator);
   }
 
   /**
@@ -92,6 +99,7 @@ export class PlayerSeatRenderer {
         isComplete: false,
       });
     });
+    this.setActiveTurnSeat(currentPlayerSeat);
   }
 
   /**
@@ -406,6 +414,32 @@ export class PlayerSeatRenderer {
     marker.isVisible = false;
 
     this.turnMarkerMeshes.set(seat.index, marker);
+
+    const badge = MeshBuilder.CreatePlane(
+      `seat-turn-badge-${seat.index}`,
+      { width: 2.6, height: 0.62 },
+      this.scene
+    );
+    badge.position = new Vector3(0, 5.18, 0);
+    badge.parent = pedestal;
+    badge.isPickable = false;
+    badge.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    badge.isVisible = false;
+
+    const badgeTexture = new DynamicTexture(
+      `seat-turn-badge-texture-${seat.index}`,
+      { width: 448, height: 112 },
+      this.scene,
+      false
+    );
+    const badgeMaterial = new StandardMaterial(`seat-turn-badge-mat-${seat.index}`, this.scene);
+    badgeMaterial.diffuseTexture = badgeTexture;
+    badgeMaterial.emissiveTexture = badgeTexture;
+    badgeMaterial.backFaceCulling = false;
+    badgeMaterial.useAlphaFromDiffuseTexture = true;
+    badge.material = badgeMaterial;
+    this.drawTurnBadge(badgeTexture);
+    this.turnBadgeMeshes.set(seat.index, badge);
   }
 
   /**
@@ -457,6 +491,7 @@ export class PlayerSeatRenderer {
     const scoreBadge = this.scoreBadgeMeshes.get(seatIndex);
     const scoreZone = this.scoreZoneMeshes.get(seatIndex);
     const turnMarker = this.turnMarkerMeshes.get(seatIndex);
+    const turnBadge = this.turnBadgeMeshes.get(seatIndex);
     if (!pedestal || !namePlate || !scoreBadge || !scoreZone) {
       return;
     }
@@ -483,6 +518,17 @@ export class PlayerSeatRenderer {
     namePlate.scaling = new Vector3(1, 1, 1);
     if (turnMarker) {
       turnMarker.isVisible = false;
+      turnMarker.scaling = new Vector3(1, 1, 1);
+      turnMarker.position.y = 3.95;
+      const markerMat = turnMarker.material as StandardMaterial | null;
+      if (markerMat) {
+        markerMat.emissiveColor = new Color3(0.32, 0.22, 0.08);
+      }
+    }
+    if (turnBadge) {
+      turnBadge.isVisible = false;
+      turnBadge.scaling = new Vector3(1, 1, 1);
+      turnBadge.position.y = 5.18;
     }
 
     if (isCurrentPlayer) {
@@ -547,15 +593,31 @@ export class PlayerSeatRenderer {
     this.drawNamePlate(namePlate, seatIndex, state, isOccupied, isCurrentPlayer, isBot, isComplete);
     this.drawScoreBadge(scoreBadge, state, isOccupied, isCurrentPlayer, isBot, isComplete);
 
-    if (this.highlightedSeatIndex === seatIndex) {
+    const isHighlightedSeat = this.highlightedSeatIndex === seatIndex;
+    const isActiveTurnSeat = this.activeTurnSeatIndex === seatIndex && isOccupied;
+
+    if (isHighlightedSeat) {
       pedestal.scaling = new Vector3(1.1, 1.1, 1.1);
       scoreZone.scaling = new Vector3(1.05, 1.05, 1.05);
       namePlate.scaling = new Vector3(1.03, 1.03, 1.03);
       pedestalMat.emissiveColor = pedestalMat.emissiveColor.add(new Color3(0.14, 0.18, 0.07));
       scoreZoneMat.emissiveColor = scoreZoneMat.emissiveColor.add(new Color3(0.1, 0.08, 0.03));
+    }
+
+    if (isActiveTurnSeat) {
+      pedestal.scaling = new Vector3(1.14, 1.14, 1.14);
+      scoreZone.scaling = new Vector3(1.1, 1.1, 1.1);
+      namePlate.scaling = new Vector3(1.06, 1.06, 1.06);
+      pedestalMat.emissiveColor = pedestalMat.emissiveColor.add(new Color3(0.2, 0.2, 0.09));
+      scoreZoneMat.emissiveColor = scoreZoneMat.emissiveColor.add(new Color3(0.14, 0.1, 0.04));
       if (turnMarker) {
         turnMarker.isVisible = true;
       }
+      if (turnBadge) {
+        turnBadge.isVisible = true;
+      }
+    } else if (isHighlightedSeat && turnMarker) {
+      turnMarker.isVisible = true;
     }
 
     if (!isOccupied) {
@@ -661,6 +723,84 @@ export class PlayerSeatRenderer {
 
     texture.update();
     material.alpha = isOccupied || isCurrentPlayer ? 0.95 : 0.32;
+  }
+
+  setActiveTurnSeat(seatIndex: number | null): void {
+    const normalizedSeat =
+      typeof seatIndex === "number" && Number.isFinite(seatIndex)
+        ? Math.floor(seatIndex)
+        : null;
+    const nextSeat =
+      normalizedSeat !== null && this.seatMeshes.has(normalizedSeat) ? normalizedSeat : null;
+    if (nextSeat === this.activeTurnSeatIndex) {
+      return;
+    }
+
+    const previousSeat = this.activeTurnSeatIndex;
+    this.activeTurnSeatIndex = nextSeat;
+    if (previousSeat !== null) {
+      const previousState = this.seatStates.get(previousSeat);
+      if (previousState) {
+        this.applySeatVisuals(previousSeat, previousState);
+      }
+    }
+    if (nextSeat !== null) {
+      const nextState = this.seatStates.get(nextSeat);
+      if (nextState) {
+        this.applySeatVisuals(nextSeat, nextState);
+      }
+    }
+  }
+
+  private animateActiveTurnMarker(): void {
+    if (this.activeTurnSeatIndex === null) {
+      return;
+    }
+
+    const marker = this.turnMarkerMeshes.get(this.activeTurnSeatIndex);
+    if (!marker || !marker.isVisible) {
+      return;
+    }
+    const badge = this.turnBadgeMeshes.get(this.activeTurnSeatIndex);
+    const pulse = (Math.sin(Date.now() * 0.006) + 1) / 2;
+    const markerScale = 1 + pulse * 0.14;
+    marker.scaling.set(markerScale, markerScale, markerScale);
+    marker.position.y = 3.95 + pulse * 0.2;
+
+    const markerMat = marker.material as StandardMaterial | null;
+    if (markerMat) {
+      markerMat.emissiveColor.r = 0.26 + pulse * 0.36;
+      markerMat.emissiveColor.g = 0.2 + pulse * 0.16;
+      markerMat.emissiveColor.b = 0.08;
+    }
+
+    if (!badge || !badge.isVisible) {
+      return;
+    }
+    const badgeScale = 1 + pulse * 0.05;
+    badge.scaling.set(badgeScale, badgeScale, badgeScale);
+    badge.position.y = 5.18 + pulse * 0.22;
+  }
+
+  private drawTurnBadge(texture: DynamicTexture): void {
+    const ctx = texture.getContext() as CanvasRenderingContext2D;
+    const width = 448;
+    const height = 112;
+    ctx.clearRect(0, 0, width, height);
+
+    this.drawRoundedRect(ctx, 12, 8, width - 24, height - 16, 20);
+    ctx.fillStyle = "#a76d16";
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#ffd995";
+    ctx.stroke();
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 50px Arial";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText("TURN", width / 2, height / 2 + 2);
+    texture.update();
   }
 
   private drawChatBubble(
@@ -816,6 +956,7 @@ export class PlayerSeatRenderer {
    * Dispose all seat meshes.
    */
   dispose(): void {
+    this.scene.unregisterBeforeRender(this.turnMarkerAnimator);
     this.scorePulseTimers.forEach((timer) => clearTimeout(timer));
     this.chatBubbleHideTimers.forEach((timer) => clearTimeout(timer));
     this.seatMeshes.forEach((mesh) => mesh.dispose());
@@ -824,12 +965,14 @@ export class PlayerSeatRenderer {
     this.chatBubbleMeshes.forEach((mesh) => mesh.dispose());
     this.scoreZoneMeshes.forEach((mesh) => mesh.dispose());
     this.turnMarkerMeshes.forEach((mesh) => mesh.dispose());
+    this.turnBadgeMeshes.forEach((mesh) => mesh.dispose());
     this.seatMeshes.clear();
     this.namePlateMeshes.clear();
     this.scoreBadgeMeshes.clear();
     this.chatBubbleMeshes.clear();
     this.scoreZoneMeshes.clear();
     this.turnMarkerMeshes.clear();
+    this.turnBadgeMeshes.clear();
     this.scorePulseTimers.clear();
     this.chatBubbleHideTimers.clear();
     this.seatStates.clear();

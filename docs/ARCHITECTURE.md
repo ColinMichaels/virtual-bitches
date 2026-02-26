@@ -244,6 +244,10 @@ ThemeManager → Load Geometry/Textures → Create Materials →
   - Daily challenges
   - Rank calculation
 
+- **`social/friends/friendsService.ts`**: Friends scaffold (planning stage)
+  - Placeholder service and shared contracts for future friends/presence/invite features
+  - Intentionally disabled until multiplayer mechanics stabilization gate is complete
+
 **Service Pattern**: Singleton instances exported as `service` (e.g., `themeManager`)
 
 ---

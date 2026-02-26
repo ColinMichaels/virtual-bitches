@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Multiplayer UX iteration + particle log-noise throttling)
+**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Multiplayer UX iteration + particle log-noise throttling + friends model scaffold planning)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -130,6 +130,22 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - **Follow-up TODO**:
   - [ ] Add CI smoke check that all configured theme asset URLs return non-HTML responses
   - [ ] Add explicit error UI for missing theme assets (instead of only console diagnostics)
+
+### Friends System Foundation (Scaffold + Deferred Execution) (2026-02-26)
+- **Status**: 🟡 Planned and scaffolded, implementation intentionally deferred
+- **Rationale**: Friends/presence is strategic for multiplayer retention, but adding full social complexity now risks slowing room/turn stability work.
+- **Completed in this pass**:
+  - ✅ Added technical plan: `docs/FRIENDS-SYSTEM-PLAN.md`
+  - ✅ Added client social contracts scaffold:
+    - `src/social/friends/types.ts`
+    - `src/social/friends/friendsService.ts`
+  - ✅ Captured rollout gates so implementation starts only after multiplayer core mechanics are stable
+- **Deferred TODO (post-stability gate)**:
+  - [ ] Implement backend friends graph + request endpoints (send/accept/decline/remove/block)
+  - [ ] Add presence heartbeat + batched presence lookup endpoints
+  - [ ] Add friend-to-private-room invite flow (tokenized/secure)
+  - [ ] Add lobby online-friends polling panel
+  - [ ] Add privacy/abuse controls (rate limits, block-first semantics, invite/request expiry)
 
 ---
 

@@ -95,7 +95,9 @@ await test("dispatches sessionExpired with session id and clears auth on expired
   });
 
   (backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession })
-    .joinMultiplayerSession = async () => createSession({ sessionId: "session-expired-case" });
+    .joinMultiplayerSession = async () => ({
+      session: createSession({ sessionId: "session-expired-case" }),
+    });
   (backendApiService as { heartbeatMultiplayerSession: typeof backendApiService.heartbeatMultiplayerSession })
     .heartbeatMultiplayerSession = async () => ({ ok: false, reason: "session_expired" });
   (authSessionService as { clear: typeof authSessionService.clear }).clear = (reason?: string) => {
@@ -144,7 +146,9 @@ await test("does not expire session when heartbeat fails for non-expiry reason",
   });
 
   (backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession })
-    .joinMultiplayerSession = async () => createSession({ sessionId: "session-non-expiry" });
+    .joinMultiplayerSession = async () => ({
+      session: createSession({ sessionId: "session-non-expiry" }),
+    });
   (backendApiService as { heartbeatMultiplayerSession: typeof backendApiService.heartbeatMultiplayerSession })
     .heartbeatMultiplayerSession = async () => ({ ok: false, reason: "unknown_player" });
   (authSessionService as { clear: typeof authSessionService.clear }).clear = () => {
@@ -183,9 +187,11 @@ await test("refreshSessionAuth updates active session record", async () => {
 
   (backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession })
     .joinMultiplayerSession = async () =>
-      createSession({
-        sessionId: "session-refresh",
-        roomCode: "ROOM1",
+      ({
+        session: createSession({
+          sessionId: "session-refresh",
+          roomCode: "ROOM1",
+        }),
       });
   (backendApiService as {
     refreshMultiplayerSessionAuth: typeof backendApiService.refreshMultiplayerSessionAuth;
@@ -218,6 +224,33 @@ await test("refreshSessionAuth updates active session record", async () => {
         refreshMultiplayerSessionAuth: typeof backendApiService.refreshMultiplayerSessionAuth;
       }
     ).refreshMultiplayerSessionAuth = originalRefresh;
+  }
+});
+
+await test("tracks room_full join failure reason", async () => {
+  const service = new MultiplayerSessionService("player-alpha");
+  const originalJoin = backendApiService.joinMultiplayerSession.bind(backendApiService);
+
+  (backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession })
+    .joinMultiplayerSession = async () => ({
+      session: null,
+      reason: "room_full",
+      status: 409,
+    });
+
+  try {
+    const joined = await service.joinSession("session-room-full");
+    assertEqual(joined, null, "Expected join failure for full room");
+    assertEqual(
+      service.getLastJoinFailureReason(),
+      "room_full",
+      "Expected room_full join failure reason"
+    );
+  } finally {
+    service.dispose();
+    (
+      backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession }
+    ).joinMultiplayerSession = originalJoin;
   }
 });
 

@@ -1,14 +1,32 @@
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 const PORT = Number(process.env.E2E_LOCAL_PORT ?? 3310);
 const apiBaseUrl = `http://127.0.0.1:${PORT}`;
+const shortTtlModeEnabled = process.env.E2E_SHORT_TTLS !== "0";
+const e2eDataDir = await mkdtemp(path.join(tmpdir(), "biscuits-api-e2e-"));
+const e2eDataFile = path.join(e2eDataDir, "store.json");
 
 const serverProcess = spawn("node", ["api/server.mjs"], {
   env: {
     ...process.env,
     PORT: String(PORT),
     WS_BASE_URL: `ws://127.0.0.1:${PORT}`,
+    API_DATA_DIR: e2eDataDir,
+    API_DATA_FILE: e2eDataFile,
+    ALLOW_SHORT_SESSION_TTLS: shortTtlModeEnabled ? "1" : process.env.ALLOW_SHORT_SESSION_TTLS,
+    MULTIPLAYER_SESSION_IDLE_TTL_MS:
+      process.env.MULTIPLAYER_SESSION_IDLE_TTL_MS ??
+      (shortTtlModeEnabled ? "12000" : undefined),
+    PUBLIC_ROOM_OVERFLOW_EMPTY_TTL_MS:
+      process.env.PUBLIC_ROOM_OVERFLOW_EMPTY_TTL_MS ??
+      (shortTtlModeEnabled ? "5000" : undefined),
+    PUBLIC_ROOM_STALE_PARTICIPANT_MS:
+      process.env.PUBLIC_ROOM_STALE_PARTICIPANT_MS ??
+      (shortTtlModeEnabled ? "4000" : undefined),
   },
   stdio: "inherit",
 });
@@ -38,6 +56,7 @@ try {
       serverProcess.kill("SIGKILL");
     }
   }
+  await rm(e2eDataDir, { recursive: true, force: true });
 }
 
 async function waitForHealth(baseUrl) {
@@ -69,6 +88,8 @@ function runSmoke(baseUrl) {
       env: {
         ...process.env,
         E2E_API_BASE_URL: baseUrl,
+        E2E_ASSERT_ROOM_EXPIRY: process.env.E2E_ASSERT_ROOM_EXPIRY ?? "1",
+        E2E_ROOM_EXPIRY_WAIT_MS: process.env.E2E_ROOM_EXPIRY_WAIT_MS ?? "9000",
       },
       stdio: "inherit",
     });

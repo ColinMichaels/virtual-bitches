@@ -11,8 +11,8 @@ const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT ?? 3000);
 const API_PREFIX = "/api";
-const DATA_DIR = path.join(__dirname, "data");
-const DATA_FILE = path.join(DATA_DIR, "store.json");
+const DATA_DIR = resolveDataDir(process.env.API_DATA_DIR);
+const DATA_FILE = resolveDataFile(process.env.API_DATA_FILE, DATA_DIR);
 const WS_BASE_URL = process.env.WS_BASE_URL ?? "ws://localhost:3000";
 const STORE_BACKEND = (process.env.API_STORE_BACKEND ?? "file").trim().toLowerCase();
 const FIRESTORE_COLLECTION_PREFIX = (process.env.API_FIRESTORE_PREFIX ?? "api_v1").trim();
@@ -24,6 +24,8 @@ const FIREBASE_PROJECT_ID =
 const FIREBASE_WEB_API_KEY = (process.env.FIREBASE_WEB_API_KEY ?? "").trim();
 const FIREBASE_AUTH_MODE = (process.env.FIREBASE_AUTH_MODE ?? "auto").trim().toLowerCase();
 const log = logger.create("Server");
+const ALLOW_SHORT_SESSION_TTLS = process.env.ALLOW_SHORT_SESSION_TTLS === "1";
+const SESSION_IDLE_TTL_MIN_MS = ALLOW_SHORT_SESSION_TTLS ? 2000 : 60 * 1000;
 
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -37,6 +39,30 @@ const MULTIPLAYER_ROOM_ACTIVE_WINDOW_MS = normalizeSessionIdleTtlValue(
 );
 const MULTIPLAYER_ROOM_LIST_LIMIT_MAX = 100;
 const MULTIPLAYER_ROOM_LIST_LIMIT_DEFAULT = 24;
+const MAX_MULTIPLAYER_HUMAN_PLAYERS = normalizeHumanPlayerLimitValue(
+  process.env.MULTIPLAYER_MAX_HUMAN_PLAYERS,
+  8
+);
+const PUBLIC_ROOM_BASE_COUNT = normalizePublicRoomCountValue(
+  process.env.PUBLIC_ROOM_BASE_COUNT,
+  2
+);
+const PUBLIC_ROOM_MIN_JOINABLE = normalizePublicRoomCountValue(
+  process.env.PUBLIC_ROOM_MIN_JOINABLE,
+  PUBLIC_ROOM_BASE_COUNT
+);
+const PUBLIC_ROOM_OVERFLOW_EMPTY_TTL_MS = normalizeSessionIdleTtlValue(
+  process.env.PUBLIC_ROOM_OVERFLOW_EMPTY_TTL_MS,
+  MULTIPLAYER_SESSION_IDLE_TTL_MS
+);
+const PUBLIC_ROOM_STALE_PARTICIPANT_MS = normalizeSessionIdleTtlValue(
+  process.env.PUBLIC_ROOM_STALE_PARTICIPANT_MS,
+  2 * 60 * 1000
+);
+const PUBLIC_ROOM_CODE_PREFIX = normalizePublicRoomCodePrefix(
+  process.env.PUBLIC_ROOM_CODE_PREFIX,
+  "LBY"
+);
 const MAX_LEADERBOARD_ENTRIES = 200;
 const MAX_STORED_GAME_LOGS = 10000;
 const MAX_WS_MESSAGE_BYTES = 16 * 1024;
@@ -69,6 +95,11 @@ const TURN_PHASES = {
   awaitRoll: "await_roll",
   awaitScore: "await_score",
   readyToEnd: "ready_to_end",
+};
+const ROOM_KINDS = {
+  private: "private",
+  publicDefault: "public_default",
+  publicOverflow: "public_overflow",
 };
 
 const WS_CLOSE_CODES = {
@@ -152,9 +183,13 @@ async function bootstrap() {
   store = await storeAdapter.load();
   log.info(`Using ${storeAdapter.name} store backend`);
   log.info(`Firebase auth verifier mode: ${FIREBASE_AUTH_MODE}`);
+  const publicRoomsChanged = reconcilePublicRoomInventory(Date.now());
   Object.keys(store.multiplayerSessions).forEach((sessionId) => {
     reconcileSessionLoops(sessionId);
   });
+  if (publicRoomsChanged) {
+    await persistStore();
+  }
 }
 
 async function handleRequest(req, res) {
@@ -551,11 +586,19 @@ async function handleListRooms(res, url) {
     ? Math.max(1, Math.min(MULTIPLAYER_ROOM_LIST_LIMIT_MAX, Math.floor(parsedLimit)))
     : MULTIPLAYER_ROOM_LIST_LIMIT_DEFAULT;
   const now = Date.now();
+  const roomInventoryChanged = reconcilePublicRoomInventory(now);
+  if (roomInventoryChanged) {
+    await persistStore();
+  }
 
   const rooms = Object.values(store.multiplayerSessions)
     .map((session) => buildRoomListing(session, now))
-    .filter((room) => room !== null && room.sessionComplete !== true)
+    .filter((room) => room !== null && room.isPublic === true && room.sessionComplete !== true)
     .sort((left, right) => {
+      const roomTypeDelta = resolveRoomListPriority(left) - resolveRoomListPriority(right);
+      if (roomTypeDelta !== 0) {
+        return roomTypeDelta;
+      }
       const activeDelta = right.activeHumanCount - left.activeHumanCount;
       if (activeDelta !== 0) {
         return activeDelta;
@@ -625,6 +668,7 @@ async function handleCreateSession(req, res) {
     roomCode,
     gameDifficulty,
     wsUrl: WS_BASE_URL,
+    roomKind: ROOM_KINDS.private,
     createdAt: now,
     lastActivityAt: now,
     expiresAt,
@@ -659,6 +703,12 @@ async function handleJoinSession(req, res, pathname) {
 
   const now = Date.now();
   const existingParticipant = session.participants[playerId];
+  const isReturningParticipant = Boolean(existingParticipant && !isBotParticipant(existingParticipant));
+  if (!isReturningParticipant && getHumanParticipantCount(session) >= MAX_MULTIPLAYER_HUMAN_PLAYERS) {
+    sendJson(res, 409, { error: "Room is full", reason: "room_full" });
+    return;
+  }
+
   session.participants[playerId] = {
     playerId,
     displayName: typeof body?.displayName === "string" ? body.displayName : undefined,
@@ -674,9 +724,15 @@ async function handleJoinSession(req, res, pathname) {
   ensureSessionTurnState(session);
   reconcileSessionLoops(sessionId);
   broadcastSessionState(session, "join");
+  const roomInventoryChanged = reconcilePublicRoomInventory(now);
 
   const auth = issueAuthTokenBundle(playerId, sessionId);
   const response = buildSessionResponse(session, playerId, auth);
+  if (roomInventoryChanged) {
+    await persistStore();
+    sendJson(res, 200, response);
+    return;
+  }
   await persistStore();
   sendJson(res, 200, response);
 }
@@ -732,10 +788,17 @@ async function handleLeaveSession(req, res, pathname) {
     "left_session"
   );
   ensureSessionTurnState(session);
+  const now = Date.now();
   if (getHumanParticipantCount(session) === 0) {
-    expireSession(sessionId, "session_empty");
+    const roomKind = getSessionRoomKind(session);
+    if (roomKind === ROOM_KINDS.private) {
+      expireSession(sessionId, "session_empty");
+    } else {
+      resetPublicRoomForIdle(session, now);
+      reconcileSessionLoops(sessionId);
+    }
   } else {
-    markSessionActivity(session, undefined, Date.now());
+    markSessionActivity(session, undefined, now);
     reconcileSessionLoops(sessionId);
     const turnStart = buildTurnStartMessage(session, { source: "reassign" });
     if (turnStart) {
@@ -744,6 +807,7 @@ async function handleLeaveSession(req, res, pathname) {
     broadcastSessionState(session, "leave");
   }
 
+  reconcilePublicRoomInventory(now);
   await persistStore();
   sendJson(res, 200, { ok: true });
 }
@@ -1214,6 +1278,10 @@ function buildSessionResponse(session, playerId, auth) {
     sessionId: snapshot.sessionId,
     roomCode: snapshot.roomCode,
     gameDifficulty: snapshot.gameDifficulty,
+    roomType: snapshot.roomType,
+    isPublic: snapshot.isPublic,
+    maxHumanCount: snapshot.maxHumanCount,
+    availableHumanSlots: snapshot.availableHumanSlots,
     wsUrl: session.wsUrl,
     playerToken: auth.accessToken,
     auth,
@@ -1232,12 +1300,18 @@ function buildSessionSnapshot(session) {
   const turnState = ensureSessionTurnState(session);
   const participants = serializeSessionParticipants(session);
   const standings = buildSessionStandings(session);
+  const humanCount = participants.filter((participant) => !isBotParticipant(participant)).length;
+  const roomKind = getSessionRoomKind(session);
   const sessionComplete =
     standings.length > 0 && standings.every((participant) => participant.isComplete === true);
   return {
     sessionId: session.sessionId,
     roomCode: session.roomCode,
     gameDifficulty: resolveSessionGameDifficulty(session),
+    roomType: roomKind,
+    isPublic: roomKind === ROOM_KINDS.publicDefault || roomKind === ROOM_KINDS.publicOverflow,
+    maxHumanCount: MAX_MULTIPLAYER_HUMAN_PLAYERS,
+    availableHumanSlots: Math.max(0, MAX_MULTIPLAYER_HUMAN_PLAYERS - humanCount),
     participants,
     turnState: serializeTurnState(turnState),
     standings,
@@ -1280,6 +1354,8 @@ function buildRoomListing(session, now = Date.now()) {
   const lastActivityAt = resolveSessionLastActivityAt(session);
   const sessionComplete =
     humans.length > 0 && humans.every((participant) => participant?.isComplete === true);
+  const roomKind = getSessionRoomKind(session);
+  const availableHumanSlots = Math.max(0, MAX_MULTIPLAYER_HUMAN_PLAYERS - humans.length);
 
   return {
     sessionId: session.sessionId,
@@ -1292,9 +1368,303 @@ function buildRoomListing(session, now = Date.now()) {
     humanCount: humans.length,
     activeHumanCount,
     readyHumanCount,
+    maxHumanCount: MAX_MULTIPLAYER_HUMAN_PLAYERS,
+    availableHumanSlots,
     botCount,
     sessionComplete,
+    roomType: roomKind,
+    isPublic: roomKind === ROOM_KINDS.publicDefault || roomKind === ROOM_KINDS.publicOverflow,
   };
+}
+
+function resolveRoomListPriority(room) {
+  const roomType = normalizeRoomKind(room?.roomType);
+  if (roomType === ROOM_KINDS.publicDefault) {
+    return 0;
+  }
+  if (roomType === ROOM_KINDS.publicOverflow) {
+    return 1;
+  }
+  return 2;
+}
+
+function normalizeRoomKind(value) {
+  if (
+    value === ROOM_KINDS.private ||
+    value === ROOM_KINDS.publicDefault ||
+    value === ROOM_KINDS.publicOverflow
+  ) {
+    return value;
+  }
+  return ROOM_KINDS.private;
+}
+
+function getSessionRoomKind(session) {
+  return normalizeRoomKind(session?.roomKind);
+}
+
+function normalizePublicRoomSlot(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  const slot = Math.floor(parsed);
+  if (slot < 0) {
+    return null;
+  }
+  return slot;
+}
+
+function buildDefaultPublicRoomCode(slot) {
+  return normalizeRoomCode(`${PUBLIC_ROOM_CODE_PREFIX}${slot + 1}`);
+}
+
+function buildPublicOverflowRoomCode() {
+  const existingCodes = new Set(
+    Object.values(store.multiplayerSessions)
+      .map((session) => (typeof session?.roomCode === "string" ? session.roomCode : ""))
+      .filter((code) => code.length > 0)
+  );
+
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const candidate = normalizeRoomCode(`${PUBLIC_ROOM_CODE_PREFIX}${randomToken().slice(0, 4).toUpperCase()}`);
+    if (!existingCodes.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return normalizeRoomCode(randomToken().slice(0, 6));
+}
+
+function isSessionCompleteForHumans(session) {
+  const participants = serializeSessionParticipants(session);
+  const humans = participants.filter((participant) => !isBotParticipant(participant));
+  return humans.length > 0 && humans.every((participant) => participant?.isComplete === true);
+}
+
+function isSessionJoinablePublicRoom(session, now = Date.now()) {
+  if (!session || typeof session !== "object") {
+    return false;
+  }
+  const roomKind = getSessionRoomKind(session);
+  if (roomKind !== ROOM_KINDS.publicDefault && roomKind !== ROOM_KINDS.publicOverflow) {
+    return false;
+  }
+  if (!Number.isFinite(session.expiresAt) || session.expiresAt <= now) {
+    return false;
+  }
+  if (isSessionCompleteForHumans(session)) {
+    return false;
+  }
+  return getHumanParticipantCount(session) < MAX_MULTIPLAYER_HUMAN_PLAYERS;
+}
+
+function createPublicRoom(roomKind, now = Date.now(), slot = null) {
+  const normalizedKind =
+    roomKind === ROOM_KINDS.publicDefault ? ROOM_KINDS.publicDefault : ROOM_KINDS.publicOverflow;
+  const sessionId = randomUUID();
+  const roomCode =
+    normalizedKind === ROOM_KINDS.publicDefault && Number.isFinite(slot)
+      ? buildDefaultPublicRoomCode(Math.max(0, Math.floor(slot)))
+      : buildPublicOverflowRoomCode();
+  const session = {
+    sessionId,
+    roomCode,
+    gameDifficulty: "normal",
+    wsUrl: WS_BASE_URL,
+    roomKind: normalizedKind,
+    createdAt: now,
+    lastActivityAt: now,
+    expiresAt:
+      normalizedKind === ROOM_KINDS.publicDefault
+        ? now + MULTIPLAYER_SESSION_IDLE_TTL_MS
+        : now + PUBLIC_ROOM_OVERFLOW_EMPTY_TTL_MS,
+    participants: {},
+    turnState: null,
+  };
+  if (normalizedKind === ROOM_KINDS.publicDefault && Number.isFinite(slot)) {
+    session.publicRoomSlot = Math.max(0, Math.floor(slot));
+  }
+
+  store.multiplayerSessions[sessionId] = session;
+  ensureSessionTurnState(session);
+  reconcileSessionLoops(sessionId);
+  return session;
+}
+
+function resetPublicRoomForIdle(session, now = Date.now()) {
+  if (!session || typeof session !== "object") {
+    return;
+  }
+
+  const roomKind = getSessionRoomKind(session);
+  session.participants = {};
+  session.turnState = null;
+  session.gameDifficulty = "normal";
+  session.lastActivityAt = now;
+  session.expiresAt =
+    roomKind === ROOM_KINDS.publicDefault
+      ? now + MULTIPLAYER_SESSION_IDLE_TTL_MS
+      : now + PUBLIC_ROOM_OVERFLOW_EMPTY_TTL_MS;
+  ensureSessionTurnState(session);
+}
+
+function pruneInactivePublicRoomParticipants(sessionId, session, now = Date.now()) {
+  if (!session || typeof session !== "object" || !session.participants) {
+    return false;
+  }
+
+  let changed = false;
+  Object.entries(session.participants).forEach(([playerId, participant]) => {
+    if (!participant || typeof participant !== "object") {
+      delete session.participants[playerId];
+      changed = true;
+      return;
+    }
+    if (isBotParticipant(participant)) {
+      return;
+    }
+    if (isSessionParticipantConnected(sessionId, playerId)) {
+      return;
+    }
+
+    const lastHeartbeatAt =
+      Number.isFinite(participant.lastHeartbeatAt) && participant.lastHeartbeatAt > 0
+        ? Math.floor(participant.lastHeartbeatAt)
+        : 0;
+    if (lastHeartbeatAt > 0 && now - lastHeartbeatAt <= PUBLIC_ROOM_STALE_PARTICIPANT_MS) {
+      return;
+    }
+
+    delete session.participants[playerId];
+    disconnectPlayerSockets(sessionId, playerId, WS_CLOSE_CODES.normal, "stale_public_room_member");
+    changed = true;
+  });
+
+  if (!changed) {
+    return false;
+  }
+
+  ensureSessionTurnState(session);
+  if (getHumanParticipantCount(session) === 0) {
+    resetPublicRoomForIdle(session, now);
+  }
+  reconcileSessionLoops(sessionId);
+  const hasConnectedClients = (wsSessionClients.get(sessionId)?.size ?? 0) > 0;
+  if (hasConnectedClients) {
+    const turnStart = buildTurnStartMessage(session, { source: "prune" });
+    if (turnStart) {
+      broadcastToSession(sessionId, JSON.stringify(turnStart), null);
+    }
+    broadcastSessionState(session, "prune");
+  }
+  return true;
+}
+
+function reconcilePublicRoomInventory(now = Date.now()) {
+  let changed = false;
+  const defaultSlots = new Map();
+
+  Object.entries(store.multiplayerSessions).forEach(([sessionId, session]) => {
+    if (!session || typeof session !== "object") {
+      return;
+    }
+
+    const normalizedKind = normalizeRoomKind(session.roomKind);
+    if (session.roomKind !== normalizedKind) {
+      session.roomKind = normalizedKind;
+      changed = true;
+    }
+
+    if (
+      normalizedKind === ROOM_KINDS.publicDefault ||
+      normalizedKind === ROOM_KINDS.publicOverflow
+    ) {
+      if (pruneInactivePublicRoomParticipants(sessionId, session, now)) {
+        changed = true;
+      }
+    }
+
+    if (normalizedKind === ROOM_KINDS.publicOverflow) {
+      const humanCount = getHumanParticipantCount(session);
+      if (!Number.isFinite(session.expiresAt)) {
+        session.expiresAt =
+          now +
+          (humanCount > 0
+            ? MULTIPLAYER_SESSION_IDLE_TTL_MS
+            : PUBLIC_ROOM_OVERFLOW_EMPTY_TTL_MS);
+        changed = true;
+      } else if (humanCount > 0 && session.expiresAt <= now + 5000) {
+        session.expiresAt = now + MULTIPLAYER_SESSION_IDLE_TTL_MS;
+        changed = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(session, "publicRoomSlot")) {
+        delete session.publicRoomSlot;
+        changed = true;
+      }
+      return;
+    }
+
+    if (normalizedKind !== ROOM_KINDS.publicDefault) {
+      if (Object.prototype.hasOwnProperty.call(session, "publicRoomSlot")) {
+        delete session.publicRoomSlot;
+        changed = true;
+      }
+      return;
+    }
+
+    const normalizedSlot = normalizePublicRoomSlot(session.publicRoomSlot);
+    if (normalizedSlot === null || normalizedSlot >= PUBLIC_ROOM_BASE_COUNT) {
+      session.roomKind = ROOM_KINDS.publicOverflow;
+      if (Object.prototype.hasOwnProperty.call(session, "publicRoomSlot")) {
+        delete session.publicRoomSlot;
+      }
+      changed = true;
+      return;
+    }
+
+    if (defaultSlots.has(normalizedSlot)) {
+      session.roomKind = ROOM_KINDS.publicOverflow;
+      delete session.publicRoomSlot;
+      changed = true;
+      return;
+    }
+
+    defaultSlots.set(normalizedSlot, sessionId);
+    if (session.publicRoomSlot !== normalizedSlot) {
+      session.publicRoomSlot = normalizedSlot;
+      changed = true;
+    }
+
+    const expectedCode = buildDefaultPublicRoomCode(normalizedSlot);
+    if (session.roomCode !== expectedCode) {
+      session.roomCode = expectedCode;
+      changed = true;
+    }
+
+    if (!Number.isFinite(session.expiresAt) || session.expiresAt <= now + 5000) {
+      session.expiresAt = now + MULTIPLAYER_SESSION_IDLE_TTL_MS;
+      changed = true;
+    }
+  });
+
+  for (let slot = 0; slot < PUBLIC_ROOM_BASE_COUNT; slot += 1) {
+    if (!defaultSlots.has(slot)) {
+      createPublicRoom(ROOM_KINDS.publicDefault, now, slot);
+      changed = true;
+    }
+  }
+
+  let joinablePublicRooms = Object.values(store.multiplayerSessions).filter((session) =>
+    isSessionJoinablePublicRoom(session, now)
+  ).length;
+  while (joinablePublicRooms < PUBLIC_ROOM_MIN_JOINABLE) {
+    createPublicRoom(ROOM_KINDS.publicOverflow, now);
+    joinablePublicRooms += 1;
+    changed = true;
+  }
+
+  return changed;
 }
 
 function resolveSessionGameDifficulty(session) {
@@ -2161,12 +2531,51 @@ function advanceSessionTurn(session, endedByPlayerId, options = {}) {
   };
 }
 
+function resolveDataDir(rawValue) {
+  if (typeof rawValue === "string" && rawValue.trim().length > 0) {
+    return path.resolve(rawValue.trim());
+  }
+  return path.join(__dirname, "data");
+}
+
+function resolveDataFile(rawValue, dataDir) {
+  if (typeof rawValue === "string" && rawValue.trim().length > 0) {
+    return path.resolve(rawValue.trim());
+  }
+  return path.join(dataDir, "store.json");
+}
+
 function normalizeSessionIdleTtlValue(rawValue, fallback) {
   const parsed = Number(rawValue);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return fallback;
   }
-  return Math.max(60 * 1000, Math.floor(parsed));
+  return Math.max(SESSION_IDLE_TTL_MIN_MS, Math.floor(parsed));
+}
+
+function normalizeHumanPlayerLimitValue(rawValue, fallback) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(2, Math.min(8, Math.floor(parsed)));
+}
+
+function normalizePublicRoomCountValue(rawValue, fallback) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return Math.max(1, Math.min(8, Math.floor(fallback)));
+  }
+  return Math.max(1, Math.min(8, Math.floor(parsed)));
+}
+
+function normalizePublicRoomCodePrefix(rawValue, fallback = "LBY") {
+  const source = typeof rawValue === "string" ? rawValue : fallback;
+  const normalized = source.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  if (!normalized) {
+    return fallback;
+  }
+  return normalized.slice(0, 4);
 }
 
 function normalizeTurnTimeoutValue(rawValue, fallback) {
@@ -3088,10 +3497,29 @@ function cleanupExpiredRecords() {
     }
   });
   Object.entries(store.multiplayerSessions).forEach(([sessionId, session]) => {
-    if (!session || session.expiresAt <= now) {
+    if (!session) {
+      expireSession(sessionId, "session_expired");
+      return;
+    }
+
+    const roomKind = getSessionRoomKind(session);
+    if (roomKind === ROOM_KINDS.publicDefault) {
+      if (!Number.isFinite(session.expiresAt) || session.expiresAt <= now + 5000) {
+        session.expiresAt = now + MULTIPLAYER_SESSION_IDLE_TTL_MS;
+      }
+      return;
+    }
+
+    if (!Number.isFinite(session.expiresAt) || session.expiresAt <= now) {
       expireSession(sessionId, "session_expired");
     }
   });
+  const roomInventoryChanged = reconcilePublicRoomInventory(now);
+  if (roomInventoryChanged) {
+    persistStore().catch((error) => {
+      log.warn("Failed to persist store after public room reconciliation", error);
+    });
+  }
 }
 
 function rejectUpgrade(socket, status, reason) {
