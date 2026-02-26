@@ -126,7 +126,10 @@ Exit criteria:
    - `logs/{logId}` (or sharded per day/game)
 2. Add Firestore security rules.
 3. Add indexes for leaderboard/session queries.
-4. Backfill from local/JSON store where needed.
+4. Run migration utility to seed Firestore from JSON snapshot:
+   - `npm run api:migrate:firestore`
+   - `npm run api:migrate:firestore:verify`
+5. Backfill from local/JSON store where needed.
 
 Exit criteria:
 - Production writes/reads use Firestore.

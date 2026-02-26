@@ -90,3 +90,34 @@ Smoke test against deployed API/Cloud Run:
 ```bash
 E2E_API_BASE_URL="https://<your-cloud-run-host>" npm run test:e2e:api
 ```
+
+## File Store -> Firestore Migration (Sprint 1.5)
+
+Install API dependencies (required for `firebase-admin`):
+
+```bash
+npm --prefix api install
+```
+
+Run migration in safe `merge` mode (default):
+
+```bash
+npm run api:migrate:firestore
+```
+
+Verification-only run:
+
+```bash
+npm run api:migrate:firestore:verify
+```
+
+Useful flags:
+
+```bash
+node api/scripts/migrate-file-store-to-firestore.mjs --mode replace --prefix api_v1 --project <project-id>
+```
+
+Notes:
+- `merge` mode keeps existing Firestore records and overlays source file values.
+- `replace` mode makes Firestore match the source store snapshot exactly.
+- Expired access/refresh tokens and sessions are pruned by default during migration.

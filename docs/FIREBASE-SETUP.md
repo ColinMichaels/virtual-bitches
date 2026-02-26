@@ -83,6 +83,24 @@ Optional smoke test against deployed API + WebSocket:
 E2E_API_BASE_URL="https://<cloud-run-service-url>" npm run test:e2e:api
 ```
 
+### 6.5) Migrate existing JSON store data to Firestore (Sprint 1.5)
+
+```bash
+npm --prefix api install
+API_FIRESTORE_PREFIX=api_v1 FIREBASE_PROJECT_ID=<project-id> npm run api:migrate:firestore
+```
+
+Verification-only:
+
+```bash
+API_FIRESTORE_PREFIX=api_v1 FIREBASE_PROJECT_ID=<project-id> npm run api:migrate:firestore:verify
+```
+
+Cutover recommendation:
+- Run migration once in `merge` mode (default).
+- Verify counts/digests from migration output.
+- Then deploy Cloud Run with `API_STORE_BACKEND=firestore` and `FIREBASE_AUTH_MODE=admin`.
+
 ## 7) GitHub Actions auto-deploy (master/dev)
 
 Workflow file:

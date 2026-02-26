@@ -22,6 +22,8 @@
     "test:network": "tsx src/multiplayer/networkService.test.ts",
     "test:e2e:api": "node api/e2e/smoke.mjs",
     "test:e2e:api:local": "node api/e2e/run-local.mjs",
+    "api:migrate:firestore": "node api/scripts/migrate-file-store-to-firestore.mjs",
+    "api:migrate:firestore:verify": "node api/scripts/migrate-file-store-to-firestore.mjs --verify-only",
     "api:dev": "node api/server.mjs",
     "firebase:login": "npx firebase-tools login",
     "firebase:use:prod": "npx firebase-tools use prod",

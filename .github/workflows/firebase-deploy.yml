@@ -313,6 +313,9 @@ jobs:
             WS_BASE_URL=${{ steps.target.outputs.ws_url }}
             FIREBASE_PROJECT_ID=${{ steps.target.outputs.fb_project_id }}
             FIREBASE_WEB_API_KEY=${{ steps.target.outputs.fb_api_key }}
+            API_STORE_BACKEND=${{ vars.API_STORE_BACKEND || 'file' }}
+            API_FIRESTORE_PREFIX=${{ vars.API_FIRESTORE_PREFIX || 'api_v1' }}
+            FIREBASE_AUTH_MODE=${{ vars.FIREBASE_AUTH_MODE || 'auto' }}
 
       - name: Smoke Test Cloud Run API + WebSocket
         env:
