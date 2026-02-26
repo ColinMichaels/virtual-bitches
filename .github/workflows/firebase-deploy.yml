@@ -295,6 +295,7 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID=$FB_SENDER_ID
           VITE_FIREBASE_APP_ID=$FB_APP_ID
           VITE_FIREBASE_MEASUREMENT_ID=$FB_MEASUREMENT_ID
+          VITE_ENABLE_ADMIN_UI=${{ vars.VITE_ENABLE_ADMIN_UI || '0' }}
           EOF
 
       - name: Build frontend
@@ -307,13 +308,13 @@ jobs:
           service: biscuits-api
           source: ./api
           region: us-central1
-          flags: --allow-unauthenticated
+          flags: --allow-unauthenticated --max-instances=${{ vars.API_MAX_INSTANCES || '1' }}
           env_vars: |
             NODE_ENV=production
             WS_BASE_URL=${{ steps.target.outputs.ws_url }}
             FIREBASE_PROJECT_ID=${{ steps.target.outputs.fb_project_id }}
             FIREBASE_WEB_API_KEY=${{ steps.target.outputs.fb_api_key }}
-            API_STORE_BACKEND=${{ vars.API_STORE_BACKEND || 'file' }}
+            API_STORE_BACKEND=${{ vars.API_STORE_BACKEND || 'firestore' }}
             API_FIRESTORE_PREFIX=${{ vars.API_FIRESTORE_PREFIX || 'api_v1' }}
             FIREBASE_AUTH_MODE=${{ vars.FIREBASE_AUTH_MODE || 'auto' }}
 

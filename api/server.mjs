@@ -205,6 +205,15 @@ async function bootstrap() {
   });
   store = await storeAdapter.load();
   log.info(`Using ${storeAdapter.name} store backend`);
+  if (storeAdapter.name === "firestore") {
+    const prefix = storeAdapter.metadata?.collectionPrefix ?? FIRESTORE_COLLECTION_PREFIX;
+    log.info(`Firestore collection prefix: ${prefix}`);
+  }
+  if (NODE_ENV === "production" && storeAdapter.name !== "firestore") {
+    log.warn(
+      "Production API is not using Firestore persistence (set API_STORE_BACKEND=firestore)."
+    );
+  }
   log.info(`Firebase auth verifier mode: ${FIREBASE_AUTH_MODE}`);
   log.info(`Admin API access mode: ${resolveAdminAccessMode()}`);
   log.info(
@@ -245,6 +254,7 @@ async function handleRequest(req, res) {
         players: Object.keys(store.players).length,
         sessions: Object.keys(store.multiplayerSessions).length,
         leaderboardEntries: Object.keys(store.leaderboardScores).length,
+        storage: buildStoreDiagnostics(),
       });
       return;
     }
@@ -261,6 +271,11 @@ async function handleRequest(req, res) {
 
     if (req.method === "GET" && pathname === "/api/admin/metrics") {
       await handleAdminMetrics(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/api/admin/storage") {
+      await handleAdminStorage(req, res);
       return;
     }
 
@@ -1066,6 +1081,25 @@ async function handleAdminMetrics(req, res) {
   });
 }
 
+async function handleAdminStorage(req, res) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.viewer });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  sendJson(res, 200, {
+    timestamp: Date.now(),
+    accessMode: auth.mode,
+    principal: buildAdminPrincipal(auth),
+    storage: buildStoreDiagnostics(),
+    sections: collectStoreSectionSummary(),
+  });
+}
+
 async function handleAdminAudit(req, res, url) {
   const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.viewer });
   if (!auth.ok) {
@@ -1445,6 +1479,35 @@ function buildAdminMetricsSnapshot(now = Date.now()) {
     activeTurnTimeoutLoops: sessionTurnTimeoutLoops.size,
     activeBotLoops: botSessionLoops.size,
   };
+}
+
+function buildStoreDiagnostics() {
+  const backend = storeAdapter?.name ?? STORE_BACKEND;
+  const metadata = storeAdapter?.metadata && typeof storeAdapter.metadata === "object"
+    ? storeAdapter.metadata
+    : {};
+  const firestorePrefix =
+    typeof metadata.collectionPrefix === "string" && metadata.collectionPrefix
+      ? metadata.collectionPrefix
+      : backend === "firestore"
+        ? FIRESTORE_COLLECTION_PREFIX
+        : undefined;
+  const firestoreCollections = Array.isArray(metadata.collections)
+    ? metadata.collections.filter((entry) => typeof entry === "string")
+    : undefined;
+
+  return {
+    backend,
+    firestorePrefix,
+    firestoreCollections,
+  };
+}
+
+function collectStoreSectionSummary() {
+  return Object.keys(DEFAULT_STORE).map((section) => ({
+    section,
+    count: Object.keys(store?.[section] ?? {}).length,
+  }));
 }
 
 function getConnectedSessionPlayerIds(sessionId) {
@@ -5394,7 +5457,7 @@ async function parseJsonBody(req) {
 
 function setCorsHeaders(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");
+  res.setHeader("Access-Control-Allow-Headers", "content-type, authorization, x-admin-token");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
 }
 

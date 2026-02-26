@@ -13,6 +13,10 @@ export async function createFileStoreAdapter({
 
   return {
     name: "file",
+    metadata: {
+      backend: "file",
+      dataFile,
+    },
     async load() {
       await mkdir(dataDir, { recursive: true });
 

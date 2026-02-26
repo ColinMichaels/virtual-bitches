@@ -19,10 +19,19 @@ export async function createFirestoreStoreAdapter({
   }
 
   const collectionPrefix = normalizeCollectionPrefix(firestorePrefix);
+  const collectionNames = getStoreSections().map((section) =>
+    getCollectionName(collectionPrefix, section)
+  );
   let previousStore = cloneStore();
 
   return {
     name: "firestore",
+    metadata: {
+      backend: "firestore",
+      projectId: app?.options?.projectId ?? firebaseProjectId ?? null,
+      collectionPrefix,
+      collections: collectionNames,
+    },
     async load() {
       const nextStore = cloneStore();
       const sections = getStoreSections();

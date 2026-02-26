@@ -27,6 +27,12 @@ To:
    - Hosting has a 60-second request timeout.
    - Cloud Run WebSockets can run longer (up to service timeout, currently 60 minutes).
    - Use a direct Cloud Run (or custom domain mapped to Cloud Run) endpoint for WS traffic.
+4. **Do not add Firebase Realtime Database for turn sync right now**
+   - Current real-time gameplay state is already WebSocket-driven and server-authoritative in the API process.
+   - Add Cloud Functions only for async/offline workflows (scheduled cleanup, analytics fanout, notifications), not in-turn gameplay.
+5. **Keep Cloud Run API single-instance until shared state coordination is introduced**
+   - Current multiplayer orchestration is in-memory + persisted snapshots; horizontal API scaling can split active WS room state.
+   - Raise max instances only after introducing a dedicated coordination layer (Redis/pubsub or equivalent).
 
 ---
 

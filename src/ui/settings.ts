@@ -24,6 +24,8 @@ import type { AuthenticatedUserProfile } from "../services/backendApi.js";
 import {
   adminApiService,
   type AdminAuditEntry,
+  type AdminStorageDiagnostics,
+  type AdminStorageSectionSummary,
   type AdminMonitorOverview,
   type AdminRoleRecord,
   type AdminUserRole,
@@ -750,6 +752,10 @@ export class SettingsModal {
         let auditEntries: AdminAuditEntry[] | null = null;
         let auditReason: string | undefined;
         let auditStatus: number | undefined;
+        let storage: AdminStorageDiagnostics | null = null;
+        let storageSections: AdminStorageSectionSummary[] | null = null;
+        let storageReason: string | undefined;
+        let storageStatus: number | undefined;
         if (resolvedRole === "owner" && canRequestAdmin) {
           const rolesResult = await adminApiService.getRoles(250, adminAuthOptions);
           if (renderVersion !== this.accountRenderVersion) {
@@ -767,6 +773,14 @@ export class SettingsModal {
           auditEntries = auditResult.entries;
           auditReason = auditResult.reason;
           auditStatus = auditResult.status;
+          const storageResult = await adminApiService.getStorage(adminAuthOptions);
+          if (renderVersion !== this.accountRenderVersion) {
+            return;
+          }
+          storage = storageResult.storage;
+          storageSections = storageResult.sections;
+          storageReason = storageResult.reason;
+          storageStatus = storageResult.status;
         }
         adminMonitorMarkup = this.renderAdminMonitorMarkup(
           adminResult.overview,
@@ -781,6 +795,10 @@ export class SettingsModal {
             auditEntries,
             auditReason,
             auditStatus,
+            storage,
+            storageSections,
+            storageReason,
+            storageStatus,
           }
         );
       }
@@ -1116,6 +1134,10 @@ export class SettingsModal {
       auditEntries?: AdminAuditEntry[] | null;
       auditReason?: string;
       auditStatus?: number;
+      storage?: AdminStorageDiagnostics | null;
+      storageSections?: AdminStorageSectionSummary[] | null;
+      storageReason?: string;
+      storageStatus?: number;
     } = {}
   ): string {
     const tokenValue = adminApiService.getAdminToken();
@@ -1177,6 +1199,12 @@ export class SettingsModal {
       options.auditReason,
       options.auditStatus
     );
+    const storageMarkup = this.renderAdminStorageMarkup(
+      options.storage,
+      options.storageSections,
+      options.storageReason,
+      options.storageStatus
+    );
 
     return `
       <div class="settings-admin-monitor">
@@ -1212,6 +1240,7 @@ export class SettingsModal {
           </div>
         </div>
         ${metricsMarkup}
+        ${storageMarkup}
         ${roomsMarkup}
         ${auditMarkup}
         ${roleManagerMarkup}
@@ -1372,6 +1401,47 @@ export class SettingsModal {
     return `
       <div class="settings-admin-room-list">
         ${roomCards}
+      </div>
+    `;
+  }
+
+  private renderAdminStorageMarkup(
+    storage: AdminStorageDiagnostics | null | undefined,
+    sections: AdminStorageSectionSummary[] | null | undefined,
+    reason?: string,
+    status?: number
+  ): string {
+    if (!storage || !sections) {
+      return `
+        <div class="settings-admin-storage">
+          <div class="settings-admin-storage-title">Persistence</div>
+          <p class="settings-admin-empty">
+            Storage summary unavailable: ${escapeHtml(this.getAdminMonitorFailureMessage(reason, status))}
+          </p>
+        </div>
+      `;
+    }
+
+    const backendLabel = storage.backend?.trim() || "unknown";
+    const prefixLabel = storage.firestorePrefix?.trim() || "";
+    const sectionMarkup = sections
+      .map((entry) => {
+        const label = entry.section?.trim() || "unknown";
+        const count = Number.isFinite(entry.count) ? Math.max(0, Math.floor(entry.count)) : 0;
+        return `<span>${escapeHtml(label)}: ${count}</span>`;
+      })
+      .join("");
+
+    return `
+      <div class="settings-admin-storage">
+        <div class="settings-admin-storage-title">Persistence</div>
+        <div class="settings-admin-storage-meta">
+          Backend: ${escapeHtml(backendLabel)}
+          ${prefixLabel ? ` • Prefix: ${escapeHtml(prefixLabel)}` : ""}
+        </div>
+        <div class="settings-admin-storage-sections">
+          ${sectionMarkup}
+        </div>
       </div>
     `;
   }
