@@ -8,13 +8,14 @@ on:
       - dev
   workflow_dispatch:
 
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'dev' && 'dev' || 'prod' }}
-    outputs:
-      project_id: ${{ steps.target.outputs.project_id }}
-      fb_storage_bucket: ${{ steps.target.outputs.fb_storage_bucket }}
     permissions:
       contents: read
       id-token: write
@@ -197,6 +198,9 @@ jobs:
             NORMALIZED_BUCKET="${FB_STORAGE_BUCKET#gs://}"
             NORMALIZED_BUCKET="${NORMALIZED_BUCKET%/}"
             ASSET_BASE_URL="https://storage.googleapis.com/${NORMALIZED_BUCKET}/"
+          fi
+          if [ "${ASSET_BASE_URL%/}" = "$ASSET_BASE_URL" ]; then
+            ASSET_BASE_URL="${ASSET_BASE_URL}/"
           fi
 
           echo "project_id=$PROJECT_ID" >> "$GITHUB_OUTPUT"
@@ -412,16 +416,101 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Resolve Asset Deployment Target
+        id: target-assets
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+          FIREBASE_PROJECT_ID_ENV_SECRET: ${{ secrets.FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_PROJECT_ID_ENV_SECRET: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET_ENV_SECRET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_ASSET_BASE_URL_ENV_SECRET: ${{ secrets.VITE_ASSET_BASE_URL }}
+          FIREBASE_PROJECT_ID_PROD_SECRET: ${{ secrets.FIREBASE_PROJECT_ID_PROD }}
+          FIREBASE_PROJECT_ID_DEV_SECRET: ${{ secrets.FIREBASE_PROJECT_ID_DEV }}
+          VITE_FIREBASE_PROJECT_ID_PROD_SECRET: ${{ secrets.VITE_FIREBASE_PROJECT_ID_PROD }}
+          VITE_FIREBASE_PROJECT_ID_DEV_SECRET: ${{ secrets.VITE_FIREBASE_PROJECT_ID_DEV }}
+          VITE_FIREBASE_STORAGE_BUCKET_PROD_SECRET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET_PROD }}
+          VITE_FIREBASE_STORAGE_BUCKET_DEV_SECRET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET_DEV }}
+          VITE_ASSET_BASE_URL_PROD_SECRET: ${{ secrets.VITE_ASSET_BASE_URL_PROD }}
+          VITE_ASSET_BASE_URL_DEV_SECRET: ${{ secrets.VITE_ASSET_BASE_URL_DEV }}
+          FIREBASE_PROJECT_ID_ENV_VAR: ${{ vars.FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_PROJECT_ID_ENV_VAR: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET_ENV_VAR: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_ASSET_BASE_URL_ENV_VAR: ${{ vars.VITE_ASSET_BASE_URL }}
+          FIREBASE_PROJECT_ID_PROD_VAR: ${{ vars.FIREBASE_PROJECT_ID_PROD }}
+          FIREBASE_PROJECT_ID_DEV_VAR: ${{ vars.FIREBASE_PROJECT_ID_DEV }}
+          VITE_FIREBASE_PROJECT_ID_PROD_VAR: ${{ vars.VITE_FIREBASE_PROJECT_ID_PROD }}
+          VITE_FIREBASE_PROJECT_ID_DEV_VAR: ${{ vars.VITE_FIREBASE_PROJECT_ID_DEV }}
+          VITE_FIREBASE_STORAGE_BUCKET_PROD_VAR: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET_PROD }}
+          VITE_FIREBASE_STORAGE_BUCKET_DEV_VAR: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET_DEV }}
+          VITE_ASSET_BASE_URL_PROD_VAR: ${{ vars.VITE_ASSET_BASE_URL_PROD }}
+          VITE_ASSET_BASE_URL_DEV_VAR: ${{ vars.VITE_ASSET_BASE_URL_DEV }}
+        run: |
+          set -euo pipefail
+
+          resolve_value() {
+            local candidate=""
+            for candidate in "$@"; do
+              if [ -n "${candidate:-}" ]; then
+                printf '%s' "$candidate"
+                return 0
+              fi
+            done
+            printf ''
+          }
+
+          if [ "$BRANCH_NAME" = "master" ] || [ "$BRANCH_NAME" = "main" ]; then
+            PROJECT_ID="$(resolve_value "$FIREBASE_PROJECT_ID_PROD_SECRET" "$FIREBASE_PROJECT_ID_ENV_SECRET" "$FIREBASE_PROJECT_ID_PROD_VAR" "$FIREBASE_PROJECT_ID_ENV_VAR")"
+            if [ -z "$PROJECT_ID" ]; then
+              PROJECT_ID="$(resolve_value "$VITE_FIREBASE_PROJECT_ID_PROD_SECRET" "$VITE_FIREBASE_PROJECT_ID_ENV_SECRET" "$VITE_FIREBASE_PROJECT_ID_PROD_VAR" "$VITE_FIREBASE_PROJECT_ID_ENV_VAR")"
+            fi
+            FB_STORAGE_BUCKET="$(resolve_value "$VITE_FIREBASE_STORAGE_BUCKET_PROD_SECRET" "$VITE_FIREBASE_STORAGE_BUCKET_ENV_SECRET" "$VITE_FIREBASE_STORAGE_BUCKET_PROD_VAR" "$VITE_FIREBASE_STORAGE_BUCKET_ENV_VAR")"
+            ASSET_BASE_URL="$(resolve_value "$VITE_ASSET_BASE_URL_PROD_SECRET" "$VITE_ASSET_BASE_URL_ENV_SECRET" "$VITE_ASSET_BASE_URL_PROD_VAR" "$VITE_ASSET_BASE_URL_ENV_VAR")"
+            EXPECTED_ENV_NAME="prod"
+          elif [ "$BRANCH_NAME" = "dev" ]; then
+            PROJECT_ID="$(resolve_value "$FIREBASE_PROJECT_ID_DEV_SECRET" "$FIREBASE_PROJECT_ID_ENV_SECRET" "$FIREBASE_PROJECT_ID_DEV_VAR" "$FIREBASE_PROJECT_ID_ENV_VAR")"
+            if [ -z "$PROJECT_ID" ]; then
+              PROJECT_ID="$(resolve_value "$VITE_FIREBASE_PROJECT_ID_DEV_SECRET" "$VITE_FIREBASE_PROJECT_ID_ENV_SECRET" "$VITE_FIREBASE_PROJECT_ID_DEV_VAR" "$VITE_FIREBASE_PROJECT_ID_ENV_VAR")"
+            fi
+            FB_STORAGE_BUCKET="$(resolve_value "$VITE_FIREBASE_STORAGE_BUCKET_DEV_SECRET" "$VITE_FIREBASE_STORAGE_BUCKET_ENV_SECRET" "$VITE_FIREBASE_STORAGE_BUCKET_DEV_VAR" "$VITE_FIREBASE_STORAGE_BUCKET_ENV_VAR")"
+            ASSET_BASE_URL="$(resolve_value "$VITE_ASSET_BASE_URL_DEV_SECRET" "$VITE_ASSET_BASE_URL_ENV_SECRET" "$VITE_ASSET_BASE_URL_DEV_VAR" "$VITE_ASSET_BASE_URL_ENV_VAR")"
+            EXPECTED_ENV_NAME="dev"
+          else
+            echo "Unsupported branch: $BRANCH_NAME"
+            exit 1
+          fi
+
+          if [ -z "${PROJECT_ID:-}" ]; then
+            echo "Missing project id for branch '$BRANCH_NAME' (GitHub Environment '$EXPECTED_ENV_NAME')."
+            exit 1
+          fi
+          if [ -z "${FB_STORAGE_BUCKET:-}" ]; then
+            echo "Missing storage bucket for branch '$BRANCH_NAME' (GitHub Environment '$EXPECTED_ENV_NAME')."
+            exit 1
+          fi
+
+          if [ -z "${ASSET_BASE_URL:-}" ]; then
+            NORMALIZED_BUCKET="${FB_STORAGE_BUCKET#gs://}"
+            NORMALIZED_BUCKET="${NORMALIZED_BUCKET%/}"
+            ASSET_BASE_URL="https://storage.googleapis.com/${NORMALIZED_BUCKET}/"
+          fi
+          if [ "${ASSET_BASE_URL%/}" = "$ASSET_BASE_URL" ]; then
+            ASSET_BASE_URL="${ASSET_BASE_URL}/"
+          fi
+
+          echo "project_id=$PROJECT_ID" >> "$GITHUB_OUTPUT"
+          echo "fb_storage_bucket=$FB_STORAGE_BUCKET" >> "$GITHUB_OUTPUT"
+          echo "asset_base_url=$ASSET_BASE_URL" >> "$GITHUB_OUTPUT"
+
       - name: Validate asset deployment inputs
         env:
-          PROJECT_ID: ${{ needs.deploy.outputs.project_id }}
-          FB_STORAGE_BUCKET: ${{ needs.deploy.outputs.fb_storage_bucket }}
+          PROJECT_ID: ${{ steps.target-assets.outputs.project_id }}
+          FB_STORAGE_BUCKET: ${{ steps.target-assets.outputs.fb_storage_bucket }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           GCP_SA_KEY_B64: ${{ secrets.GCP_SA_KEY_B64 }}
         run: |
           set -euo pipefail
-          [ -z "${PROJECT_ID:-}" ] && { echo "Missing deploy output: project_id"; exit 1; }
-          [ -z "${FB_STORAGE_BUCKET:-}" ] && { echo "Missing deploy output: fb_storage_bucket"; exit 1; }
+          [ -z "${PROJECT_ID:-}" ] && { echo "Missing resolved target: project_id"; exit 1; }
+          [ -z "${FB_STORAGE_BUCKET:-}" ] && { echo "Missing resolved target: fb_storage_bucket"; exit 1; }
           if [ -z "${GCP_SA_KEY:-}" ] && [ -z "${GCP_SA_KEY_B64:-}" ]; then
             echo "Missing required secret: GCP_SA_KEY (raw JSON) or GCP_SA_KEY_B64 (base64 JSON)"
             exit 1
@@ -470,12 +559,12 @@ jobs:
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ steps.gcp-creds.outputs.credentials_json }}
-          project_id: ${{ needs.deploy.outputs.project_id }}
+          project_id: ${{ steps.target-assets.outputs.project_id }}
 
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ needs.deploy.outputs.project_id }}
+          project_id: ${{ steps.target-assets.outputs.project_id }}
 
       - name: Build public asset tree
         run: node scripts/copy-assets.mjs --sync-themes
@@ -490,7 +579,7 @@ jobs:
 
       - name: Upload assets to Firebase Storage
         env:
-          FIREBASE_STORAGE_BUCKET: ${{ needs.deploy.outputs.fb_storage_bucket }}
+          FIREBASE_STORAGE_BUCKET: ${{ steps.target-assets.outputs.fb_storage_bucket }}
           ASSET_CACHE_CONTROL: ${{ vars.CDN_ASSET_CACHE_CONTROL || 'public,max-age=86400' }}
           CONTENT_CACHE_CONTROL: ${{ vars.CDN_CONTENT_CACHE_CONTROL || 'public,max-age=300,must-revalidate' }}
         run: |
@@ -498,3 +587,20 @@ jobs:
             --bucket "$FIREBASE_STORAGE_BUCKET" \
             --asset-cache-control "$ASSET_CACHE_CONTROL" \
             --content-cache-control "$CONTENT_CACHE_CONTROL"
+
+      - name: Smoke Test CDN Assets
+        env:
+          ASSET_BASE_URL: ${{ steps.target-assets.outputs.asset_base_url }}
+          CDN_VERIFY_RETRIES: ${{ vars.CDN_VERIFY_RETRIES || '3' }}
+          CDN_VERIFY_DELAY_MS: ${{ vars.CDN_VERIFY_DELAY_MS || '2000' }}
+          CDN_VERIFY_TIMEOUT_MS: ${{ vars.CDN_VERIFY_TIMEOUT_MS || '15000' }}
+        run: |
+          node scripts/check-cdn-assets.mjs \
+            --retries "$CDN_VERIFY_RETRIES" \
+            --delay-ms "$CDN_VERIFY_DELAY_MS" \
+            --timeout-ms "$CDN_VERIFY_TIMEOUT_MS" \
+            --url "${ASSET_BASE_URL}assets/themes/default/theme.config.json" \
+            --url "${ASSET_BASE_URL}assets/logos/Biscuits_logo.png" \
+            --url "${ASSET_BASE_URL}assets/music/game%20music.mp3" \
+            --url "${ASSET_BASE_URL}rules.md" \
+            --url "${ASSET_BASE_URL}updates.json"

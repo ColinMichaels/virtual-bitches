@@ -95,6 +95,23 @@ Optional GitHub Environment variables for cache behavior:
 - `CDN_ASSET_CACHE_CONTROL` (default: `public,max-age=86400`)
 - `CDN_CONTENT_CACHE_CONTROL` (default: `public,max-age=300,must-revalidate`)
 
+Optional GitHub Environment variables for CDN smoke checks:
+
+- `CDN_VERIFY_RETRIES` (default: `3`)
+- `CDN_VERIFY_DELAY_MS` (default: `2000`)
+- `CDN_VERIFY_TIMEOUT_MS` (default: `15000`)
+
+Manual verification command:
+
+```bash
+npm run cdn:verify -- \
+  --url "https://storage.googleapis.com/<your-bucket>/assets/themes/default/theme.config.json" \
+  --url "https://storage.googleapis.com/<your-bucket>/assets/logos/Biscuits_logo.png" \
+  --url "https://storage.googleapis.com/<your-bucket>/assets/music/game%20music.mp3" \
+  --url "https://storage.googleapis.com/<your-bucket>/rules.md" \
+  --url "https://storage.googleapis.com/<your-bucket>/updates.json"
+```
+
 ## Notes
 
 - Keep local fallback paths for development by leaving `VITE_ASSET_BASE_URL` empty.

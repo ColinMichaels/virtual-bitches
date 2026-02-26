@@ -30,6 +30,7 @@
     "api:migrate:firestore": "node api/scripts/migrate-file-store-to-firestore.mjs",
     "api:migrate:firestore:verify": "node api/scripts/migrate-file-store-to-firestore.mjs --verify-only",
     "api:dev": "node api/server.mjs",
+    "cdn:verify": "node scripts/check-cdn-assets.mjs",
     "cdn:upload:firebase": "npm run copy:assets && node scripts/upload-assets-to-firebase-storage.mjs",
     "firebase:login": "npx firebase-tools login",
     "firebase:use:prod": "npx firebase-tools use prod",
