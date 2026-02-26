@@ -145,6 +145,7 @@ export class SplashScreen {
     `;
 
     document.body.appendChild(this.container);
+    document.body.classList.add("splash-active");
     this.canvas = this.container.querySelector("#splash-canvas") as HTMLCanvasElement;
 
     this.container.querySelectorAll<HTMLElement>("[data-play-mode]").forEach((button) => {
@@ -336,6 +337,7 @@ export class SplashScreen {
   }
 
   show(): void {
+    document.body.classList.add("splash-active");
     this.container.style.display = "flex";
     this.background3d?.start();
 
@@ -350,6 +352,7 @@ export class SplashScreen {
 
     setTimeout(() => {
       this.container.style.display = "none";
+      document.body.classList.remove("splash-active");
       this.background3d?.dispose();
       this.background3d = null;
       this.backgroundLoadPromise = null;
@@ -357,6 +360,7 @@ export class SplashScreen {
   }
 
   dispose(): void {
+    document.body.classList.remove("splash-active");
     this.background3d?.dispose();
     this.background3d = null;
     this.backgroundLoadPromise = null;

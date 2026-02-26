@@ -110,6 +110,15 @@ export class SettingsModal {
                 Allow control inversion during drunk attacks
               </label>
             </div>
+
+            <div class="setting-row">
+              <label for="mobile-dice-layout">Mobile Dice Layout</label>
+              <select id="mobile-dice-layout">
+                <option value="wrapped" ${this.settings.controls.mobileDiceLayout === "wrapped" ? "selected" : ""}>Wrapped Grid</option>
+                <option value="single-row" ${this.settings.controls.mobileDiceLayout === "single-row" ? "selected" : ""}>Single Row</option>
+                <option value="perimeter" ${this.settings.controls.mobileDiceLayout === "perimeter" ? "selected" : ""}>Perimeter</option>
+              </select>
+            </div>
           </div>
 
           <div class="settings-section">
@@ -427,6 +436,14 @@ export class SettingsModal {
         "info",
         2200
       );
+      audioService.playSfx("click");
+    });
+
+    const mobileDiceLayout = document.getElementById("mobile-dice-layout") as HTMLSelectElement;
+    mobileDiceLayout.addEventListener("change", () => {
+      settingsService.updateControls({
+        mobileDiceLayout: mobileDiceLayout.value as "wrapped" | "single-row" | "perimeter",
+      });
       audioService.playSfx("click");
     });
 
@@ -1822,6 +1839,8 @@ export class SettingsModal {
       this.settings.controls.reduceChaosCameraEffects;
     (document.getElementById("allow-control-inversion") as HTMLInputElement).checked =
       this.settings.controls.allowChaosControlInversion;
+    (document.getElementById("mobile-dice-layout") as HTMLSelectElement).value =
+      this.settings.controls.mobileDiceLayout;
 
     (document.getElementById("variant-d20") as HTMLInputElement).checked = this.settings.game.addD20;
     (document.getElementById("variant-d4") as HTMLInputElement).checked = this.settings.game.addD4;

@@ -32,6 +32,7 @@ export interface ControlSettings {
   cameraSensitivity: number; // 0.5-2.0
   reduceChaosCameraEffects: boolean;
   allowChaosControlInversion: boolean;
+  mobileDiceLayout: "wrapped" | "single-row" | "perimeter";
 }
 
 export interface CameraSettings {
@@ -83,6 +84,7 @@ const DEFAULT_SETTINGS: Settings = {
     cameraSensitivity: 1.0,
     reduceChaosCameraEffects: false,
     allowChaosControlInversion: true,
+    mobileDiceLayout: "wrapped",
   },
   camera: {
     sensitivity: 1.0,

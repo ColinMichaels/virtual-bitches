@@ -47,6 +47,7 @@ export class DiceRow {
     this.container.style.display = "flex";
     this.clearHighlightTimers();
     this.container.innerHTML = "";
+    const dieElements: HTMLElement[] = [];
 
     let lastKind: DieKind | null = null;
 
@@ -60,8 +61,11 @@ export class DiceRow {
       const hintLevel = hintData?.get(die.id) || 'normal';
       const el = this.createDieElement(die, state.selected.has(die.id), hintLevel);
       this.container.appendChild(el);
+      dieElements.push(el);
       lastKind = die.def.kind;
     });
+
+    this.applyMobilePerimeterSlots(dieElements);
   }
 
   private createDivider(): HTMLElement {
@@ -209,5 +213,75 @@ export class DiceRow {
       clearTimeout(timer);
     });
     this.highlightTimers.clear();
+  }
+
+  private applyMobilePerimeterSlots(dieElements: HTMLElement[]): void {
+    if (!dieElements.length) {
+      return;
+    }
+
+    const total = dieElements.length;
+    const topCount = Math.min(
+      total,
+      total <= 6 ? total : Math.max(4, Math.min(8, Math.ceil(total * 0.55)))
+    );
+    const overflow = total - topCount;
+    const topDice = dieElements.slice(0, topCount);
+    const sideDice = dieElements.slice(topCount);
+    const leftDice: HTMLElement[] = [];
+    const rightDice: HTMLElement[] = [];
+
+    sideDice.forEach((dieEl, index) => {
+      if (index % 2 === 0) {
+        leftDice.push(dieEl);
+      } else {
+        rightDice.push(dieEl);
+      }
+    });
+
+    topDice.forEach((dieEl, index) => {
+      this.setPerimeterSlot(dieEl, "top", index, topDice.length);
+    });
+    leftDice.forEach((dieEl, index) => {
+      this.setPerimeterSlot(dieEl, "left", index, leftDice.length);
+    });
+    rightDice.forEach((dieEl, index) => {
+      this.setPerimeterSlot(dieEl, "right", index, rightDice.length);
+    });
+
+    this.container.dataset.perimeterOverflow = String(Math.max(0, overflow));
+  }
+
+  private setPerimeterSlot(
+    dieElement: HTMLElement,
+    zone: "top" | "left" | "right",
+    index: number,
+    count: number
+  ): void {
+    let x = 50;
+    let y = 12;
+
+    if (zone === "top") {
+      x = this.distribute(index, count, 16, 84);
+      y = 10;
+    } else if (zone === "left") {
+      x = 8;
+      y = this.distribute(index, count, 28, 80);
+    } else {
+      x = 92;
+      y = this.distribute(index, count, 28, 80);
+    }
+
+    dieElement.dataset.perimeterZone = zone;
+    dieElement.style.setProperty("--mobile-perimeter-x", `${x}%`);
+    dieElement.style.setProperty("--mobile-perimeter-y", `${y}%`);
+  }
+
+  private distribute(index: number, count: number, min: number, max: number): number {
+    if (count <= 1) {
+      return (min + max) / 2;
+    }
+    const step = (max - min) / (count - 1);
+    return min + step * index;
   }
 }
