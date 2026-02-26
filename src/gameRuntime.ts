@@ -487,6 +487,23 @@ class Game implements GameCallbacks {
       GameFlowController.updateHintMode(this.state, this.diceRow);
       this.updateUI();
     });
+    tutorialModal.setOnRequestOpenAudioSettings(() => {
+      this.openTutorialAudioSettings();
+    });
+    tutorialModal.setOnRequestOpenGraphicsSettings(() => {
+      this.openTutorialGraphicsSettings();
+    });
+    tutorialModal.setOnRequestCloseAuxiliaryModals(() => {
+      if (this.settingsModal.isVisible()) {
+        this.settingsModal.hide();
+      }
+      if (rulesModal.isVisible()) {
+        rulesModal.hide();
+      }
+      if (this.leaderboardModal.isVisible()) {
+        this.leaderboardModal.hide();
+      }
+    });
 
     this.inputController.initialize();
     this.setupDiceSelection();
@@ -1903,12 +1920,36 @@ class Game implements GameCallbacks {
     this.selectedDieIndex = index;
   }
 
+  private openTutorialAudioSettings(): void {
+    this.openTutorialSettingsTab("audio");
+  }
+
+  private openTutorialGraphicsSettings(): void {
+    this.openTutorialSettingsTab("graphics");
+  }
+
+  private openTutorialSettingsTab(tab: "audio" | "graphics"): void {
+    if (!this.paused) {
+      this.paused = true;
+    }
+    this.settingsModal.show();
+    this.settingsModal.showTab(tab);
+    this.updateUI();
+  }
+
   togglePause(): void {
     this.paused = !this.paused;
 
     if (this.paused) {
       notificationService.show("Paused", "info");
       this.settingsModal.show();
+      if (tutorialModal.isActive()) {
+        tutorialModal.onPlayerAction("openSettings");
+        const preferredSettingsTab = tutorialModal.getPreferredSettingsTab();
+        if (preferredSettingsTab) {
+          this.settingsModal.showTab(preferredSettingsTab);
+        }
+      }
     } else {
       notificationService.show("Resume!", "info");
       this.settingsModal.hide();

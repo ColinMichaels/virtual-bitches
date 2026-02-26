@@ -97,6 +97,12 @@ Lower total score wins.
 - Use on-screen buttons for roll, score, settings, and menus.
 - Mobile menu exposes settings, profile, leaderboard, and upgrade access.
 
+### Audio Quick Control
+
+- Open Settings with <kbd>Esc</kbd> or the gear button.
+- Go to the <strong>Audio</strong> tab.
+- Toggle <strong>Music</strong> off, or drag <strong>Music</strong> volume to <strong>0%</strong>.
+
 ## HUD And Turn Indicators
 
 - Top multiplayer standings row shows score, placement, completion status, and current turn marker.

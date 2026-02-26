@@ -1783,7 +1783,7 @@ button.danger,
   left: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 2000;
+  z-index: 11000;
   display: none;
   align-items: center;
   justify-content: center;
@@ -2093,11 +2093,19 @@ button.danger,
   width: 100vw !important;
   height: 100vh !important;
   pointer-events: none !important; /* Allow clicks through */
-  z-index: 2000 !important;
+  z-index: 12000 !important;
   display: none;
   align-items: flex-start !important;
   justify-content: center !important;
   padding-top: 40px;
+}
+
+.tutorial-modal.tutorial-modal--settings-focus {
+  align-items: flex-start !important;
+  justify-content: flex-end !important;
+  padding-top: max(10px, env(safe-area-inset-top));
+  padding-right: max(10px, env(safe-area-inset-right));
+  padding-bottom: 10px;
 }
 
 .tutorial-modal .tutorial-backdrop {
@@ -2118,12 +2126,61 @@ button.danger,
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
+.tutorial-modal.tutorial-modal--settings-focus .tutorial-content {
+  width: min(360px, calc(100vw - 20px));
+  max-width: 360px;
+  max-height: min(46vh, 380px);
+  padding: 12px 14px;
+  border-radius: 12px;
+}
+
+.tutorial-modal.tutorial-modal--settings-focus .tutorial-icon,
+.tutorial-modal.tutorial-modal--settings-focus .tutorial-dots {
+  display: none;
+}
+
+.tutorial-modal.tutorial-modal--settings-focus .tutorial-title {
+  font-size: 14px;
+  margin: 0 0 4px 0;
+  text-align: left;
+}
+
+.tutorial-modal.tutorial-modal--settings-focus .tutorial-body {
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0;
+  text-align: left;
+}
+
+.tutorial-modal.tutorial-modal--settings-focus .tutorial-nav {
+  margin-top: 6px;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tutorial-modal.tutorial-modal--settings-focus #tutorial-skip {
+  padding: 6px 10px;
+  font-size: 11px;
+}
+
 @media (max-width: 768px) {
   .tutorial-content {
     width: 95%;
     padding: 16px;
     max-width: none;
     max-height: 50vh; /* Reduced height on mobile to avoid covering controls */
+  }
+
+  .tutorial-modal.tutorial-modal--settings-focus {
+    justify-content: center !important;
+    padding-right: 0;
+    padding-top: max(8px, env(safe-area-inset-top));
+  }
+
+.tutorial-modal.tutorial-modal--settings-focus .tutorial-content {
+    width: min(95vw, 420px);
+    max-width: 420px;
+    max-height: 32vh;
   }
 }
 
@@ -2149,6 +2206,28 @@ button.danger,
   line-height: 1.6;
   color: #ddd;
   margin-bottom: 32px;
+}
+
+.tutorial-music-choice {
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tutorial-music-choice .btn {
+  min-width: 150px;
+}
+
+.tutorial-modal.tutorial-modal--settings-focus .tutorial-music-choice {
+  margin-top: 8px;
+}
+
+.tutorial-modal.tutorial-modal--settings-focus .tutorial-music-choice .btn {
+  min-width: 112px;
+  padding: 6px 10px;
+  font-size: 11px;
 }
 
 @media (max-width: 768px) {
@@ -2199,10 +2278,36 @@ button.danger,
 .tutorial-spotlight {
   position: fixed;
   pointer-events: none;
-  z-index: 9998;
+  z-index: 11999;
   transition: all 0.3s ease;
   border: 3px solid rgba(255, 215, 0, 0.8);
   animation: pulse-spotlight 2s ease-in-out infinite;
+}
+
+.tutorial-target-highlight {
+  position: relative;
+  z-index: 11020 !important;
+  outline: 2px solid rgba(255, 215, 0, 0.95);
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 2px rgba(255, 215, 0, 0.32),
+    0 0 14px rgba(255, 215, 0, 0.55);
+  animation: tutorial-target-highlight-pulse 1.3s ease-in-out infinite;
+}
+
+@keyframes tutorial-target-highlight-pulse {
+  0%, 100% {
+    outline-color: rgba(255, 215, 0, 0.95);
+    box-shadow:
+      0 0 0 2px rgba(255, 215, 0, 0.32),
+      0 0 14px rgba(255, 215, 0, 0.55);
+  }
+  50% {
+    outline-color: rgba(255, 245, 183, 0.98);
+    box-shadow:
+      0 0 0 2px rgba(255, 245, 183, 0.44),
+      0 0 20px rgba(255, 228, 110, 0.72);
+  }
 }
 
 @keyframes pulse-spotlight {
@@ -2214,10 +2319,6 @@ button.danger,
     border-color: rgba(255, 215, 0, 1);
     transform: scale(1.02);
   }
-}
-
-.tutorial-modal {
-  z-index: 9999;
 }
 
 /* Notification System - Game-style Floating Text */

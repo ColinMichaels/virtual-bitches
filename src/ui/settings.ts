@@ -198,26 +198,26 @@ export class SettingsModal {
               <span id="master-volume-value">${Math.round(this.settings.audio.masterVolume * 100)}%</span>
             </div>
 
-            <div class="setting-row">
+            <div class="setting-row" id="audio-sfx-volume-row">
               <label for="sfx-volume">Sound Effects</label>
               <input type="range" id="sfx-volume" min="0" max="100" value="${this.settings.audio.sfxVolume * 100}">
               <span id="sfx-volume-value">${Math.round(this.settings.audio.sfxVolume * 100)}%</span>
             </div>
 
-            <div class="setting-row">
+            <div class="setting-row" id="audio-music-volume-row">
               <label for="music-volume">Music</label>
               <input type="range" id="music-volume" min="0" max="100" value="${this.settings.audio.musicVolume * 100}">
               <span id="music-volume-value">${Math.round(this.settings.audio.musicVolume * 100)}%</span>
             </div>
 
-            <div class="setting-row">
+            <div class="setting-row" id="audio-sfx-toggle-row">
               <label>
                 <input type="checkbox" id="sfx-enabled" ${this.settings.audio.sfxEnabled ? "checked" : ""}>
                 Enable Sound Effects
               </label>
             </div>
 
-            <div class="setting-row">
+            <div class="setting-row" id="audio-music-toggle-row">
               <label>
                 <input type="checkbox" id="music-enabled" ${this.settings.audio.musicEnabled ? "checked" : ""}>
                 Enable Music
@@ -651,6 +651,13 @@ export class SettingsModal {
     if (tab === "account") {
       void this.refreshAccountSection();
     }
+  }
+
+  /**
+   * Programmatically switch to a specific settings tab.
+   */
+  showTab(tab: "game" | "graphics" | "audio" | "account"): void {
+    this.switchTab(tab);
   }
 
   private async refreshAccountSection(): Promise<void> {
