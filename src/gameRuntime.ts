@@ -35,6 +35,7 @@ import { playerDataSyncService } from "./services/playerDataSync.js";
 import { getLocalPlayerId } from "./services/playerIdentity.js";
 import {
   MultiplayerNetworkService,
+  type MultiplayerSessionStateMessage,
   type MultiplayerTurnAutoAdvancedMessage,
   type MultiplayerTurnActionMessage,
   type MultiplayerTurnEndMessage,
@@ -126,6 +127,7 @@ class Game implements GameCallbacks {
   private hudClockHandle: ReturnType<typeof setInterval> | null = null;
   private participantSeatById = new Map<string, number>();
   private participantLabelById = new Map<string, string>();
+  private lastTurnPlanPreview = "";
 
   private actionBtn: HTMLButtonElement;
   private deselectBtn: HTMLButtonElement;
@@ -219,6 +221,11 @@ class Game implements GameCallbacks {
       const detail = (event as CustomEvent<MultiplayerTurnActionMessage>).detail;
       if (!detail) return;
       this.handleMultiplayerTurnAction(detail);
+    }) as EventListener);
+    document.addEventListener("multiplayer:session:state", ((event: Event) => {
+      const detail = (event as CustomEvent<MultiplayerSessionStateMessage>).detail;
+      if (!detail) return;
+      this.handleMultiplayerSessionState(detail);
     }) as EventListener);
     document.addEventListener("multiplayer:error", ((event: Event) => {
       const detail = (event as CustomEvent<{ code?: string; message?: string }>).detail;
@@ -595,6 +602,7 @@ class Game implements GameCallbacks {
     updateUrlSessionParam: boolean
   ): void {
     playerDataSyncService.setSessionId(session.sessionId);
+    this.lastTurnPlanPreview = "";
     this.applyMultiplayerSeatState(session);
 
     const sessionWsUrl = this.buildSessionWsUrl(session);
@@ -667,8 +675,13 @@ class Game implements GameCallbacks {
 
     if (this.multiplayerTurnPlan.order.length > 1) {
       const preview = this.buildTurnPlanPreview(this.multiplayerTurnPlan);
-      log.info(`Clockwise turn order planned (${session.sessionId}): ${preview}`);
-      notificationService.show(`Turn order (clockwise): ${preview}`, "info", 3400);
+      if (preview !== this.lastTurnPlanPreview) {
+        this.lastTurnPlanPreview = preview;
+        log.info(`Clockwise turn order planned (${session.sessionId}): ${preview}`);
+        notificationService.show(`Turn order (clockwise): ${preview}`, "info", 3400);
+      }
+    } else {
+      this.lastTurnPlanPreview = "";
     }
 
     this.applyTurnStateFromSession(session);
@@ -867,6 +880,32 @@ class Game implements GameCallbacks {
       return label;
     }
     return `Player ${playerId.slice(0, 4)}`;
+  }
+
+  private handleMultiplayerSessionState(message: MultiplayerSessionStateMessage): void {
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession) {
+      return;
+    }
+    if (message.sessionId !== activeSession.sessionId) {
+      return;
+    }
+
+    const hasTurnState = Object.prototype.hasOwnProperty.call(message, "turnState");
+    const syncedSession = this.multiplayerSessionService.syncSessionState({
+      sessionId: message.sessionId,
+      roomCode: message.roomCode,
+      participants: message.participants,
+      ...(hasTurnState ? { turnState: message.turnState ?? null } : {}),
+      ...(typeof message.expiresAt === "number" && Number.isFinite(message.expiresAt)
+        ? { expiresAt: message.expiresAt }
+        : {}),
+    });
+    if (!syncedSession) {
+      return;
+    }
+
+    this.applyMultiplayerSeatState(syncedSession);
   }
 
   private handleMultiplayerTurnStart(message: MultiplayerTurnStartMessage): void {
@@ -1321,6 +1360,7 @@ class Game implements GameCallbacks {
     this.awaitingMultiplayerRoll = false;
     this.pendingTurnEndSync = false;
     this.applyTurnTiming(null);
+    this.lastTurnPlanPreview = "";
     playerDataSyncService.setSessionId(undefined);
     this.clearSessionQueryParam();
 

@@ -586,6 +586,7 @@ async function handleJoinSession(req, res, pathname) {
   };
   ensureSessionTurnState(session);
   reconcileSessionLoops(sessionId);
+  broadcastSessionState(session, "join");
 
   const auth = issueAuthTokenBundle(playerId, sessionId);
   const response = buildSessionResponse(session, playerId, auth);
@@ -650,6 +651,7 @@ async function handleLeaveSession(req, res, pathname) {
     if (turnStart) {
       broadcastToSession(sessionId, JSON.stringify(turnStart), null);
     }
+    broadcastSessionState(session, "leave");
   }
 
   await persistStore();
@@ -1117,17 +1119,42 @@ function hashToken(value) {
 }
 
 function buildSessionResponse(session, playerId, auth) {
+  const snapshot = buildSessionSnapshot(session);
+  return {
+    sessionId: snapshot.sessionId,
+    roomCode: snapshot.roomCode,
+    wsUrl: session.wsUrl,
+    playerToken: auth.accessToken,
+    auth,
+    participants: snapshot.participants,
+    turnState: snapshot.turnState,
+    createdAt: snapshot.createdAt,
+    expiresAt: snapshot.expiresAt,
+  };
+}
+
+function buildSessionSnapshot(session) {
   const turnState = ensureSessionTurnState(session);
   return {
     sessionId: session.sessionId,
     roomCode: session.roomCode,
-    wsUrl: session.wsUrl,
-    playerToken: auth.accessToken,
-    auth,
     participants: serializeSessionParticipants(session),
     turnState: serializeTurnState(turnState),
     createdAt: session.createdAt,
     expiresAt: session.expiresAt,
+  };
+}
+
+function buildSessionStateMessage(session, options = {}) {
+  if (!session) {
+    return null;
+  }
+
+  return {
+    type: "session_state",
+    ...buildSessionSnapshot(session),
+    timestamp: Date.now(),
+    source: options.source ?? "server",
   };
 }
 
@@ -1986,6 +2013,7 @@ function scheduleBotTurnIfNeeded(sessionId) {
 
     broadcastToSession(sessionId, JSON.stringify(advanced.turnEnd), null);
     broadcastToSession(sessionId, JSON.stringify(advanced.turnStart), null);
+    broadcastSessionState(latestSession, "bot_auto");
     persistStore().catch((error) => {
       log.warn("Failed to persist session after bot turn advance", error);
     });
@@ -2205,6 +2233,7 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
   );
   broadcastToSession(sessionId, JSON.stringify(advanced.turnEnd), null);
   broadcastToSession(sessionId, JSON.stringify(advanced.turnStart), null);
+  broadcastSessionState(session, "timeout_auto");
   persistStore().catch((error) => {
     log.warn("Failed to persist session after timeout auto-advance", error);
   });
@@ -2550,10 +2579,7 @@ function handleSocketConnection(socket, auth) {
 
   const session = store.multiplayerSessions[client.sessionId];
   if (session) {
-    const turnStart = buildTurnStartMessage(session, { source: "sync" });
-    if (turnStart) {
-      sendSocketPayload(client, turnStart);
-    }
+    sendTurnSyncPayload(client, session, "sync");
     reconcileSessionLoops(client.sessionId);
   }
 
@@ -2803,10 +2829,7 @@ function handleTurnActionMessage(client, session, payload) {
 
   if (turnState.activeTurnPlayerId !== client.playerId) {
     sendSocketError(client, "turn_not_active", "not_your_turn");
-    const syncMessage = buildTurnStartMessage(session, { source: "sync" });
-    if (syncMessage) {
-      sendSocketPayload(client, syncMessage);
-    }
+    sendTurnSyncPayload(client, session, "sync");
     return;
   }
 
@@ -2814,18 +2837,12 @@ function handleTurnActionMessage(client, session, payload) {
   const currentPhase = normalizeTurnPhase(turnState.phase);
   if (action === "roll" && currentPhase !== TURN_PHASES.awaitRoll) {
     sendSocketError(client, "turn_action_invalid_phase", "roll_not_expected");
-    const syncMessage = buildTurnStartMessage(session, { source: "sync" });
-    if (syncMessage) {
-      sendSocketPayload(client, syncMessage);
-    }
+    sendTurnSyncPayload(client, session, "sync");
     return;
   }
   if (action === "score" && currentPhase !== TURN_PHASES.awaitScore) {
     sendSocketError(client, "turn_action_invalid_phase", "score_not_expected");
-    const syncMessage = buildTurnStartMessage(session, { source: "sync" });
-    if (syncMessage) {
-      sendSocketPayload(client, syncMessage);
-    }
+    sendTurnSyncPayload(client, session, "sync");
     return;
   }
 
@@ -2834,10 +2851,7 @@ function handleTurnActionMessage(client, session, payload) {
     const parsedRoll = parseTurnRollPayload(payload);
     if (!parsedRoll.ok) {
       sendSocketError(client, "turn_action_invalid_payload", parsedRoll.reason);
-      const syncMessage = buildTurnStartMessage(session, { source: "sync" });
-      if (syncMessage) {
-        sendSocketPayload(client, syncMessage);
-      }
+      sendTurnSyncPayload(client, session, "sync");
       return;
     }
 
@@ -2854,10 +2868,7 @@ function handleTurnActionMessage(client, session, payload) {
           ? "turn_action_invalid_score"
           : "turn_action_invalid_payload";
       sendSocketError(client, code, parsedScore.reason);
-      const syncMessage = buildTurnStartMessage(session, { source: "sync" });
-      if (syncMessage) {
-        sendSocketPayload(client, syncMessage);
-      }
+      sendTurnSyncPayload(client, session, "sync");
       return;
     }
 
@@ -2879,6 +2890,7 @@ function handleTurnActionMessage(client, session, payload) {
   if (message) {
     broadcastToSession(client.sessionId, JSON.stringify(message), null);
   }
+  broadcastSessionState(session, `turn_${action}`);
   persistStore().catch((error) => {
     log.warn("Failed to persist session after turn action", error);
   });
@@ -2897,19 +2909,13 @@ function handleTurnEndMessage(client, session) {
 
   if (turnState.activeTurnPlayerId !== client.playerId) {
     sendSocketError(client, "turn_not_active", "not_your_turn");
-    const syncMessage = buildTurnStartMessage(session, { source: "sync" });
-    if (syncMessage) {
-      sendSocketPayload(client, syncMessage);
-    }
+    sendTurnSyncPayload(client, session, "sync");
     return;
   }
 
   if (normalizeTurnPhase(turnState.phase) !== TURN_PHASES.readyToEnd) {
     sendSocketError(client, "turn_action_required", "score_required_before_turn_end");
-    const syncMessage = buildTurnStartMessage(session, { source: "sync" });
-    if (syncMessage) {
-      sendSocketPayload(client, syncMessage);
-    }
+    sendTurnSyncPayload(client, session, "sync");
     return;
   }
 
@@ -2924,10 +2930,32 @@ function handleTurnEndMessage(client, session) {
 
   broadcastToSession(client.sessionId, JSON.stringify(advanced.turnEnd), null);
   broadcastToSession(client.sessionId, JSON.stringify(advanced.turnStart), null);
+  broadcastSessionState(session, "turn_end");
   persistStore().catch((error) => {
     log.warn("Failed to persist session after turn advance", error);
   });
   reconcileSessionLoops(client.sessionId);
+}
+
+function broadcastSessionState(session, source = "server", sender = null) {
+  const message = buildSessionStateMessage(session, { source });
+  if (!message) {
+    return;
+  }
+
+  broadcastToSession(session.sessionId, JSON.stringify(message), sender);
+}
+
+function sendTurnSyncPayload(client, session, source = "sync") {
+  const sessionState = buildSessionStateMessage(session, { source });
+  if (sessionState) {
+    sendSocketPayload(client, sessionState);
+  }
+
+  const turnStart = buildTurnStartMessage(session, { source });
+  if (turnStart) {
+    sendSocketPayload(client, turnStart);
+  }
 }
 
 function registerSocketClient(client, sessionId) {

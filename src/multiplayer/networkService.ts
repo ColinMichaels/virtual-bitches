@@ -142,6 +142,48 @@ export interface MultiplayerTurnActionMessage {
   source?: string;
 }
 
+export interface MultiplayerSessionStateParticipant {
+  playerId: string;
+  displayName?: string;
+  joinedAt: number;
+  lastHeartbeatAt: number;
+  isBot?: boolean;
+}
+
+export interface MultiplayerSessionStateTurnSnapshot {
+  order: string[];
+  activeTurnPlayerId: string | null;
+  round: number;
+  turnNumber: number;
+  phase?: MultiplayerTurnPhase;
+  activeRoll?: {
+    rollIndex: number;
+    dice: Array<{
+      dieId: string;
+      sides: number;
+      value: number;
+    }>;
+    serverRollId?: string;
+    updatedAt?: number;
+  } | null;
+  activeRollServerId?: string | null;
+  turnExpiresAt?: number | null;
+  turnTimeoutMs?: number;
+  updatedAt: number;
+}
+
+export interface MultiplayerSessionStateMessage {
+  type: "session_state";
+  sessionId: string;
+  roomCode: string;
+  participants: MultiplayerSessionStateParticipant[];
+  turnState: MultiplayerSessionStateTurnSnapshot | null;
+  createdAt: number;
+  expiresAt?: number;
+  timestamp?: number;
+  source?: string;
+}
+
 function isCameraAttackMessage(value: unknown): value is CameraAttackMessage {
   if (!value || typeof value !== "object") return false;
 
@@ -239,6 +281,20 @@ function isMultiplayerTurnActionMessage(value: unknown): value is MultiplayerTur
   return (
     msg.type === "turn_action" &&
     (msg.action === "roll" || msg.action === "score")
+  );
+}
+
+function isMultiplayerSessionStateMessage(
+  value: unknown
+): value is MultiplayerSessionStateMessage {
+  if (!value || typeof value !== "object") return false;
+
+  const msg = value as Partial<MultiplayerSessionStateMessage>;
+  return (
+    msg.type === "session_state" &&
+    typeof msg.sessionId === "string" &&
+    typeof msg.roomCode === "string" &&
+    Array.isArray(msg.participants)
   );
 }
 
@@ -351,6 +407,13 @@ export class MultiplayerNetworkService {
     if (isMultiplayerTurnActionMessage(parsed)) {
       this.eventTarget.dispatchEvent(
         createCustomEvent("multiplayer:turn:action", parsed)
+      );
+      return;
+    }
+
+    if (isMultiplayerSessionStateMessage(parsed)) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:session:state", parsed)
       );
       return;
     }
