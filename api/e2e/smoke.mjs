@@ -128,8 +128,8 @@ async function run() {
   const turnRollPayload = {
     rollIndex: 1,
     dice: [
-      { dieId: "d6-a", sides: 6, value: 2 },
-      { dieId: "d8-a", sides: 8, value: 8 },
+      { dieId: "d6-a", sides: 6 },
+      { dieId: "d8-a", sides: 8 },
     ],
   };
   hostSocket.send(
@@ -142,6 +142,17 @@ async function run() {
     typeof rollServerId === "string" && rollServerId.length > 0,
     "missing server-issued roll id"
   );
+  const rolledD6 = Array.isArray(guestTurnRolled?.roll?.dice)
+    ? guestTurnRolled.roll.dice.find((die) => die?.dieId === "d6-a")
+    : null;
+  const expectedScorePoints =
+    rolledD6 && Number.isFinite(rolledD6.sides) && Number.isFinite(rolledD6.value)
+      ? Math.floor(rolledD6.sides) - Math.floor(rolledD6.value)
+      : NaN;
+  assert(
+    Number.isFinite(expectedScorePoints) && expectedScorePoints >= 0,
+    "expected score points not derivable from server roll"
+  );
 
   hostSocket.send(
     JSON.stringify({
@@ -149,9 +160,9 @@ async function run() {
       action: "score",
       score: {
         selectedDiceIds: ["d6-a"],
-        points: 0,
+        points: expectedScorePoints + 1,
         rollServerId: rollServerId,
-        projectedTotalScore: 0,
+        projectedTotalScore: expectedScorePoints + 1,
       },
     })
   );
@@ -180,9 +191,9 @@ async function run() {
       action: "score",
       score: {
         selectedDiceIds: ["d6-a"],
-        points: 4,
+        points: expectedScorePoints,
         rollServerId: rollServerId,
-        projectedTotalScore: 4,
+        projectedTotalScore: expectedScorePoints,
       },
     })
   );

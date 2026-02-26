@@ -14,7 +14,6 @@ import { ProfileModal } from "./ui/profile.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
 import { GameState, Action, GameDifficulty } from "./engine/types.js";
-import { SeededRNG } from "./engine/rng.js";
 import { Color3, PointerEventTypes } from "@babylonjs/core";
 import { audioService } from "./services/audio.js";
 import { hapticsService } from "./services/haptics.js";
@@ -117,6 +116,8 @@ class Game implements GameCallbacks {
   private multiplayerTurnPlan: MultiplayerTurnPlan | null = null;
   private activeTurnPlayerId: string | null = null;
   private activeRollServerId: string | null = null;
+  private awaitingMultiplayerRoll = false;
+  private lobbyRedirectInProgress = false;
   private participantSeatById = new Map<string, number>();
   private participantLabelById = new Map<string, string>();
 
@@ -175,12 +176,18 @@ class Game implements GameCallbacks {
     document.addEventListener("multiplayer:authExpired", () => {
       notificationService.show("Multiplayer auth expired, refreshing session...", "warning", 2200);
     });
-    document.addEventListener("multiplayer:sessionExpired", () => {
-      notificationService.show("Multiplayer session expired. Rejoin required.", "error", 3200);
-    });
-    document.addEventListener("auth:sessionExpired", () => {
-      notificationService.show("Session expired. Please rejoin multiplayer.", "warning", 2600);
-    });
+    document.addEventListener("multiplayer:sessionExpired", ((event: Event) => {
+      const detail = (event as CustomEvent<{ reason?: string }>).detail;
+      this.handleMultiplayerSessionExpired(detail?.reason ?? "multiplayer_session_expired");
+    }) as EventListener);
+    document.addEventListener("auth:sessionExpired", ((event: Event) => {
+      const detail = (event as CustomEvent<{ reason?: string }>).detail;
+      if (!this.isMultiplayerTurnEnforced()) {
+        notificationService.show("Session expired. Please reauthenticate.", "warning", 2600);
+        return;
+      }
+      this.handleMultiplayerSessionExpired(detail?.reason ?? "auth_session_expired");
+    }) as EventListener);
     document.addEventListener("multiplayer:turn:start", ((event: Event) => {
       const detail = (event as CustomEvent<MultiplayerTurnStartMessage>).detail;
       if (!detail?.playerId) return;
@@ -763,6 +770,7 @@ class Game implements GameCallbacks {
   }
 
   private applyTurnStateFromSession(session: MultiplayerSessionRecord): void {
+    this.awaitingMultiplayerRoll = false;
     const serverActiveTurnPlayerId = session.turnState?.activeTurnPlayerId ?? null;
     if (serverActiveTurnPlayerId) {
       this.activeTurnPlayerId = serverActiveTurnPlayerId;
@@ -812,6 +820,7 @@ class Game implements GameCallbacks {
   }
 
   private handleMultiplayerTurnStart(message: MultiplayerTurnStartMessage): void {
+    this.awaitingMultiplayerRoll = false;
     this.activeTurnPlayerId = message.playerId;
     this.activeRollServerId =
       message.playerId === this.localPlayerId &&
@@ -861,10 +870,19 @@ class Game implements GameCallbacks {
 
     if (message.playerId === this.localPlayerId) {
       if (message.action === "roll") {
+        this.awaitingMultiplayerRoll = false;
         this.activeRollServerId =
           typeof message.roll?.serverRollId === "string" && message.roll.serverRollId
             ? message.roll.serverRollId
             : null;
+
+        if (this.isMultiplayerTurnEnforced()) {
+          const applied = this.applyAuthoritativeRoll(message.roll);
+          if (!applied) {
+            this.activeRollServerId = null;
+            notificationService.show("Turn roll sync failed. Retry your roll.", "warning", 2200);
+          }
+        }
       }
       return;
     }
@@ -879,6 +897,7 @@ class Game implements GameCallbacks {
 
   private handleMultiplayerProtocolError(code: string, message?: string): void {
     if (code === "turn_not_active") {
+      this.awaitingMultiplayerRoll = false;
       return;
     }
 
@@ -888,6 +907,7 @@ class Game implements GameCallbacks {
     }
 
     if (code === "turn_action_invalid_phase") {
+      this.awaitingMultiplayerRoll = false;
       notificationService.show("Turn sync conflict. Wait for turn update.", "warning", 2000);
       return;
     }
@@ -898,6 +918,7 @@ class Game implements GameCallbacks {
     }
 
     if (code === "turn_action_invalid_payload") {
+      this.awaitingMultiplayerRoll = false;
       notificationService.show("Turn payload rejected. Syncing...", "warning", 2200);
       return;
     }
@@ -995,21 +1016,105 @@ class Game implements GameCallbacks {
 
   private buildRollTurnPayload(): {
     rollIndex: number;
-    dice: Array<{ dieId: string; sides: number; value: number }>;
+    dice: Array<{ dieId: string; sides: number }>;
   } {
-    const rng = new SeededRNG(`${this.state.seed}-${this.state.rollIndex}`);
     const dice = this.state.dice
       .filter((die) => die.inPlay && !die.scored)
       .map((die) => ({
         dieId: die.id,
         sides: die.def.sides,
-        value: rng.rollDie(die.def.sides),
       }));
 
     return {
       rollIndex: this.state.rollIndex + 1,
       dice,
     };
+  }
+
+  private applyAuthoritativeRoll(roll: MultiplayerTurnActionMessage["roll"]): boolean {
+    if (!roll || !Array.isArray(roll.dice)) {
+      return false;
+    }
+    if (this.state.status !== "READY") {
+      return this.state.status === "ROLLED";
+    }
+
+    const snapshotById = new Map<string, { sides: number; value: number }>();
+    for (const die of roll.dice) {
+      if (!die || typeof die !== "object") {
+        return false;
+      }
+      const dieId = typeof die.dieId === "string" ? die.dieId.trim() : "";
+      const sides = Number.isFinite(die.sides) ? Math.floor(die.sides) : NaN;
+      const value =
+        typeof die.value === "number" && Number.isFinite(die.value)
+          ? Math.floor(die.value)
+          : NaN;
+      if (!dieId || !Number.isFinite(sides) || sides < 2 || !Number.isFinite(value)) {
+        return false;
+      }
+      snapshotById.set(dieId, {
+        sides,
+        value: Math.max(1, Math.min(sides, value)),
+      });
+    }
+
+    let invalidSnapshot = false;
+    const rolledDice = this.state.dice.map((die) => {
+      if (!die.inPlay || die.scored) {
+        return die;
+      }
+
+      const snapshot = snapshotById.get(die.id);
+      if (!snapshot) {
+        invalidSnapshot = true;
+        return die;
+      }
+      if (snapshot.sides !== die.def.sides) {
+        invalidSnapshot = true;
+        return die;
+      }
+
+      return {
+        ...die,
+        value: snapshot.value,
+      };
+    });
+    if (invalidSnapshot) {
+      return false;
+    }
+
+    const rollIndex =
+      Number.isFinite(roll.rollIndex) && Math.floor(roll.rollIndex) > this.state.rollIndex
+        ? Math.floor(roll.rollIndex)
+        : this.state.rollIndex + 1;
+
+    this.state = {
+      ...this.state,
+      dice: rolledDice,
+      rollIndex,
+      status: "ROLLED",
+      selected: new Set(),
+      actionLog: [...this.state.actionLog, { t: "ROLL" }],
+    };
+    this.updateUI();
+
+    this.animating = true;
+    audioService.playSfx("roll");
+    hapticsService.roll();
+
+    this.diceRenderer.animateRoll(this.state.dice, () => {
+      this.animating = false;
+      this.selectedDieIndex = 0;
+      this.updateUI();
+      notificationService.show("Roll Complete!", "info");
+
+      if (tutorialModal.isActive()) {
+        tutorialModal.onPlayerAction("roll");
+      }
+    });
+
+    return true;
   }
 
   private buildScoreTurnPayload(
@@ -1042,7 +1147,24 @@ class Game implements GameCallbacks {
     window.history.replaceState(window.history.state, "", currentUrl.toString());
   }
 
+  private handleMultiplayerSessionExpired(reason: string): void {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return;
+    }
+    if (this.lobbyRedirectInProgress) {
+      return;
+    }
+
+    log.warn("Multiplayer session expired; returning to lobby", { reason });
+    notificationService.show("Multiplayer session expired. Returning to main menu...", "warning", 2200);
+    void this.returnToLobby();
+  }
+
   private async returnToLobby(): Promise<void> {
+    if (this.lobbyRedirectInProgress) {
+      return;
+    }
+    this.lobbyRedirectInProgress = true;
     try {
       await this.multiplayerSessionService.leaveSession();
     } catch (error) {
@@ -1051,6 +1173,7 @@ class Game implements GameCallbacks {
 
     this.multiplayerNetwork?.dispose();
     this.multiplayerNetwork = undefined;
+    this.awaitingMultiplayerRoll = false;
     playerDataSyncService.setSessionId(undefined);
     this.clearSessionQueryParam();
 
@@ -1058,7 +1181,13 @@ class Game implements GameCallbacks {
     redirectUrl.searchParams.delete("session");
     redirectUrl.searchParams.delete("seed");
     redirectUrl.searchParams.delete("log");
-    window.location.assign(redirectUrl.toString());
+    try {
+      window.location.assign(redirectUrl.toString());
+    } catch (error) {
+      this.lobbyRedirectInProgress = false;
+      log.error("Failed to redirect to lobby after session exit", error);
+      notificationService.show("Unable to return to main menu. Please refresh.", "error", 2800);
+    }
   }
 
   private async copySessionInviteLink(sessionId: string): Promise<void> {
@@ -1313,6 +1442,10 @@ class Game implements GameCallbacks {
   private handleRoll(): void {
     if (this.paused) return;
     if (!this.canLocalPlayerTakeTurnAction()) return;
+    if (this.awaitingMultiplayerRoll) {
+      notificationService.show("Waiting for roll sync...", "info", 1400);
+      return;
+    }
 
     // Invalid action reminder
     if (this.state.status === "ROLLED") {
@@ -1328,8 +1461,14 @@ class Game implements GameCallbacks {
       return;
     }
 
-    this.animating = true;
+    if (this.isMultiplayerTurnEnforced()) {
+      this.awaitingMultiplayerRoll = true;
+      notificationService.show("Rolling...", "info", 900);
+      return;
+    }
+
     this.dispatch({ t: "ROLL" });
+    this.animating = true;
 
     // Play roll sound and haptic feedback
     audioService.playSfx("roll");

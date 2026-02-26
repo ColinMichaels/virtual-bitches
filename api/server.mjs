@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { randomBytes, randomUUID, createHash } from "node:crypto";
+import { randomBytes, randomInt, randomUUID, createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "./logger.mjs";
@@ -1261,6 +1261,21 @@ function normalizeTurnScoreSummary(value) {
   };
 }
 
+function parseDieSidesFromId(dieId) {
+  if (typeof dieId !== "string") {
+    return null;
+  }
+  const match = /^d(\d+)(?:-|$)/i.exec(dieId.trim());
+  if (!match) {
+    return null;
+  }
+  const sides = Number(match[1]);
+  if (!Number.isFinite(sides) || sides < 2) {
+    return null;
+  }
+  return Math.floor(sides);
+}
+
 function parseTurnRollPayload(payload) {
   const roll = payload?.roll;
   if (!roll || typeof roll !== "object") {
@@ -1284,21 +1299,21 @@ function parseTurnRollPayload(payload) {
     }
     const dieId = typeof die.dieId === "string" ? die.dieId.trim() : "";
     const sides = Number.isFinite(die.sides) ? Math.floor(die.sides) : NaN;
-    const valueAtFace = Number.isFinite(die.value) ? Math.floor(die.value) : NaN;
     if (!dieId || seenIds.has(dieId)) {
       return { ok: false, reason: "invalid_roll_die_id" };
     }
     if (!Number.isFinite(sides) || sides < 2 || sides > 1000) {
       return { ok: false, reason: "invalid_roll_die_sides" };
     }
-    if (!Number.isFinite(valueAtFace) || valueAtFace < 1 || valueAtFace > sides) {
-      return { ok: false, reason: "invalid_roll_die_value" };
+    const expectedSides = parseDieSidesFromId(dieId);
+    if (Number.isFinite(expectedSides) && expectedSides !== sides) {
+      return { ok: false, reason: "roll_die_sides_mismatch" };
     }
     seenIds.add(dieId);
     dice.push({
       dieId,
       sides,
-      value: valueAtFace,
+      value: randomInt(1, sides + 1),
     });
   }
 
