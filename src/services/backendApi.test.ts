@@ -134,6 +134,43 @@ await test("passes botCount in multiplayer session create payload", async () => 
   assertEqual(parsedBody.botCount, 2, "Expected botCount in request payload");
 });
 
+await test("lists multiplayer rooms with bounded limit", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    jsonResponse({
+      rooms: [
+        {
+          sessionId: "session-1",
+          roomCode: "ROOM42",
+          createdAt: Date.now(),
+          lastActivityAt: Date.now(),
+          expiresAt: Date.now() + 60000,
+          participantCount: 2,
+          humanCount: 1,
+          activeHumanCount: 1,
+          readyHumanCount: 1,
+          botCount: 1,
+          sessionComplete: false,
+        },
+      ],
+    });
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.listMultiplayerRooms(999);
+  assert(Array.isArray(result), "Expected rooms array result");
+  assertEqual(fetchCalls.length, 1, "Expected one fetch call");
+  assertEqual(
+    fetchCalls[0].url,
+    "https://api.example.com/api/multiplayer/rooms?limit=100",
+    "Expected bounded room listing endpoint"
+  );
+});
+
 await test("returns null on non-ok responses", async () => {
   authSessionService.clear();
   fetchCalls.length = 0;

@@ -5,8 +5,8 @@
 
 import { audioService } from "../services/audio.js";
 import { settingsService } from "../services/settings.js";
-import { GameDifficulty } from "../engine/types.js";
 import { logger } from "../utils/logger.js";
+import { confirmAction } from "./confirmModal.js";
 
 const log = logger.create("Tutorial");
 
@@ -24,6 +24,7 @@ export class TutorialModal {
   private spotlightOverlay: HTMLElement;
   private currentStep = 0;
   private isWaitingForAction = false;
+  private completing = false;
   private onComplete: (() => void) | null = null;
 
   private steps: TutorialStep[] = [
@@ -112,7 +113,7 @@ export class TutorialModal {
 
     skipBtn.addEventListener("click", () => {
       audioService.playSfx("click");
-      this.complete();
+      void this.complete();
     });
 
     nextBtn.addEventListener("click", () => {
@@ -121,13 +122,13 @@ export class TutorialModal {
         this.currentStep++;
         this.renderStep();
       } else {
-        this.complete();
+        void this.complete();
       }
     });
 
     // Close on backdrop click
     this.container.querySelector(".tutorial-backdrop")!.addEventListener("click", () => {
-      this.complete();
+      void this.complete();
     });
   }
 
@@ -279,30 +280,42 @@ export class TutorialModal {
     }
   }
 
-  private complete(): void {
-    // Mark tutorial as shown
-    settingsService.updateGame({ showTutorial: false });
+  private async complete(): Promise<void> {
+    if (this.completing) {
+      return;
+    }
+    this.completing = true;
+    try {
+      // Mark tutorial as shown
+      settingsService.updateGame({ showTutorial: false });
 
-    // Offer Easy Mode
-    this.offerEasyMode();
+      this.hide();
+      this.hideSpotlight();
 
-    this.hide();
-    this.hideSpotlight();
+      // Offer Easy Mode after closing tutorial so the confirmation modal is unobstructed.
+      await this.offerEasyMode();
 
-    if (this.onComplete) {
-      this.onComplete();
+      if (this.onComplete) {
+        this.onComplete();
+      }
+    } finally {
+      this.completing = false;
     }
   }
 
-  private offerEasyMode(): void {
-    const wantsEasyMode = confirm(
-      "🎓 Tutorial Complete!\n\n" +
-      "Would you like to enable Easy Mode?\n\n" +
-      "✨ Easy Mode includes:\n" +
-      "• Color-coded hints for best moves\n" +
-      "• Undo button to fix mistakes\n\n" +
-      "You can change this anytime in Settings."
-    );
+  private async offerEasyMode(): Promise<void> {
+    const wantsEasyMode = await confirmAction({
+      title: "Tutorial Complete",
+      message:
+        "Would you like to enable Easy Mode?\n\n" +
+        "Easy Mode includes:\n" +
+        "- Color-coded hints for best moves\n" +
+        "- Undo button to fix mistakes\n\n" +
+        "You can change this anytime in Settings.",
+      confirmLabel: "Enable Easy Mode",
+      cancelLabel: "Not Now",
+      tone: "primary",
+    });
 
     if (wantsEasyMode) {
       settingsService.updateGame({ difficulty: 'easy' });

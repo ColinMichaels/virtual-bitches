@@ -12,6 +12,7 @@ const log = logger.create('RulesModal');
 export class RulesModal {
   private container: HTMLElement;
   private rulesContent: string = "";
+  private onReplayTutorial: (() => void) | null = null;
 
   constructor() {
     // Create modal
@@ -24,6 +25,9 @@ export class RulesModal {
         <div class="modal-header">
           <h2>Game Rules</h2>
           <button class="modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="rules-actions">
+          <button class="btn-rules-replay" type="button">Replay Tutorial</button>
         </div>
         <div class="modal-body rules-body">
           <div class="loading">Loading rules...</div>
@@ -71,6 +75,17 @@ export class RulesModal {
       this.hide();
     });
 
+    const replayBtn = this.container.querySelector(".btn-rules-replay");
+    replayBtn?.addEventListener("click", () => {
+      if (!this.onReplayTutorial) {
+        return;
+      }
+      audioService.playSfx("click");
+      this.hide();
+      this.onReplayTutorial();
+    });
+
+    this.updateReplayTutorialButton();
   }
 
   show(): void {
@@ -83,5 +98,18 @@ export class RulesModal {
 
   isVisible(): boolean {
     return this.container.style.display === "flex";
+  }
+
+  setOnReplayTutorial(callback: (() => void) | null): void {
+    this.onReplayTutorial = callback;
+    this.updateReplayTutorialButton();
+  }
+
+  private updateReplayTutorialButton(): void {
+    const replayBtn = this.container.querySelector<HTMLButtonElement>(".btn-rules-replay");
+    if (!replayBtn) {
+      return;
+    }
+    replayBtn.style.display = this.onReplayTutorial ? "inline-flex" : "none";
   }
 }

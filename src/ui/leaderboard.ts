@@ -17,6 +17,7 @@ import {
   type PlayerDataSyncStatus,
 } from "../services/playerDataSync.js";
 import { logger } from "../utils/logger.js";
+import { confirmAction } from "./confirmModal.js";
 
 const log = logger.create("LeaderboardModal");
 type SyncIndicatorTone = "ok" | "syncing" | "pending" | "offline" | "error";
@@ -170,7 +171,7 @@ export class LeaderboardModal {
     if (clearBtn) {
       clearBtn.addEventListener("click", () => {
         audioService.playSfx("click");
-        this.handleClearHistory();
+        void this.handleClearHistory();
       });
     }
 
@@ -391,12 +392,20 @@ export class LeaderboardModal {
     `;
   }
 
-  private handleClearHistory() {
-    const confirmed = confirm("Are you sure you want to clear your entire score history? This cannot be undone.");
-    if (confirmed) {
-      scoreHistoryService.clearHistory();
-      this.renderPersonalScores();
+  private async handleClearHistory(): Promise<void> {
+    const confirmed = await confirmAction({
+      title: "Clear Score History?",
+      message: "Are you sure you want to clear your entire score history? This cannot be undone.",
+      confirmLabel: "Clear History",
+      cancelLabel: "Cancel",
+      tone: "danger",
+    });
+    if (!confirmed) {
+      return;
     }
+
+    scoreHistoryService.clearHistory();
+    this.renderPersonalScores();
   }
 
   private formatDate(timestamp: number): string {

@@ -21,6 +21,7 @@ import {
 import { scoreHistoryService } from "../services/score-history.js";
 import type { AuthenticatedUserProfile } from "../services/backendApi.js";
 import { logger } from "../utils/logger.js";
+import { confirmAction } from "./confirmModal.js";
 
 const log = logger.create("SettingsModal");
 
@@ -410,11 +411,15 @@ export class SettingsModal {
 
     // Game Difficulty
     const gameDifficulty = document.getElementById("game-difficulty") as HTMLSelectElement;
-    gameDifficulty.addEventListener("change", () => {
-      if (this.checkGameInProgress && this.checkGameInProgress()) {
-        const confirmed = confirm(
-          "Changing difficulty will start a new game. Your current progress will be lost. Continue?"
-        );
+    gameDifficulty.addEventListener("change", async () => {
+      if (this.isGameInProgress()) {
+        const confirmed = await confirmAction({
+          title: "Start New Game?",
+          message: "Changing difficulty will start a new game. Your current progress will be lost.",
+          confirmLabel: "Continue",
+          cancelLabel: "Keep Current Game",
+          tone: "danger",
+        });
         if (!confirmed) {
           gameDifficulty.value = this.settings.game.difficulty;
           return;
@@ -427,7 +432,7 @@ export class SettingsModal {
       this.updateDifficultyInfo();
       audioService.playSfx("click");
 
-      if (this.checkGameInProgress && this.checkGameInProgress()) {
+      if (this.isGameInProgress()) {
         this.hide();
         if (this.onNewGame) {
           this.onNewGame();
@@ -437,11 +442,15 @@ export class SettingsModal {
 
     // Game Variants
     const variantD20 = document.getElementById("variant-d20") as HTMLInputElement;
-    variantD20.addEventListener("change", () => {
-      if (this.checkGameInProgress && this.checkGameInProgress()) {
-        const confirmed = confirm(
-          "Changing dice variants will start a new game. Your current progress will be lost. Continue?"
-        );
+    variantD20.addEventListener("change", async () => {
+      if (this.isGameInProgress()) {
+        const confirmed = await confirmAction({
+          title: "Start New Game?",
+          message: "Changing dice variants will start a new game. Your current progress will be lost.",
+          confirmLabel: "Continue",
+          cancelLabel: "Keep Current Game",
+          tone: "danger",
+        });
         if (!confirmed) {
           variantD20.checked = this.settings.game.addD20;
           return;
@@ -449,18 +458,22 @@ export class SettingsModal {
       }
       settingsService.updateGame({ addD20: variantD20.checked });
       audioService.playSfx("click");
-      if (this.checkGameInProgress && this.checkGameInProgress() && this.onNewGame) {
+      if (this.isGameInProgress() && this.onNewGame) {
         this.hide();
         this.onNewGame();
       }
     });
 
     const variantD4 = document.getElementById("variant-d4") as HTMLInputElement;
-    variantD4.addEventListener("change", () => {
-      if (this.checkGameInProgress && this.checkGameInProgress()) {
-        const confirmed = confirm(
-          "Changing dice variants will start a new game. Your current progress will be lost. Continue?"
-        );
+    variantD4.addEventListener("change", async () => {
+      if (this.isGameInProgress()) {
+        const confirmed = await confirmAction({
+          title: "Start New Game?",
+          message: "Changing dice variants will start a new game. Your current progress will be lost.",
+          confirmLabel: "Continue",
+          cancelLabel: "Keep Current Game",
+          tone: "danger",
+        });
         if (!confirmed) {
           variantD4.checked = this.settings.game.addD4;
           return;
@@ -468,18 +481,22 @@ export class SettingsModal {
       }
       settingsService.updateGame({ addD4: variantD4.checked });
       audioService.playSfx("click");
-      if (this.checkGameInProgress && this.checkGameInProgress() && this.onNewGame) {
+      if (this.isGameInProgress() && this.onNewGame) {
         this.hide();
         this.onNewGame();
       }
     });
 
     const variant2ndD10 = document.getElementById("variant-2nd-d10") as HTMLInputElement;
-    variant2ndD10.addEventListener("change", () => {
-      if (this.checkGameInProgress && this.checkGameInProgress()) {
-        const confirmed = confirm(
-          "Changing dice variants will start a new game. Your current progress will be lost. Continue?"
-        );
+    variant2ndD10.addEventListener("change", async () => {
+      if (this.isGameInProgress()) {
+        const confirmed = await confirmAction({
+          title: "Start New Game?",
+          message: "Changing dice variants will start a new game. Your current progress will be lost.",
+          confirmLabel: "Continue",
+          cancelLabel: "Keep Current Game",
+          tone: "danger",
+        });
         if (!confirmed) {
           variant2ndD10.checked = this.settings.game.add2ndD10;
           return;
@@ -491,18 +508,22 @@ export class SettingsModal {
         settingsService.updateGame({ d100Mode: false });
         (document.getElementById("variant-d100") as HTMLInputElement).checked = false;
       }
-      if (this.checkGameInProgress && this.checkGameInProgress() && this.onNewGame) {
+      if (this.isGameInProgress() && this.onNewGame) {
         this.hide();
         this.onNewGame();
       }
     });
 
     const variantD100 = document.getElementById("variant-d100") as HTMLInputElement;
-    variantD100.addEventListener("change", () => {
-      if (this.checkGameInProgress && this.checkGameInProgress()) {
-        const confirmed = confirm(
-          "Changing dice variants will start a new game. Your current progress will be lost. Continue?"
-        );
+    variantD100.addEventListener("change", async () => {
+      if (this.isGameInProgress()) {
+        const confirmed = await confirmAction({
+          title: "Start New Game?",
+          message: "Changing dice variants will start a new game. Your current progress will be lost.",
+          confirmLabel: "Continue",
+          cancelLabel: "Keep Current Game",
+          tone: "danger",
+        });
         if (!confirmed) {
           variantD100.checked = this.settings.game.d100Mode;
           return;
@@ -514,7 +535,7 @@ export class SettingsModal {
       }
       settingsService.updateGame({ d100Mode: variantD100.checked });
       audioService.playSfx("click");
-      if (this.checkGameInProgress && this.checkGameInProgress() && this.onNewGame) {
+      if (this.isGameInProgress() && this.onNewGame) {
         this.hide();
         this.onNewGame();
       }
@@ -529,9 +550,16 @@ export class SettingsModal {
     });
 
     // Main Menu button
-    document.getElementById("settings-return-lobby")?.addEventListener("click", () => {
+    document.getElementById("settings-return-lobby")?.addEventListener("click", async () => {
       audioService.playSfx("click");
-      if (!confirm("Leave this game and return to the main menu?")) {
+      const confirmed = await confirmAction({
+        title: "Return To Lobby?",
+        message: "Leave this game and return to the main menu?",
+        confirmLabel: "Return To Lobby",
+        cancelLabel: "Stay In Game",
+        tone: "danger",
+      });
+      if (!confirmed) {
         return;
       }
       this.hide();
@@ -547,23 +575,39 @@ export class SettingsModal {
     });
 
     // New Game button
-    document.getElementById("settings-new-game")?.addEventListener("click", () => {
+    document.getElementById("settings-new-game")?.addEventListener("click", async () => {
       audioService.playSfx("click");
-      if (confirm("Start a new game? Your current progress will be lost.")) {
-        this.hide();
-        if (this.onNewGame) {
-          this.onNewGame();
-        }
+      const confirmed = await confirmAction({
+        title: "Start New Game?",
+        message: "Your current progress will be lost.",
+        confirmLabel: "Start New Game",
+        cancelLabel: "Cancel",
+        tone: "danger",
+      });
+      if (!confirmed) {
+        return;
+      }
+      this.hide();
+      if (this.onNewGame) {
+        this.onNewGame();
       }
     });
 
     // Reset button
-    document.getElementById("settings-reset")?.addEventListener("click", () => {
+    document.getElementById("settings-reset")?.addEventListener("click", async () => {
       audioService.playSfx("click");
-      if (confirm("Reset all settings to defaults?")) {
-        settingsService.resetToDefaults();
-        this.refresh();
+      const confirmed = await confirmAction({
+        title: "Reset Settings?",
+        message: "Reset all settings to defaults?",
+        confirmLabel: "Reset Settings",
+        cancelLabel: "Cancel",
+        tone: "danger",
+      });
+      if (!confirmed) {
+        return;
       }
+      settingsService.resetToDefaults();
+      this.refresh();
     });
 
     // Close on backdrop click
@@ -942,6 +986,10 @@ export class SettingsModal {
       return `${minutes}m ${seconds % 60}s`;
     }
     return `${seconds}s`;
+  }
+
+  private isGameInProgress(): boolean {
+    return Boolean(this.checkGameInProgress && this.checkGameInProgress());
   }
 
   /**

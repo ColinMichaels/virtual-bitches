@@ -76,16 +76,11 @@ export class GameFlowController {
   static handleModeChange(
     currentState: GameState,
     newDifficulty: GameDifficulty,
-    isGameInProgress: boolean
+    isGameInProgress: boolean,
+    allowGameReset: boolean = true
   ): { newState: GameState | null; modeUpdated: boolean } {
-    // Check if game is in progress
-    if (isGameInProgress) {
-      const confirmed = confirm(
-        `Switch to ${newDifficulty.charAt(0).toUpperCase() + newDifficulty.slice(1)} mode? This will start a new game and your current progress will be lost.`
-      );
-      if (!confirmed) {
-        return { newState: null, modeUpdated: false };
-      }
+    if (isGameInProgress && !allowGameReset) {
+      return { newState: null, modeUpdated: false };
     }
 
     // Update settings

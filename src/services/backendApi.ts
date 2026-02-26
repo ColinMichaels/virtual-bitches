@@ -102,7 +102,22 @@ export interface MultiplayerSessionRecord {
   sessionComplete?: boolean;
   completedAt?: number | null;
   createdAt: number;
+  lastActivityAt?: number;
   expiresAt?: number;
+}
+
+export interface MultiplayerRoomListing {
+  sessionId: string;
+  roomCode: string;
+  createdAt: number;
+  lastActivityAt: number;
+  expiresAt: number;
+  participantCount: number;
+  humanCount: number;
+  activeHumanCount: number;
+  readyHumanCount: number;
+  botCount: number;
+  sessionComplete: boolean;
 }
 
 export interface CreateMultiplayerSessionRequest {
@@ -216,6 +231,18 @@ export class BackendApiService {
       method: "POST",
       body: request,
     });
+  }
+
+  async listMultiplayerRooms(limit: number = 24): Promise<MultiplayerRoomListing[] | null> {
+    const bounded = Math.max(1, Math.min(100, Math.floor(limit)));
+    const response = await this.request<{ rooms: MultiplayerRoomListing[] }>(
+      `/multiplayer/rooms?limit=${bounded}`,
+      {
+        method: "GET",
+        authMode: "none",
+      }
+    );
+    return response?.rooms ?? null;
   }
 
   async joinMultiplayerSession(
