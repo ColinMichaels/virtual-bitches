@@ -159,7 +159,7 @@ Exit criteria:
 - [x] Add Firebase client SDK bootstrap in frontend.
 - [x] Update environment files for Firebase/Cloud Run endpoints.
 - [x] Add Firestore adapter for profile/log/session persistence.
-- [ ] Add WS reconnection/backoff tests for Cloud Run timeout behavior.
+- [x] Add WS reconnection/backoff tests for Cloud Run timeout behavior.
 - [x] Add GitHub Actions deploy pipeline for branch-based `master`/`dev` Firebase + Cloud Run deploy.
 
 ---
