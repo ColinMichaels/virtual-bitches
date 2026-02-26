@@ -21,7 +21,7 @@ This syncs source files into `public/**` so you can upload from one place.
 
 ## 2) Upload to Firebase Storage bucket
 
-Use your Firebase Storage bucket name from `VITE_FIREBASE_STORAGE_BUCKET`.
+Use your Firebase Storage bucket name from `VITE_FIREBASE_STORAGE_BUCKET` (recommended), or rely on `FIREBASE_PROJECT_ID` auto-discovery.
 
 Quick path (scripted):
 
@@ -88,7 +88,7 @@ The GitHub Actions pipeline now includes a dedicated `deploy-assets` job in
 - optimizes image assets with ImageMagick
 - uploads optimized assets to Firebase Storage
 
-It runs after the main deploy job and uses the resolved `VITE_FIREBASE_STORAGE_BUCKET` value.
+It runs after the main deploy job and prefers `VITE_FIREBASE_STORAGE_BUCKET`; if missing/invalid it falls back to project bucket discovery.
 
 Optional GitHub Environment variables for cache behavior:
 
@@ -127,4 +127,4 @@ If upload fails with `gs://... not found: 404`:
   - `<project-id>.firebasestorage.app`
   - `<project-id>.appspot.com`
 
-The upload script now auto-tries both common Firebase bucket formats when `FIREBASE_PROJECT_ID` is available.
+The upload script auto-tries both common Firebase bucket formats and, if needed, scans project buckets to pick a matching fallback.
