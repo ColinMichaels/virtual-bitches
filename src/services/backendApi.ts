@@ -45,8 +45,27 @@ export interface MultiplayerSessionParticipant {
   joinedAt: number;
   lastHeartbeatAt: number;
   isBot?: boolean;
+  botProfile?: "cautious" | "balanced" | "aggressive";
   isReady?: boolean;
   score?: number;
+  remainingDice?: number;
+  isComplete?: boolean;
+  completedAt?: number | null;
+}
+
+export interface MultiplayerSessionStanding {
+  playerId: string;
+  displayName?: string;
+  joinedAt: number;
+  lastHeartbeatAt: number;
+  isBot?: boolean;
+  botProfile?: "cautious" | "balanced" | "aggressive";
+  isReady?: boolean;
+  score?: number;
+  remainingDice?: number;
+  isComplete?: boolean;
+  completedAt?: number | null;
+  placement: number;
 }
 
 export interface MultiplayerSessionTurnState {
@@ -78,7 +97,10 @@ export interface MultiplayerSessionRecord {
   playerToken?: string;
   auth?: MultiplayerSessionAuth;
   participants?: MultiplayerSessionParticipant[];
+  standings?: MultiplayerSessionStanding[];
   turnState?: MultiplayerSessionTurnState | null;
+  sessionComplete?: boolean;
+  completedAt?: number | null;
   createdAt: number;
   expiresAt?: number;
 }

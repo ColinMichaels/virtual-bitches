@@ -148,8 +148,27 @@ export interface MultiplayerSessionStateParticipant {
   joinedAt: number;
   lastHeartbeatAt: number;
   isBot?: boolean;
+  botProfile?: "cautious" | "balanced" | "aggressive";
   isReady?: boolean;
   score?: number;
+  remainingDice?: number;
+  isComplete?: boolean;
+  completedAt?: number | null;
+}
+
+export interface MultiplayerSessionStateStanding {
+  playerId: string;
+  displayName?: string;
+  joinedAt: number;
+  lastHeartbeatAt: number;
+  isBot?: boolean;
+  botProfile?: "cautious" | "balanced" | "aggressive";
+  isReady?: boolean;
+  score?: number;
+  remainingDice?: number;
+  isComplete?: boolean;
+  completedAt?: number | null;
+  placement: number;
 }
 
 export interface MultiplayerSessionStateTurnSnapshot {
@@ -179,7 +198,10 @@ export interface MultiplayerSessionStateMessage {
   sessionId: string;
   roomCode: string;
   participants: MultiplayerSessionStateParticipant[];
+  standings?: MultiplayerSessionStateStanding[];
   turnState: MultiplayerSessionStateTurnSnapshot | null;
+  sessionComplete?: boolean;
+  completedAt?: number | null;
   createdAt: number;
   expiresAt?: number;
   timestamp?: number;

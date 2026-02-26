@@ -107,6 +107,24 @@ const SELECTION_EMISSIVE_COLOR = new Color3(1, 1, 0.3);
 
 // Color conversion constant
 const RGB_MAX_VALUE = 255;
+const SPECTATOR_PREVIEW_TTL_MS = 7000;
+
+const SIDES_TO_DIE_KIND: Record<number, DieKind> = {
+  4: "d4",
+  6: "d6",
+  8: "d8",
+  10: "d10",
+  12: "d12",
+  20: "d20",
+};
+
+interface SpectatorPreviewState {
+  dice: DieState[];
+  sourceToTempId: Map<string, string>;
+  tempIds: string[];
+  scoreAreaPosition: Vector3;
+  cleanupTimer: ReturnType<typeof setTimeout> | null;
+}
 
 export class DiceRenderer {
   private meshes = new Map<string, Mesh>();
@@ -138,6 +156,7 @@ export class DiceRenderer {
   private debugMeshes = new Map<string, Mesh>();
   private isDebugMode = false;
   private debugUseLightMaterial = false;
+  private spectatorPreviews = new Map<string, SpectatorPreviewState>();
 
   // Rotation cache for raycast-detected rotations (d10, d12)
   private rotationCache = new Map<string, Map<number, Vector3>>();
@@ -1018,7 +1037,7 @@ export class DiceRenderer {
     }
   }
 
-  animateRoll(dice: DieState[], onComplete: () => void) {
+  animateRoll(dice: DieState[], onComplete: () => void, rollAreaPosition?: Vector3) {
     const activeDice = dice.filter((d) => d.inPlay && !d.scored);
     if (activeDice.length === 0) {
       onComplete();
@@ -1056,8 +1075,10 @@ export class DiceRenderer {
 
       const row = Math.floor(i / cols);
       const col = i % cols;
-      const offsetX = (col - cols / 2) * spacing;
-      const offsetZ = (row - Math.floor(shuffledDice.length / cols) / 2) * spacing;
+      const rollAreaX = rollAreaPosition?.x ?? 0;
+      const rollAreaZ = rollAreaPosition?.z ?? 0;
+      const offsetX = rollAreaX + (col - cols / 2) * spacing;
+      const offsetZ = rollAreaZ + (row - Math.floor(shuffledDice.length / cols) / 2) * spacing;
 
       // Size-based random spread: smaller dice get more spread, larger stay closer to grid
       const dieSize = DIE_SIZES[die.def.kind];
@@ -1114,8 +1135,8 @@ export class DiceRenderer {
       // Random starting position (clustered center) that moves to final position
       // Creates "scrambling" effect as dice spread out while falling
       const startClusterRadius = 3; // Start in tight cluster
-      const startX = (Math.random() - 0.5) * startClusterRadius;
-      const startZ = (Math.random() - 0.5) * startClusterRadius;
+      const startX = rollAreaX + (Math.random() - 0.5) * startClusterRadius;
+      const startZ = rollAreaZ + (Math.random() - 0.5) * startClusterRadius;
       const startY = DROP_START_HEIGHT + (Math.random() - 0.5) * 4; // Varied heights
       const endY = DROP_END_HEIGHT;
 
@@ -1239,7 +1260,12 @@ export class DiceRenderer {
     setTimeout(onComplete, ROLL_COMPLETE_DELAY_MS);
   }
 
-  animateScore(dice: DieState[], selected: Set<string>, onComplete: () => void) {
+  animateScore(
+    dice: DieState[],
+    selected: Set<string>,
+    onComplete: () => void,
+    scoreAreaPosition?: Vector3
+  ) {
     const toScore = dice.filter((d) => selected.has(d.id));
     if (toScore.length === 0) {
       onComplete();
@@ -1254,11 +1280,9 @@ export class DiceRenderer {
     const spacingX = 1.5;
     const spacingZ = 1.5;
 
-    // Calculate score area position relative to current player (seat 0)
-    // Position is between table center and player seat
-    const scoreAreaDistance = 9; // Distance from center toward player
-    const baseX = scoreAreaDistance; // Front of table (seat 0 is at angle 0)
-    const baseZ = -3;
+    // Score area center can be seat-specific (multiplayer) or fallback.
+    const baseX = scoreAreaPosition?.x ?? 9;
+    const baseZ = scoreAreaPosition?.z ?? -3;
     const baseY = DROP_END_HEIGHT;
 
     toScore.forEach((die, i) => {
@@ -1332,6 +1356,155 @@ export class DiceRenderer {
     setTimeout(onComplete, SCORE_ANIMATION_DELAY_MS);
   }
 
+  startSpectatorRollPreview(
+    previewKey: string,
+    roll: { rollIndex: number; dice: Array<{ dieId: string; sides: number; value?: number }> },
+    scoreAreaPosition: Vector3
+  ): boolean {
+    const key = typeof previewKey === "string" ? previewKey.trim() : "";
+    if (!key || !roll || !Array.isArray(roll.dice) || roll.dice.length === 0) {
+      return false;
+    }
+
+    this.cancelSpectatorPreview(key);
+
+    const sourceToTempId = new Map<string, string>();
+    const dice: DieState[] = [];
+
+    const safeRollIndex =
+      Number.isFinite(roll.rollIndex) && roll.rollIndex > 0 ? Math.floor(roll.rollIndex) : 1;
+    roll.dice.forEach((die, index) => {
+      const sourceId = typeof die?.dieId === "string" ? die.dieId.trim() : "";
+      const sides = Number.isFinite(die?.sides) ? Math.floor(die.sides) : NaN;
+      const kind = SIDES_TO_DIE_KIND[sides];
+      if (!sourceId || !kind) {
+        return;
+      }
+      const valueRaw = Number.isFinite(die?.value) ? Math.floor(die.value as number) : 1;
+      const value = Math.max(1, Math.min(sides, valueRaw));
+      const tempId = `${kind}-spectator-${key}-${safeRollIndex}-${index + 1}-${Date.now()}`;
+      sourceToTempId.set(sourceId, tempId);
+      dice.push({
+        id: tempId,
+        def: { kind, sides },
+        value,
+        inPlay: true,
+        scored: false,
+      });
+    });
+
+    if (dice.length === 0) {
+      return false;
+    }
+
+    const rollAreaPosition = this.resolveSpectatorRollArea(scoreAreaPosition);
+    this.spectatorPreviews.set(key, {
+      dice,
+      sourceToTempId,
+      tempIds: dice.map((die) => die.id),
+      scoreAreaPosition: scoreAreaPosition.clone(),
+      cleanupTimer: null,
+    });
+
+    this.animateRoll(dice, () => {
+      this.scheduleSpectatorPreviewCleanup(key);
+    }, rollAreaPosition);
+    return true;
+  }
+
+  completeSpectatorScorePreview(
+    previewKey: string,
+    selectedSourceDiceIds: string[]
+  ): boolean {
+    const key = typeof previewKey === "string" ? previewKey.trim() : "";
+    const preview = this.spectatorPreviews.get(key);
+    if (!key || !preview || !Array.isArray(selectedSourceDiceIds)) {
+      return false;
+    }
+
+    if (preview.cleanupTimer) {
+      clearTimeout(preview.cleanupTimer);
+      preview.cleanupTimer = null;
+    }
+
+    const selectedTempIds = selectedSourceDiceIds
+      .map((sourceId) => preview.sourceToTempId.get(sourceId))
+      .filter((dieId): dieId is string => typeof dieId === "string");
+    if (selectedTempIds.length === 0) {
+      this.cancelSpectatorPreview(key);
+      return false;
+    }
+
+    this.animateScore(
+      preview.dice,
+      new Set(selectedTempIds),
+      () => {
+        this.scheduleSpectatorPreviewCleanup(key, 900);
+      },
+      preview.scoreAreaPosition
+    );
+    return true;
+  }
+
+  cancelSpectatorPreview(previewKey: string): void {
+    const key = typeof previewKey === "string" ? previewKey.trim() : "";
+    if (!key) {
+      return;
+    }
+
+    const preview = this.spectatorPreviews.get(key);
+    if (!preview) {
+      return;
+    }
+    if (preview.cleanupTimer) {
+      clearTimeout(preview.cleanupTimer);
+    }
+    preview.tempIds.forEach((dieId) => {
+      this.selectedMeshes.delete(dieId);
+      this.dieColors.delete(dieId);
+      const mesh = this.meshes.get(dieId);
+      if (mesh) {
+        this.highlightLayer.removeMesh(mesh);
+        mesh.dispose();
+      }
+      this.meshes.delete(dieId);
+    });
+    this.spectatorPreviews.delete(key);
+  }
+
+  cancelAllSpectatorPreviews(): void {
+    const previewKeys = [...this.spectatorPreviews.keys()];
+    previewKeys.forEach((previewKey) => {
+      this.cancelSpectatorPreview(previewKey);
+    });
+  }
+
+  private scheduleSpectatorPreviewCleanup(previewKey: string, delayMs: number = SPECTATOR_PREVIEW_TTL_MS): void {
+    const preview = this.spectatorPreviews.get(previewKey);
+    if (!preview) {
+      return;
+    }
+    if (preview.cleanupTimer) {
+      clearTimeout(preview.cleanupTimer);
+    }
+
+    preview.cleanupTimer = setTimeout(() => {
+      this.cancelSpectatorPreview(previewKey);
+    }, Math.max(200, Math.floor(delayMs)));
+  }
+
+  private resolveSpectatorRollArea(scoreAreaPosition: Vector3): Vector3 {
+    const radial = new Vector3(scoreAreaPosition.x, 0, scoreAreaPosition.z);
+    const length = radial.length();
+    if (!Number.isFinite(length) || length <= 0.01) {
+      return new Vector3(0, 0, 0);
+    }
+
+    radial.normalize();
+    const rollDistance = Math.max(3, length * 0.62);
+    return new Vector3(radial.x * rollDistance, 0, radial.z * rollDistance);
+  }
+
   getMesh(dieId: string): Mesh | undefined {
     return this.meshes.get(dieId);
   }
@@ -1341,10 +1514,12 @@ export class DiceRenderer {
   }
 
   clearDice(): void {
+    this.cancelAllSpectatorPreviews();
     this.meshes.forEach((mesh) => {
       mesh.dispose();
     });
     this.meshes.clear();
+    this.selectedMeshes.clear();
     this.dieColors.clear();
     this.colorIndex = 0;
   }
@@ -1445,6 +1620,7 @@ export class DiceRenderer {
    */
   private async onThemeChanged(): Promise<void> {
     log.info("Theme changed, reloading...");
+    this.cancelAllSpectatorPreviews();
 
     const currentTheme = themeManager.getCurrentThemeConfig();
     const newMeshFile = currentTheme?.meshFile;
@@ -1689,6 +1865,7 @@ export class DiceRenderer {
   dispose() {
     // Unsubscribe from theme changes
     this.unsubscribeTheme?.();
+    this.cancelAllSpectatorPreviews();
 
     this.meshes.forEach((mesh) => mesh.dispose());
     this.meshes.clear();
