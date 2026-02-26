@@ -71,7 +71,13 @@ export class BackendApiService {
   constructor(options: BackendApiOptions = {}) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl ?? environment.apiBaseUrl);
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    const configuredFetch = options.fetchImpl;
+    this.fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) => {
+      if (configuredFetch) {
+        return configuredFetch.call(globalThis, input, init);
+      }
+      return fetch(input, init);
+    }) as typeof fetch;
   }
 
   async getPlayerProfile(playerId: string): Promise<PlayerProfileRecord | null> {
