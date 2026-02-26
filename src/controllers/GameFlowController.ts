@@ -7,6 +7,7 @@ import { createGame, replay, deserializeActions } from "../game/state.js";
 import { settingsService } from "../services/settings.js";
 import { shouldShowHints } from "../engine/modes.js";
 import { notificationService } from "../ui/notifications.js";
+import { audioService } from "../services/audio.js";
 import { generateSeed, parseGameURL } from "../utils/urlUtils.js";
 import type { GameState, GameDifficulty, GameConfig } from "../engine/types.js";
 import type { DiceRow } from "../ui/diceRow.js";
@@ -140,8 +141,6 @@ export class GameFlowController {
    * Initialize audio on first user interaction
    */
   static async initializeAudio(): Promise<void> {
-    const { audioService } = await import("../services/audio.js");
-
     const initAudio = async () => {
       if (!audioService.isInitialized()) {
         await audioService.initialize();

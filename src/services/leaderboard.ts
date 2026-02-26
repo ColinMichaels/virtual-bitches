@@ -6,13 +6,59 @@ import {
 import { scoreHistoryService, type GameScore } from "./score-history.js";
 import { logger } from "../utils/logger.js";
 import { firebaseAuthService } from "./firebaseAuth.js";
+import { environment } from "@env";
 
 const log = logger.create("LeaderboardService");
 const MAX_FLUSH_PER_BATCH = 8;
+const GLOBAL_LEADERBOARD_CACHE_KEY = `${environment.storage.prefix}-global-leaderboard-cache`;
+const MAX_GLOBAL_CACHE_ENTRIES = 200;
+const AUTO_SYNC_INTERVAL_MS = 30000;
+
+export type LeaderboardSyncState = "idle" | "syncing" | "offline" | "error";
+
+export interface LeaderboardSyncStatus {
+  state: LeaderboardSyncState;
+  pendingGlobalScores: number;
+  lastAttemptAt: number;
+  lastSuccessAt: number;
+  lastErrorAt: number;
+  lastFetchedAt: number;
+  usingCachedData: boolean;
+}
+
+interface GlobalLeaderboardCachePayload {
+  entries: GlobalLeaderboardEntry[];
+  updatedAt: number;
+}
 
 export class LeaderboardService {
   private flushInFlight = false;
   private accountProfile: AuthenticatedUserProfile | null = null;
+  private globalLeaderboardCache: GlobalLeaderboardEntry[] = [];
+  private autoSyncStarted = false;
+  private autoSyncIntervalHandle?: ReturnType<typeof setInterval>;
+  private syncStatus: LeaderboardSyncStatus = {
+    state: "idle",
+    pendingGlobalScores: 0,
+    lastAttemptAt: 0,
+    lastSuccessAt: 0,
+    lastErrorAt: 0,
+    lastFetchedAt: 0,
+    usingCachedData: false,
+  };
+  private readonly onOnline = () => {
+    void this.flushPendingScores();
+  };
+  private readonly onFirebaseAuthChanged = () => {
+    this.clearCachedProfile();
+    void this.flushPendingScores();
+  };
+
+  constructor() {
+    this.globalLeaderboardCache = this.loadGlobalLeaderboardCache();
+    this.emitSyncStatusChanged();
+    this.startAutoSync();
+  }
 
   async submitScore(score: GameScore): Promise<boolean> {
     if (score.globalSynced) {
@@ -40,10 +86,22 @@ export class LeaderboardService {
     });
 
     if (!result) {
+      this.syncStatus.lastErrorAt = Date.now();
+      this.syncStatus.state = isNavigatorOnline() ? "error" : "offline";
+      this.emitSyncStatusChanged();
       return false;
     }
 
     scoreHistoryService.markGlobalSynced([score.id]);
+    const nextCache = [result, ...this.globalLeaderboardCache.filter((entry) => entry.id !== result.id)]
+      .sort(compareLeaderboardEntries)
+      .slice(0, MAX_GLOBAL_CACHE_ENTRIES);
+    this.globalLeaderboardCache = nextCache;
+    this.saveGlobalLeaderboardCache(nextCache);
+    this.syncStatus.state = "idle";
+    this.syncStatus.lastSuccessAt = Date.now();
+    this.syncStatus.lastErrorAt = 0;
+    this.emitSyncStatusChanged();
     return true;
   }
 
@@ -53,15 +111,22 @@ export class LeaderboardService {
     }
 
     this.flushInFlight = true;
+    this.syncStatus.state = "syncing";
+    this.syncStatus.lastAttemptAt = Date.now();
+    this.emitSyncStatusChanged();
     try {
       await firebaseAuthService.initialize();
       const token = await firebaseAuthService.getIdToken();
       if (!token) {
+        this.syncStatus.state = "idle";
+        this.emitSyncStatusChanged();
         return 0;
       }
 
       const profile = await this.getAccountProfile(true);
       if (!profile || profile.isAnonymous || !profile.leaderboardName?.trim()) {
+        this.syncStatus.state = "idle";
+        this.emitSyncStatusChanged();
         return 0;
       }
 
@@ -74,10 +139,21 @@ export class LeaderboardService {
       for (const score of pending) {
         const ok = await this.submitScore(score);
         if (!ok) {
+          this.syncStatus.state = isNavigatorOnline() ? "error" : "offline";
+          this.syncStatus.lastErrorAt = Date.now();
+          this.emitSyncStatusChanged();
           break;
         }
         submitted += 1;
       }
+      if (submitted > 0) {
+        this.syncStatus.state = "idle";
+        this.syncStatus.lastSuccessAt = Date.now();
+        this.syncStatus.lastErrorAt = 0;
+      } else if (this.syncStatus.state === "syncing") {
+        this.syncStatus.state = "idle";
+      }
+      this.emitSyncStatusChanged();
       return submitted;
     } finally {
       this.flushInFlight = false;
@@ -85,12 +161,30 @@ export class LeaderboardService {
   }
 
   async getGlobalLeaderboard(limit: number = 200): Promise<GlobalLeaderboardEntry[]> {
+    await this.flushPendingScores();
+
     const entries = await backendApiService.getGlobalLeaderboard(limit);
     if (!entries) {
       log.warn("Failed to load global leaderboard");
-      return [];
+      this.syncStatus.usingCachedData = true;
+      this.syncStatus.state = isNavigatorOnline() ? "error" : "offline";
+      this.syncStatus.lastErrorAt = Date.now();
+      this.emitSyncStatusChanged();
+      return this.globalLeaderboardCache.slice(0, Math.max(1, Math.min(200, Math.floor(limit))));
     }
-    return entries;
+
+    const normalized = entries
+      .filter((entry) => Number.isFinite(entry?.score))
+      .sort(compareLeaderboardEntries)
+      .slice(0, MAX_GLOBAL_CACHE_ENTRIES);
+    this.globalLeaderboardCache = normalized;
+    this.saveGlobalLeaderboardCache(normalized);
+    this.syncStatus.usingCachedData = false;
+    this.syncStatus.lastFetchedAt = Date.now();
+    this.syncStatus.state = "idle";
+    this.syncStatus.lastErrorAt = 0;
+    this.emitSyncStatusChanged();
+    return normalized.slice(0, Math.max(1, Math.min(200, Math.floor(limit))));
   }
 
   async getAccountProfile(forceRefresh = false): Promise<AuthenticatedUserProfile | null> {
@@ -120,7 +214,119 @@ export class LeaderboardService {
 
   clearCachedProfile(): void {
     this.accountProfile = null;
+    this.emitSyncStatusChanged();
+  }
+
+  getSyncStatus(): LeaderboardSyncStatus {
+    return { ...this.syncStatus, pendingGlobalScores: scoreHistoryService.getUnsyncedGlobalScores().length };
+  }
+
+  startAutoSync(): void {
+    if (this.autoSyncStarted) {
+      return;
+    }
+    if (typeof window === "undefined" && typeof document === "undefined") {
+      return;
+    }
+    this.autoSyncStarted = true;
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("online", this.onOnline);
+    }
+    if (typeof document !== "undefined") {
+      document.addEventListener(
+        "auth:firebaseUserChanged",
+        this.onFirebaseAuthChanged as EventListener
+      );
+    }
+
+    this.autoSyncIntervalHandle = setInterval(() => {
+      void this.flushPendingScores();
+    }, AUTO_SYNC_INTERVAL_MS);
+    this.emitSyncStatusChanged();
+  }
+
+  private loadGlobalLeaderboardCache(): GlobalLeaderboardEntry[] {
+    if (typeof localStorage === "undefined") {
+      return [];
+    }
+
+    try {
+      const raw = localStorage.getItem(GLOBAL_LEADERBOARD_CACHE_KEY);
+      if (!raw) {
+        return [];
+      }
+
+      const parsed = JSON.parse(raw) as Partial<GlobalLeaderboardCachePayload> | null;
+      if (!parsed || !Array.isArray(parsed.entries)) {
+        return [];
+      }
+
+      return parsed.entries
+        .filter((entry) => entry && Number.isFinite(entry.score))
+        .sort(compareLeaderboardEntries)
+        .slice(0, MAX_GLOBAL_CACHE_ENTRIES);
+    } catch (error) {
+      log.warn("Failed to load global leaderboard cache", error);
+      return [];
+    }
+  }
+
+  private saveGlobalLeaderboardCache(entries: GlobalLeaderboardEntry[]): void {
+    if (typeof localStorage === "undefined") {
+      return;
+    }
+
+    try {
+      const payload: GlobalLeaderboardCachePayload = {
+        entries,
+        updatedAt: Date.now(),
+      };
+      localStorage.setItem(GLOBAL_LEADERBOARD_CACHE_KEY, JSON.stringify(payload));
+    } catch (error) {
+      log.warn("Failed to save global leaderboard cache", error);
+    }
+  }
+
+  private emitSyncStatusChanged(): void {
+    this.syncStatus.pendingGlobalScores = scoreHistoryService.getUnsyncedGlobalScores().length;
+
+    if (typeof document === "undefined" || typeof CustomEvent === "undefined") {
+      return;
+    }
+
+    document.dispatchEvent(
+      new CustomEvent<LeaderboardSyncStatus>("sync:leaderboardStatusChanged", {
+        detail: this.getSyncStatus(),
+      })
+    );
   }
 }
 
 export const leaderboardService = new LeaderboardService();
+
+function compareLeaderboardEntries(a: GlobalLeaderboardEntry, b: GlobalLeaderboardEntry): number {
+  const scoreDiff = a.score - b.score;
+  if (scoreDiff !== 0) {
+    return scoreDiff;
+  }
+
+  const durationDiff = (a.duration ?? 0) - (b.duration ?? 0);
+  if (durationDiff !== 0) {
+    return durationDiff;
+  }
+
+  const rollCountDiff = (a.rollCount ?? 0) - (b.rollCount ?? 0);
+  if (rollCountDiff !== 0) {
+    return rollCountDiff;
+  }
+
+  return (a.timestamp ?? 0) - (b.timestamp ?? 0);
+}
+
+function isNavigatorOnline(): boolean {
+  if (typeof navigator === "undefined" || typeof navigator.onLine !== "boolean") {
+    return true;
+  }
+  return navigator.onLine;
+}

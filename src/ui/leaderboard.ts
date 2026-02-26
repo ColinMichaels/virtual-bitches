@@ -6,12 +6,20 @@
 import { scoreHistoryService, GameScore } from "../services/score-history.js";
 import { audioService } from "../services/audio.js";
 import { getDifficultyName } from "../engine/modes.js";
-import { leaderboardService } from "../services/leaderboard.js";
+import {
+  leaderboardService,
+  type LeaderboardSyncStatus,
+} from "../services/leaderboard.js";
 import { firebaseAuthService } from "../services/firebaseAuth.js";
 import type { AuthenticatedUserProfile, GlobalLeaderboardEntry } from "../services/backendApi.js";
+import {
+  playerDataSyncService,
+  type PlayerDataSyncStatus,
+} from "../services/playerDataSync.js";
 import { logger } from "../utils/logger.js";
 
 const log = logger.create("LeaderboardModal");
+type SyncIndicatorTone = "ok" | "syncing" | "pending" | "offline" | "error";
 
 export class LeaderboardModal {
   private container: HTMLElement;
@@ -25,6 +33,13 @@ export class LeaderboardModal {
     if (this.activeTab === "global" && this.isVisible()) {
       void this.renderGlobalLeaderboard();
     }
+    this.updateSyncIndicator();
+  };
+  private readonly onDataSyncStatusChanged = () => {
+    this.updateSyncIndicator();
+  };
+  private readonly onLeaderboardSyncStatusChanged = () => {
+    this.updateSyncIndicator();
   };
 
   constructor() {
@@ -32,17 +47,35 @@ export class LeaderboardModal {
     this.contentContainer = this.container.querySelector(".leaderboard-content")!;
     document.body.appendChild(this.container);
     document.addEventListener("auth:firebaseUserChanged", this.onFirebaseAuthChanged as EventListener);
+    document.addEventListener(
+      "sync:playerDataStatusChanged",
+      this.onDataSyncStatusChanged as EventListener
+    );
+    document.addEventListener(
+      "sync:leaderboardStatusChanged",
+      this.onLeaderboardSyncStatusChanged as EventListener
+    );
+    this.updateSyncIndicator();
   }
 
   private createModal(): HTMLElement {
     const modal = document.createElement("div");
     modal.id = "leaderboard-modal";
     modal.className = "modal";
+    const syncIndicator = this.getSyncIndicatorState();
     modal.innerHTML = `
       <div class="modal-backdrop"></div>
       <div class="modal-content leaderboard-modal-content">
         <div class="modal-header">
           <h2>Leaderboard</h2>
+          <div
+            id="leaderboard-sync-indicator"
+            class="sync-indicator sync-indicator--${syncIndicator.tone}"
+            title="${escapeAttribute(syncIndicator.title)}"
+          >
+            <span class="sync-indicator-dot" aria-hidden="true"></span>
+            <span class="sync-indicator-label">${escapeHtml(syncIndicator.label)}</span>
+          </div>
           <button class="modal-close" title="Close (ESC)">&times;</button>
         </div>
         <div class="leaderboard-tabs">
@@ -96,6 +129,7 @@ export class LeaderboardModal {
     } else {
       void this.renderGlobalLeaderboard();
     }
+    this.updateSyncIndicator();
   }
 
   private renderPersonalScores() {
@@ -409,6 +443,7 @@ export class LeaderboardModal {
   show(): void {
     this.container.style.display = "flex";
     this.switchTab("personal"); // Always start on personal tab
+    this.updateSyncIndicator();
   }
 
   /**
@@ -433,7 +468,95 @@ export class LeaderboardModal {
       "auth:firebaseUserChanged",
       this.onFirebaseAuthChanged as EventListener
     );
+    document.removeEventListener(
+      "sync:playerDataStatusChanged",
+      this.onDataSyncStatusChanged as EventListener
+    );
+    document.removeEventListener(
+      "sync:leaderboardStatusChanged",
+      this.onLeaderboardSyncStatusChanged as EventListener
+    );
     this.container.remove();
+  }
+
+  private updateSyncIndicator(): void {
+    const indicator = this.container.querySelector("#leaderboard-sync-indicator");
+    if (!indicator) {
+      return;
+    }
+
+    const state = this.getSyncIndicatorState();
+    indicator.classList.remove(
+      "sync-indicator--ok",
+      "sync-indicator--syncing",
+      "sync-indicator--pending",
+      "sync-indicator--offline",
+      "sync-indicator--error"
+    );
+    indicator.classList.add(`sync-indicator--${state.tone}`);
+    indicator.setAttribute("title", state.title);
+
+    const label = indicator.querySelector(".sync-indicator-label");
+    if (label) {
+      label.textContent = state.label;
+    }
+  }
+
+  private getSyncIndicatorState(): { label: string; tone: SyncIndicatorTone; title: string } {
+    const dataSync: PlayerDataSyncStatus = playerDataSyncService.getSyncStatus();
+    const leaderboardSync: LeaderboardSyncStatus = leaderboardService.getSyncStatus();
+    const pendingCount =
+      dataSync.pendingLogCount +
+      dataSync.pendingScoreLogCount +
+      leaderboardSync.pendingGlobalScores;
+
+    if (!isNavigatorOnline()) {
+      return {
+        label: "Offline",
+        tone: "offline",
+        title: "Offline mode: local scores are queued and will sync later.",
+      };
+    }
+
+    if (dataSync.state === "syncing" || leaderboardSync.state === "syncing") {
+      return {
+        label: "Syncing",
+        tone: "syncing",
+        title: "Sync in progress.",
+      };
+    }
+
+    if (dataSync.state === "error" || leaderboardSync.state === "error") {
+      return {
+        label: "Retry",
+        tone: "error",
+        title: "A recent sync attempt failed. Automatic retry is active.",
+      };
+    }
+
+    if (pendingCount > 0 || dataSync.profileDirty) {
+      return {
+        label: pendingCount > 0 ? `Pending ${pendingCount}` : "Pending",
+        tone: "pending",
+        title: "There are local score/profile updates waiting to sync.",
+      };
+    }
+
+    const latestSuccessAt = Math.max(
+      dataSync.lastSuccessAt,
+      leaderboardSync.lastSuccessAt,
+      leaderboardSync.lastFetchedAt
+    );
+    const suffix =
+      latestSuccessAt > 0
+        ? ` Last update ${formatRelativeSyncTime(latestSuccessAt)}.`
+        : "";
+
+    return {
+      label: "Updated",
+      tone: "ok",
+      title: `Leaderboard data is synchronized.${suffix}`,
+    };
   }
 }
 
@@ -451,4 +574,41 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function escapeAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;");
+}
+
+function formatRelativeSyncTime(timestamp: number): string {
+  const deltaMs = Date.now() - timestamp;
+  if (!Number.isFinite(deltaMs) || deltaMs < 0) {
+    return "just now";
+  }
+  if (deltaMs < 10_000) {
+    return "just now";
+  }
+  const seconds = Math.floor(deltaMs / 1000);
+  if (seconds < 60) {
+    return `${seconds}s ago`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function isNavigatorOnline(): boolean {
+  if (typeof navigator === "undefined" || typeof navigator.onLine !== "boolean") {
+    return true;
+  }
+  return navigator.onLine;
 }

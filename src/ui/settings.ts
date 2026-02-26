@@ -10,7 +10,14 @@ import { notificationService } from "./notifications.js";
 import { ThemeSwitcher } from "./themeSwitcher.js";
 import { GameDifficulty } from "../engine/types.js";
 import { firebaseAuthService } from "../services/firebaseAuth.js";
-import { leaderboardService } from "../services/leaderboard.js";
+import {
+  leaderboardService,
+  type LeaderboardSyncStatus,
+} from "../services/leaderboard.js";
+import {
+  playerDataSyncService,
+  type PlayerDataSyncStatus,
+} from "../services/playerDataSync.js";
 import { scoreHistoryService } from "../services/score-history.js";
 import type { AuthenticatedUserProfile } from "../services/backendApi.js";
 import { logger } from "../utils/logger.js";
@@ -18,6 +25,7 @@ import { logger } from "../utils/logger.js";
 const log = logger.create("SettingsModal");
 
 type SettingsTab = "game" | "graphics" | "audio" | "account";
+type SyncIndicatorTone = "ok" | "syncing" | "pending" | "offline" | "error";
 
 export class SettingsModal {
   private container: HTMLElement;
@@ -33,6 +41,12 @@ export class SettingsModal {
   private readonly onFirebaseAuthChanged = () => {
     leaderboardService.clearCachedProfile();
     void this.refreshAccountSection();
+  };
+  private readonly onDataSyncStatusChanged = () => {
+    this.updateAccountSyncIndicator();
+  };
+  private readonly onLeaderboardSyncStatusChanged = () => {
+    this.updateAccountSyncIndicator();
   };
 
   constructor() {
@@ -544,6 +558,14 @@ export class SettingsModal {
     });
 
     document.addEventListener("auth:firebaseUserChanged", this.onFirebaseAuthChanged as EventListener);
+    document.addEventListener(
+      "sync:playerDataStatusChanged",
+      this.onDataSyncStatusChanged as EventListener
+    );
+    document.addEventListener(
+      "sync:leaderboardStatusChanged",
+      this.onLeaderboardSyncStatusChanged as EventListener
+    );
   }
 
   private setupTabSwitching(): void {
@@ -610,6 +632,7 @@ export class SettingsModal {
           ? "Signed In"
           : "Guest Mode"
         : "Auth Not Configured";
+      const syncIndicator = this.getSyncIndicatorState();
 
       panel.innerHTML = `
         <div class="settings-account-header">
@@ -618,6 +641,14 @@ export class SettingsModal {
             <div class="settings-account-badge">${escapeHtml(authLabel)}</div>
             ${email ? `<div class="settings-account-email">${escapeHtml(email)}</div>` : ""}
             <div class="settings-account-provider">Provider: ${escapeHtml(provider)}</div>
+            <div
+              id="settings-sync-indicator"
+              class="sync-indicator sync-indicator--${syncIndicator.tone}"
+              title="${escapeAttribute(syncIndicator.title)}"
+            >
+              <span class="sync-indicator-dot" aria-hidden="true"></span>
+              <span class="sync-indicator-label">${escapeHtml(syncIndicator.label)}</span>
+            </div>
           </div>
           <div class="settings-account-actions">
             ${
@@ -732,6 +763,86 @@ export class SettingsModal {
           void this.refreshAccountSection();
         });
     });
+  }
+
+  private updateAccountSyncIndicator(): void {
+    const indicator = this.container.querySelector("#settings-sync-indicator");
+    if (!indicator) {
+      return;
+    }
+
+    const state = this.getSyncIndicatorState();
+    indicator.classList.remove(
+      "sync-indicator--ok",
+      "sync-indicator--syncing",
+      "sync-indicator--pending",
+      "sync-indicator--offline",
+      "sync-indicator--error"
+    );
+    indicator.classList.add(`sync-indicator--${state.tone}`);
+    indicator.setAttribute("title", state.title);
+
+    const label = indicator.querySelector(".sync-indicator-label");
+    if (label) {
+      label.textContent = state.label;
+    }
+  }
+
+  private getSyncIndicatorState(): { label: string; tone: SyncIndicatorTone; title: string } {
+    const dataSync: PlayerDataSyncStatus = playerDataSyncService.getSyncStatus();
+    const leaderboardSync: LeaderboardSyncStatus = leaderboardService.getSyncStatus();
+    const pendingCount =
+      dataSync.pendingLogCount +
+      dataSync.pendingScoreLogCount +
+      leaderboardSync.pendingGlobalScores;
+
+    if (!isNavigatorOnline()) {
+      return {
+        label: "Offline",
+        tone: "offline",
+        title: "Offline: local progress is cached and will sync when connection returns.",
+      };
+    }
+
+    if (dataSync.state === "syncing" || leaderboardSync.state === "syncing") {
+      return {
+        label: "Syncing",
+        tone: "syncing",
+        title: "Sync in progress.",
+      };
+    }
+
+    if (dataSync.state === "error" || leaderboardSync.state === "error") {
+      return {
+        label: "Retrying",
+        tone: "error",
+        title: "A recent sync attempt failed. The app will retry automatically.",
+      };
+    }
+
+    if (pendingCount > 0 || dataSync.profileDirty) {
+      return {
+        label: pendingCount > 0 ? `Pending ${pendingCount}` : "Pending",
+        tone: "pending",
+        title: "There are local changes waiting to sync.",
+      };
+    }
+
+    const latestSuccessAt = Math.max(
+      dataSync.lastSuccessAt,
+      leaderboardSync.lastSuccessAt,
+      leaderboardSync.lastFetchedAt
+    );
+    const suffix =
+      latestSuccessAt > 0
+        ? ` Last update ${formatRelativeSyncTime(latestSuccessAt)}.`
+        : "";
+
+    return {
+      label: "Up to date",
+      tone: "ok",
+      title: `All local data is synced.${suffix}`,
+    };
   }
 
   /**
@@ -890,4 +1001,35 @@ function escapeAttribute(value: string): string {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll('"', "&quot;");
+}
+
+function formatRelativeSyncTime(timestamp: number): string {
+  const deltaMs = Date.now() - timestamp;
+  if (!Number.isFinite(deltaMs) || deltaMs < 0) {
+    return "just now";
+  }
+  if (deltaMs < 10_000) {
+    return "just now";
+  }
+  const seconds = Math.floor(deltaMs / 1000);
+  if (seconds < 60) {
+    return `${seconds}s ago`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function isNavigatorOnline(): boolean {
+  if (typeof navigator === "undefined" || typeof navigator.onLine !== "boolean") {
+    return true;
+  }
+  return navigator.onLine;
 }
