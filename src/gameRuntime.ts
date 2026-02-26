@@ -14,7 +14,7 @@ import { ProfileModal } from "./ui/profile.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
 import { GameState, Action, GameDifficulty } from "./engine/types.js";
-import { Color3, PointerEventTypes } from "@babylonjs/core";
+import { Color3, PointerEventTypes, Vector3 } from "@babylonjs/core";
 import { audioService } from "./services/audio.js";
 import { hapticsService } from "./services/haptics.js";
 import { settingsService } from "./services/settings.js";
@@ -76,6 +76,9 @@ interface SeatedMultiplayerParticipant {
   isBot: boolean;
   isReady: boolean;
   score: number;
+  remainingDice: number;
+  isComplete: boolean;
+  completedAt: number | null;
 }
 
 function formatCameraAttackLabel(effectType: string): string {
@@ -96,6 +99,20 @@ function formatCameraAttackLabel(effectType: string): string {
 function normalizeParticipantScore(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     return 0;
+  }
+  return Math.floor(value);
+}
+
+function normalizeRemainingDice(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+  return Math.floor(value);
+}
+
+function normalizeCompletedAt(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
   }
   return Math.floor(value);
 }
@@ -137,6 +154,7 @@ class Game implements GameCallbacks {
   private participantSeatById = new Map<string, number>();
   private participantLabelById = new Map<string, string>();
   private lastTurnPlanPreview = "";
+  private lastSessionComplete = false;
 
   private actionBtn: HTMLButtonElement;
   private deselectBtn: HTMLButtonElement;
@@ -632,7 +650,9 @@ class Game implements GameCallbacks {
     const participantBySeat = new Map<number, SeatedMultiplayerParticipant>();
     this.participantSeatById.clear();
     this.participantLabelById.clear();
-    const showReadyState = seatedParticipants.filter((participant) => !participant.isBot).length > 1;
+    const showReadyState =
+      seatedParticipants.filter((participant) => !participant.isBot && !participant.isComplete)
+        .length > 1;
     seatedParticipants.forEach((participant) => {
       participantBySeat.set(participant.seatIndex, participant);
       const isCurrentPlayer = participant.playerId === this.localPlayerId;
@@ -656,6 +676,8 @@ class Game implements GameCallbacks {
           isBot: participant.isBot,
           playerName: this.formatSeatDisplayName(participant, isCurrentPlayer, showReadyState),
           avatarColor: this.resolveSeatColor(participant, isCurrentPlayer),
+          score: participant.score,
+          isComplete: participant.isComplete,
         });
         continue;
       }
@@ -667,6 +689,8 @@ class Game implements GameCallbacks {
         isBot: false,
         playerName: isCurrentSeat ? "YOU" : "Empty",
         avatarColor: isCurrentSeat ? new Color3(0.24, 0.84, 0.36) : undefined,
+        score: isCurrentSeat ? this.state.score : undefined,
+        isComplete: false,
       });
     }
 
@@ -694,6 +718,7 @@ class Game implements GameCallbacks {
       this.lastTurnPlanPreview = "";
     }
 
+    this.updateMultiplayerStandingsHud(session, seatedParticipants);
     this.applyTurnStateFromSession(session);
   }
 
@@ -719,6 +744,9 @@ class Game implements GameCallbacks {
       isBot: false,
       isReady: localParticipant?.isReady === true,
       score: normalizeParticipantScore(localParticipant?.score),
+      remainingDice: normalizeRemainingDice(localParticipant?.remainingDice),
+      isComplete: localParticipant?.isComplete === true,
+      completedAt: normalizeCompletedAt(localParticipant?.completedAt),
     });
 
     const others = normalizedParticipants.filter(
@@ -733,6 +761,9 @@ class Game implements GameCallbacks {
         isBot: participant.isBot,
         isReady: participant.isReady,
         score: participant.score,
+        remainingDice: participant.remainingDice,
+        isComplete: participant.isComplete,
+        completedAt: participant.completedAt,
       });
     });
 
@@ -747,6 +778,9 @@ class Game implements GameCallbacks {
     isBot: boolean;
     isReady: boolean;
     score: number;
+    remainingDice: number;
+    isComplete: boolean;
+    completedAt: number | null;
     joinedAt: number;
   }> {
     const seen = new Map<
@@ -757,6 +791,9 @@ class Game implements GameCallbacks {
         isBot: boolean;
         isReady: boolean;
         score: number;
+        remainingDice: number;
+        isComplete: boolean;
+        completedAt: number | null;
         joinedAt: number;
       }
     >();
@@ -783,6 +820,9 @@ class Game implements GameCallbacks {
         isBot: Boolean(participant.isBot),
         isReady: Boolean(participant.isBot) ? true : participant.isReady === true,
         score: normalizeParticipantScore(participant.score),
+        remainingDice: normalizeRemainingDice(participant.remainingDice),
+        isComplete: participant.isComplete === true,
+        completedAt: normalizeCompletedAt(participant.completedAt),
         joinedAt:
           typeof participant.joinedAt === "number" && Number.isFinite(participant.joinedAt)
             ? participant.joinedAt
@@ -797,6 +837,9 @@ class Game implements GameCallbacks {
         isBot: false,
         isReady: true,
         score: normalizeParticipantScore(this.state.score),
+        remainingDice: 0,
+        isComplete: false,
+        completedAt: null,
         joinedAt: -1,
       });
     }
@@ -844,14 +887,16 @@ class Game implements GameCallbacks {
     showReadyState: boolean
   ): string {
     const label = this.formatParticipantLabel(participant, isCurrentPlayer);
-    const scoreText = ` • ${normalizeParticipantScore(participant.score)}`;
+    if (participant.isComplete) {
+      return `${label} • DONE`.slice(0, 24);
+    }
     const readinessText =
       !participant.isBot && showReadyState
         ? participant.isReady
           ? " • READY"
           : " • WAIT"
         : "";
-    return `${label}${scoreText}${readinessText}`.slice(0, 24);
+    return `${label}${readinessText}`.slice(0, 24);
   }
 
   private resolveSeatColor(
@@ -875,10 +920,51 @@ class Game implements GameCallbacks {
     return `${labels.slice(0, 5).join(" -> ")} -> ...`;
   }
 
+  private updateMultiplayerStandingsHud(
+    session: MultiplayerSessionRecord,
+    seatedParticipants: SeatedMultiplayerParticipant[]
+  ): void {
+    const participants = Array.isArray(session.standings) && session.standings.length > 0
+      ? session.standings
+      : seatedParticipants.map((participant) => ({
+          playerId: participant.playerId,
+          displayName: participant.displayName,
+          isBot: participant.isBot,
+          score: participant.score,
+          isComplete: participant.isComplete,
+          placement: 0,
+        }));
+
+    const entries = participants.map((participant, index) => {
+      const playerId = participant.playerId;
+      const label =
+        playerId === this.localPlayerId
+          ? "YOU"
+          : this.participantLabelById.get(playerId) ??
+            (participant.displayName?.trim() ||
+              this.buildDefaultParticipantName(playerId, Boolean(participant.isBot)));
+      return {
+        playerId,
+        label,
+        score: normalizeParticipantScore(participant.score),
+        placement:
+          typeof participant.placement === "number" && Number.isFinite(participant.placement)
+            ? Math.max(1, Math.floor(participant.placement))
+            : index + 1,
+        isBot: Boolean(participant.isBot),
+        isComplete: participant.isComplete === true,
+        isCurrentPlayer: playerId === this.localPlayerId,
+      };
+    });
+
+    this.hud.setMultiplayerStandings(entries, session.turnState?.activeTurnPlayerId ?? null);
+  }
+
   private applyTurnStateFromSession(session: MultiplayerSessionRecord): void {
     this.awaitingMultiplayerRoll = false;
     this.applyTurnTiming(session.turnState?.turnExpiresAt);
     const serverActiveTurnPlayerId = session.turnState?.activeTurnPlayerId ?? null;
+    this.hud.setMultiplayerActiveTurn(serverActiveTurnPlayerId);
     if (serverActiveTurnPlayerId) {
       this.activeTurnPlayerId = serverActiveTurnPlayerId;
       this.activeRollServerId =
@@ -913,10 +999,10 @@ class Game implements GameCallbacks {
     this.pendingTurnEndSync = false;
     this.applyTurnTiming(null);
     this.updateTurnSeatHighlight(fallbackActive);
+    this.hud.setMultiplayerActiveTurn(fallbackActive);
   }
 
   private updateTurnSeatHighlight(activePlayerId: string | null): void {
-    this.scene.playerSeatRenderer.clearHighlights();
     if (!activePlayerId) {
       this.scene.playerSeatRenderer.highlightSeat(this.scene.currentPlayerSeat);
       return;
@@ -929,6 +1015,39 @@ class Game implements GameCallbacks {
     }
 
     this.scene.playerSeatRenderer.highlightSeat(this.scene.currentPlayerSeat);
+  }
+
+  private getSeatScoreZonePosition(playerId: string): { seatIndex: number; x: number; y: number; z: number } | null {
+    const seatIndex = this.participantSeatById.get(playerId);
+    if (typeof seatIndex !== "number") {
+      return null;
+    }
+    const center = this.scene.playerSeatRenderer.getSeatScoreZonePosition(seatIndex);
+    if (!center) {
+      return null;
+    }
+    return {
+      seatIndex,
+      x: center.x,
+      y: center.y,
+      z: center.z,
+    };
+  }
+
+  private buildSpectatorPreviewKey(playerId: string): string {
+    const sessionId =
+      this.multiplayerSessionService.getActiveSession()?.sessionId ??
+      this.multiplayerOptions.roomCode ??
+      "multiplayer";
+    return `${sessionId}:${playerId}`;
+  }
+
+  private cancelSpectatorPreviewForPlayer(playerId: string | null | undefined): void {
+    const targetPlayerId = typeof playerId === "string" ? playerId.trim() : "";
+    if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
+      return;
+    }
+    this.diceRenderer.cancelSpectatorPreview(this.buildSpectatorPreviewKey(targetPlayerId));
   }
 
   private getParticipantLabel(playerId: string): string {
@@ -952,11 +1071,20 @@ class Game implements GameCallbacks {
     }
 
     const hasTurnState = Object.prototype.hasOwnProperty.call(message, "turnState");
+    const hasStandings = Object.prototype.hasOwnProperty.call(message, "standings");
+    const hasCompletedAt = Object.prototype.hasOwnProperty.call(message, "completedAt");
     const syncedSession = this.multiplayerSessionService.syncSessionState({
       sessionId: message.sessionId,
       roomCode: message.roomCode,
       participants: message.participants,
+      ...(hasStandings ? { standings: message.standings } : {}),
       ...(hasTurnState ? { turnState: message.turnState ?? null } : {}),
+      ...(typeof message.sessionComplete === "boolean"
+        ? { sessionComplete: message.sessionComplete }
+        : {}),
+      ...(hasCompletedAt
+        ? { completedAt: message.completedAt ?? null }
+        : {}),
       ...(typeof message.expiresAt === "number" && Number.isFinite(message.expiresAt)
         ? { expiresAt: message.expiresAt }
         : {}),
@@ -966,6 +1094,12 @@ class Game implements GameCallbacks {
     }
 
     this.applyMultiplayerSeatState(syncedSession);
+    if (syncedSession.sessionComplete === true && !this.lastSessionComplete) {
+      this.lastSessionComplete = true;
+      notificationService.show("Session complete. Final standings locked.", "success", 2600);
+    } else if (syncedSession.sessionComplete !== true) {
+      this.lastSessionComplete = false;
+    }
   }
 
   private handleMultiplayerTurnStart(message: MultiplayerTurnStartMessage): void {
@@ -973,9 +1107,11 @@ class Game implements GameCallbacks {
       return;
     }
 
+    const previousActiveTurnPlayerId = this.activeTurnPlayerId;
     this.awaitingMultiplayerRoll = false;
     this.applyTurnTiming(message.turnExpiresAt ?? null);
     this.activeTurnPlayerId = message.playerId;
+    this.hud.setMultiplayerActiveTurn(message.playerId);
     this.activeRollServerId =
       message.playerId === this.localPlayerId &&
       typeof message.activeRollServerId === "string" &&
@@ -988,6 +1124,9 @@ class Game implements GameCallbacks {
       message.phase,
       message.activeRoll
     );
+    if (previousActiveTurnPlayerId && previousActiveTurnPlayerId !== message.playerId) {
+      this.cancelSpectatorPreviewForPlayer(previousActiveTurnPlayerId);
+    }
 
     if (message.playerId === this.localPlayerId) {
       const suffix =
@@ -1012,9 +1151,11 @@ class Game implements GameCallbacks {
 
     this.pendingTurnEndSync = false;
     this.applyTurnTiming(null);
+    this.hud.setMultiplayerActiveTurn(null);
     if (typeof message.playerId !== "string" || !message.playerId) {
       return;
     }
+    this.cancelSpectatorPreviewForPlayer(message.playerId);
 
     if (message.playerId === this.localPlayerId) {
       notificationService.show("Turn ended", "info", 1200);
@@ -1074,6 +1215,7 @@ class Game implements GameCallbacks {
     if (!playerId) {
       return;
     }
+    this.cancelSpectatorPreviewForPlayer(playerId);
     const targetLabel = this.getParticipantLabel(playerId);
     notificationService.show(`${targetLabel} turn timed out`, "warning", 1800);
   }
@@ -1107,9 +1249,50 @@ class Game implements GameCallbacks {
       return;
     }
 
+    const seatScoreZone = this.getSeatScoreZonePosition(message.playerId);
+    const spectatorPreviewKey = this.buildSpectatorPreviewKey(message.playerId);
+    if (message.action === "roll" && seatScoreZone && message.roll) {
+      this.diceRenderer.startSpectatorRollPreview(
+        spectatorPreviewKey,
+        message.roll,
+        new Vector3(seatScoreZone.x, seatScoreZone.y, seatScoreZone.z)
+      );
+    }
+
+    if (message.action === "score") {
+      const scoreSelection = Array.isArray(message.score?.selectedDiceIds)
+        ? message.score?.selectedDiceIds ?? []
+        : [];
+      const selectedDiceIds = scoreSelection.filter(
+        (dieId): dieId is string => typeof dieId === "string" && dieId.trim().length > 0
+      );
+      const previewCompleted =
+        selectedDiceIds.length > 0
+          ? this.diceRenderer.completeSpectatorScorePreview(spectatorPreviewKey, selectedDiceIds)
+          : false;
+
+      if (!previewCompleted && seatScoreZone) {
+        this.scene.playerSeatRenderer.pulseScoreZone(seatScoreZone.seatIndex);
+        particleService.emit({
+          effectId: "burst-gold",
+          position: new Vector3(seatScoreZone.x, seatScoreZone.y + 0.45, seatScoreZone.z),
+          options: {
+            scale: 0.4,
+            networkSync: false,
+          },
+        });
+      }
+    }
+
     const actionLabel = message.action === "score" ? "scored" : "rolled";
+    const scoreSuffix =
+      message.action === "score" &&
+      typeof message.score?.points === "number" &&
+      Number.isFinite(message.score.points)
+        ? ` (+${Math.max(0, Math.floor(message.score.points))})`
+        : "";
     notificationService.show(
-      `${this.getParticipantLabel(message.playerId)} ${actionLabel}`,
+      `${this.getParticipantLabel(message.playerId)} ${actionLabel}${scoreSuffix}`,
       "info",
       1200
     );
@@ -1153,12 +1336,26 @@ class Game implements GameCallbacks {
     }
   }
 
-  private getHumanParticipantCount(): number {
+  private hasActiveHumanOpponent(): boolean {
     const participants = this.multiplayerSessionService.getActiveSession()?.participants ?? [];
-    if (!Array.isArray(participants) || participants.length === 0) {
-      return 0;
-    }
-    return participants.filter((participant) => participant && !participant.isBot).length;
+    return participants.some(
+      (participant) =>
+        participant &&
+        participant.playerId !== this.localPlayerId &&
+        !participant.isBot &&
+        participant.isComplete !== true
+    );
+  }
+
+  private hasActiveBotOpponent(): boolean {
+    const participants = this.multiplayerSessionService.getActiveSession()?.participants ?? [];
+    return participants.some(
+      (participant) =>
+        participant &&
+        participant.playerId !== this.localPlayerId &&
+        participant.isBot === true &&
+        participant.isComplete !== true
+    );
   }
 
   private isMultiplayerTurnEnforced(): boolean {
@@ -1166,8 +1363,20 @@ class Game implements GameCallbacks {
       return false;
     }
 
-    // Single-human sessions should keep playing locally even if turn sync stalls.
-    return this.getHumanParticipantCount() > 1;
+    if (this.multiplayerSessionService.getActiveSession()?.sessionComplete === true) {
+      return false;
+    }
+
+    if (this.hasActiveHumanOpponent()) {
+      return true;
+    }
+
+    if (!this.hasActiveBotOpponent()) {
+      return false;
+    }
+
+    // Bot-only sessions fall back to local play if socket sync is unavailable.
+    return this.multiplayerNetwork?.isConnected() === true;
   }
 
   private canLocalPlayerTakeTurnAction(): boolean {
@@ -1457,7 +1666,10 @@ class Game implements GameCallbacks {
     this.awaitingMultiplayerRoll = false;
     this.pendingTurnEndSync = false;
     this.applyTurnTiming(null);
+    this.diceRenderer.cancelAllSpectatorPreviews();
     this.lastTurnPlanPreview = "";
+    this.lastSessionComplete = false;
+    this.hud.setMultiplayerStandings([], null);
     playerDataSyncService.setSessionId(undefined);
     this.clearSessionQueryParam();
 
@@ -1805,6 +2017,7 @@ class Game implements GameCallbacks {
     audioService.playSfx("score");
     hapticsService.score();
 
+    const localSeatScoreZone = this.getSeatScoreZonePosition(this.localPlayerId);
     this.diceRenderer.animateScore(this.state.dice, selected, () => {
       this.animating = false;
       this.updateUI();
@@ -1817,7 +2030,9 @@ class Game implements GameCallbacks {
       } else {
         notificationService.show(`+${points}`, "success");
       }
-    });
+    }, localSeatScoreZone
+      ? new Vector3(localSeatScoreZone.x, localSeatScoreZone.y, localSeatScoreZone.z)
+      : undefined);
 
     this.dispatch({ t: "SCORE_SELECTED" });
     this.emitTurnEnd();
@@ -1860,6 +2075,9 @@ class Game implements GameCallbacks {
 
   private updateUI(): void {
     this.hud.update(this.state);
+    this.scene.playerSeatRenderer.updateSeat(this.scene.currentPlayerSeat, {
+      score: this.state.score,
+    });
     this.diceRow.update(this.state);
     const isTurnLocked =
       this.isMultiplayerTurnEnforced() &&

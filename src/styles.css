@@ -183,6 +183,66 @@ h1, h2, h3, h4, h5, h6 {
   align-items: center;
 }
 
+#multiplayer-scoreboard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(4, 12, 24, 0.78);
+  border-radius: 0 0 8px 8px;
+  border-top: 1px solid rgba(139, 191, 255, 0.22);
+}
+
+.multiplayer-scoreboard__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  min-width: 128px;
+}
+
+.multiplayer-scoreboard__row.is-self {
+  border-color: rgba(119, 237, 168, 0.72);
+  background: rgba(47, 136, 86, 0.35);
+}
+
+.multiplayer-scoreboard__row.is-complete {
+  opacity: 0.88;
+}
+
+.multiplayer-scoreboard__row.is-active-turn {
+  border-color: rgba(255, 208, 115, 0.95);
+  box-shadow: 0 0 10px rgba(255, 193, 83, 0.32);
+}
+
+.multiplayer-scoreboard__rank {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.multiplayer-scoreboard__name {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.multiplayer-scoreboard__meta {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.multiplayer-scoreboard__score {
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 700;
+  color: #9fe7ff;
+}
+
 .stat-compact {
   display: flex;
   align-items: center;
@@ -2880,6 +2940,25 @@ button.danger:hover:not(:disabled) {
     gap: 16px;
     padding: 6px 12px;
     font-size: 10px;
+  }
+
+  #multiplayer-scoreboard {
+    padding: 6px 8px;
+    gap: 5px;
+  }
+
+  .multiplayer-scoreboard__row {
+    min-width: 108px;
+    gap: 6px;
+    padding: 4px 8px;
+  }
+
+  .multiplayer-scoreboard__name {
+    font-size: 11px;
+  }
+
+  .multiplayer-scoreboard__score {
+    font-size: 12px;
   }
 
   #profile-btn {

@@ -4,6 +4,16 @@ import { getDifficultyName } from "../engine/modes.js";
 
 const TIME_ATTACK_DURATION_MS = 5 * 60 * 1000;
 
+interface MultiplayerHudStandingEntry {
+  playerId: string;
+  label: string;
+  score: number;
+  placement: number;
+  isBot: boolean;
+  isComplete: boolean;
+  isCurrentPlayer: boolean;
+}
+
 export class HUD {
   private rollCountEl: HTMLElement;
   private scoreEl: HTMLElement;
@@ -12,11 +22,14 @@ export class HUD {
   private poolListEl: HTMLElement;
   private modeDisplayEl: HTMLElement;
   private modeDropdownEl: HTMLElement;
+  private multiplayerStandingsEl: HTMLElement | null;
   private isDropdownOpen: boolean = false;
   private onModeChange: ((difficulty: GameDifficulty) => void) | null = null;
   private gameStartAtMs = Date.now();
   private turnDeadlineAtMs: number | null = null;
   private currentVariant: GameState["mode"]["variant"] = "classic";
+  private multiplayerStandings: MultiplayerHudStandingEntry[] = [];
+  private multiplayerActivePlayerId: string | null = null;
 
   constructor() {
     this.rollCountEl = document.getElementById("roll-count")!;
@@ -26,6 +39,7 @@ export class HUD {
     this.poolListEl = document.getElementById("pool-list")!;
     this.modeDisplayEl = document.getElementById("mode-display")!;
     this.modeDropdownEl = document.getElementById("mode-dropdown")!;
+    this.multiplayerStandingsEl = document.getElementById("multiplayer-scoreboard");
 
     // Setup mode switcher
     this.setupModeSwitcher();
@@ -68,6 +82,55 @@ export class HUD {
 
   setOnModeChange(callback: (difficulty: GameDifficulty) => void) {
     this.onModeChange = callback;
+  }
+
+  setMultiplayerStandings(
+    entries: Array<{
+      playerId: string;
+      label: string;
+      score: number;
+      placement: number;
+      isBot: boolean;
+      isComplete: boolean;
+      isCurrentPlayer: boolean;
+    }>,
+    activePlayerId: string | null
+  ): void {
+    this.multiplayerStandings = Array.isArray(entries)
+      ? entries
+          .filter((entry) => entry && typeof entry.playerId === "string")
+          .map((entry, index) => ({
+            playerId: entry.playerId,
+            label:
+              typeof entry.label === "string" && entry.label.trim().length > 0
+                ? entry.label.trim().slice(0, 20)
+                : `Player ${entry.playerId.slice(0, 4)}`,
+            score:
+              typeof entry.score === "number" && Number.isFinite(entry.score)
+                ? Math.max(0, Math.floor(entry.score))
+                : 0,
+            placement:
+              typeof entry.placement === "number" && Number.isFinite(entry.placement)
+                ? Math.max(1, Math.floor(entry.placement))
+                : index + 1,
+            isBot: entry.isBot === true,
+            isComplete: entry.isComplete === true,
+            isCurrentPlayer: entry.isCurrentPlayer === true,
+          }))
+      : [];
+    this.multiplayerActivePlayerId =
+      typeof activePlayerId === "string" && activePlayerId.trim().length > 0
+        ? activePlayerId
+        : null;
+    this.renderMultiplayerStandings();
+  }
+
+  setMultiplayerActiveTurn(activePlayerId: string | null): void {
+    this.multiplayerActivePlayerId =
+      typeof activePlayerId === "string" && activePlayerId.trim().length > 0
+        ? activePlayerId
+        : null;
+    this.renderMultiplayerStandings();
   }
 
   setGameClockStart(startAtMs: number): void {
@@ -191,5 +254,53 @@ export class HUD {
       20: "⭓",  // Icosahedron (circle with dot)
     };
     return shapes[sides] || "●";
+  }
+
+  private renderMultiplayerStandings(): void {
+    if (!this.multiplayerStandingsEl) {
+      return;
+    }
+
+    if (this.multiplayerStandings.length <= 1) {
+      this.multiplayerStandingsEl.style.display = "none";
+      this.multiplayerStandingsEl.innerHTML = "";
+      return;
+    }
+
+    this.multiplayerStandingsEl.style.display = "flex";
+    this.multiplayerStandingsEl.innerHTML = "";
+
+    this.multiplayerStandings.forEach((entry) => {
+      const row = document.createElement("div");
+      row.className = "multiplayer-scoreboard__row";
+      if (entry.isCurrentPlayer) {
+        row.classList.add("is-self");
+      }
+      if (entry.isComplete) {
+        row.classList.add("is-complete");
+      }
+      if (this.multiplayerActivePlayerId === entry.playerId) {
+        row.classList.add("is-active-turn");
+      }
+
+      const rank = document.createElement("span");
+      rank.className = "multiplayer-scoreboard__rank";
+      rank.textContent = `#${entry.placement}`;
+
+      const name = document.createElement("span");
+      name.className = "multiplayer-scoreboard__name";
+      name.textContent = entry.label;
+
+      const meta = document.createElement("span");
+      meta.className = "multiplayer-scoreboard__meta";
+      meta.textContent = entry.isComplete ? "DONE" : entry.isBot ? "BOT" : "LIVE";
+
+      const score = document.createElement("span");
+      score.className = "multiplayer-scoreboard__score";
+      score.textContent = `${entry.score}`;
+
+      row.append(rank, name, meta, score);
+      this.multiplayerStandingsEl?.appendChild(row);
+    });
   }
 }

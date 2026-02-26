@@ -176,6 +176,7 @@ async function run() {
     rolledD6 && Number.isFinite(rolledD6.sides) && Number.isFinite(rolledD6.value)
       ? Math.floor(rolledD6.sides) - Math.floor(rolledD6.value)
       : NaN;
+  const expectedRemainingAfterScore = 14;
   assert(
     Number.isFinite(expectedScorePoints) && expectedScorePoints >= 0,
     "expected score points not derivable from server roll"
@@ -277,6 +278,11 @@ async function run() {
     hostParticipantAfterScore?.score,
     expectedScorePoints,
     "expected host participant score update after validated score action"
+  );
+  assert(
+    Number.isFinite(hostParticipantAfterScore?.remainingDice) &&
+      hostParticipantAfterScore.remainingDice === expectedRemainingAfterScore,
+    "expected host remainingDice to decrement after score action"
   );
 
   const guestTurnEndedPromise = waitForBufferedMessage(

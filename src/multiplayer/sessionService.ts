@@ -82,7 +82,10 @@ export class MultiplayerSessionService {
     sessionId?: string;
     roomCode?: string;
     participants?: MultiplayerSessionRecord["participants"];
+    standings?: MultiplayerSessionRecord["standings"];
     turnState?: MultiplayerSessionRecord["turnState"];
+    sessionComplete?: boolean;
+    completedAt?: number | null;
     expiresAt?: number;
   }): MultiplayerSessionRecord | null {
     const current = this.activeSession;
@@ -106,8 +109,20 @@ export class MultiplayerSessionService {
     if (Array.isArray(update.participants)) {
       nextSession.participants = update.participants;
     }
+    if (Array.isArray(update.standings)) {
+      nextSession.standings = update.standings;
+    }
     if (Object.prototype.hasOwnProperty.call(update, "turnState")) {
       nextSession.turnState = update.turnState ?? null;
+    }
+    if (typeof update.sessionComplete === "boolean") {
+      nextSession.sessionComplete = update.sessionComplete;
+    }
+    if (Object.prototype.hasOwnProperty.call(update, "completedAt")) {
+      nextSession.completedAt =
+        typeof update.completedAt === "number" && Number.isFinite(update.completedAt)
+          ? Math.floor(update.completedAt)
+          : null;
     }
     if (typeof update.expiresAt === "number" && Number.isFinite(update.expiresAt)) {
       nextSession.expiresAt = Math.floor(update.expiresAt);

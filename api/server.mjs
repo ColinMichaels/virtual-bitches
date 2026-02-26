@@ -35,9 +35,12 @@ const MAX_MULTIPLAYER_BOTS = 4;
 const BOT_TICK_MIN_MS = 4500;
 const BOT_TICK_MAX_MS = 9000;
 const BOT_NAMES = ["Byte Bessie", "Lag Larry", "Packet Patty", "Dicebot Dave"];
+const BOT_PROFILES = ["cautious", "balanced", "aggressive"];
 const BOT_CAMERA_EFFECTS = ["shake"];
 const BOT_TURN_ADVANCE_MIN_MS = 1600;
 const BOT_TURN_ADVANCE_MAX_MS = 3200;
+const DEFAULT_PARTICIPANT_DICE_COUNT = 15;
+const BOT_ROLL_DICE_SIDES = [8, 12, 10, 6, 6, 6, 20, 6, 4, 6, 6, 6, 10, 6, 6];
 const TURN_TIMEOUT_MS = normalizeTurnTimeoutValue(process.env.TURN_TIMEOUT_MS, 45000);
 const TURN_TIMEOUT_WARNING_MS = normalizeTurnWarningValue(
   process.env.TURN_TIMEOUT_WARNING_MS,
@@ -532,19 +535,27 @@ async function handleCreateSession(req, res) {
       lastHeartbeatAt: now,
       isReady: false,
       score: 0,
+      remainingDice: DEFAULT_PARTICIPANT_DICE_COUNT,
+      isComplete: false,
+      completedAt: null,
     },
   };
 
   for (let index = 0; index < botCount; index += 1) {
     const botId = `bot-${sessionId.slice(0, 6)}-${index + 1}`;
+    const botProfile = BOT_PROFILES[index % BOT_PROFILES.length];
     participants[botId] = {
       playerId: botId,
       displayName: BOT_NAMES[index % BOT_NAMES.length],
       joinedAt: now,
       lastHeartbeatAt: now,
       isBot: true,
+      botProfile,
       isReady: true,
       score: 0,
+      remainingDice: DEFAULT_PARTICIPANT_DICE_COUNT,
+      isComplete: false,
+      completedAt: null,
     };
   }
 
@@ -590,6 +601,9 @@ async function handleJoinSession(req, res, pathname) {
     lastHeartbeatAt: Date.now(),
     isReady: false,
     score: normalizeParticipantScore(existingParticipant?.score),
+    remainingDice: normalizeParticipantRemainingDice(existingParticipant?.remainingDice),
+    isComplete: existingParticipant?.isComplete === true,
+    completedAt: normalizeParticipantCompletedAt(existingParticipant?.completedAt),
   };
   ensureSessionTurnState(session);
   reconcileSessionLoops(sessionId);
@@ -1135,6 +1149,9 @@ function buildSessionResponse(session, playerId, auth) {
     auth,
     participants: snapshot.participants,
     turnState: snapshot.turnState,
+    standings: snapshot.standings,
+    sessionComplete: snapshot.sessionComplete,
+    completedAt: snapshot.completedAt,
     createdAt: snapshot.createdAt,
     expiresAt: snapshot.expiresAt,
   };
@@ -1142,11 +1159,18 @@ function buildSessionResponse(session, playerId, auth) {
 
 function buildSessionSnapshot(session) {
   const turnState = ensureSessionTurnState(session);
+  const participants = serializeSessionParticipants(session);
+  const standings = buildSessionStandings(session);
+  const sessionComplete =
+    standings.length > 0 && standings.every((participant) => participant.isComplete === true);
   return {
     sessionId: session.sessionId,
     roomCode: session.roomCode,
-    participants: serializeSessionParticipants(session),
+    participants,
     turnState: serializeTurnState(turnState),
+    standings,
+    sessionComplete,
+    completedAt: sessionComplete ? resolveSessionCompletedAt(standings) : null,
     createdAt: session.createdAt,
     expiresAt: session.expiresAt,
   };
@@ -1348,6 +1372,12 @@ function normalizeTurnScoreSummary(value) {
   if (!rollServerId) {
     return null;
   }
+
+  const remainingDice = normalizeParticipantRemainingDice(
+    value.remainingDice,
+    DEFAULT_PARTICIPANT_DICE_COUNT
+  );
+  const isComplete = value.isComplete === true || remainingDice === 0;
   return {
     selectedDiceIds,
     points,
@@ -1357,6 +1387,8 @@ function normalizeTurnScoreSummary(value) {
       Number.isFinite(projectedTotalScore) && projectedTotalScore >= 0
         ? projectedTotalScore
         : null,
+    remainingDice,
+    isComplete,
     updatedAt: Number.isFinite(value.updatedAt) ? Number(value.updatedAt) : Date.now(),
   };
 }
@@ -1526,20 +1558,30 @@ function parseTurnScorePayload(payload, lastRollSnapshot) {
 function serializeSessionParticipants(session) {
   const participants = Object.values(session?.participants ?? {})
     .filter((participant) => participant && typeof participant.playerId === "string")
-    .map((participant) => ({
-      playerId: participant.playerId,
-      displayName:
-        typeof participant.displayName === "string" ? participant.displayName : undefined,
-      joinedAt:
-        typeof participant.joinedAt === "number" ? participant.joinedAt : Date.now(),
-      lastHeartbeatAt:
-        typeof participant.lastHeartbeatAt === "number"
-          ? participant.lastHeartbeatAt
-          : Date.now(),
-      isBot: Boolean(participant.isBot),
-      isReady: participant.isBot ? true : participant.isReady === true,
-      score: normalizeParticipantScore(participant.score),
-    }))
+    .map((participant) => {
+      const remainingDice = normalizeParticipantRemainingDice(participant.remainingDice);
+      const isComplete = participant.isComplete === true || remainingDice === 0;
+      return {
+        playerId: participant.playerId,
+        displayName:
+          typeof participant.displayName === "string" ? participant.displayName : undefined,
+        joinedAt:
+          typeof participant.joinedAt === "number" ? participant.joinedAt : Date.now(),
+        lastHeartbeatAt:
+          typeof participant.lastHeartbeatAt === "number"
+            ? participant.lastHeartbeatAt
+            : Date.now(),
+        isBot: Boolean(participant.isBot),
+        botProfile: participant.isBot ? normalizeBotProfile(participant.botProfile) : undefined,
+        isReady: participant.isBot ? true : participant.isReady === true,
+        score: normalizeParticipantScore(participant.score),
+        remainingDice,
+        isComplete,
+        completedAt: isComplete
+          ? normalizeParticipantCompletedAt(participant.completedAt)
+          : null,
+      };
+    })
     .sort((left, right) => {
       const joinedDelta = left.joinedAt - right.joinedAt;
       if (joinedDelta !== 0) {
@@ -1556,6 +1598,7 @@ function serializeParticipantsInJoinOrder(session) {
     .filter((participant) => participant && typeof participant.playerId === "string")
     .map((participant) => ({
       playerId: participant.playerId,
+      isComplete: isParticipantComplete(participant),
       joinedAt:
         typeof participant.joinedAt === "number" && Number.isFinite(participant.joinedAt)
           ? participant.joinedAt
@@ -1570,15 +1613,103 @@ function serializeParticipantsInJoinOrder(session) {
     });
 }
 
+function buildSessionStandings(session) {
+  const serializedParticipants = serializeSessionParticipants(session);
+  return [...serializedParticipants]
+    .sort((left, right) => {
+      const completeDelta = Number(right.isComplete === true) - Number(left.isComplete === true);
+      if (completeDelta !== 0) {
+        return completeDelta;
+      }
+
+      const scoreDelta = normalizeParticipantScore(left.score) - normalizeParticipantScore(right.score);
+      if (scoreDelta !== 0) {
+        return scoreDelta;
+      }
+
+      const remainingDelta =
+        normalizeParticipantRemainingDice(left.remainingDice) -
+        normalizeParticipantRemainingDice(right.remainingDice);
+      if (remainingDelta !== 0) {
+        return remainingDelta;
+      }
+
+      const leftCompletedAt = normalizeParticipantCompletedAt(left.completedAt) ?? Number.MAX_SAFE_INTEGER;
+      const rightCompletedAt = normalizeParticipantCompletedAt(right.completedAt) ?? Number.MAX_SAFE_INTEGER;
+      if (leftCompletedAt !== rightCompletedAt) {
+        return leftCompletedAt - rightCompletedAt;
+      }
+
+      const joinedDelta = left.joinedAt - right.joinedAt;
+      if (joinedDelta !== 0) {
+        return joinedDelta;
+      }
+
+      return left.playerId.localeCompare(right.playerId);
+    })
+    .map((participant, index) => ({
+      ...participant,
+      placement: index + 1,
+    }));
+}
+
+function resolveSessionCompletedAt(standings) {
+  if (!Array.isArray(standings) || standings.length === 0) {
+    return null;
+  }
+  const completedAtValues = standings
+    .map((participant) => normalizeParticipantCompletedAt(participant.completedAt))
+    .filter((value) => Number.isFinite(value));
+  if (completedAtValues.length === 0) {
+    return null;
+  }
+  return Math.max(...completedAtValues);
+}
+
 function ensureSessionTurnState(session) {
   if (!session) {
     return null;
   }
 
-  const orderedParticipants = serializeParticipantsInJoinOrder(session);
+  const currentState = session.turnState ?? null;
+  const currentActiveTurnPlayerId =
+    typeof currentState?.activeTurnPlayerId === "string"
+      ? currentState.activeTurnPlayerId
+      : null;
+  const keepCompletedActivePlayer =
+    normalizeTurnPhase(currentState?.phase) === TURN_PHASES.readyToEnd &&
+    typeof currentActiveTurnPlayerId === "string" &&
+    currentActiveTurnPlayerId.length > 0;
+
+  const orderedParticipants = serializeParticipantsInJoinOrder(session).filter(
+    (participant) =>
+      participant &&
+      !participant.isComplete &&
+      (!keepCompletedActivePlayer || participant.playerId !== currentActiveTurnPlayerId)
+  );
+  if (keepCompletedActivePlayer) {
+    const activeParticipant = session.participants?.[currentActiveTurnPlayerId];
+    if (activeParticipant) {
+      orderedParticipants.push({
+        playerId: currentActiveTurnPlayerId,
+        isComplete: false,
+        joinedAt:
+          typeof activeParticipant.joinedAt === "number" && Number.isFinite(activeParticipant.joinedAt)
+            ? activeParticipant.joinedAt
+            : 0,
+      });
+      orderedParticipants.sort((left, right) => {
+        const joinedDelta = left.joinedAt - right.joinedAt;
+        if (joinedDelta !== 0) {
+          return joinedDelta;
+        }
+        return left.playerId.localeCompare(right.playerId);
+      });
+    }
+  }
+
   const participantIds = orderedParticipants.map((participant) => participant.playerId);
   const participantIdSet = new Set(participantIds);
-  const currentState = session.turnState ?? null;
   const nextOrder = [];
 
   if (Array.isArray(currentState?.order)) {
@@ -1602,7 +1733,7 @@ function ensureSessionTurnState(session) {
       ? currentState.activeTurnPlayerId
       : null;
   let activeTurnRecovered = false;
-  if (!allHumansReady) {
+  if (!allHumansReady || participantIds.length === 0) {
     activeTurnPlayerId = null;
   } else if (!activeTurnPlayerId || !nextOrder.includes(activeTurnPlayerId)) {
     activeTurnPlayerId = nextOrder[0] ?? null;
@@ -1630,7 +1761,7 @@ function ensureSessionTurnState(session) {
       ? Math.floor(currentState.turnExpiresAt)
       : null;
 
-  if (!allHumansReady) {
+  if (!allHumansReady || nextOrder.length === 0) {
     phase = TURN_PHASES.awaitRoll;
     lastRollSnapshot = null;
     lastScoreSummary = null;
@@ -1658,9 +1789,14 @@ function ensureSessionTurnState(session) {
     }
   }
 
-  if (allHumansReady && activeTurnPlayerId && (!turnExpiresAt || turnExpiresAt <= now)) {
+  if (
+    allHumansReady &&
+    nextOrder.length > 0 &&
+    activeTurnPlayerId &&
+    (!turnExpiresAt || turnExpiresAt <= now)
+  ) {
     turnExpiresAt = now + turnTimeoutMs;
-  } else if (!allHumansReady || !activeTurnPlayerId) {
+  } else if (!allHumansReady || !activeTurnPlayerId || nextOrder.length === 0) {
     turnExpiresAt = null;
   }
 
@@ -1787,34 +1923,56 @@ function advanceSessionTurn(session, endedByPlayerId, options = {}) {
     source: options.source ?? "player",
   };
 
-  const nextIndex = (currentIndex + 1) % turnState.order.length;
-  const wrapped = nextIndex === 0;
   const timeoutMs = normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
-  turnState.activeTurnPlayerId = turnState.order[nextIndex];
-  turnState.turnNumber = Math.max(1, Math.floor(turnState.turnNumber) + 1);
-  if (wrapped) {
-    turnState.round = Math.max(1, Math.floor(turnState.round) + 1);
+  const nextOrder = turnState.order.filter((playerId) => {
+    const participant = session.participants?.[playerId];
+    return Boolean(participant) && !isParticipantComplete(participant);
+  });
+
+  let nextActivePlayerId = null;
+  let wrapped = false;
+  for (let offset = 1; offset <= turnState.order.length; offset += 1) {
+    const candidateIndex = (currentIndex + offset) % turnState.order.length;
+    const candidatePlayerId = turnState.order[candidateIndex];
+    const participant = session.participants?.[candidatePlayerId];
+    if (!participant || isParticipantComplete(participant)) {
+      continue;
+    }
+    nextActivePlayerId = candidatePlayerId;
+    wrapped = candidateIndex <= currentIndex;
+    break;
+  }
+
+  turnState.order = nextOrder;
+  turnState.activeTurnPlayerId = nextActivePlayerId;
+  if (nextActivePlayerId) {
+    turnState.turnNumber = Math.max(1, Math.floor(turnState.turnNumber) + 1);
+    if (wrapped) {
+      turnState.round = Math.max(1, Math.floor(turnState.round) + 1);
+    }
   }
   turnState.phase = TURN_PHASES.awaitRoll;
   turnState.lastRollSnapshot = null;
   turnState.lastScoreSummary = null;
   turnState.turnTimeoutMs = timeoutMs;
-  turnState.turnExpiresAt = timestamp + timeoutMs;
+  turnState.turnExpiresAt = nextActivePlayerId ? timestamp + timeoutMs : null;
   turnState.updatedAt = timestamp;
 
-  const turnStart = {
-    type: "turn_start",
-    sessionId: session.sessionId,
-    playerId: turnState.activeTurnPlayerId,
-    round: turnState.round,
-    turnNumber: turnState.turnNumber,
-    phase: normalizeTurnPhase(turnState.phase),
-    turnExpiresAt: turnState.turnExpiresAt,
-    turnTimeoutMs: timeoutMs,
-    timestamp,
-    order: [...turnState.order],
-    source: options.source ?? "player",
-  };
+  const turnStart = nextActivePlayerId
+    ? {
+        type: "turn_start",
+        sessionId: session.sessionId,
+        playerId: turnState.activeTurnPlayerId,
+        round: turnState.round,
+        turnNumber: turnState.turnNumber,
+        phase: normalizeTurnPhase(turnState.phase),
+        turnExpiresAt: turnState.turnExpiresAt,
+        turnTimeoutMs: timeoutMs,
+        timestamp,
+        order: [...turnState.order],
+        source: options.source ?? "player",
+      }
+    : null;
 
   return {
     turnEnd,
@@ -1863,12 +2021,85 @@ function isBotParticipant(participant) {
   return Boolean(participant?.isBot);
 }
 
+function normalizeBotProfile(value) {
+  if (typeof value !== "string") {
+    return "balanced";
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "cautious" || normalized === "aggressive") {
+    return normalized;
+  }
+  return "balanced";
+}
+
 function normalizeParticipantScore(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
     return 0;
   }
   return Math.floor(parsed);
+}
+
+function normalizeParticipantRemainingDice(value, fallback = DEFAULT_PARTICIPANT_DICE_COUNT) {
+  const fallbackValue = Number.isFinite(fallback) ? Math.max(0, Math.floor(fallback)) : 0;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallbackValue;
+  }
+  return Math.max(0, Math.floor(parsed));
+}
+
+function normalizeParticipantCompletedAt(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+  return Math.floor(parsed);
+}
+
+function isParticipantComplete(participant) {
+  if (!participant || typeof participant !== "object") {
+    return false;
+  }
+  if (participant.isComplete === true) {
+    return true;
+  }
+  return normalizeParticipantRemainingDice(participant.remainingDice) === 0;
+}
+
+function applyParticipantScoreUpdate(participant, scoreSummary, rollDiceCount) {
+  const safeRollDiceCount =
+    Number.isFinite(rollDiceCount) && rollDiceCount > 0 ? Math.floor(rollDiceCount) : 0;
+  const currentScore = normalizeParticipantScore(participant?.score);
+  const points = Number.isFinite(scoreSummary?.points) ? Math.max(0, Math.floor(scoreSummary.points)) : 0;
+  const selectedDiceCount = Array.isArray(scoreSummary?.selectedDiceIds)
+    ? scoreSummary.selectedDiceIds.length
+    : 0;
+  const currentRemainingDice = normalizeParticipantRemainingDice(
+    participant?.remainingDice,
+    safeRollDiceCount || DEFAULT_PARTICIPANT_DICE_COUNT
+  );
+  const remainingBase = safeRollDiceCount > 0 ? Math.max(currentRemainingDice, safeRollDiceCount) : currentRemainingDice;
+  const nextRemainingDice = Math.max(0, remainingBase - selectedDiceCount);
+  const didComplete = nextRemainingDice === 0;
+  const completedAt = didComplete
+    ? normalizeParticipantCompletedAt(participant?.completedAt) ?? Date.now()
+    : null;
+  const nextScore = currentScore + points;
+
+  if (participant) {
+    participant.score = nextScore;
+    participant.remainingDice = nextRemainingDice;
+    participant.isComplete = didComplete;
+    participant.completedAt = completedAt;
+  }
+
+  return {
+    nextScore,
+    nextRemainingDice,
+    didComplete,
+    completedAt,
+  };
 }
 
 function getHumanParticipantCount(session) {
@@ -1887,11 +2118,12 @@ function areAllHumansReady(session) {
   const humans = Object.values(session.participants).filter(
     (participant) => participant && !isBotParticipant(participant)
   );
-  if (humans.length <= 1) {
+  const activeHumans = humans.filter((participant) => !isParticipantComplete(participant));
+  if (activeHumans.length <= 1) {
     return true;
   }
 
-  return humans.every((participant) => participant.isReady === true);
+  return activeHumans.every((participant) => participant.isReady === true);
 }
 
 function getBotParticipants(session) {
@@ -2008,6 +2240,232 @@ function dispatchBotMessage(sessionId) {
   broadcastToSession(sessionId, JSON.stringify(payload), null);
 }
 
+function buildBotTurnRollPayload(playerId, turnNumber, remainingDice) {
+  const safeTurnNumber =
+    Number.isFinite(turnNumber) && turnNumber > 0 ? Math.floor(turnNumber) : 1;
+  const diceCount = Math.max(
+    1,
+    Math.min(MAX_TURN_ROLL_DICE, normalizeParticipantRemainingDice(remainingDice))
+  );
+  const dice = [];
+
+  for (let index = 0; index < diceCount; index += 1) {
+    const sides = BOT_ROLL_DICE_SIDES[index % BOT_ROLL_DICE_SIDES.length] ?? 6;
+    dice.push({
+      dieId: `${playerId}-t${safeTurnNumber}-d${index + 1}-s${sides}`,
+      sides,
+    });
+  }
+
+  return {
+    rollIndex: safeTurnNumber,
+    dice,
+  };
+}
+
+function resolveBotSelectionCount(botProfile, remainingDice, availableDice, turnNumber) {
+  const remaining = Math.max(1, normalizeParticipantRemainingDice(remainingDice, availableDice));
+  const available = Math.max(1, Math.min(availableDice, remaining));
+  const safeTurnNumber =
+    Number.isFinite(turnNumber) && turnNumber > 0 ? Math.floor(turnNumber) : 1;
+  const profile = normalizeBotProfile(botProfile);
+
+  if (remaining <= 2) {
+    return Math.min(remaining, available);
+  }
+
+  if (profile === "cautious") {
+    if (remaining <= 4 && safeTurnNumber > 8) {
+      return Math.min(2, available, remaining);
+    }
+    return 1;
+  }
+
+  if (profile === "aggressive") {
+    if (remaining <= 5) {
+      return Math.min(remaining, available);
+    }
+    const base = safeTurnNumber > 5 ? 4 : 3;
+    return Math.min(base, available, remaining);
+  }
+
+  // balanced
+  if (remaining <= 4) {
+    return Math.min(2, available, remaining);
+  }
+  if (safeTurnNumber > 7) {
+    return Math.min(3, available, remaining);
+  }
+  return Math.min(2, available, remaining);
+}
+
+function buildBotTurnScoreSummary(rollSnapshot, remainingDice, options = {}) {
+  if (!rollSnapshot || !Array.isArray(rollSnapshot.dice) || rollSnapshot.dice.length === 0) {
+    return null;
+  }
+
+  const rollServerId =
+    typeof rollSnapshot.serverRollId === "string" && rollSnapshot.serverRollId
+      ? rollSnapshot.serverRollId
+      : "";
+  if (!rollServerId) {
+    return null;
+  }
+
+  const scoredCandidates = rollSnapshot.dice
+    .map((die) => {
+      const dieId = typeof die?.dieId === "string" ? die.dieId : "";
+      const sides = Number.isFinite(die?.sides) ? Math.floor(die.sides) : NaN;
+      const value = Number.isFinite(die?.value) ? Math.floor(die.value) : NaN;
+      if (!dieId || !Number.isFinite(sides) || !Number.isFinite(value)) {
+        return null;
+      }
+      return {
+        dieId,
+        points: Math.max(0, sides - value),
+        value,
+      };
+    })
+    .filter((entry) => entry !== null);
+
+  if (scoredCandidates.length === 0) {
+    return null;
+  }
+
+  scoredCandidates.sort((left, right) => {
+    const pointsDelta = left.points - right.points;
+    if (pointsDelta !== 0) {
+      return pointsDelta;
+    }
+    const valueDelta = right.value - left.value;
+    if (valueDelta !== 0) {
+      return valueDelta;
+    }
+    return left.dieId.localeCompare(right.dieId);
+  });
+
+  const selectionCount = resolveBotSelectionCount(
+    options.botProfile,
+    remainingDice,
+    scoredCandidates.length,
+    options.turnNumber
+  );
+
+  const selectedDice = scoredCandidates.slice(0, selectionCount);
+  const points = selectedDice.reduce((sum, die) => sum + die.points, 0);
+
+  return {
+    selectedDiceIds: selectedDice.map((die) => die.dieId),
+    points,
+    expectedPoints: points,
+    rollServerId,
+    updatedAt: Date.now(),
+  };
+}
+
+function executeBotTurn(session, activePlayerId) {
+  const turnState = ensureSessionTurnState(session);
+  if (!turnState || turnState.activeTurnPlayerId !== activePlayerId) {
+    return null;
+  }
+
+  const participant = session.participants?.[activePlayerId];
+  if (!isBotParticipant(participant)) {
+    return null;
+  }
+  participant.lastHeartbeatAt = Date.now();
+
+  if (isParticipantComplete(participant)) {
+    participant.isComplete = true;
+    participant.completedAt =
+      normalizeParticipantCompletedAt(participant.completedAt) ?? Date.now();
+    const advanced = advanceSessionTurn(session, activePlayerId, {
+      source: "bot_auto",
+    });
+    return advanced
+      ? {
+          rollAction: null,
+          scoreAction: null,
+          turnEnd: advanced.turnEnd,
+          turnStart: advanced.turnStart,
+        }
+      : null;
+  }
+
+  if (normalizeTurnPhase(turnState.phase) !== TURN_PHASES.awaitRoll) {
+    turnState.phase = TURN_PHASES.awaitRoll;
+    turnState.lastRollSnapshot = null;
+    turnState.lastScoreSummary = null;
+    turnState.updatedAt = Date.now();
+  }
+
+  const remainingDice = normalizeParticipantRemainingDice(participant.remainingDice);
+  const rollPayload = buildBotTurnRollPayload(activePlayerId, turnState.turnNumber, remainingDice);
+  const parsedRoll = parseTurnRollPayload({ roll: rollPayload });
+  if (!parsedRoll.ok) {
+    return null;
+  }
+
+  turnState.lastRollSnapshot = parsedRoll.value;
+  turnState.lastScoreSummary = null;
+  turnState.phase = TURN_PHASES.awaitScore;
+  turnState.updatedAt = Date.now();
+
+  const rollAction = buildTurnActionMessage(
+    session,
+    activePlayerId,
+    "roll",
+    { roll: parsedRoll.value },
+    { source: "bot_auto" }
+  );
+
+  const botScoreSummary = buildBotTurnScoreSummary(parsedRoll.value, remainingDice, {
+    botProfile: participant.botProfile,
+    turnNumber: turnState.turnNumber,
+  });
+  if (!botScoreSummary) {
+    return null;
+  }
+
+  const scoreUpdate = applyParticipantScoreUpdate(
+    participant,
+    botScoreSummary,
+    parsedRoll.value.dice.length
+  );
+  const finalizedScoreSummary = {
+    ...botScoreSummary,
+    projectedTotalScore: scoreUpdate.nextScore,
+    remainingDice: scoreUpdate.nextRemainingDice,
+    isComplete: scoreUpdate.didComplete,
+    updatedAt: Date.now(),
+  };
+  turnState.lastScoreSummary = finalizedScoreSummary;
+  turnState.phase = TURN_PHASES.readyToEnd;
+  turnState.updatedAt = Date.now();
+
+  const scoreAction = buildTurnActionMessage(
+    session,
+    activePlayerId,
+    "score",
+    { score: finalizedScoreSummary },
+    { source: "bot_auto" }
+  );
+
+  const advanced = advanceSessionTurn(session, activePlayerId, {
+    source: "bot_auto",
+  });
+  if (!advanced) {
+    return null;
+  }
+
+  return {
+    rollAction,
+    scoreAction,
+    turnEnd: advanced.turnEnd,
+    turnStart: advanced.turnStart,
+  };
+}
+
 function scheduleBotTurnIfNeeded(sessionId) {
   const loop = botSessionLoops.get(sessionId);
   const session = store.multiplayerSessions[sessionId];
@@ -2050,15 +2508,21 @@ function scheduleBotTurnIfNeeded(sessionId) {
     if (!latestSession) {
       return;
     }
-    const advanced = advanceSessionTurn(latestSession, activePlayerId, {
-      source: "bot_auto",
-    });
-    if (!advanced) {
+    const botTurn = executeBotTurn(latestSession, activePlayerId);
+    if (!botTurn) {
       return;
     }
 
-    broadcastToSession(sessionId, JSON.stringify(advanced.turnEnd), null);
-    broadcastToSession(sessionId, JSON.stringify(advanced.turnStart), null);
+    if (botTurn.rollAction) {
+      broadcastToSession(sessionId, JSON.stringify(botTurn.rollAction), null);
+    }
+    if (botTurn.scoreAction) {
+      broadcastToSession(sessionId, JSON.stringify(botTurn.scoreAction), null);
+    }
+    broadcastToSession(sessionId, JSON.stringify(botTurn.turnEnd), null);
+    if (botTurn.turnStart) {
+      broadcastToSession(sessionId, JSON.stringify(botTurn.turnStart), null);
+    }
     broadcastSessionState(latestSession, "bot_auto");
     persistStore().catch((error) => {
       log.warn("Failed to persist session after bot turn advance", error);
@@ -2278,7 +2742,9 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
     null
   );
   broadcastToSession(sessionId, JSON.stringify(advanced.turnEnd), null);
-  broadcastToSession(sessionId, JSON.stringify(advanced.turnStart), null);
+  if (advanced.turnStart) {
+    broadcastToSession(sessionId, JSON.stringify(advanced.turnStart), null);
+  }
   broadcastSessionState(session, "timeout_auto");
   persistStore().catch((error) => {
     log.warn("Failed to persist session after timeout auto-advance", error);
@@ -2939,15 +3405,20 @@ function handleTurnActionMessage(client, session, payload) {
     }
 
     const participant = session.participants[client.playerId];
-    const nextParticipantScore =
-      normalizeParticipantScore(participant?.score) + parsedScore.value.points;
-    if (participant) {
-      participant.score = nextParticipantScore;
-    }
+    const rollDiceCount = Array.isArray(turnState.lastRollSnapshot?.dice)
+      ? turnState.lastRollSnapshot.dice.length
+      : 0;
+    const scoreUpdate = applyParticipantScoreUpdate(
+      participant,
+      parsedScore.value,
+      rollDiceCount
+    );
 
     turnState.lastScoreSummary = {
       ...parsedScore.value,
-      projectedTotalScore: nextParticipantScore,
+      projectedTotalScore: scoreUpdate.nextScore,
+      remainingDice: scoreUpdate.nextRemainingDice,
+      isComplete: scoreUpdate.didComplete,
     };
     turnState.phase = TURN_PHASES.readyToEnd;
     details = { score: turnState.lastScoreSummary };
@@ -3001,11 +3472,13 @@ function handleTurnEndMessage(client, session) {
     return;
   }
   log.info(
-    `Turn advanced: session=${client.sessionId} endedBy=${advanced.turnEnd.playerId} next=${advanced.turnStart.playerId} round=${advanced.turnStart.round} turn=${advanced.turnStart.turnNumber}`
+    `Turn advanced: session=${client.sessionId} endedBy=${advanced.turnEnd.playerId} next=${advanced.turnStart?.playerId ?? "none"} round=${advanced.turnStart?.round ?? turnState.round} turn=${advanced.turnStart?.turnNumber ?? turnState.turnNumber}`
   );
 
   broadcastToSession(client.sessionId, JSON.stringify(advanced.turnEnd), null);
-  broadcastToSession(client.sessionId, JSON.stringify(advanced.turnStart), null);
+  if (advanced.turnStart) {
+    broadcastToSession(client.sessionId, JSON.stringify(advanced.turnStart), null);
+  }
   broadcastSessionState(session, "turn_end");
   persistStore().catch((error) => {
     log.warn("Failed to persist session after turn advance", error);
