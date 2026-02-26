@@ -87,7 +87,22 @@ Required GitHub secrets:
 Shared:
 - `GCP_SA_KEY` (JSON service account key with Firebase Hosting/Firestore + Cloud Run deploy permissions)
 
-Branch-specific project:
+Recommended setup (GitHub Environments):
+- Create two GitHub Environments: `prod` and `dev`.
+- `master`/`main` deploy job uses `prod`; `dev` deploy job uses `dev`.
+- Add these keys inside each environment (same names in both):
+  - `FIREBASE_PROJECT_ID` (or fallback `VITE_FIREBASE_PROJECT_ID`)
+  - `VITE_API_BASE_URL`
+  - `VITE_WS_URL`
+  - `VITE_FIREBASE_API_KEY`
+  - `VITE_FIREBASE_AUTH_DOMAIN`
+  - `VITE_FIREBASE_PROJECT_ID`
+  - `VITE_FIREBASE_STORAGE_BUCKET`
+  - `VITE_FIREBASE_MESSAGING_SENDER_ID`
+  - `VITE_FIREBASE_APP_ID`
+  - `VITE_FIREBASE_MEASUREMENT_ID` (optional)
+
+Alternate setup (repo-level branch-suffixed keys):
 - `FIREBASE_PROJECT_ID_PROD`
 - `FIREBASE_PROJECT_ID_DEV`
 
@@ -95,6 +110,10 @@ Fallback behavior:
 - If `FIREBASE_PROJECT_ID_PROD` or `FIREBASE_PROJECT_ID_DEV` is not set, workflow falls back to:
   - `VITE_FIREBASE_PROJECT_ID_PROD`
   - `VITE_FIREBASE_PROJECT_ID_DEV`
+
+Environment keys are also supported:
+- `FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_PROJECT_ID`
 
 Branch-specific frontend env secrets:
 - `VITE_API_BASE_URL_PROD`
@@ -122,7 +141,11 @@ The workflow builds a `.env.production` file at runtime from these secrets; no k
 
 If workflow fails with `Missing required secret/output: PROJECT_ID`:
 1. Ensure branch is `master`, `main`, or `dev`.
-2. Set either:
+2. If using GitHub Environments, ensure environment name matches exactly:
+   - `dev` for `dev` branch
+   - `prod` for `main`/`master` branch
+3. Set either:
    - `FIREBASE_PROJECT_ID_<ENV>` (recommended), or
-   - `VITE_FIREBASE_PROJECT_ID_<ENV>` (fallback).
-3. Re-run workflow.
+   - `VITE_FIREBASE_PROJECT_ID_<ENV>` (fallback), or
+   - environment key `FIREBASE_PROJECT_ID` / `VITE_FIREBASE_PROJECT_ID`.
+4. Re-run workflow.
