@@ -1,4 +1,9 @@
-import { MultiplayerNetworkService, type WebSocketLike } from "./networkService.js";
+import {
+  MultiplayerNetworkService,
+  type MultiplayerGameUpdateMessage,
+  type MultiplayerPlayerNotificationMessage,
+  type WebSocketLike,
+} from "./networkService.js";
 import type { CameraAttackMessage } from "../chaos/types.js";
 import type { ParticleNetworkEvent } from "../services/particleService.js";
 
@@ -102,6 +107,28 @@ function createParticleEvent(): ParticleNetworkEvent {
     type: "particle:emit",
     effectId: "attack-shake-impact",
     position: { x: 1, y: 2, z: 3 },
+    timestamp: Date.now(),
+  };
+}
+
+function createGameUpdateMessage(): MultiplayerGameUpdateMessage {
+  return {
+    type: "game_update",
+    id: "update-1",
+    title: "Live Event",
+    content: "Chaos mode now active for this session",
+    updateType: "announcement",
+    timestamp: Date.now(),
+  };
+}
+
+function createPlayerNotificationMessage(): MultiplayerPlayerNotificationMessage {
+  return {
+    type: "player_notification",
+    id: "note-1",
+    title: "Heads Up",
+    message: "You have been targeted by a chaos attack",
+    severity: "warning",
     timestamp: Date.now(),
   };
 }
@@ -245,6 +272,126 @@ await test("dispatches inbound particle event to local event bus", () => {
 
   assert(received !== null, "Expected inbound particle event");
   assertEqual(received!.effectId, "attack-shake-impact", "Expected effect id");
+});
+
+await test("dispatches inbound multiplayer game update event", () => {
+  const eventTarget = new EventTarget();
+  let socket: MockWebSocket | null = null;
+  let received: MultiplayerGameUpdateMessage | null = null;
+
+  eventTarget.addEventListener("multiplayer:update:received", (event: Event) => {
+    received = (event as CustomEvent<MultiplayerGameUpdateMessage>).detail;
+  });
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local",
+    eventTarget,
+    autoReconnect: false,
+    webSocketFactory: () => {
+      socket = new MockWebSocket();
+      return socket;
+    },
+  });
+
+  network.connect();
+  socket!.emitOpen();
+  socket!.emitMessage(createGameUpdateMessage());
+
+  assert(received !== null, "Expected inbound game update");
+  assertEqual(received!.title, "Live Event", "Expected game update title");
+});
+
+await test("dispatches inbound multiplayer player notification event", () => {
+  const eventTarget = new EventTarget();
+  let socket: MockWebSocket | null = null;
+  let received: MultiplayerPlayerNotificationMessage | null = null;
+
+  eventTarget.addEventListener("multiplayer:notification:received", (event: Event) => {
+    received = (event as CustomEvent<MultiplayerPlayerNotificationMessage>).detail;
+  });
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local",
+    eventTarget,
+    autoReconnect: false,
+    webSocketFactory: () => {
+      socket = new MockWebSocket();
+      return socket;
+    },
+  });
+
+  network.connect();
+  socket!.emitOpen();
+  socket!.emitMessage(createPlayerNotificationMessage());
+
+  assert(received !== null, "Expected inbound player notification");
+  assertEqual(received!.severity, "warning", "Expected notification severity");
+});
+
+await test("bridges outgoing multiplayer game update to websocket", () => {
+  const eventTarget = new EventTarget();
+  let socket: MockWebSocket | null = null;
+  let sentEventCount = 0;
+  eventTarget.addEventListener("multiplayer:update:sent", () => {
+    sentEventCount += 1;
+  });
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local",
+    eventTarget,
+    autoReconnect: false,
+    webSocketFactory: () => {
+      socket = new MockWebSocket();
+      return socket;
+    },
+  });
+
+  network.enableEventBridge();
+  network.connect();
+  socket!.emitOpen();
+
+  const outgoing = createGameUpdateMessage();
+  eventTarget.dispatchEvent(
+    new CustomEvent("multiplayer:update:send", { detail: outgoing })
+  );
+
+  assertEqual(socket!.sentPayloads.length, 1, "Expected one outbound update payload");
+  const sent = JSON.parse(socket!.sentPayloads[0]) as MultiplayerGameUpdateMessage;
+  assertEqual(sent.id, outgoing.id, "Expected sent update payload to match");
+  assertEqual(sentEventCount, 1, "Expected update sent feedback event");
+});
+
+await test("bridges outgoing player notification to websocket", () => {
+  const eventTarget = new EventTarget();
+  let socket: MockWebSocket | null = null;
+  let sentEventCount = 0;
+  eventTarget.addEventListener("multiplayer:notification:sent", () => {
+    sentEventCount += 1;
+  });
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local",
+    eventTarget,
+    autoReconnect: false,
+    webSocketFactory: () => {
+      socket = new MockWebSocket();
+      return socket;
+    },
+  });
+
+  network.enableEventBridge();
+  network.connect();
+  socket!.emitOpen();
+
+  const outgoing = createPlayerNotificationMessage();
+  eventTarget.dispatchEvent(
+    new CustomEvent("multiplayer:notification:send", { detail: outgoing })
+  );
+
+  assertEqual(socket!.sentPayloads.length, 1, "Expected one outbound notification payload");
+  const sent = JSON.parse(socket!.sentPayloads[0]) as MultiplayerPlayerNotificationMessage;
+  assertEqual(sent.id, outgoing.id, "Expected sent notification payload to match");
+  assertEqual(sentEventCount, 1, "Expected notification sent feedback event");
 });
 
 console.log("\nMultiplayerNetworkService tests passed! ✓");

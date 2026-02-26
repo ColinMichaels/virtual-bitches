@@ -82,6 +82,31 @@ async function run() {
     "particle effectId mismatch on host receive"
   );
 
+  const gameUpdate = createGameUpdate(runSuffix);
+  hostSocket.send(JSON.stringify(gameUpdate));
+  const guestGameUpdate = await waitForMessage(
+    guestSocket,
+    (payload) => payload?.type === "game_update" && payload?.id === gameUpdate.id,
+    "guest game update receive"
+  );
+  assert(
+    guestGameUpdate.title === gameUpdate.title,
+    "game update title mismatch on guest receive"
+  );
+
+  const playerNotification = createPlayerNotification(runSuffix);
+  guestSocket.send(JSON.stringify(playerNotification));
+  const hostPlayerNotification = await waitForMessage(
+    hostSocket,
+    (payload) =>
+      payload?.type === "player_notification" && payload?.id === playerNotification.id,
+    "host player notification receive"
+  );
+  assert(
+    hostPlayerNotification.message === playerNotification.message,
+    "player notification message mismatch on host receive"
+  );
+
   const heartbeat = await apiRequest(
     `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/heartbeat`,
     {
@@ -343,6 +368,28 @@ function createParticleEmit(suffix) {
     type: "particle:emit",
     effectId: `e2e-effect-${suffix}`,
     position: { x: 1, y: 2, z: 3 },
+    timestamp: Date.now(),
+  };
+}
+
+function createGameUpdate(suffix) {
+  return {
+    type: "game_update",
+    id: `e2e-update-${suffix}`,
+    title: "E2E Live Update",
+    content: "Multiplayer game update relay test",
+    updateType: "announcement",
+    timestamp: Date.now(),
+  };
+}
+
+function createPlayerNotification(suffix) {
+  return {
+    type: "player_notification",
+    id: `e2e-note-${suffix}`,
+    title: "E2E Notification",
+    message: "Player notification relay test",
+    severity: "info",
     timestamp: Date.now(),
   };
 }
