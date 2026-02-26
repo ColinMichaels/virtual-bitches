@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Session expiry choice integration tests + reliability pass)
+**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Session expiry tests + splash tutorial replay entrypoint)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -117,7 +117,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
     - Easy mode bots should play intentionally dumber (more mistakes, weaker optimization)
     - Normal mode bots should remain balanced
     - Hard mode bots should be more adaptive/aggressive
-  - [ ] Add optional replay-tutorial entry point from splash screen (pre-game)
+  - ✅ Added optional replay-tutorial entry point from splash screen (pre-game)
   - [ ] Add regression test ensuring no browser `confirm/prompt` remains in gameplay paths
 
 ### Theme Asset Copying and Deployment Robustness (2026-02-26)

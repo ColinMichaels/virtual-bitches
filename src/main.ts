@@ -2,6 +2,7 @@ import { SplashScreen } from "./ui/splash.js";
 import { LoadingScreen } from "./ui/loadingScreen.js";
 import { notificationService } from "./ui/notifications.js";
 import { themeManager } from "./services/themeManager.js";
+import { settingsService } from "./services/settings.js";
 import { environment } from "@env";
 import { logger } from "./utils/logger.js";
 import type { SplashStartOptions } from "./ui/splash.js";
@@ -127,6 +128,15 @@ async function startGame(startOptions: SplashStartOptions): Promise<boolean> {
     return true;
   }
 
+  let resolvedStartOptions = startOptions;
+  if (startOptions.forceTutorialReplay) {
+    settingsService.updateGame({ showTutorial: true });
+    resolvedStartOptions = {
+      playMode: "solo",
+      forceTutorialReplay: true,
+    };
+  }
+
   try {
     const [settingsModal, leaderboardModal, rulesModal, tutorialModal, profileModal, runtime] = await Promise.all([
       getSettingsModal(),
@@ -143,8 +153,8 @@ async function startGame(startOptions: SplashStartOptions): Promise<boolean> {
       rulesModal,
       tutorialModal,
       profileModal,
-      playMode: startOptions.playMode,
-      multiplayer: startOptions.multiplayer,
+      playMode: resolvedStartOptions.playMode,
+      multiplayer: resolvedStartOptions.multiplayer,
     });
 
     gameStarted = true;
