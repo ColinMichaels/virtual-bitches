@@ -40,4 +40,24 @@ The running server uses JSON-file persistence for now. SQL files define the inte
 - Session creation/join returns:
   - `playerToken` for WS query auth
   - `auth` bundle (`accessToken`, `refreshToken`, `expiresAt`, `tokenType`)
-- WS server is not implemented in this folder yet; this scaffold provides the HTTP/session contracts only.
+- WS endpoint is available at `/` and expects query params:
+  - `session=<sessionId>`
+  - `playerId=<playerId>`
+  - `token=<playerToken or auth.accessToken>`
+- Supported WS message types for relay:
+  - `chaos_attack`
+  - `particle:emit`
+
+## E2E Smoke Tests
+
+Local end-to-end smoke test (starts API server automatically):
+
+```bash
+npm run test:e2e:api:local
+```
+
+Smoke test against deployed API/Cloud Run:
+
+```bash
+E2E_API_BASE_URL="https://<your-cloud-run-host>" npm run test:e2e:api
+```
