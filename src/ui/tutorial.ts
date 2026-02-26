@@ -16,8 +16,10 @@ type TutorialStep = {
   image: string;
   spotlight?: string; // CSS selector for element to highlight
   waitForAction?: boolean; // Wait for player to perform action
-  actionType?: 'roll' | 'select' | 'score'; // Type of action to wait for
+  actionType?: TutorialActionType; // Type of action to wait for
 };
+
+type TutorialActionType = 'roll' | 'select' | 'score' | 'openSettings' | 'musicChoice' | 'sfxInfo' | 'themeInfo';
 
 export class TutorialModal {
   private container: HTMLElement;
@@ -26,6 +28,15 @@ export class TutorialModal {
   private isWaitingForAction = false;
   private completing = false;
   private onComplete: (() => void) | null = null;
+  private onRequestOpenAudioSettings: (() => void) | null = null;
+  private onRequestOpenGraphicsSettings: (() => void) | null = null;
+  private onRequestCloseAuxiliaryModals: (() => void) | null = null;
+  private autoOpenSettingsRequested = false;
+  private previousStepSettingsFocus = false;
+  private highlightedTargets: HTMLElement[] = [];
+  private tutorialMusicPreviewStarted = false;
+  private tutorialMusicChoiceCommitted = false;
+  private tutorialMusicSnapshot: { musicEnabled: boolean; musicVolume: number } | null = null;
 
   private steps: TutorialStep[] = [
     {
@@ -61,6 +72,36 @@ export class TutorialModal {
       spotlight: "#action-btn",
       waitForAction: true,
       actionType: 'score'
+    },
+    {
+      title: "Audio And Settings",
+      content: "Open <strong>Settings</strong> now (<strong>Esc</strong> or the gear button). We'll open Audio controls and preview music.",
+      image: "⚙️",
+      spotlight: "#settings-gear-btn, #mobile-settings-btn",
+      waitForAction: true,
+      actionType: "openSettings"
+    },
+    {
+      title: "Music Only",
+      content: "This step controls <strong>music only</strong>. Sound effects are configured separately in the next step.",
+      image: "🎵",
+      spotlight: "#audio-music-toggle-row, #music-enabled, #audio-music-volume-row, #music-volume",
+      waitForAction: true,
+      actionType: "musicChoice"
+    },
+    {
+      title: "Sound Effects Separate",
+      content: "Use these controls if you want quieter clicks/rolls. Music mute does not mute sound effects.",
+      image: "🔔",
+      spotlight: "#audio-sfx-toggle-row, #sfx-enabled, #audio-sfx-volume-row, #sfx-volume",
+      actionType: "sfxInfo"
+    },
+    {
+      title: "Dice Theme",
+      content: "You can change your dice look in <strong>Settings → Graphics</strong>. Use the highlighted Dice Theme dropdown.",
+      image: "🎨",
+      spotlight: "#theme-switcher-container, #theme-dropdown",
+      actionType: "themeInfo"
     },
     {
       title: "Keep Going!",
@@ -139,10 +180,19 @@ export class TutorialModal {
     const body = this.container.querySelector(".tutorial-body")!;
     const dots = this.container.querySelector(".tutorial-dots")!;
     const nextBtn = document.getElementById("tutorial-next")!;
+    const settingsFocusStep = this.isSettingsFocusStep(step);
+    if (!settingsFocusStep && this.previousStepSettingsFocus) {
+      this.onRequestCloseAuxiliaryModals?.();
+    }
+    this.previousStepSettingsFocus = settingsFocusStep;
 
     icon.textContent = step.image;
     title.textContent = step.title;
-    body.innerHTML = step.content;
+    body.innerHTML = settingsFocusStep
+      ? this.getSettingsFocusMessage(step.actionType)
+      : step.content;
+    this.container.classList.toggle("tutorial-modal--settings-focus", settingsFocusStep);
+    this.clearTargetHighlights();
 
     // Update dots
     dots.innerHTML = this.steps.map((_, i) =>
@@ -164,11 +214,24 @@ export class TutorialModal {
 
     // Handle spotlight and action waiting
     if (step.spotlight) {
-      this.showSpotlight(step.spotlight);
-      this.positionModalAwayFrom(step.spotlight);
+      this.applyTargetHighlights(step.spotlight);
+      if (!settingsFocusStep) {
+        this.showSpotlight(step.spotlight);
+        this.positionModalAwayFrom(step.spotlight);
+      } else {
+        this.hideSpotlight();
+        this.resetModalPosition();
+      }
     } else {
       this.hideSpotlight();
       this.resetModalPosition();
+    }
+
+    if (step.actionType === "openSettings" || step.actionType === "musicChoice") {
+      void this.startTutorialMusicPreview();
+    }
+    if (settingsFocusStep && step.actionType !== "openSettings") {
+      this.requestSettingsTabForStep(step.actionType);
     }
 
     if (step.waitForAction) {
@@ -176,11 +239,21 @@ export class TutorialModal {
       nextBtn.style.display = "none";
       this.isWaitingForAction = true;
 
-      // Add waiting indicator to body
-      const waitingText = document.createElement('div');
-      waitingText.style.cssText = 'margin-top: 15px; padding: 10px; background: rgba(255, 215, 0, 0.15); border-radius: 8px; color: #FFD700; font-size: 14px; text-align: center;';
-      waitingText.innerHTML = `⏳ <strong>Waiting for you to ${step.actionType}...</strong>`;
-      body.appendChild(waitingText);
+      if (!settingsFocusStep) {
+        // Add waiting indicator to body
+        const waitingText = document.createElement('div');
+        waitingText.style.cssText = 'margin-top: 15px; padding: 10px; background: rgba(255, 215, 0, 0.15); border-radius: 8px; color: #FFD700; font-size: 14px; text-align: center;';
+        waitingText.innerHTML = `⏳ <strong>${this.getWaitingActionText(step.actionType)}</strong>`;
+        body.appendChild(waitingText);
+      }
+
+      if (step.actionType === "musicChoice") {
+        this.renderMusicChoiceControls(body);
+      }
+
+      if (step.actionType === "openSettings") {
+        this.autoOpenSettingsAndAdvance();
+      }
     } else {
       // Show next button
       nextBtn.style.display = "inline-block";
@@ -259,10 +332,19 @@ export class TutorialModal {
     this.container.style.paddingBottom = '40px';
   }
 
+  private isSettingsFocusStep(step: TutorialStep): boolean {
+    return (
+      step.actionType === "openSettings" ||
+      step.actionType === "musicChoice" ||
+      step.actionType === "sfxInfo" ||
+      step.actionType === "themeInfo"
+    );
+  }
+
   /**
    * Called by main game when player performs an action during tutorial
    */
-  onPlayerAction(actionType: 'roll' | 'select' | 'score'): void {
+  onPlayerAction(actionType: TutorialActionType): void {
     log.debug(`Action detected: ${actionType}, waiting: ${this.isWaitingForAction}, current step: ${this.currentStep}`);
 
     if (!this.isWaitingForAction) return;
@@ -280,12 +362,176 @@ export class TutorialModal {
     }
   }
 
+  private getWaitingActionText(actionType?: TutorialActionType): string {
+    switch (actionType) {
+      case "roll":
+        return "Waiting for you to roll...";
+      case "select":
+        return "Waiting for you to select dice...";
+      case "score":
+        return "Waiting for you to score selected dice...";
+      case "openSettings":
+        return "Waiting for you to open Settings...";
+      case "musicChoice":
+        return "Choose mute or keep music to continue...";
+      default:
+        return "Waiting for your action...";
+    }
+  }
+
+  private getSettingsFocusMessage(actionType?: TutorialActionType): string {
+    if (actionType === "openSettings") {
+      return "Opening <strong>Settings → Audio</strong> so you can preview and configure music.";
+    }
+    if (actionType === "musicChoice") {
+      return "Music setup only: use the highlighted <strong>Music</strong> controls, then choose below.";
+    }
+    if (actionType === "sfxInfo") {
+      return "Sound effects are separate: use the highlighted <strong>Sound Effects</strong> controls if needed.";
+    }
+    if (actionType === "themeInfo") {
+      return "Theme setup: switch to <strong>Graphics</strong> and use the highlighted <strong>Dice Theme</strong> dropdown.";
+    }
+    return "Adjust audio settings.";
+  }
+
+  private requestSettingsTabForStep(actionType?: TutorialActionType): void {
+    if (!actionType) {
+      return;
+    }
+
+    if (actionType === "themeInfo") {
+      this.onRequestOpenGraphicsSettings?.();
+      return;
+    }
+
+    if (actionType === "openSettings" || actionType === "musicChoice" || actionType === "sfxInfo") {
+      this.onRequestOpenAudioSettings?.();
+    }
+  }
+
+  private autoOpenSettingsAndAdvance(): void {
+    if (this.autoOpenSettingsRequested || !this.onRequestOpenAudioSettings) {
+      return;
+    }
+
+    this.autoOpenSettingsRequested = true;
+    window.setTimeout(() => {
+      this.onRequestOpenAudioSettings?.();
+      this.onPlayerAction("openSettings");
+    }, 140);
+  }
+
+  private renderMusicChoiceControls(body: Element): void {
+    const controls = document.createElement("div");
+    controls.className = "tutorial-music-choice";
+    controls.innerHTML = `
+      <button type="button" class="btn btn-danger danger" data-music-choice="mute">Mute Music</button>
+      <button type="button" class="btn btn-primary primary" data-music-choice="keep">Keep Music On</button>
+    `;
+
+    controls.querySelector<HTMLButtonElement>('[data-music-choice="mute"]')?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      this.applyMusicChoice("mute");
+    });
+
+    controls.querySelector<HTMLButtonElement>('[data-music-choice="keep"]')?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      this.applyMusicChoice("keep");
+    });
+
+    body.appendChild(controls);
+  }
+
+  private applyTargetHighlights(selector: string): void {
+    const targets = document.querySelectorAll<HTMLElement>(selector);
+    targets.forEach((target) => {
+      target.classList.add("tutorial-target-highlight");
+      this.highlightedTargets.push(target);
+    });
+  }
+
+  private clearTargetHighlights(): void {
+    this.highlightedTargets.forEach((target) => {
+      target.classList.remove("tutorial-target-highlight");
+    });
+    this.highlightedTargets = [];
+  }
+
+  private applyMusicChoice(choice: "mute" | "keep"): void {
+    const snapshot = this.tutorialMusicSnapshot ?? settingsService.getSettings().audio;
+    if (choice === "mute") {
+      settingsService.updateAudio({ musicEnabled: false });
+      audioService.stopMusic();
+    } else {
+      const keepVolume = snapshot.musicVolume > 0 ? snapshot.musicVolume : 0.35;
+      settingsService.updateAudio({ musicEnabled: true, musicVolume: keepVolume });
+      if (!audioService.isInitialized()) {
+        void audioService.initialize().then(() => audioService.playMusic());
+      } else {
+        void audioService.playMusic();
+      }
+    }
+
+    this.tutorialMusicChoiceCommitted = true;
+    this.onPlayerAction("musicChoice");
+  }
+
+  private async startTutorialMusicPreview(): Promise<void> {
+    if (this.tutorialMusicPreviewStarted) {
+      return;
+    }
+
+    this.tutorialMusicPreviewStarted = true;
+
+    try {
+      const settings = settingsService.getSettings();
+      this.tutorialMusicSnapshot = {
+        musicEnabled: settings.audio.musicEnabled,
+        musicVolume: settings.audio.musicVolume,
+      };
+
+      const previewVolume = settings.audio.musicVolume > 0 ? settings.audio.musicVolume : 0.35;
+      settingsService.updateAudio({
+        musicEnabled: true,
+        musicVolume: previewVolume,
+      });
+
+      if (!audioService.isInitialized()) {
+        await audioService.initialize();
+      }
+      await audioService.playMusic();
+    } catch (error) {
+      log.warn("Unable to start tutorial music preview", error);
+    }
+  }
+
+  private restoreMusicPreviewIfUncommitted(): void {
+    if (!this.tutorialMusicSnapshot || this.tutorialMusicChoiceCommitted) {
+      return;
+    }
+
+    settingsService.updateAudio({
+      musicEnabled: this.tutorialMusicSnapshot.musicEnabled,
+      musicVolume: this.tutorialMusicSnapshot.musicVolume,
+    });
+
+    if (!this.tutorialMusicSnapshot.musicEnabled) {
+      audioService.stopMusic();
+    } else if (audioService.isInitialized()) {
+      void audioService.playMusic();
+    }
+  }
+
   private async complete(): Promise<void> {
     if (this.completing) {
       return;
     }
     this.completing = true;
     try {
+      this.onRequestCloseAuxiliaryModals?.();
+      this.restoreMusicPreviewIfUncommitted();
+
       // Mark tutorial as shown
       settingsService.updateGame({ showTutorial: false });
 
@@ -326,15 +572,34 @@ export class TutorialModal {
     this.onComplete = callback;
   }
 
+  setOnRequestOpenAudioSettings(callback: (() => void) | null): void {
+    this.onRequestOpenAudioSettings = callback;
+  }
+
+  setOnRequestOpenGraphicsSettings(callback: (() => void) | null): void {
+    this.onRequestOpenGraphicsSettings = callback;
+  }
+
+  setOnRequestCloseAuxiliaryModals(callback: (() => void) | null): void {
+    this.onRequestCloseAuxiliaryModals = callback;
+  }
+
   show(): void {
     this.container.style.display = "flex";
+    this.container.classList.remove("tutorial-modal--settings-focus");
     this.currentStep = 0;
+    this.autoOpenSettingsRequested = false;
+    this.previousStepSettingsFocus = false;
+    this.tutorialMusicPreviewStarted = false;
+    this.tutorialMusicChoiceCommitted = false;
+    this.tutorialMusicSnapshot = null;
     this.renderStep();
   }
 
   hide(): void {
     this.container.style.display = "none";
     this.hideSpotlight();
+    this.clearTargetHighlights();
   }
 
   shouldShow(): boolean {
@@ -344,5 +609,20 @@ export class TutorialModal {
 
   isActive(): boolean {
     return this.container.style.display !== "none";
+  }
+
+  getPreferredSettingsTab(): "audio" | "graphics" | null {
+    if (!this.isActive()) {
+      return null;
+    }
+
+    const actionType = this.steps[this.currentStep]?.actionType;
+    if (actionType === "openSettings" || actionType === "musicChoice" || actionType === "sfxInfo") {
+      return "audio";
+    }
+    if (actionType === "themeInfo") {
+      return "graphics";
+    }
+    return null;
   }
 }
