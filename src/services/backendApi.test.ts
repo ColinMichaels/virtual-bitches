@@ -238,4 +238,30 @@ await test("does not attempt session refresh for firebase-auth request", async (
   );
 });
 
+await test("updates authenticated profile with firebase token", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    jsonResponse({
+      uid: "uid-1",
+      displayName: "Google User",
+      leaderboardName: "DiceMaster",
+      email: "user@example.com",
+      isAnonymous: false,
+      provider: "firebase",
+    });
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+    firebaseTokenProvider: () => "firebase-id-token",
+  });
+
+  const result = await api.updateAuthenticatedUserProfile("DiceMaster");
+  assert(result !== null, "Expected profile update response");
+  assertEqual(fetchCalls.length, 1, "Expected one profile update request");
+  assertEqual(fetchCalls[0].url, "https://api.example.com/api/auth/me", "Expected auth profile endpoint");
+  assertEqual(fetchCalls[0].init?.method, "PUT", "Expected PUT method");
+});
+
 console.log("\nBackendApiService tests passed! ✓");

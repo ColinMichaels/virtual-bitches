@@ -1,4 +1,8 @@
-import { backendApiService, type GlobalLeaderboardEntry } from "./backendApi.js";
+import {
+  backendApiService,
+  type AuthenticatedUserProfile,
+  type GlobalLeaderboardEntry,
+} from "./backendApi.js";
 import { scoreHistoryService, type GameScore } from "./score-history.js";
 import { logger } from "../utils/logger.js";
 import { firebaseAuthService } from "./firebaseAuth.js";
@@ -8,10 +12,17 @@ const MAX_FLUSH_PER_BATCH = 8;
 
 export class LeaderboardService {
   private flushInFlight = false;
+  private accountProfile: AuthenticatedUserProfile | null = null;
 
   async submitScore(score: GameScore): Promise<boolean> {
     if (score.globalSynced) {
       return true;
+    }
+
+    const profile = await this.getAccountProfile(true);
+    const leaderboardName = profile?.leaderboardName?.trim();
+    if (!profile || profile.isAnonymous || !leaderboardName) {
+      return false;
     }
 
     const result = await backendApiService.submitLeaderboardScore({
@@ -25,6 +36,7 @@ export class LeaderboardService {
         difficulty: score.mode?.difficulty,
         variant: score.mode?.variant,
       },
+      playerName: leaderboardName,
     });
 
     if (!result) {
@@ -48,6 +60,11 @@ export class LeaderboardService {
         return 0;
       }
 
+      const profile = await this.getAccountProfile(true);
+      if (!profile || profile.isAnonymous || !profile.leaderboardName?.trim()) {
+        return 0;
+      }
+
       const pending = scoreHistoryService
         .getUnsyncedGlobalScores()
         .sort((a, b) => a.timestamp - b.timestamp)
@@ -67,13 +84,42 @@ export class LeaderboardService {
     }
   }
 
-  async getGlobalLeaderboard(limit: number = 25): Promise<GlobalLeaderboardEntry[]> {
+  async getGlobalLeaderboard(limit: number = 200): Promise<GlobalLeaderboardEntry[]> {
     const entries = await backendApiService.getGlobalLeaderboard(limit);
     if (!entries) {
       log.warn("Failed to load global leaderboard");
       return [];
     }
     return entries;
+  }
+
+  async getAccountProfile(forceRefresh = false): Promise<AuthenticatedUserProfile | null> {
+    if (!forceRefresh && this.accountProfile) {
+      return this.accountProfile;
+    }
+
+    const profile = await backendApiService.getAuthenticatedUserProfile();
+    this.accountProfile = profile;
+    return profile;
+  }
+
+  async setLeaderboardName(displayName: string): Promise<AuthenticatedUserProfile | null> {
+    const normalized = displayName.trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const profile = await backendApiService.updateAuthenticatedUserProfile(normalized);
+    if (!profile) {
+      return null;
+    }
+
+    this.accountProfile = profile;
+    return profile;
+  }
+
+  clearCachedProfile(): void {
+    this.accountProfile = null;
   }
 }
 

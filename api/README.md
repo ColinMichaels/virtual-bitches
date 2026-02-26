@@ -42,7 +42,10 @@ The running server uses JSON-file persistence for now. SQL files define the inte
 ## Notes
 
 - Auth contract is bearer token based with refresh token rotation.
-- Global leaderboard score submissions accept Firebase ID tokens and also support session tokens for local/e2e scaffolding.
+- Global leaderboard score submissions require non-anonymous Firebase-authenticated users.
+- `/api/auth/me` supports:
+  - `GET` to inspect authenticated account profile
+  - `PUT` with `{ "displayName": "<name>" }` to set leaderboard name
 - Session creation/join returns:
   - `playerToken` for WS query auth
   - `auth` bundle (`accessToken`, `refreshToken`, `expiresAt`, `tokenType`)
@@ -54,6 +57,13 @@ The running server uses JSON-file persistence for now. SQL files define the inte
 - Supported WS message types for relay:
   - `chaos_attack`
   - `particle:emit`
+- Leaderboard ordering is deterministic:
+  1. Lower score first
+  2. Lower duration first
+  3. Fewer rolls first
+  4. Earlier timestamp first
+  5. Lexicographic score id tie-breaker
+- Backend retains top `200` leaderboard entries.
 
 ## E2E Smoke Tests
 

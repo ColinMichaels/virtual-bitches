@@ -7,8 +7,8 @@ import { scoreHistoryService, GameScore } from "../services/score-history.js";
 import { audioService } from "../services/audio.js";
 import { getDifficultyName } from "../engine/modes.js";
 import { leaderboardService } from "../services/leaderboard.js";
-import { firebaseAuthService, type FirebaseUserProfile } from "../services/firebaseAuth.js";
-import type { GlobalLeaderboardEntry } from "../services/backendApi.js";
+import { firebaseAuthService } from "../services/firebaseAuth.js";
+import type { AuthenticatedUserProfile, GlobalLeaderboardEntry } from "../services/backendApi.js";
 import { logger } from "../utils/logger.js";
 
 const log = logger.create("LeaderboardModal");
@@ -19,7 +19,9 @@ export class LeaderboardModal {
   private onReplay: ((score: GameScore) => void) | null = null;
   private activeTab: "personal" | "global" = "personal";
   private globalRenderVersion = 0;
+  private savingLeaderboardName = false;
   private readonly onFirebaseAuthChanged = () => {
+    leaderboardService.clearCachedProfile();
     if (this.activeTab === "global" && this.isVisible()) {
       void this.renderGlobalLeaderboard();
     }
@@ -196,11 +198,12 @@ export class LeaderboardModal {
     try {
       await firebaseAuthService.initialize();
       await leaderboardService.flushPendingScores();
-      const entries = await leaderboardService.getGlobalLeaderboard(25);
+      const entries = await leaderboardService.getGlobalLeaderboard(200);
+      const accountProfile = await leaderboardService.getAccountProfile();
       if (this.activeTab !== "global" || renderVersion !== this.globalRenderVersion) {
         return;
       }
-      this.renderGlobalContent(entries, firebaseAuthService.getCurrentUserProfile());
+      this.renderGlobalContent(entries, accountProfile);
     } catch (error) {
       if (this.activeTab !== "global" || renderVersion !== this.globalRenderVersion) {
         return;
@@ -215,14 +218,22 @@ export class LeaderboardModal {
     }
   }
 
-  private renderGlobalContent(entries: GlobalLeaderboardEntry[], user: FirebaseUserProfile | null): void {
+  private renderGlobalContent(
+    entries: GlobalLeaderboardEntry[],
+    accountProfile: AuthenticatedUserProfile | null
+  ): void {
     const authConfigured = firebaseAuthService.isConfigured();
+    const isAuthenticated = Boolean(accountProfile && !accountProfile.isAnonymous);
     const displayName =
-      user?.displayName || user?.email || (user?.isAnonymous ? "Guest Player" : "Not Signed In");
-    const authBadge = user
-      ? (user.isAnonymous ? "Guest Session" : "Google Account")
+      accountProfile?.displayName ||
+      accountProfile?.email ||
+      (isAuthenticated ? "Signed In" : "Not Signed In");
+    const authBadge = isAuthenticated
+      ? "Authenticated Account"
       : "Not Signed In";
-    const showGoogleSignIn = authConfigured && (!user || user.isAnonymous);
+    const showGoogleSignIn = authConfigured && !isAuthenticated;
+    const leaderboardName = accountProfile?.leaderboardName?.trim() ?? "";
+    const requiresNameSetup = isAuthenticated && leaderboardName.length === 0;
 
     this.contentContainer.innerHTML = `
       <div class="global-auth-panel">
@@ -241,11 +252,23 @@ export class LeaderboardModal {
         </div>
       </div>
       ${
+        requiresNameSetup
+          ? `<div class="global-name-setup">
+              <h4>Set Leaderboard Name</h4>
+              <p>Pick the public name shown on the global leaderboard.</p>
+              <div class="global-name-row">
+                <input id="leaderboard-name-input" type="text" maxlength="24" placeholder="Your player name" />
+                <button class="btn-global-auth" data-action="save-name">Save Name</button>
+              </div>
+            </div>`
+          : ""
+      }
+      ${
         entries.length === 0
           ? '<p class="empty-message">No global scores yet. Finish a run to claim the first spot.</p>'
           : `<div class="score-list">
               ${entries
-                .map((entry, index) => this.renderGlobalEntry(entry, index + 1, user))
+                .map((entry, index) => this.renderGlobalEntry(entry, index + 1, accountProfile))
                 .join("")}
             </div>`
       }
@@ -258,10 +281,39 @@ export class LeaderboardModal {
           audioService.playSfx("click");
           void firebaseAuthService.signInWithGoogle().then((ok) => {
             if (ok) {
+              leaderboardService.clearCachedProfile();
               void this.renderGlobalLeaderboard();
             }
           });
         });
+    }
+
+    if (requiresNameSetup) {
+      const saveBtn = this.contentContainer.querySelector('[data-action="save-name"]');
+      const nameInput = this.contentContainer.querySelector("#leaderboard-name-input");
+
+      saveBtn?.addEventListener("click", () => {
+        const input = nameInput as HTMLInputElement | null;
+        const value = input?.value?.trim() ?? "";
+        if (!value || this.savingLeaderboardName) {
+          return;
+        }
+
+        this.savingLeaderboardName = true;
+        audioService.playSfx("click");
+        void leaderboardService
+          .setLeaderboardName(value)
+          .then((profile) => {
+            if (!profile) {
+              return;
+            }
+            void leaderboardService.flushPendingScores();
+            void this.renderGlobalLeaderboard();
+          })
+          .finally(() => {
+            this.savingLeaderboardName = false;
+          });
+      });
     }
 
     this.contentContainer
@@ -275,7 +327,7 @@ export class LeaderboardModal {
   private renderGlobalEntry(
     entry: GlobalLeaderboardEntry,
     rank: number,
-    currentUser: FirebaseUserProfile | null
+    currentUser: AuthenticatedUserProfile | null
   ): string {
     const normalizedDifficulty = normalizeDifficulty(entry.mode?.difficulty);
     const modeName = getDifficultyName(normalizedDifficulty);

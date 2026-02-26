@@ -5,6 +5,7 @@
   "scripts": {
     "copy:assets": "cp src/content/rules.md public/rules.md",
     "dev": "npm run copy:assets && vite",
+    "dev:full": "node scripts/dev-full.mjs",
     "dev:dev": "npm run copy:assets && vite --mode development",
     "build": "npm run copy:assets && tsc && vite build",
     "build:dev": "npm run copy:assets && tsc && vite build --mode development",

@@ -4,8 +4,8 @@ import {
   GoogleAuthProvider,
   getAuth,
   onAuthStateChanged,
-  signInAnonymously,
   signInWithPopup,
+  signOut,
   type Auth,
   type User,
 } from "firebase/auth";
@@ -39,6 +39,10 @@ export class FirebaseAuthService {
   getCurrentUserProfile(): FirebaseUserProfile | null {
     if (!this.currentUser) return null;
     return mapUser(this.currentUser);
+  }
+
+  isAuthenticated(): boolean {
+    return Boolean(this.currentUser && !this.currentUser.isAnonymous);
   }
 
   async initialize(): Promise<void> {
@@ -86,6 +90,19 @@ export class FirebaseAuthService {
     }
   }
 
+  async signOutCurrentUser(): Promise<void> {
+    await this.initialize();
+    if (!this.auth) {
+      return;
+    }
+
+    try {
+      await signOut(this.auth);
+    } catch (error) {
+      log.warn("Sign-out failed", error);
+    }
+  }
+
   private async bootstrap(): Promise<void> {
     if (!hasFirebaseConfig()) {
       log.warn("Firebase auth disabled: missing Firebase web config");
@@ -101,22 +118,7 @@ export class FirebaseAuthService {
         this.currentUser = user;
         this.dispatchAuthChanged();
       });
-
-      if (!this.auth.currentUser) {
-        try {
-          await signInAnonymously(this.auth);
-        } catch (error) {
-          if (isExpectedAnonymousAuthRestriction(error)) {
-            log.warn(
-              "Anonymous Firebase auth is restricted/disabled. Continuing without anonymous session."
-            );
-          } else {
-            log.error("Failed to sign in anonymously", error);
-          }
-        }
-      } else {
-        this.currentUser = this.auth.currentUser;
-      }
+      this.currentUser = this.auth.currentUser;
     } catch (error) {
       log.error("Failed to initialize Firebase auth", error);
     } finally {
@@ -157,18 +159,6 @@ function mapUser(user: User): FirebaseUserProfile {
     photoURL: user.photoURL ?? undefined,
     isAnonymous: Boolean(user.isAnonymous),
   };
-}
-
-function isExpectedAnonymousAuthRestriction(error: unknown): boolean {
-  const code =
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof (error as { code?: unknown }).code === "string"
-      ? String((error as { code?: string }).code)
-      : "";
-
-  return code === "auth/admin-restricted-operation" || code === "auth/operation-not-allowed";
 }
 
 export const firebaseAuthService = new FirebaseAuthService();

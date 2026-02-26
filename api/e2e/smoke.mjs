@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 const REQUEST_TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 10000);
 const WS_TIMEOUT_MS = Number(process.env.E2E_WS_TIMEOUT_MS ?? 10000);
+const firebaseIdToken = process.env.E2E_FIREBASE_ID_TOKEN?.trim() ?? "";
 
 const baseInput = (process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:3000").trim();
 const wsOverride = process.env.E2E_WS_URL?.trim();
@@ -91,32 +92,36 @@ async function run() {
   );
   assert(heartbeat?.ok === true, "heartbeat response was not ok=true");
 
-  const scoreSubmission = await apiRequest("/leaderboard/scores", {
-    method: "POST",
-    accessToken: created.auth.accessToken,
-    body: {
-      scoreId: `e2e-score-${runSuffix}`,
-      score: 42,
-      timestamp: Date.now(),
-      duration: 180000,
-      rollCount: 7,
-      playerName: "E2E Host",
-      mode: {
-        difficulty: "normal",
-        variant: "classic",
+  if (firebaseIdToken) {
+    const scoreSubmission = await apiRequest("/leaderboard/scores", {
+      method: "POST",
+      accessToken: firebaseIdToken,
+      body: {
+        scoreId: `e2e-score-${runSuffix}`,
+        score: 42,
+        timestamp: Date.now(),
+        duration: 180000,
+        rollCount: 7,
+        playerName: "E2E Host",
+        mode: {
+          difficulty: "normal",
+          variant: "classic",
+        },
       },
-    },
-  });
-  assert(scoreSubmission?.score === 42, "leaderboard score submission failed");
+    });
+    assert(scoreSubmission?.score === 42, "leaderboard score submission failed");
 
-  const leaderboard = await apiRequest("/leaderboard/global?limit=5", {
-    method: "GET",
-  });
-  assert(Array.isArray(leaderboard?.entries), "global leaderboard did not return entries[]");
-  assert(
-    leaderboard.entries.some((entry) => entry?.id === scoreSubmission.id),
-    "submitted score was not present in global leaderboard response"
-  );
+    const leaderboard = await apiRequest("/leaderboard/global?limit=5", {
+      method: "GET",
+    });
+    assert(Array.isArray(leaderboard?.entries), "global leaderboard did not return entries[]");
+    assert(
+      leaderboard.entries.some((entry) => entry?.id === scoreSubmission.id),
+      "submitted score was not present in global leaderboard response"
+    );
+  } else {
+    log("Skipping leaderboard write verification (set E2E_FIREBASE_ID_TOKEN to enable).");
+  }
 
   log("Smoke test passed.");
 }
