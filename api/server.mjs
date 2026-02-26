@@ -19,6 +19,7 @@ const FIREBASE_PROJECT_ID =
     process.env.GOOGLE_CLOUD_PROJECT ??
     process.env.GCLOUD_PROJECT ??
     "").trim();
+const FIREBASE_WEB_API_KEY = (process.env.FIREBASE_WEB_API_KEY ?? "").trim();
 const log = logger.create("Server");
 
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -646,6 +647,13 @@ function authorizeRequest(req, expectedPlayerId, expectedSessionId) {
 }
 
 async function verifyFirebaseIdToken(idToken) {
+  if (!FIREBASE_WEB_API_KEY) {
+    return {
+      ok: false,
+      reason: "firebase_api_key_not_configured",
+    };
+  }
+
   const cached = firebaseTokenCache.get(idToken);
   const now = Date.now();
   if (cached && cached.expiresAt > now + 5000) {
@@ -655,24 +663,50 @@ async function verifyFirebaseIdToken(idToken) {
     };
   }
 
-  const endpoint = new URL("https://oauth2.googleapis.com/tokeninfo");
-  endpoint.searchParams.set("id_token", idToken);
+  const decoded = decodeJwtPayload(idToken);
+  const audience = typeof decoded?.aud === "string" ? decoded.aud : "";
+  const issuer = typeof decoded?.iss === "string" ? decoded.iss : "";
+  if (FIREBASE_PROJECT_ID && audience && audience !== FIREBASE_PROJECT_ID) {
+    log.warn(
+      `Rejected Firebase token with mismatched project audience (expected=${FIREBASE_PROJECT_ID}, actual=${audience})`
+    );
+    return {
+      ok: false,
+      reason: "firebase_audience_mismatch",
+    };
+  }
+  if (FIREBASE_PROJECT_ID && issuer) {
+    const expectedIssuer = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
+    if (issuer !== expectedIssuer) {
+      log.warn(
+        `Rejected Firebase token with mismatched issuer (expected=${expectedIssuer}, actual=${issuer})`
+      );
+      return {
+        ok: false,
+        reason: "firebase_issuer_mismatch",
+      };
+    }
+  }
+
+  const endpoint = new URL("https://identitytoolkit.googleapis.com/v1/accounts:lookup");
+  endpoint.searchParams.set("key", FIREBASE_WEB_API_KEY);
 
   let response;
   try {
-    response = await fetch(endpoint, { method: "GET" });
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        idToken,
+      }),
+    });
   } catch (error) {
-    log.warn("Failed to call Google tokeninfo endpoint", error);
+    log.warn("Failed to call Firebase accounts:lookup", error);
     return {
       ok: false,
-      reason: "firebase_tokeninfo_request_failed",
-    };
-  }
-
-  if (!response.ok) {
-    return {
-      ok: false,
-      reason: `firebase_tokeninfo_http_${response.status}`,
+      reason: "firebase_lookup_request_failed",
     };
   }
 
@@ -680,17 +714,31 @@ async function verifyFirebaseIdToken(idToken) {
   try {
     payload = await response.json();
   } catch (error) {
-    log.warn("Invalid tokeninfo JSON response", error);
+    log.warn("Invalid Firebase accounts:lookup JSON response", error);
     return {
       ok: false,
-      reason: "firebase_tokeninfo_invalid_json",
+      reason: "firebase_lookup_invalid_json",
     };
   }
 
-  const uid = String(payload.user_id ?? payload.sub ?? "").trim();
-  const aud = String(payload.aud ?? "").trim();
-  const exp = Number(payload.exp ?? 0);
-  const expiresAt = Number.isFinite(exp) ? exp * 1000 : now + 60000;
+  if (!response.ok) {
+    const remoteMessage =
+      typeof payload?.error?.message === "string"
+        ? payload.error.message
+        : `HTTP_${response.status}`;
+
+    return {
+      ok: false,
+      reason: `firebase_lookup_${normalizeReason(remoteMessage)}`,
+    };
+  }
+
+  const users = Array.isArray(payload?.users) ? payload.users : [];
+  const user = users[0] ?? null;
+  const uid =
+    user && typeof user.localId === "string" ? user.localId.trim() : "";
+  const exp = Number(decoded?.exp ?? 0);
+  const expiresAt = Number.isFinite(exp) ? exp * 1000 : now + 5 * 60 * 1000;
 
   if (!uid) {
     return {
@@ -699,21 +747,15 @@ async function verifyFirebaseIdToken(idToken) {
     };
   }
 
-  if (FIREBASE_PROJECT_ID && aud && aud !== FIREBASE_PROJECT_ID) {
-    log.warn(
-      `Rejected Firebase token with mismatched project audience (expected=${FIREBASE_PROJECT_ID}, actual=${aud})`
-    );
-    return {
-      ok: false,
-      reason: "firebase_audience_mismatch",
-    };
-  }
-
   const claims = {
     uid,
-    email: typeof payload.email === "string" ? payload.email : undefined,
-    name: typeof payload.name === "string" ? payload.name : undefined,
-    picture: typeof payload.picture === "string" ? payload.picture : undefined,
+    email: user && typeof user.email === "string" ? user.email : undefined,
+    name:
+      user && typeof user.displayName === "string"
+        ? user.displayName
+        : undefined,
+    picture:
+      user && typeof user.photoUrl === "string" ? user.photoUrl : undefined,
     expiresAt,
   };
 
@@ -722,6 +764,33 @@ async function verifyFirebaseIdToken(idToken) {
     ok: true,
     claims,
   };
+}
+
+function decodeJwtPayload(token) {
+  const parts = String(token ?? "").split(".");
+  if (parts.length < 2) {
+    return null;
+  }
+
+  const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+  const padding = payload.length % 4 === 0 ? "" : "=".repeat(4 - (payload.length % 4));
+  const normalized = payload + padding;
+
+  try {
+    const raw = Buffer.from(normalized, "base64").toString("utf8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeReason(message) {
+  return String(message)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
 }
 
 function issueAuthTokenBundle(playerId, sessionId) {

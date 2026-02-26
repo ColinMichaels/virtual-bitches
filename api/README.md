@@ -13,6 +13,7 @@ Environment variables:
 - `PORT` (default: `3000`)
 - `WS_BASE_URL` (default: `ws://localhost:3000`)
 - `FIREBASE_PROJECT_ID` (recommended for Firebase ID token audience validation)
+- `FIREBASE_WEB_API_KEY` (required for Firebase `accounts:lookup` ID token validation)
 
 ## Storage
 
