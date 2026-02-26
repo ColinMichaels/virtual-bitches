@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY package.json ./
 COPY server.mjs ./
+COPY logger.mjs ./
 COPY data ./data
 
 ENV NODE_ENV=production
