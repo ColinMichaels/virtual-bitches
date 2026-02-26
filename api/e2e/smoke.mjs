@@ -75,6 +75,23 @@ async function run() {
     buildSocketUrl(activeSessionId, guestPlayerId, joined.auth.accessToken)
   );
   guestMessageBuffer = createSocketMessageBuffer(guestSocket);
+  const guestReadyState = await waitForBufferedMessage(
+    guestMessageBuffer,
+    (payload) =>
+      payload?.type === "session_state" &&
+      payload?.sessionId === activeSessionId &&
+      Array.isArray(payload?.participants) &&
+      payload.participants
+        .filter((participant) => participant && !participant.isBot)
+        .every((participant) => participant?.isReady === true),
+    "guest ready session_state"
+  );
+  assert(
+    guestReadyState.participants
+      .filter((participant) => participant && !participant.isBot)
+      .every((participant) => participant?.isReady === true),
+    "expected all human participants to be ready after socket connect"
+  );
 
   const expectedFirstTurnPlayerId =
     typeof joined?.turnState?.activeTurnPlayerId === "string"

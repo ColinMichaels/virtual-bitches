@@ -45,6 +45,7 @@ export interface MultiplayerSessionParticipant {
   joinedAt: number;
   lastHeartbeatAt: number;
   isBot?: boolean;
+  isReady?: boolean;
 }
 
 export interface MultiplayerSessionTurnState {

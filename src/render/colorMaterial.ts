@@ -10,7 +10,7 @@
  * - Where texture alpha = 1 (opaque): show texture color
  */
 
-import { ShaderMaterial, Scene, Texture, Color3, Vector3 } from "@babylonjs/core";
+import { ShaderMaterial, Scene, Texture, Color3, Vector3, Effect } from "@babylonjs/core";
 
 export interface ColorMaterialOptions {
   /** Base die color */
@@ -44,6 +44,9 @@ export function createColorMaterial(
   scene: Scene,
   options: ColorMaterialOptions
 ): ShaderMaterial {
+  // Ensure shader source is registered before creating shader materials.
+  // Without this, Babylon may try to fetch .fx files and get index.html in dev.
+  ensureColorDiceShadersRegistered();
 
   // Set defines based on available textures
   const defines: string[] = [];
@@ -219,3 +222,15 @@ void main(void) {
   gl_FragColor = vec4(finalColor, 1.0);
 }
 `;
+
+let shadersRegistered = false;
+
+function ensureColorDiceShadersRegistered(): void {
+  if (shadersRegistered) {
+    return;
+  }
+
+  Effect.ShadersStore["colorDiceVertexShader"] = colorDiceVertexShader;
+  Effect.ShadersStore["colorDiceFragmentShader"] = colorDiceFragmentShader;
+  shadersRegistered = true;
+}

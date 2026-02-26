@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "copy:assets": "cp src/content/rules.md public/rules.md",
+    "copy:assets": "node scripts/copy-assets.mjs",
+    "copy:assets:sync": "node scripts/copy-assets.mjs --sync-themes",
     "dev": "npm run copy:assets && vite",
     "dev:full": "node scripts/dev-full.mjs",
     "dev:dev": "npm run copy:assets && vite --mode development",
