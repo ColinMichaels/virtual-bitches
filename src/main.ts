@@ -53,6 +53,10 @@ let lastFirebaseReauthPromptAt = 0;
 
 registerAuthSessionHandlers();
 hydrateBrandAssets();
+applyMobileDiceLayoutPreference(settingsService.getSettings().controls.mobileDiceLayout);
+settingsService.onChange((settings) => {
+  applyMobileDiceLayoutPreference(settings.controls.mobileDiceLayout);
+});
 
 bootLoadingScreen.show();
 setBootStatus("Loading theme catalog...", 8);
@@ -173,6 +177,10 @@ function hydrateBrandAssets(): void {
   if (miniLogo) {
     miniLogo.src = biscuitsLogoUrl;
   }
+}
+
+function applyMobileDiceLayoutPreference(layout: "wrapped" | "single-row" | "perimeter"): void {
+  document.body.dataset.mobileDiceLayout = layout;
 }
 
 function loadGameRuntime(): Promise<GameRuntimeModule> {

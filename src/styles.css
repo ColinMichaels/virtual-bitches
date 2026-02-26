@@ -22,6 +22,9 @@ h1, h2, h3, h4, h5, h6 {
   --safe-area-right: env(safe-area-inset-right);
   --safe-area-bottom: env(safe-area-inset-bottom);
   --safe-area-left: env(safe-area-inset-left);
+  --control-edge-gap: 20px;
+  --control-edge-gap-mobile: 10px;
+  --control-icon-size: 50px;
   --btn-border-radius: 10px;
   --btn-border: 1px solid rgba(255, 255, 255, 0.22);
   --btn-shadow: 0 8px 20px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.18);
@@ -926,30 +929,79 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-/* Settings Gear Button - Top Right */
-/* Settings, Updates, and Leaderboard Buttons - Bottom Right (grouped together) */
-#settings-gear-btn {
+/* Right rail controls (desktop) */
+:is(
+  #settings-gear-btn,
+  #invite-link-btn,
+  #updates-toggle-btn,
+  #chaos-upgrades-btn,
+  #leaderboard-btn
+) {
   position: absolute;
-  bottom: max(20px, env(safe-area-inset-bottom));
-  right: max(140px, calc(env(safe-area-inset-right) + 120px));
-  width: 50px;
-  height: 50px;
+  bottom: max(var(--control-edge-gap), calc(env(safe-area-inset-bottom) + var(--control-edge-gap)));
+  width: var(--control-icon-size);
+  height: var(--control-icon-size);
   padding: 12px;
   background: rgba(0,0,0,0.7);
   border: 1px solid rgba(255,255,255,0.2);
   border-radius: 50%;
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
 }
 
-#settings-gear-btn svg {
+:is(
+  #settings-gear-btn,
+  #invite-link-btn,
+  #updates-toggle-btn,
+  #chaos-upgrades-btn,
+  #leaderboard-btn
+) svg {
   width: 24px;
   height: 24px;
   color: #fff;
+}
+
+:is(#invite-link-btn, #updates-toggle-btn, #chaos-upgrades-btn, #leaderboard-btn):active {
+  transform: scale(0.95);
+}
+
+#leaderboard-btn {
+  right: max(var(--control-edge-gap), env(safe-area-inset-right));
+}
+
+#updates-toggle-btn {
+  right: max(
+    calc(var(--control-edge-gap) + 60px),
+    calc(env(safe-area-inset-right) + 60px)
+  );
+}
+
+#settings-gear-btn {
+  right: max(
+    calc(var(--control-edge-gap) + 120px),
+    calc(env(safe-area-inset-right) + 120px)
+  );
+}
+
+#chaos-upgrades-btn {
+  right: max(
+    calc(var(--control-edge-gap) + 180px),
+    calc(env(safe-area-inset-right) + 180px)
+  );
+}
+
+#invite-link-btn {
+  right: max(
+    calc(var(--control-edge-gap) + 240px),
+    calc(env(safe-area-inset-right) + 240px)
+  );
 }
 
 #settings-gear-btn:hover {
@@ -962,62 +1014,10 @@ h1, h2, h3, h4, h5, h6 {
   transform: rotate(90deg) scale(0.95);
 }
 
-#invite-link-btn {
-  position: absolute;
-  bottom: max(20px, env(safe-area-inset-bottom));
-  right: max(260px, calc(env(safe-area-inset-right) + 240px));
-  width: 50px;
-  height: 50px;
-  padding: 12px;
-  background: rgba(0,0,0,0.7);
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
-#invite-link-btn svg {
-  width: 24px;
-  height: 24px;
-  color: #fff;
-}
-
 #invite-link-btn:hover {
   background: rgba(45, 156, 219, 0.85);
   border-color: #2d9cdb;
   transform: scale(1.1);
-}
-
-#invite-link-btn:active {
-  transform: scale(0.95);
-}
-
-#updates-toggle-btn {
-  position: absolute;
-  bottom: max(20px, env(safe-area-inset-bottom));
-  right: max(80px, calc(env(safe-area-inset-right) + 60px));
-  width: 50px;
-  height: 50px;
-  padding: 12px;
-  background: rgba(0,0,0,0.7);
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
-#updates-toggle-btn svg {
-  width: 24px;
-  height: 24px;
-  color: #fff;
 }
 
 #updates-toggle-btn:hover {
@@ -1026,76 +1026,16 @@ h1, h2, h3, h4, h5, h6 {
   transform: scale(1.1);
 }
 
-#updates-toggle-btn:active {
-  transform: scale(0.95);
-}
-
-#chaos-upgrades-btn {
-  position: absolute;
-  bottom: max(20px, env(safe-area-inset-bottom));
-  right: max(200px, calc(env(safe-area-inset-right) + 180px));
-  width: 50px;
-  height: 50px;
-  padding: 12px;
-  background: rgba(0,0,0,0.7);
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
-#chaos-upgrades-btn svg {
-  width: 24px;
-  height: 24px;
-  color: #fff;
-}
-
 #chaos-upgrades-btn:hover {
   background: rgba(124, 93, 250, 0.85);
   border-color: #7c5dfa;
   transform: scale(1.1);
 }
 
-#chaos-upgrades-btn:active {
-  transform: scale(0.95);
-}
-
-#leaderboard-btn {
-  position: absolute;
-  bottom: max(20px, env(safe-area-inset-bottom));
-  right: max(20px, env(safe-area-inset-right));
-  width: 50px;
-  height: 50px;
-  padding: 12px;
-  background: rgba(0,0,0,0.7);
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
-#leaderboard-btn svg {
-  width: 24px;
-  height: 24px;
-  color: #fff;
-}
-
 #leaderboard-btn:hover {
   background: rgba(255, 193, 7, 0.8);
   border-color: #ffc107;
   transform: scale(1.1);
-}
-
-#leaderboard-btn:active {
-  transform: scale(0.95);
 }
 
 /* Camera Controls - Bottom Left */
@@ -1392,6 +1332,25 @@ button.danger,
 
 #splash-screen.fade-out {
   opacity: 0;
+}
+
+/* Hide gameplay chrome while splash is visible (prevents mobile controls from bleeding through). */
+body.splash-active :is(
+  #unified-hud,
+  #effect-hud,
+  #dice-row,
+  #controls,
+  #camera-controls,
+  #settings-gear-btn,
+  #invite-link-btn,
+  #updates-toggle-btn,
+  #chaos-upgrades-btn,
+  #leaderboard-btn,
+  #camera-positions-btn,
+  #mobile-menu-toggle,
+  #mobile-controls-menu
+) {
+  display: none !important;
 }
 
 #splash-canvas {
@@ -6126,5 +6085,210 @@ button.danger,
   .alpha-actions button {
     width: 100%;
     min-width: 0;
+  }
+}
+
+/* Responsive control cleanup: safe-edge controls + wrapped dice strip on mobile */
+@media screen and (max-width: 768px) {
+  #dice-row {
+    top: auto;
+    left: auto;
+    right: auto;
+    width: 100%;
+    max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    padding-left: max(8px, calc(env(safe-area-inset-left) + 4px));
+    padding-right: max(8px, calc(env(safe-area-inset-right) + 4px));
+    min-height: 64px;
+    max-height: 132px;
+    overflow: hidden;
+  }
+
+  #dice-row .die-wrapper {
+    flex: 0 0 auto;
+  }
+
+  #dice-row .die-wrapper .die-2d {
+    width: 50px;
+    height: 50px;
+  }
+
+  #dice-row .die-type-divider {
+    display: none;
+  }
+
+  #mobile-menu-toggle {
+    right: max(var(--control-edge-gap-mobile), calc(env(safe-area-inset-right) + 6px));
+    bottom: max(var(--control-edge-gap-mobile), calc(env(safe-area-inset-bottom) + 6px));
+    z-index: 1012;
+  }
+
+  #mobile-controls-menu {
+    right: max(var(--control-edge-gap-mobile), calc(env(safe-area-inset-right) + 6px));
+    bottom: max(var(--control-edge-gap-mobile), calc(env(safe-area-inset-bottom) + 6px));
+    max-width: min(
+      300px,
+      calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right) - 20px)
+    );
+    z-index: 1011;
+  }
+
+  .mobile-menu-content {
+    margin-bottom: 64px;
+  }
+
+  #controls {
+    position: fixed;
+    left: max(8px, calc(env(safe-area-inset-left) + 4px));
+    right: max(66px, calc(env(safe-area-inset-right) + 62px));
+    bottom: max(var(--control-edge-gap-mobile), calc(env(safe-area-inset-bottom) + 8px));
+    width: auto;
+    max-width: none;
+    transform: none;
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 8px;
+    z-index: 1008;
+  }
+
+  #action-btn {
+    width: 100%;
+    min-height: 50px;
+    padding: 14px 10px;
+  }
+
+  body[data-mobile-dice-layout="single-row"] #dice-row {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    min-height: 70px;
+    max-height: none;
+  }
+
+  body[data-mobile-dice-layout="single-row"] #dice-row::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  body[data-mobile-dice-layout="single-row"] #dice-row::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 999px;
+  }
+
+  body[data-mobile-dice-layout="single-row"] #dice-row .die-type-divider {
+    display: block;
+  }
+
+  body[data-mobile-dice-layout="perimeter"] #dice-row {
+    position: fixed;
+    top: max(96px, calc(env(safe-area-inset-top) + 84px));
+    left: 0;
+    right: 0;
+    bottom: max(84px, calc(env(safe-area-inset-bottom) + 74px));
+    width: 100%;
+    max-width: 100%;
+    min-height: 0;
+    max-height: none;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 62;
+  }
+
+  body[data-mobile-dice-layout="perimeter"] #dice-row .die-wrapper {
+    position: absolute;
+    left: var(--mobile-perimeter-x, 50%);
+    top: var(--mobile-perimeter-y, 12%);
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+    z-index: 1;
+  }
+
+  body[data-mobile-dice-layout="perimeter"] #dice-row .die-wrapper .die-2d {
+    width: 48px;
+    height: 48px;
+  }
+
+  body[data-mobile-dice-layout="perimeter"] #dice-row .die-wrapper .kind {
+    font-size: 8px;
+  }
+
+  body[data-mobile-dice-layout="perimeter"] #dice-row .die-type-divider {
+    display: none;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  #dice-row {
+    gap: 5px;
+    min-height: 58px;
+    max-height: 124px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    padding-left: max(6px, calc(env(safe-area-inset-left) + 4px));
+    padding-right: max(6px, calc(env(safe-area-inset-right) + 4px));
+  }
+
+  #dice-row .die-wrapper .die-2d {
+    width: 46px;
+    height: 46px;
+  }
+
+  #controls {
+    left: max(6px, calc(env(safe-area-inset-left) + 3px));
+    right: max(62px, calc(env(safe-area-inset-right) + 58px));
+    bottom: max(8px, calc(env(safe-area-inset-bottom) + 6px));
+  }
+
+  #mobile-menu-toggle {
+    right: max(6px, calc(env(safe-area-inset-right) + 4px));
+    bottom: max(8px, calc(env(safe-area-inset-bottom) + 4px));
+  }
+
+  #mobile-controls-menu {
+    right: max(6px, calc(env(safe-area-inset-right) + 4px));
+    bottom: max(8px, calc(env(safe-area-inset-bottom) + 4px));
+  }
+
+  body[data-mobile-dice-layout="single-row"] #dice-row {
+    min-height: 64px;
+  }
+
+  body[data-mobile-dice-layout="perimeter"] #dice-row {
+    top: max(88px, calc(env(safe-area-inset-top) + 78px));
+    bottom: max(74px, calc(env(safe-area-inset-bottom) + 66px));
+  }
+
+  body[data-mobile-dice-layout="perimeter"] #dice-row .die-wrapper .die-2d {
+    width: 44px;
+    height: 44px;
+  }
+
+  body[data-mobile-dice-layout="perimeter"] #dice-row .die-wrapper .kind {
+    font-size: 7px;
+    top: -4px;
+    right: -4px;
+  }
+}
+
+@media screen and (max-height: 500px) and (orientation: landscape) {
+  #controls {
+    left: 50%;
+    right: auto;
+    width: min(420px, calc(100vw - 18px));
+    transform: translateX(-50%);
+    bottom: max(8px, calc(env(safe-area-inset-bottom) + 6px));
+  }
+
+  #action-btn {
+    width: 100%;
   }
 }
