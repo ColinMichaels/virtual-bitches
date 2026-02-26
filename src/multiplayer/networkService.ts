@@ -82,7 +82,7 @@ export type MultiplayerTurnActionType = "roll" | "score";
 export interface MultiplayerTurnRollDieSnapshot {
   dieId: string;
   sides: number;
-  value: number;
+  value?: number;
 }
 
 export interface MultiplayerTurnRollPayload {
