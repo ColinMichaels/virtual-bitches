@@ -78,6 +78,45 @@ export class MultiplayerSessionService {
     return refreshed;
   }
 
+  syncSessionState(update: {
+    sessionId?: string;
+    roomCode?: string;
+    participants?: MultiplayerSessionRecord["participants"];
+    turnState?: MultiplayerSessionRecord["turnState"];
+    expiresAt?: number;
+  }): MultiplayerSessionRecord | null {
+    const current = this.activeSession;
+    if (!current) return null;
+
+    if (
+      typeof update.sessionId === "string" &&
+      update.sessionId &&
+      update.sessionId !== current.sessionId
+    ) {
+      return null;
+    }
+
+    const nextSession: MultiplayerSessionRecord = {
+      ...current,
+    };
+
+    if (typeof update.roomCode === "string" && update.roomCode.trim().length > 0) {
+      nextSession.roomCode = update.roomCode;
+    }
+    if (Array.isArray(update.participants)) {
+      nextSession.participants = update.participants;
+    }
+    if (Object.prototype.hasOwnProperty.call(update, "turnState")) {
+      nextSession.turnState = update.turnState ?? null;
+    }
+    if (typeof update.expiresAt === "number" && Number.isFinite(update.expiresAt)) {
+      nextSession.expiresAt = Math.floor(update.expiresAt);
+    }
+
+    this.activeSession = nextSession;
+    return nextSession;
+  }
+
   dispose(): void {
     this.clearHeartbeat();
     this.activeSession = null;

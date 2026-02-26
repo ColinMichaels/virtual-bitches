@@ -163,6 +163,19 @@ async function run() {
     Number.isFinite(expectedScorePoints) && expectedScorePoints >= 0,
     "expected score points not derivable from server roll"
   );
+  const guestSessionAfterRoll = await waitForBufferedMessage(
+    guestMessageBuffer,
+    (payload) =>
+      payload?.type === "session_state" &&
+      payload?.sessionId === activeSessionId &&
+      payload?.turnState?.phase === "await_score",
+    "guest session_state after roll"
+  );
+  assertEqual(
+    guestSessionAfterRoll?.turnState?.activeRollServerId,
+    rollServerId,
+    "session_state activeRollServerId mismatch after roll"
+  );
 
   hostSocket.send(
     JSON.stringify({
@@ -247,6 +260,19 @@ async function run() {
     guestTurnStarted.playerId,
     expectedSecondTurnPlayerId,
     "turn_start next player mismatch"
+  );
+  const guestSessionAfterTurnAdvance = await waitForBufferedMessage(
+    guestMessageBuffer,
+    (payload) =>
+      payload?.type === "session_state" &&
+      payload?.sessionId === activeSessionId &&
+      payload?.turnState?.activeTurnPlayerId === expectedSecondTurnPlayerId,
+    "guest session_state after turn advance"
+  );
+  assertEqual(
+    guestSessionAfterTurnAdvance?.turnState?.activeTurnPlayerId,
+    expectedSecondTurnPlayerId,
+    "session_state active turn mismatch after turn advance"
   );
 
   const chaosAttack = createChaosAttack(runSuffix);
