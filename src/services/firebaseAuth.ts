@@ -103,7 +103,17 @@ export class FirebaseAuthService {
       });
 
       if (!this.auth.currentUser) {
-        await signInAnonymously(this.auth);
+        try {
+          await signInAnonymously(this.auth);
+        } catch (error) {
+          if (isExpectedAnonymousAuthRestriction(error)) {
+            log.warn(
+              "Anonymous Firebase auth is restricted/disabled. Continuing without anonymous session."
+            );
+          } else {
+            log.error("Failed to sign in anonymously", error);
+          }
+        }
       } else {
         this.currentUser = this.auth.currentUser;
       }
@@ -147,6 +157,18 @@ function mapUser(user: User): FirebaseUserProfile {
     photoURL: user.photoURL ?? undefined,
     isAnonymous: Boolean(user.isAnonymous),
   };
+}
+
+function isExpectedAnonymousAuthRestriction(error: unknown): boolean {
+  const code =
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+      ? String((error as { code?: string }).code)
+      : "";
+
+  return code === "auth/admin-restricted-operation" || code === "auth/operation-not-allowed";
 }
 
 export const firebaseAuthService = new FirebaseAuthService();

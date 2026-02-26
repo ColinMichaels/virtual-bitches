@@ -1,6 +1,7 @@
 import { backendApiService, type GlobalLeaderboardEntry } from "./backendApi.js";
 import { scoreHistoryService, type GameScore } from "./score-history.js";
 import { logger } from "../utils/logger.js";
+import { firebaseAuthService } from "./firebaseAuth.js";
 
 const log = logger.create("LeaderboardService");
 const MAX_FLUSH_PER_BATCH = 8;
@@ -41,6 +42,12 @@ export class LeaderboardService {
 
     this.flushInFlight = true;
     try {
+      await firebaseAuthService.initialize();
+      const token = await firebaseAuthService.getIdToken();
+      if (!token) {
+        return 0;
+      }
+
       const pending = scoreHistoryService
         .getUnsyncedGlobalScores()
         .sort((a, b) => a.timestamp - b.timestamp)
