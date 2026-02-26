@@ -93,6 +93,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - **Scope**: Reliability and usability upgrades for multiplayer sessions, fallback behavior, and onboarding flow
 - **Completed**:
   - ✅ Room browser on splash with create/join flow and active-room refresh
+  - ✅ Added private-room join-by-code flow (`/api/multiplayer/rooms/:roomCode/join`) with splash invite-code input, one-tap `Join Code` quick action, inline validation + backend failure/success feedback, and invite links carrying both `session` and `room` params
   - ✅ Room inactivity expiry lifecycle with server-side cleanup and room list integration
   - ✅ Session-expired in-game modal with two clear recovery actions:
     - Return to Lobby
@@ -150,6 +151,15 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ---
 
 ## 🟡 Medium Priority
+
+### Live Ops / Admin Dashboard Foundation (Planned)
+- **Status**: 🟡 Planned (deferred until core multiplayer stability milestones are complete)
+- **Description**: Add internal admin tooling for monitoring active rooms/sessions and executing moderation/ops actions safely.
+- **Next Steps**:
+  - [ ] Define admin auth/roles + audit logging policy for `/api/admin/*`
+  - [ ] Add room/session monitoring endpoints (active rooms, turn state, idle/timeout health)
+  - [ ] Add controlled admin mutations (expire room, remove participant, room visibility toggle)
+  - [ ] Add a lightweight internal dashboard UI for live operations
 
 ### Visual Settings & Dice Visibility Enhancement (COMPLETE) 🎨
 - **Status**: ✅ Phase 1 COMPLETE (2026-02-25)

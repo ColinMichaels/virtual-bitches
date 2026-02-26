@@ -258,6 +258,27 @@ This document captures future feature ideas, enhancements, and expansion possibi
   - Insult & Taunt System (300+ pre-written taunts, AI generation, emotes, voice lines)
   - Chaos Points economy with ability unlocks and progression
   - 7 game modes (Casual, Competitive, Survival, Team Chaos, etc.)
+
+---
+
+## 🛠️ Live Ops & Admin
+
+### Front Admin Control + Monitoring Dashboard
+- **Complexity**: High
+- **Description**: Internal dashboard for live room oversight, moderation controls, and operational health checks.
+- **Initial Scope**:
+  - Room/session table (active players, room type, turn state, idle timers)
+  - Global counters (active sessions, ws connections, join failures, turn timeout rate)
+  - Room actions (expire room, remove participant, toggle room visibility)
+  - Incident panel (error spikes, auth failures, reconnect churn)
+- **Technical Notes**:
+  - Add admin-only API namespace (e.g., `/api/admin/*`) with strict auth/role checks
+  - Emit lightweight operational metrics from API loop/session manager
+  - Keep read APIs paginated/filterable for high room volume
+- **AI Prompt**:
+  ```
+  Implement Phase 1 of a BISCUITS admin dashboard. Add secure admin API endpoints for room/session summaries and moderation actions, then build a minimal frontend admin panel showing live room health, participant state, and emergency controls (expire room, remove player). Use role-gated auth and audit logging for all admin mutations.
+  ```
   - Anti-toxicity systems (report, mute, safe mode, AI moderation)
   - Network protocol for real-time attack broadcasting
 - **Design Philosophy**: "Fun frustration" - psychological pressure without toxicity

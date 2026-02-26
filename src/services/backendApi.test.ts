@@ -214,6 +214,51 @@ await test("returns joined session payload on successful multiplayer join", asyn
   assertEqual(result.reason, undefined, "Expected no join failure reason");
 });
 
+await test("joins multiplayer room by room code endpoint", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    jsonResponse({
+      sessionId: "session-by-code",
+      roomCode: "AB12CD",
+      createdAt: Date.now(),
+    });
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.joinMultiplayerRoomByCode("ab12cd", {
+    playerId: "player-1",
+  });
+  assert(result.session !== null, "Expected joined session from room code");
+  assertEqual(fetchCalls.length, 1, "Expected one fetch call");
+  assertEqual(
+    fetchCalls[0].url,
+    "https://api.example.com/api/multiplayer/rooms/AB12CD/join",
+    "Expected room-code join endpoint"
+  );
+});
+
+await test("returns typed room_not_found reason when room code join is rejected", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () => jsonResponse({ error: "Room code not found", reason: "room_not_found" }, 404);
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.joinMultiplayerRoomByCode("missing", {
+    playerId: "player-1",
+  });
+  assertEqual(result.session, null, "Expected null session when room code is missing");
+  assertEqual(result.reason, "room_not_found", "Expected room_not_found reason");
+  assertEqual(result.status, 404, "Expected 404 status");
+});
+
 await test("returns null on non-ok responses", async () => {
   authSessionService.clear();
   fetchCalls.length = 0;

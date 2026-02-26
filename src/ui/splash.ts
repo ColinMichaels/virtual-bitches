@@ -8,6 +8,7 @@ import { environment } from "../environments/environment.js";
 import { logger } from "../utils/logger.js";
 import type { MultiplayerRoomListing } from "../services/backendApi.js";
 import type { SplashBackground3D } from "./splashBackground3d.js";
+import { getLocalPlayerId } from "../services/playerIdentity.js";
 import biscuitsLogoUrl from "../assets/logos/Biscuits_logo.png";
 
 const log = logger.create("SplashScreen");
@@ -20,6 +21,7 @@ export interface SplashStartOptions {
   multiplayer?: {
     botCount: number;
     sessionId?: string;
+    roomCode?: string;
   };
 }
 
@@ -32,6 +34,14 @@ export class SplashScreen {
   private botCount = 1;
   private roomList: MultiplayerRoomListing[] = [];
   private selectedRoomSessionId: string | null = null;
+  private privateRoomCode = "";
+  private roomCodeJoinInFlight = false;
+  private roomCodeFeedback:
+    | {
+        tone: "info" | "success" | "error";
+        message: string;
+      }
+    | null = null;
   private roomListLoading = false;
   gameTitle = environment.gameTitle;
 
@@ -86,6 +96,22 @@ export class SplashScreen {
             </select>
             <button type="button" id="splash-room-refresh" class="btn btn-secondary secondary">Refresh</button>
           </div>
+          <label for="splash-room-code">Join By Invite Code</label>
+          <div class="splash-room-code-actions">
+            <input
+              id="splash-room-code"
+              type="text"
+              inputmode="text"
+              autocapitalize="characters"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Enter room code"
+              maxlength="8"
+              aria-describedby="splash-room-code-error"
+            />
+            <button type="button" id="splash-room-code-join" class="btn btn-primary primary">Join Code</button>
+          </div>
+          <p id="splash-room-code-error" class="splash-room-code-error" style="display: none;"></p>
           <p id="splash-room-status">No active public rooms found. Starting creates a private room.</p>
           <p>Pick a public lobby, or create a private room and invite others with your share link.</p>
         </div>
@@ -117,10 +143,45 @@ export class SplashScreen {
     });
 
     const roomSelect = this.container.querySelector<HTMLSelectElement>("#splash-room-select");
+    const roomCodeInput = this.container.querySelector<HTMLInputElement>("#splash-room-code");
+    const roomCodeJoinButton = this.container.querySelector<HTMLButtonElement>("#splash-room-code-join");
     roomSelect?.addEventListener("change", () => {
       const selected = roomSelect.value.trim();
       this.selectedRoomSessionId = selected.length > 0 ? selected : null;
+      if (this.selectedRoomSessionId && roomCodeInput) {
+        this.privateRoomCode = "";
+        roomCodeInput.value = "";
+      }
+      this.clearRoomCodeFeedback();
+      this.updateRoomCodeValidationUi();
       this.updateRoomStatus();
+    });
+    roomCodeInput?.addEventListener("input", () => {
+      const normalized = this.normalizeRoomCode(roomCodeInput.value);
+      this.privateRoomCode = normalized;
+      roomCodeInput.value = normalized;
+      if (normalized.length > 0) {
+        this.selectedRoomSessionId = null;
+        if (roomSelect) {
+          roomSelect.value = "";
+        }
+      }
+      this.clearRoomCodeFeedback();
+      this.updateRoomCodeValidationUi();
+      this.updateRoomStatus();
+    });
+    roomCodeInput?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+      if (roomCodeJoinButton?.disabled) {
+        return;
+      }
+      audioService.playSfx("click");
+      this.playMode = "multiplayer";
+      this.syncPlayModeUi();
+      void this.handleJoinCodeQuickAction(attemptStart);
     });
 
     const refreshButton = this.container.querySelector<HTMLButtonElement>("#splash-room-refresh");
@@ -131,9 +192,9 @@ export class SplashScreen {
 
     const startButton = this.container.querySelector<HTMLButtonElement>("#start-game-btn");
     const replayTutorialButton = this.container.querySelector<HTMLButtonElement>("#splash-replay-tutorial-btn");
-    const attemptStart = async (options: SplashStartOptions): Promise<void> => {
+    const attemptStart = async (options: SplashStartOptions): Promise<boolean> => {
       if (startButton?.disabled || replayTutorialButton?.disabled) {
-        return;
+        return false;
       }
 
       if (startButton) {
@@ -146,9 +207,10 @@ export class SplashScreen {
       try {
         const shouldStart = await Promise.resolve(onStart(options));
         if (!shouldStart) {
-          return;
+          return false;
         }
         this.hide();
+        return true;
       } finally {
         if (startButton) {
           startButton.disabled = false;
@@ -156,10 +218,20 @@ export class SplashScreen {
         if (replayTutorialButton) {
           replayTutorialButton.disabled = false;
         }
+        this.updateRoomCodeValidationUi();
       }
     };
 
     startButton?.addEventListener("click", () => {
+      const roomCodeValidationError =
+        this.playMode === "multiplayer"
+          ? this.getRoomCodeValidationError(this.privateRoomCode)
+          : null;
+      if (roomCodeValidationError) {
+        this.setRoomCodeFeedback(roomCodeValidationError, "error");
+        this.updateRoomCodeValidationUi();
+        return;
+      }
       audioService.playSfx("click");
       void attemptStart({
         playMode: this.playMode,
@@ -168,9 +240,19 @@ export class SplashScreen {
             ? {
                 botCount: this.botCount,
                 sessionId: this.selectedRoomSessionId ?? undefined,
+                roomCode: this.privateRoomCode || undefined,
               }
             : undefined,
       });
+    });
+    roomCodeJoinButton?.addEventListener("click", () => {
+      if (roomCodeJoinButton.disabled) {
+        return;
+      }
+      audioService.playSfx("click");
+      this.playMode = "multiplayer";
+      this.syncPlayModeUi();
+      void this.handleJoinCodeQuickAction(attemptStart);
     });
 
     replayTutorialButton?.addEventListener("click", () => {
@@ -263,6 +345,7 @@ export class SplashScreen {
     if (this.playMode === "multiplayer") {
       void this.refreshRoomList(false);
     }
+    this.updateRoomCodeValidationUi();
   }
 
   private updateRoomStatus(): void {
@@ -272,6 +355,15 @@ export class SplashScreen {
     }
     if (this.roomListLoading) {
       statusEl.textContent = "Refreshing rooms...";
+      return;
+    }
+    if (this.privateRoomCode) {
+      const roomCodeValidationError = this.getRoomCodeValidationError(this.privateRoomCode);
+      if (roomCodeValidationError) {
+        statusEl.textContent = "Invite code must be 4-8 letters or numbers.";
+        return;
+      }
+      statusEl.textContent = `Joining private room ${this.privateRoomCode}.`;
       return;
     }
     if (this.selectedRoomSessionId) {
@@ -361,6 +453,7 @@ export class SplashScreen {
       const canRestoreSelection =
         typeof priorSelection === "string" &&
         priorSelection.length > 0 &&
+        this.privateRoomCode.length === 0 &&
         this.roomList.some((room) => room.sessionId === priorSelection);
       this.selectedRoomSessionId = canRestoreSelection ? priorSelection : null;
       roomSelect.value = this.selectedRoomSessionId ?? "";
@@ -382,6 +475,149 @@ export class SplashScreen {
         refreshButton.disabled = false;
       }
       this.updateRoomStatus();
+    }
+  }
+
+  private normalizeRoomCode(rawValue: string): string {
+    return rawValue.replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, 8);
+  }
+
+  private getRoomCodeValidationError(roomCode: string): string | null {
+    if (!roomCode) {
+      return null;
+    }
+    if (roomCode.length < 4) {
+      return "Invite code must be 4-8 letters or numbers.";
+    }
+    return null;
+  }
+
+  private updateRoomCodeValidationUi(): void {
+    const roomCodeInput = this.container.querySelector<HTMLInputElement>("#splash-room-code");
+    const roomCodeJoinButton = this.container.querySelector<HTMLButtonElement>("#splash-room-code-join");
+    const roomCodeError = this.container.querySelector<HTMLElement>("#splash-room-code-error");
+    const validationError = this.getRoomCodeValidationError(this.privateRoomCode);
+    const shouldShowFeedback = this.playMode === "multiplayer";
+    const feedbackMessage = validationError
+      ? validationError
+      : this.roomCodeFeedback?.message ?? "";
+    const feedbackTone = validationError ? "error" : this.roomCodeFeedback?.tone ?? null;
+    const showErrorState = shouldShowFeedback && feedbackTone === "error";
+
+    if (roomCodeInput) {
+      roomCodeInput.setAttribute("aria-invalid", showErrorState ? "true" : "false");
+      roomCodeInput.disabled = this.roomCodeJoinInFlight;
+    }
+    if (roomCodeError) {
+      roomCodeError.classList.remove("is-info", "is-success", "is-error");
+      if (shouldShowFeedback && feedbackMessage) {
+        roomCodeError.textContent = feedbackMessage;
+        roomCodeError.style.display = "block";
+        if (feedbackTone === "info" || feedbackTone === "success" || feedbackTone === "error") {
+          roomCodeError.classList.add(`is-${feedbackTone}`);
+        }
+      } else {
+        roomCodeError.textContent = "";
+        roomCodeError.style.display = "none";
+      }
+    }
+    if (roomCodeJoinButton) {
+      roomCodeJoinButton.disabled =
+        this.playMode !== "multiplayer" ||
+        this.roomCodeJoinInFlight ||
+        this.privateRoomCode.length === 0 ||
+        Boolean(validationError);
+    }
+  }
+
+  private setRoomCodeFeedback(
+    message: string,
+    tone: "info" | "success" | "error"
+  ): void {
+    const normalizedMessage = message.trim();
+    this.roomCodeFeedback = normalizedMessage
+      ? {
+          tone,
+          message: normalizedMessage,
+        }
+      : null;
+    this.updateRoomCodeValidationUi();
+  }
+
+  private clearRoomCodeFeedback(): void {
+    this.roomCodeFeedback = null;
+  }
+
+  private getRoomCodeJoinFailureMessage(reason: string | undefined): string {
+    if (reason === "room_not_found") {
+      return "No room found for that invite code.";
+    }
+    if (reason === "room_full") {
+      return "That room is full right now.";
+    }
+    if (reason === "session_expired") {
+      return "That room has expired.";
+    }
+    return "Unable to join with that invite code right now.";
+  }
+
+  private async handleJoinCodeQuickAction(
+    attemptStart: (options: SplashStartOptions) => Promise<boolean>
+  ): Promise<void> {
+    if (this.roomCodeJoinInFlight) {
+      return;
+    }
+
+    const validationError = this.getRoomCodeValidationError(this.privateRoomCode);
+    if (validationError) {
+      this.setRoomCodeFeedback(validationError, "error");
+      return;
+    }
+
+    const targetRoomCode = this.privateRoomCode;
+    const localPlayerId = getLocalPlayerId();
+    this.roomCodeJoinInFlight = true;
+    this.setRoomCodeFeedback("Checking invite code...", "info");
+
+    let joinedSessionId: string | null = null;
+    try {
+      const { backendApiService } = await import("../services/backendApi.js");
+      const joinResult = await backendApiService.joinMultiplayerRoomByCode(targetRoomCode, {
+        playerId: localPlayerId,
+      });
+
+      if (!joinResult.session) {
+        this.setRoomCodeFeedback(
+          this.getRoomCodeJoinFailureMessage(joinResult.reason),
+          "error"
+        );
+        return;
+      }
+
+      joinedSessionId = joinResult.session.sessionId;
+      this.setRoomCodeFeedback(
+        `Room ${joinResult.session.roomCode} found. Joining...`,
+        "success"
+      );
+      const started = await attemptStart({
+        playMode: "multiplayer",
+        multiplayer: {
+          botCount: this.botCount,
+          sessionId: joinedSessionId,
+          roomCode: targetRoomCode,
+        },
+      });
+
+      if (!started) {
+        this.setRoomCodeFeedback("Unable to start game. Try again.", "error");
+        await backendApiService.leaveMultiplayerSession(joinedSessionId, localPlayerId);
+      }
+    } catch (error) {
+      log.warn("Invite-code join precheck failed", error);
+      this.setRoomCodeFeedback("Unable to validate invite code right now.", "error");
+    } finally {
+      this.roomCodeJoinInFlight = false;
+      this.updateRoomCodeValidationUi();
     }
   }
 }

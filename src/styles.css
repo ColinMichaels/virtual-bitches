@@ -1532,7 +1532,8 @@ button.danger,
   color: rgba(255, 255, 255, 0.78);
 }
 
-.splash-multiplayer-options select {
+.splash-multiplayer-options select,
+.splash-multiplayer-options input {
   min-width: 180px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.22);
@@ -1550,6 +1551,43 @@ button.danger,
 
 .splash-room-picker select {
   min-width: 260px;
+}
+
+.splash-multiplayer-options input#splash-room-code {
+  min-width: 260px;
+}
+
+.splash-room-code-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.splash-room-code-actions button {
+  min-width: 104px;
+  padding: 9px 12px;
+  font-size: 13px;
+}
+
+.splash-room-code-error {
+  min-height: 16px;
+}
+
+.splash-room-code-error.is-info {
+  color: rgba(174, 214, 255, 0.92);
+}
+
+.splash-room-code-error.is-success {
+  color: rgba(159, 244, 190, 0.95);
+}
+
+.splash-room-code-error.is-error {
+  color: rgba(255, 152, 152, 0.96);
+}
+
+.splash-multiplayer-options input[aria-invalid="true"] {
+  border-color: rgba(255, 122, 122, 0.9);
+  box-shadow: 0 0 0 1px rgba(255, 122, 122, 0.35);
 }
 
 .splash-room-picker button {
@@ -3821,7 +3859,8 @@ button.danger,
     min-width: 0;
   }
 
-  .splash-multiplayer-options select {
+  .splash-multiplayer-options select,
+  .splash-multiplayer-options input {
     width: 100%;
   }
 
@@ -3831,8 +3870,20 @@ button.danger,
     align-items: stretch;
   }
 
+  .splash-room-code-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .splash-room-picker select,
   .splash-room-picker button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .splash-room-code-actions input,
+  .splash-room-code-actions button {
     width: 100%;
     min-width: 0;
   }

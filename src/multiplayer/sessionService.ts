@@ -68,6 +68,21 @@ export class MultiplayerSessionService {
     return joinResult.session;
   }
 
+  async joinRoomByCode(roomCode: string, displayName?: string): Promise<MultiplayerSessionRecord | null> {
+    const joinResult = await backendApiService.joinMultiplayerRoomByCode(roomCode, {
+      playerId: this.playerId,
+      displayName,
+    });
+    if (!joinResult.session) {
+      this.lastJoinFailureReason = joinResult.reason ?? "unknown";
+      return null;
+    }
+
+    this.lastJoinFailureReason = null;
+    this.setActiveSession(joinResult.session);
+    return joinResult.session;
+  }
+
   async leaveSession(): Promise<void> {
     const current = this.activeSession;
     if (!current) return;

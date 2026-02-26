@@ -492,7 +492,7 @@ class Game implements GameCallbacks {
           "info",
           2600
         );
-        void this.copySessionInviteLink(activeSession.sessionId);
+        void this.copySessionInviteLink(activeSession.sessionId, activeSession.roomCode);
         return;
       }
 
@@ -653,15 +653,35 @@ class Game implements GameCallbacks {
   private async bootstrapMultiplayerSession(): Promise<void> {
     const query = new URLSearchParams(window.location.search);
     const sessionIdFromUrl = query.get("session")?.trim() ?? "";
+    const roomCodeFromUrl = this.normalizeInviteRoomCode(query.get("room"));
     const sessionIdFromOption =
       typeof this.multiplayerOptions.sessionId === "string"
         ? this.multiplayerOptions.sessionId.trim()
         : "";
+    const roomCodeFromOption = this.normalizeInviteRoomCode(this.multiplayerOptions.roomCode);
     const targetSessionId = sessionIdFromOption || sessionIdFromUrl;
+    const targetRoomCode = roomCodeFromOption || roomCodeFromUrl;
     const fromInviteLink = targetSessionId.length > 0 && targetSessionId === sessionIdFromUrl;
+    const fromRoomCodeInviteLink =
+      targetRoomCode.length > 0 &&
+      targetRoomCode === roomCodeFromUrl &&
+      !sessionIdFromOption;
     if (targetSessionId) {
       const joined = await this.joinMultiplayerSession(targetSessionId, fromInviteLink);
-      if (joined || fromInviteLink) {
+      if (joined) {
+        return;
+      }
+
+      if (fromInviteLink && roomCodeFromUrl) {
+        const joinedByRoomCode = await this.joinMultiplayerRoomByCode(roomCodeFromUrl, true, {
+          suppressFailureNotification: true,
+        });
+        if (joinedByRoomCode) {
+          return;
+        }
+      }
+
+      if (fromInviteLink) {
         return;
       }
 
@@ -677,6 +697,35 @@ class Game implements GameCallbacks {
         notificationService.show("Selected room expired. Creating a new room instead.", "warning", 2800);
       } else {
         notificationService.show("Selected room unavailable. Creating a new room instead.", "warning", 2800);
+      }
+    }
+
+    if (targetRoomCode) {
+      const joinedByRoomCode = await this.joinMultiplayerRoomByCode(
+        targetRoomCode,
+        fromRoomCodeInviteLink
+      );
+      if (joinedByRoomCode) {
+        return;
+      }
+      if (fromRoomCodeInviteLink) {
+        return;
+      }
+
+      const joinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason();
+      const fallbackJoined = await this.tryJoinAlternativeRoom("", joinFailureReason);
+      if (fallbackJoined) {
+        return;
+      }
+
+      if (joinFailureReason === "room_not_found") {
+        notificationService.show("Room code not found. Creating a new room instead.", "warning", 2800);
+      } else if (joinFailureReason === "room_full") {
+        notificationService.show("That room code is full. Creating a new room instead.", "warning", 2800);
+      } else if (joinFailureReason === "session_expired") {
+        notificationService.show("That room expired. Creating a new room instead.", "warning", 2800);
+      } else {
+        notificationService.show("Unable to join that room code. Creating a new room instead.", "warning", 2800);
       }
     }
 
@@ -727,8 +776,47 @@ class Game implements GameCallbacks {
           notificationService.show("Room is full. Pick another room or create a new one.", "warning", 2800);
         } else if (joinFailureReason === "session_expired") {
           notificationService.show("That room expired. Pick another room.", "warning", 2800);
+        } else if (joinFailureReason === "room_not_found") {
+          notificationService.show("Room code not found. Check the invite and try again.", "warning", 2800);
         } else {
           notificationService.show("Unable to join multiplayer session.", "error", 2600);
+        }
+      }
+      return false;
+    }
+
+    this.bindMultiplayerSession(session, !fromInviteLink);
+    if (fromInviteLink) {
+      notificationService.show(`Joined multiplayer room ${session.roomCode}.`, "success", 2600);
+    }
+    return true;
+  }
+
+  private async joinMultiplayerRoomByCode(
+    roomCode: string,
+    fromInviteLink: boolean,
+    options?: { suppressFailureNotification?: boolean }
+  ): Promise<boolean> {
+    const normalizedRoomCode = this.normalizeInviteRoomCode(roomCode);
+    if (!normalizedRoomCode) {
+      if (!options?.suppressFailureNotification) {
+        notificationService.show("Room code is invalid.", "warning", 2400);
+      }
+      return false;
+    }
+
+    const session = await this.multiplayerSessionService.joinRoomByCode(normalizedRoomCode);
+    if (!session) {
+      if (!options?.suppressFailureNotification) {
+        const joinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason();
+        if (joinFailureReason === "room_not_found") {
+          notificationService.show("Room code not found.", "warning", 2600);
+        } else if (joinFailureReason === "room_full") {
+          notificationService.show("That room is full. Try another room.", "warning", 2600);
+        } else if (joinFailureReason === "session_expired") {
+          notificationService.show("That room expired. Try another room.", "warning", 2600);
+        } else {
+          notificationService.show("Unable to join room code.", "error", 2400);
         }
       }
       return false;
@@ -833,7 +921,7 @@ class Game implements GameCallbacks {
     }
 
     if (updateUrlSessionParam) {
-      this.updateSessionQueryParam(session.sessionId);
+      this.updateSessionQueryParam(session.sessionId, session.roomCode);
     }
 
     this.updateInviteLinkControlVisibility();
@@ -2065,15 +2153,29 @@ class Game implements GameCallbacks {
     };
   }
 
-  private updateSessionQueryParam(sessionId: string): void {
+  private normalizeInviteRoomCode(rawValue: string | null | undefined): string {
+    if (typeof rawValue !== "string") {
+      return "";
+    }
+    return rawValue.replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, 8);
+  }
+
+  private updateSessionQueryParam(sessionId: string, roomCode?: string): void {
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.set("session", sessionId);
+    const normalizedRoomCode = this.normalizeInviteRoomCode(roomCode);
+    if (normalizedRoomCode) {
+      currentUrl.searchParams.set("room", normalizedRoomCode);
+    } else {
+      currentUrl.searchParams.delete("room");
+    }
     window.history.replaceState(window.history.state, "", currentUrl.toString());
   }
 
   private clearSessionQueryParam(): void {
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.delete("session");
+    currentUrl.searchParams.delete("room");
     window.history.replaceState(window.history.state, "", currentUrl.toString());
   }
 
@@ -2245,6 +2347,7 @@ class Game implements GameCallbacks {
 
     const redirectUrl = new URL(window.location.href);
     redirectUrl.searchParams.delete("session");
+    redirectUrl.searchParams.delete("room");
     redirectUrl.searchParams.delete("seed");
     redirectUrl.searchParams.delete("log");
     try {
@@ -2256,7 +2359,7 @@ class Game implements GameCallbacks {
     }
   }
 
-  private async copySessionInviteLink(sessionId: string): Promise<void> {
+  private async copySessionInviteLink(sessionId: string, roomCode?: string): Promise<void> {
     if (typeof window === "undefined" || !window.navigator?.clipboard?.writeText) {
       notificationService.show("Clipboard access unavailable on this device.", "warning", 2200);
       return;
@@ -2265,6 +2368,12 @@ class Game implements GameCallbacks {
     try {
       const inviteUrl = new URL(window.location.href);
       inviteUrl.searchParams.set("session", sessionId);
+      const normalizedRoomCode = this.normalizeInviteRoomCode(roomCode);
+      if (normalizedRoomCode) {
+        inviteUrl.searchParams.set("room", normalizedRoomCode);
+      } else {
+        inviteUrl.searchParams.delete("room");
+      }
       await window.navigator.clipboard.writeText(inviteUrl.toString());
       notificationService.show("Invite link copied to clipboard.", "info", 1800);
     } catch {
@@ -2536,7 +2645,7 @@ class Game implements GameCallbacks {
       notificationService.show("Start or join a multiplayer room to copy an invite link.", "warning", 2400);
       return;
     }
-    void this.copySessionInviteLink(activeSession.sessionId);
+    void this.copySessionInviteLink(activeSession.sessionId, activeSession.roomCode);
   }
 
   private queueTutorialCompletionUndo(): void {
