@@ -77,6 +77,8 @@ const PUBLIC_ROOM_CODE_PREFIX = normalizePublicRoomCodePrefix(
   "LBY"
 );
 const MAX_LEADERBOARD_ENTRIES = 200;
+const MAX_PLAYER_SCORE_ENTRIES_PER_PLAYER = 500;
+const MAX_PLAYER_SCORE_LIST_LIMIT = 500;
 const MAX_STORED_GAME_LOGS = 10000;
 const MAX_WS_MESSAGE_BYTES = 16 * 1024;
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -256,6 +258,7 @@ async function handleRequest(req, res) {
         ok: true,
         now: Date.now(),
         players: Object.keys(store.players).length,
+        playerScoreEntries: Object.keys(store.playerScores).length,
         sessions: Object.keys(store.multiplayerSessions).length,
         leaderboardEntries: Object.keys(store.leaderboardScores).length,
         storage: buildStoreDiagnostics(),
@@ -328,6 +331,16 @@ async function handleRequest(req, res) {
 
     if (req.method === "PUT" && /^\/api\/players\/[^/]+\/profile$/.test(pathname)) {
       await handlePutProfile(req, res, pathname);
+      return;
+    }
+
+    if (req.method === "GET" && /^\/api\/players\/[^/]+\/scores$/.test(pathname)) {
+      await handleGetPlayerScores(req, res, pathname, url);
+      return;
+    }
+
+    if (req.method === "POST" && /^\/api\/players\/[^/]+\/scores\/batch$/.test(pathname)) {
+      await handleAppendPlayerScores(req, res, pathname);
       return;
     }
 
@@ -638,6 +651,77 @@ async function handlePutProfile(req, res, pathname) {
   store.players[playerId] = profile;
   await persistStore();
   sendJson(res, 200, profile);
+}
+
+async function handleGetPlayerScores(req, res, pathname, requestUrl) {
+  const playerId = decodeURIComponent(pathname.split("/")[3]);
+  const authCheck = authorizeRequest(req, playerId);
+  if (!authCheck.ok) {
+    sendJson(res, 401, { error: "Unauthorized" });
+    return;
+  }
+
+  const rawLimit = Number(requestUrl.searchParams.get("limit") ?? MAX_PLAYER_SCORE_LIST_LIMIT);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.max(1, Math.min(MAX_PLAYER_SCORE_LIST_LIMIT, Math.floor(rawLimit)))
+    : MAX_PLAYER_SCORE_LIST_LIMIT;
+
+  const allEntries = collectPlayerScoresByPlayerId(playerId);
+  const sortedEntries = allEntries.sort(comparePlayerScoreEntries);
+  const entries = sortedEntries.slice(0, limit).map(serializePlayerScoreEntry);
+  const stats = buildPlayerScoreStats(allEntries);
+
+  sendJson(res, 200, {
+    playerId,
+    entries,
+    stats,
+    total: allEntries.length,
+    generatedAt: Date.now(),
+  });
+}
+
+async function handleAppendPlayerScores(req, res, pathname) {
+  const playerId = decodeURIComponent(pathname.split("/")[3]);
+  const authCheck = authorizeRequest(req, playerId);
+  if (!authCheck.ok) {
+    sendJson(res, 401, { error: "Unauthorized" });
+    return;
+  }
+
+  const body = await parseJsonBody(req);
+  const scores = Array.isArray(body?.scores) ? body.scores : [];
+  if (scores.length === 0) {
+    sendJson(res, 200, { accepted: 0, failed: 0 });
+    return;
+  }
+
+  let accepted = 0;
+  let failed = 0;
+  const now = Date.now();
+
+  for (const score of scores) {
+    const parsedScore = parsePlayerScorePayload(score);
+    if (!parsedScore) {
+      failed += 1;
+      continue;
+    }
+
+    const storeId = `${playerId}:${parsedScore.scoreId}`;
+    store.playerScores[storeId] = {
+      id: storeId,
+      playerId,
+      ...parsedScore,
+      updatedAt: now,
+    };
+    accepted += 1;
+  }
+
+  if (accepted > 0) {
+    trimPlayerScoresByPlayer(playerId, MAX_PLAYER_SCORE_ENTRIES_PER_PLAYER);
+    await persistStore();
+  }
+
+  sendJson(res, 200, { accepted, failed });
 }
 
 async function handleAppendLogs(req, res) {
@@ -4759,6 +4843,31 @@ function parseLeaderboardPayload(body) {
   return parsed;
 }
 
+function parsePlayerScorePayload(body) {
+  if (!body || typeof body !== "object") {
+    return null;
+  }
+
+  const scoreId = normalizeIdentifier(body.scoreId, `score-${randomUUID()}`);
+  const score = Number(body.score);
+  const duration = Number(body.duration ?? 0);
+  const rollCount = Number(body.rollCount ?? 0);
+  const timestamp = Number(body.timestamp);
+  if (!Number.isFinite(score) || score < 0) {
+    return null;
+  }
+
+  return {
+    scoreId,
+    score,
+    timestamp: Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now(),
+    seed: typeof body.seed === "string" ? body.seed.slice(0, 120) : undefined,
+    duration: Number.isFinite(duration) && duration >= 0 ? duration : 0,
+    rollCount: Number.isFinite(rollCount) && rollCount >= 0 ? Math.floor(rollCount) : 0,
+    mode: sanitizeLeaderboardMode(body.mode),
+  };
+}
+
 function sanitizeLeaderboardMode(mode) {
   if (!mode || typeof mode !== "object") {
     return undefined;
@@ -4831,6 +4940,30 @@ function compareLeaderboardEntries(left, right) {
   return String(left.id ?? "").localeCompare(String(right.id ?? ""));
 }
 
+function comparePlayerScoreEntries(left, right) {
+  const scoreDelta = Number(left.score ?? 0) - Number(right.score ?? 0);
+  if (scoreDelta !== 0) {
+    return scoreDelta;
+  }
+
+  const durationDelta = Number(left.duration ?? 0) - Number(right.duration ?? 0);
+  if (durationDelta !== 0) {
+    return durationDelta;
+  }
+
+  const rollDelta = Number(left.rollCount ?? 0) - Number(right.rollCount ?? 0);
+  if (rollDelta !== 0) {
+    return rollDelta;
+  }
+
+  const timestampDelta = Number(left.timestamp ?? 0) - Number(right.timestamp ?? 0);
+  if (timestampDelta !== 0) {
+    return timestampDelta;
+  }
+
+  return String(left.scoreId ?? "").localeCompare(String(right.scoreId ?? ""));
+}
+
 function trimLeaderboardScores(maxEntries) {
   const ids = Object.keys(store.leaderboardScores);
   if (ids.length <= maxEntries) {
@@ -4842,6 +4975,85 @@ function trimLeaderboardScores(maxEntries) {
   ids.forEach((id) => {
     if (!keep.has(id)) {
       delete store.leaderboardScores[id];
+    }
+  });
+}
+
+function collectPlayerScoresByPlayerId(playerId) {
+  return Object.values(store.playerScores)
+    .filter((entry) => entry && entry.playerId === playerId && Number.isFinite(entry.score))
+    .map((entry) => ({
+      scoreId:
+        typeof entry.scoreId === "string" && entry.scoreId
+          ? entry.scoreId
+          : normalizeIdentifier(entry.id, "score-unknown"),
+      score: Number(entry.score ?? 0),
+      timestamp: Number.isFinite(entry.timestamp) ? Math.floor(entry.timestamp) : Date.now(),
+      seed: typeof entry.seed === "string" ? entry.seed : undefined,
+      duration: Number.isFinite(entry.duration) ? Math.max(0, Number(entry.duration)) : 0,
+      rollCount: Number.isFinite(entry.rollCount) ? Math.max(0, Math.floor(entry.rollCount)) : 0,
+      mode: sanitizeLeaderboardMode(entry.mode),
+    }));
+}
+
+function serializePlayerScoreEntry(entry) {
+  return {
+    scoreId: entry.scoreId,
+    score: entry.score,
+    timestamp: entry.timestamp,
+    seed: entry.seed,
+    duration: entry.duration,
+    rollCount: entry.rollCount,
+    mode: entry.mode,
+  };
+}
+
+function buildPlayerScoreStats(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return {
+      totalGames: 0,
+      bestScore: 0,
+      averageScore: 0,
+      totalPlayTime: 0,
+    };
+  }
+
+  const totalGames = entries.length;
+  const bestScore = Math.min(...entries.map((entry) => Number(entry.score ?? 0)));
+  const totalPlayTime = entries.reduce(
+    (sum, entry) => sum + Math.max(0, Number(entry.duration ?? 0)),
+    0
+  );
+  const averageScore = Math.round(
+    entries.reduce((sum, entry) => sum + Number(entry.score ?? 0), 0) / totalGames
+  );
+
+  return {
+    totalGames,
+    bestScore,
+    averageScore,
+    totalPlayTime,
+  };
+}
+
+function trimPlayerScoresByPlayer(playerId, maxEntries) {
+  const playerEntries = Object.values(store.playerScores)
+    .filter((entry) => entry && entry.playerId === playerId)
+    .sort(comparePlayerScoreEntries);
+  if (playerEntries.length <= maxEntries) {
+    return;
+  }
+
+  const keepKeys = new Set(
+    playerEntries.slice(0, maxEntries).map((entry) => `${playerId}:${entry.scoreId}`)
+  );
+  Object.keys(store.playerScores).forEach((key) => {
+    const entry = store.playerScores[key];
+    if (!entry || entry.playerId !== playerId) {
+      return;
+    }
+    if (!keepKeys.has(key)) {
+      delete store.playerScores[key];
     }
   });
 }

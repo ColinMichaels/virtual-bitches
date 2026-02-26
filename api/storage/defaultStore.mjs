@@ -1,5 +1,6 @@
 export const DEFAULT_STORE = {
   players: {},
+  playerScores: {},
   gameLogs: {},
   multiplayerSessions: {},
   refreshTokens: {},

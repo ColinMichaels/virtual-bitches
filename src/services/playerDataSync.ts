@@ -335,29 +335,37 @@ export class PlayerDataSyncService {
     const unsynced = scoreHistoryService.getUnsyncedScores();
     if (unsynced.length === 0) return true;
 
-    const logs: GameLogRecord[] = unsynced.map((score) => ({
-      id: `score-${score.id}`,
-      playerId: this.profilePlayerId,
-      sessionId: this.sessionId,
-      type: "score_saved",
+    const scorePayloads = unsynced.map((score) => ({
+      scoreId: score.id,
+      score: score.score,
       timestamp: score.timestamp,
-      payload: {
-        scoreId: score.id,
-        score: score.score,
-        seed: score.seed,
-        duration: score.duration,
-        rollCount: score.rollCount,
-        mode: score.mode,
-      },
+      seed: score.seed,
+      duration: score.duration,
+      rollCount: score.rollCount,
+      mode: score.mode,
     }));
 
-    const response = await backendApiService.appendGameLogs(logs);
+    const response = await backendApiService.appendPlayerScores(
+      this.profilePlayerId,
+      scorePayloads
+    );
     if (!response || response.accepted <= 0) return false;
 
     const acceptedScoreIds = unsynced.slice(0, response.accepted).map((entry) => entry.id);
     scoreHistoryService.markSynced(acceptedScoreIds);
-    log.debug(`Synced ${acceptedScoreIds.length} score logs`);
-    return response.accepted >= logs.length && response.failed <= 0;
+    log.debug(`Synced ${acceptedScoreIds.length} player score records`);
+
+    this.enqueueLog("score_sync", {
+      accepted: response.accepted,
+      failed: response.failed,
+      playerId: this.profilePlayerId,
+      sessionId: this.sessionId,
+      scores: unsynced.slice(0, response.accepted).map((score) => ({
+        scoreId: score.id,
+        score: score.score,
+      })),
+    });
+    return response.accepted >= scorePayloads.length && response.failed <= 0;
   }
 
   private removeAcceptedLogs(accepted: number): void {

@@ -11,13 +11,17 @@ import {
   type LeaderboardSyncStatus,
 } from "../services/leaderboard.js";
 import { firebaseAuthService } from "../services/firebaseAuth.js";
-import type { AuthenticatedUserProfile, GlobalLeaderboardEntry } from "../services/backendApi.js";
+import {
+  backendApiService,
+  type AuthenticatedUserProfile,
+  type GlobalLeaderboardEntry,
+  type PlayerScoreRecord,
+} from "../services/backendApi.js";
 import {
   playerDataSyncService,
   type PlayerDataSyncStatus,
 } from "../services/playerDataSync.js";
 import { logger } from "../utils/logger.js";
-import { confirmAction } from "./confirmModal.js";
 import { modalManager } from "./modalManager.js";
 
 const log = logger.create("LeaderboardModal");
@@ -28,6 +32,7 @@ export class LeaderboardModal {
   private contentContainer: HTMLElement;
   private onReplay: ((score: GameScore) => void) | null = null;
   private activeTab: "personal" | "global" = "personal";
+  private personalRenderVersion = 0;
   private globalRenderVersion = 0;
   private savingLeaderboardName = false;
   private readonly onFirebaseAuthChanged = () => {
@@ -131,16 +136,40 @@ export class LeaderboardModal {
 
     // Render appropriate content
     if (tab === "personal") {
-      this.renderPersonalScores();
+      void this.renderPersonalScores();
     } else {
       void this.renderGlobalLeaderboard();
     }
     this.updateSyncIndicator();
   }
 
-  private renderPersonalScores() {
-    const stats = scoreHistoryService.getStats();
-    const topScores = scoreHistoryService.getTopScores(10);
+  private async renderPersonalScores(): Promise<void> {
+    const renderVersion = ++this.personalRenderVersion;
+    this.contentContainer.innerHTML = `
+      <div class="global-placeholder">
+        <h3>My Scores</h3>
+        <p>Loading synced score history...</p>
+      </div>
+    `;
+
+    const profilePlayerId = playerDataSyncService.getPlayerId();
+    const response = await backendApiService.getPlayerScores(profilePlayerId, 200);
+    if (this.activeTab !== "personal" || renderVersion !== this.personalRenderVersion) {
+      return;
+    }
+
+    if (!response) {
+      this.contentContainer.innerHTML = `
+        <div class="global-placeholder">
+          <h3>My Scores</h3>
+          <p>Unable to load server score history right now.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const stats = response.stats;
+    const topScores = response.entries.slice(0, 10);
 
     this.contentContainer.innerHTML = `
       <div class="stats-summary">
@@ -164,27 +193,19 @@ export class LeaderboardModal {
 
       <div class="scores-section">
         <div class="section-header">
-          <h3>Top 10 Scores</h3>
-          <button class="btn btn-danger btn-sm btn-clear-history">Clear History</button>
+          <h3>Top 10 Synced Scores</h3>
         </div>
-        ${topScores.length > 0 ? this.renderScoreList(topScores) : '<p class="empty-message">No scores yet. Play a game to get started!</p>'}
+        ${topScores.length > 0 ? this.renderServerScoreList(topScores) : '<p class="empty-message">No synced scores yet. Finish a game to publish your history.</p>'}
       </div>
     `;
 
-    // Wire up clear history button
-    const clearBtn = this.contentContainer.querySelector(".btn-clear-history");
-    if (clearBtn) {
-      clearBtn.addEventListener("click", () => {
-        audioService.playSfx("click");
-        void this.handleClearHistory();
-      });
-    }
-
-    // Wire up replay buttons
     this.contentContainer.querySelectorAll(".btn-replay").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         audioService.playSfx("click");
-        const scoreId = (e.target as HTMLElement).getAttribute("data-score-id")!;
+        const scoreId = (e.currentTarget as HTMLElement).getAttribute("data-score-id") ?? "";
+        if (!scoreId) {
+          return;
+        }
         const score = scoreHistoryService.getScore(scoreId);
         if (score && this.onReplay) {
           this.hide();
@@ -194,13 +215,15 @@ export class LeaderboardModal {
     });
   }
 
-  private renderScoreList(scores: GameScore[]): string {
+  private renderServerScoreList(scores: PlayerScoreRecord[]): string {
     return `
       <div class="score-list">
         ${scores.map((score, index) => {
-          const modeName = score.mode ? getDifficultyName(score.mode.difficulty) : 'Normal';
-          const modeClass = score.mode?.difficulty === 'easy' ? 'mode-easy' :
-                           score.mode?.difficulty === 'hard' ? 'mode-hard' : '';
+          const normalizedDifficulty = normalizeDifficulty(score.mode?.difficulty);
+          const modeName = getDifficultyName(normalizedDifficulty);
+          const modeClass = normalizedDifficulty === 'easy' ? 'mode-easy' :
+                           normalizedDifficulty === 'hard' ? 'mode-hard' : '';
+          const replayAvailable = Boolean(this.onReplay && scoreHistoryService.getScore(score.scoreId));
           return `
           <div class="score-entry">
             <div class="rank">#${index + 1}</div>
@@ -213,7 +236,12 @@ export class LeaderboardModal {
                 <span class="mode-badge ${modeClass}">${modeName}</span>
               </div>
             </div>
-            <button class="btn btn-outline btn-sm btn-replay" data-score-id="${score.id}" title="Replay this game">
+            <button
+              class="btn btn-outline btn-sm btn-replay"
+              data-score-id="${score.scoreId}"
+              title="${replayAvailable ? "Replay this game" : "Replay available for local scores on this device"}"
+              ${replayAvailable ? "" : "disabled"}
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 12a9 9 0 009 9 9 9 0 009-9 9 9 0 00-9-9"/>
                 <path d="M3 12l3-3m-3 3l3 3"/>
@@ -395,22 +423,6 @@ export class LeaderboardModal {
         </div>
       </div>
     `;
-  }
-
-  private async handleClearHistory(): Promise<void> {
-    const confirmed = await confirmAction({
-      title: "Clear Score History?",
-      message: "Are you sure you want to clear your entire score history? This cannot be undone.",
-      confirmLabel: "Clear History",
-      cancelLabel: "Cancel",
-      tone: "danger",
-    });
-    if (!confirmed) {
-      return;
-    }
-
-    scoreHistoryService.clearHistory();
-    this.renderPersonalScores();
   }
 
   private formatDate(timestamp: number): string {

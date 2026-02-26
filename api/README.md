@@ -45,6 +45,8 @@ SQL files define the intended longer-term relational schema.
 - `GET /api/auth/me`
 - `GET /api/players/:playerId/profile`
 - `PUT /api/players/:playerId/profile`
+- `GET /api/players/:playerId/scores`
+- `POST /api/players/:playerId/scores/batch`
 - `POST /api/logs/batch`
 - `POST /api/leaderboard/scores`
 - `GET /api/leaderboard/global`
@@ -103,6 +105,8 @@ Planned (not implemented yet):
 - Current multiplayer orchestration is server-process authoritative (in-memory + persisted snapshots). Keep Cloud Run API single-instance until distributed room coordination is introduced.
 - Friends/presence architecture plan lives in `docs/FRIENDS-SYSTEM-PLAN.md`; endpoints above are intentionally deferred until multiplayer stability gate completion.
 - `GET /api/players/:playerId/profile` returns `204 No Content` when profile does not exist yet.
+- `GET /api/players/:playerId/scores` returns server-synced personal score history with aggregate stats.
+- `POST /api/players/:playerId/scores/batch` upserts score records for the specified player and trims to the best `500` entries per player.
 - WS endpoint is available at `/` and expects query params:
   - `session=<sessionId>`
   - `playerId=<playerId>`

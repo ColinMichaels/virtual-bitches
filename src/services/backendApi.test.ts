@@ -106,6 +106,72 @@ await test("posts log batch payload", async () => {
   assert(typeof fetchCalls[0].init?.body === "string", "Expected JSON request body");
 });
 
+await test("posts player score batch payload", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () => jsonResponse({ accepted: 1, failed: 0 });
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.appendPlayerScores("player/1", [
+    {
+      scoreId: "score-1",
+      score: 7,
+      timestamp: Date.now(),
+      duration: 1234,
+      rollCount: 6,
+      mode: {
+        difficulty: "normal",
+        variant: "classic",
+      },
+    },
+  ]);
+
+  assertEqual(result?.accepted, 1, "Expected accepted score count");
+  assertEqual(fetchCalls.length, 1, "Expected one fetch call");
+  assertEqual(
+    fetchCalls[0].url,
+    "https://api.example.com/api/players/player%2F1/scores/batch",
+    "Expected encoded player score batch endpoint"
+  );
+  assert(typeof fetchCalls[0].init?.body === "string", "Expected JSON request body");
+});
+
+await test("fetches player scores with bounded limit", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    jsonResponse({
+      playerId: "player-1",
+      entries: [],
+      stats: {
+        totalGames: 0,
+        bestScore: 0,
+        averageScore: 0,
+        totalPlayTime: 0,
+      },
+      total: 0,
+      generatedAt: Date.now(),
+    });
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.getPlayerScores("player-1", 999);
+  assert(result !== null, "Expected player score response");
+  assertEqual(fetchCalls.length, 1, "Expected one fetch call");
+  assertEqual(
+    fetchCalls[0].url,
+    "https://api.example.com/api/players/player-1/scores?limit=500",
+    "Expected bounded player score listing endpoint"
+  );
+});
+
 await test("passes botCount and difficulty in multiplayer session create payload", async () => {
   authSessionService.clear();
   fetchCalls.length = 0;

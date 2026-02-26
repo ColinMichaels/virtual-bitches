@@ -170,6 +170,39 @@ export interface LeaderboardScoreSubmission {
   };
 }
 
+export interface PlayerScoreSubmission {
+  scoreId: string;
+  score: number;
+  timestamp: number;
+  seed?: string;
+  duration: number;
+  rollCount: number;
+  mode?: {
+    difficulty?: string;
+    variant?: string;
+  };
+}
+
+export interface PlayerScoreRecord extends PlayerScoreSubmission {}
+
+export interface PlayerScoreBatchResponse {
+  accepted: number;
+  failed: number;
+}
+
+export interface PlayerScoreListResponse {
+  playerId: string;
+  entries: PlayerScoreRecord[];
+  stats: {
+    totalGames: number;
+    bestScore: number;
+    averageScore: number;
+    totalPlayTime: number;
+  };
+  total: number;
+  generatedAt: number;
+}
+
 export interface GlobalLeaderboardEntry {
   id: string;
   uid: string;
@@ -241,6 +274,38 @@ export class BackendApiService {
       method: "PUT",
       body: profile,
     });
+  }
+
+  async appendPlayerScores(
+    playerId: string,
+    scores: PlayerScoreSubmission[]
+  ): Promise<PlayerScoreBatchResponse | null> {
+    if (scores.length === 0) {
+      return { accepted: 0, failed: 0 };
+    }
+
+    return this.request<PlayerScoreBatchResponse>(
+      `/players/${encodeURIComponent(playerId)}/scores/batch`,
+      {
+        method: "POST",
+        body: {
+          scores,
+        },
+      }
+    );
+  }
+
+  async getPlayerScores(
+    playerId: string,
+    limit: number = 200
+  ): Promise<PlayerScoreListResponse | null> {
+    const boundedLimit = Math.max(1, Math.min(500, Math.floor(limit)));
+    return this.request<PlayerScoreListResponse>(
+      `/players/${encodeURIComponent(playerId)}/scores?limit=${boundedLimit}`,
+      {
+        method: "GET",
+      }
+    );
   }
 
   async appendGameLogs(logs: GameLogRecord[]): Promise<GameLogBatchResponse | null> {
