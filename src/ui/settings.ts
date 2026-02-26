@@ -49,6 +49,7 @@ export class SettingsModal {
   private activeTab: SettingsTab = "game";
   private savingLeaderboardName = false;
   private savingAdminRole = false;
+  private savingAdminMutation = false;
   private accountRenderVersion = 0;
   private adminMonitorRefreshHandle?: ReturnType<typeof setInterval>;
   private readonly onFirebaseAuthChanged = () => {
@@ -962,6 +963,7 @@ export class SettingsModal {
           .then((firebaseIdToken) =>
             adminApiService.setRole(targetUid, nextRole, {
               firebaseIdToken,
+              adminToken: adminApiService.getAdminToken(),
             })
           )
           .then((result) => {
@@ -978,6 +980,107 @@ export class SettingsModal {
           })
           .finally(() => {
             this.savingAdminRole = false;
+            void this.refreshAccountSection();
+          });
+      });
+    });
+
+    panel.querySelectorAll('[data-action="settings-admin-expire-room"]').forEach((buttonNode) => {
+      const button = buttonNode as HTMLButtonElement;
+      button.addEventListener("click", () => {
+        if (this.savingAdminMutation) {
+          return;
+        }
+        const sessionId = button.dataset.sessionId?.trim() ?? "";
+        if (!sessionId) {
+          return;
+        }
+        this.savingAdminMutation = true;
+        audioService.playSfx("click");
+        void confirmAction({
+          title: "Expire Room?",
+          message: `Force close room ${sessionId}? Connected players will be disconnected.`,
+          confirmLabel: "Expire Room",
+          cancelLabel: "Cancel",
+          tone: "danger",
+        })
+          .then((confirmed) => {
+            if (!confirmed) {
+              return null;
+            }
+            return this.getAdminRequestAuthOptions().then((authOptions) =>
+              adminApiService.expireSession(sessionId, authOptions)
+            );
+          })
+          .then((result) => {
+            if (!result) {
+              return;
+            }
+            if (!result.ok) {
+              notificationService.show(
+                this.getAdminMonitorFailureMessage(result.reason, result.status),
+                "error",
+                2500
+              );
+              return;
+            }
+            notificationService.show("Room expired", "success", 1800);
+          })
+          .finally(() => {
+            this.savingAdminMutation = false;
+            void this.refreshAccountSection();
+          });
+      });
+    });
+
+    panel.querySelectorAll('[data-action="settings-admin-remove-player"]').forEach((buttonNode) => {
+      const button = buttonNode as HTMLButtonElement;
+      button.addEventListener("click", () => {
+        if (this.savingAdminMutation) {
+          return;
+        }
+        const sessionId = button.dataset.sessionId?.trim() ?? "";
+        const card = button.closest(".settings-admin-room-card") as HTMLElement | null;
+        const select = card?.querySelector(
+          "select[data-admin-remove-player]"
+        ) as HTMLSelectElement | null;
+        const playerId = select?.value?.trim() ?? "";
+        if (!sessionId || !playerId) {
+          return;
+        }
+        this.savingAdminMutation = true;
+        audioService.playSfx("click");
+        void confirmAction({
+          title: "Remove Player?",
+          message: `Remove ${playerId} from room ${sessionId}?`,
+          confirmLabel: "Remove Player",
+          cancelLabel: "Cancel",
+          tone: "danger",
+        })
+          .then((confirmed) => {
+            if (!confirmed) {
+              return null;
+            }
+            return this.getAdminRequestAuthOptions().then((authOptions) =>
+              adminApiService.removeParticipant(sessionId, playerId, authOptions)
+            );
+          })
+          .then((result) => {
+            if (!result) {
+              return;
+            }
+            if (!result.ok) {
+              notificationService.show(
+                this.getAdminMonitorFailureMessage(result.reason, result.status),
+                "error",
+                2500
+              );
+              return;
+            }
+            notificationService.show("Player removed from room", "success", 1800);
+          })
+          .finally(() => {
+            this.savingAdminMutation = false;
             void this.refreshAccountSection();
           });
       });
@@ -999,6 +1102,7 @@ export class SettingsModal {
     const tokenValue = adminApiService.getAdminToken();
     const now = Date.now();
     const currentRole = this.normalizeAdminRoleValue(options.currentRole);
+    const canOperate = currentRole === "owner" || currentRole === "operator";
     const statusText = overview
       ? `Connected (${this.formatAdminAccessMode(overview.accessMode)})`
       : this.getAdminMonitorFailureMessage(reason, status);
@@ -1034,7 +1138,7 @@ export class SettingsModal {
       `
       : "";
     const roomsMarkup = overview
-      ? this.renderAdminRoomListMarkup(overview, now)
+      ? this.renderAdminRoomListMarkup(overview, now, canOperate)
       : `
         <p class="settings-admin-empty">
           Monitor data is unavailable right now. Configure token access or retry.
@@ -1150,7 +1254,11 @@ export class SettingsModal {
     `;
   }
 
-  private renderAdminRoomListMarkup(overview: AdminMonitorOverview, now: number): string {
+  private renderAdminRoomListMarkup(
+    overview: AdminMonitorOverview,
+    now: number,
+    canOperate: boolean
+  ): string {
     if (!overview.rooms.length) {
       return `
         <p class="settings-admin-empty">
@@ -1174,6 +1282,47 @@ export class SettingsModal {
             : null;
         const secondsToSessionExpire = Math.max(0, Math.ceil((room.expiresAt - now) / 1000));
         const roomTypeLabel = this.formatAdminRoomType(room.roomType);
+        const removablePlayers = room.participants.filter((participant) => !participant.isBot);
+        const removeOptionsMarkup = removablePlayers
+          .map((participant) => {
+            const participantLabel =
+              participant.displayName?.trim() || participant.playerId;
+            return `<option value="${escapeAttribute(participant.playerId)}">${escapeHtml(participantLabel)}</option>`;
+          })
+          .join("");
+        const adminActionsMarkup = canOperate
+          ? `
+            <div class="settings-admin-room-actions">
+              <button
+                type="button"
+                class="btn btn-danger settings-account-btn"
+                data-action="settings-admin-expire-room"
+                data-session-id="${escapeAttribute(room.sessionId)}"
+              >
+                Expire Room
+              </button>
+              ${
+                removablePlayers.length > 0
+                  ? `
+                    <div class="settings-admin-remove-row">
+                      <select data-admin-remove-player>
+                        ${removeOptionsMarkup}
+                      </select>
+                      <button
+                        type="button"
+                        class="btn btn-secondary settings-account-btn"
+                        data-action="settings-admin-remove-player"
+                        data-session-id="${escapeAttribute(room.sessionId)}"
+                      >
+                        Remove Player
+                      </button>
+                    </div>
+                  `
+                  : `<div class="settings-admin-empty">No human players to remove.</div>`
+              }
+            </div>
+          `
+          : "";
 
         return `
           <div class="settings-admin-room-card">
@@ -1189,6 +1338,7 @@ export class SettingsModal {
               ${secondsToTurnExpire === null ? "" : ` • turn ${secondsToTurnExpire}s`}
               • idle ${Math.floor(room.idleMs / 1000)}s • room ${secondsToSessionExpire}s
             </div>
+            ${adminActionsMarkup}
           </div>
         `;
       })
@@ -1211,6 +1361,14 @@ export class SettingsModal {
         return "Admin token rejected";
       case "missing_admin_role":
         return "Role value is required";
+      case "invalid_session_id":
+        return "Invalid session ID";
+      case "invalid_player_id":
+        return "Invalid player ID";
+      case "unknown_session":
+        return "Session not found";
+      case "unknown_player":
+        return "Player not found in room";
       case "admin_role_required":
         return "Admin role is required";
       case "admin_role_forbidden":
@@ -1265,6 +1423,18 @@ export class SettingsModal {
       return role;
     }
     return null;
+  }
+
+  private async getAdminRequestAuthOptions(): Promise<{
+    firebaseIdToken?: string | null;
+    adminToken?: string | null;
+  }> {
+    const firebaseIdToken = await firebaseAuthService.getIdToken();
+    const adminToken = adminApiService.getAdminToken();
+    return {
+      firebaseIdToken,
+      adminToken,
+    };
   }
 
   private formatAdminRoomType(roomType: string): string {
@@ -1325,7 +1495,8 @@ export class SettingsModal {
     return (
       activeElement.id === "settings-leaderboard-name" ||
       activeElement.id === "settings-admin-token" ||
-      activeElement.matches("select[data-admin-role-select]")
+      activeElement.matches("select[data-admin-role-select]") ||
+      activeElement.matches("select[data-admin-remove-player]")
     );
   }
 

@@ -53,6 +53,8 @@ SQL files define the intended longer-term relational schema.
 - `GET /api/admin/metrics`
 - `GET /api/admin/roles`
 - `PUT /api/admin/roles/:uid`
+- `POST /api/admin/sessions/:sessionId/expire`
+- `POST /api/admin/sessions/:sessionId/participants/:playerId/remove`
 - `POST /api/multiplayer/sessions`
 - `POST /api/multiplayer/sessions/:sessionId/join`
 - `POST /api/multiplayer/rooms/:roomCode/join`
@@ -88,6 +90,9 @@ Planned (not implemented yet):
     - otherwise: role-based in production, and role-based in non-production when bootstrap owners are configured (fallback `open`)
   - Role mode requires Firebase-authenticated users with assigned roles (`viewer`, `operator`, `owner`).
   - `owner` role can assign/revoke roles via `PUT /api/admin/roles/:uid`.
+  - `operator` and `owner` may run room control mutations:
+    - expire room session
+    - remove participant from room
   - Pass `x-admin-token: <token>` (or bearer token) when token mode is enabled.
 - Friends/presence architecture plan lives in `docs/FRIENDS-SYSTEM-PLAN.md`; endpoints above are intentionally deferred until multiplayer stability gate completion.
 - `GET /api/players/:playerId/profile` returns `204 No Content` when profile does not exist yet.

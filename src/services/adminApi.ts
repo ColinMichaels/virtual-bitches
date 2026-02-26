@@ -115,6 +115,17 @@ export interface AdminRoleUpdateResult {
   principal?: AdminPrincipal | null;
 }
 
+export interface AdminMutationResult {
+  ok: boolean;
+  status?: number;
+  reason?: string;
+  principal?: AdminPrincipal | null;
+  sessionId?: string;
+  playerId?: string;
+  sessionExpired?: boolean;
+  roomInventoryChanged?: boolean;
+}
+
 export interface AdminRequestAuthOptions {
   firebaseIdToken?: string | null;
   adminToken?: string | null;
@@ -255,10 +266,88 @@ export class AdminApiService {
     };
   }
 
+  async expireSession(
+    sessionId: string,
+    authOptions: AdminRequestAuthOptions = {}
+  ): Promise<AdminMutationResult> {
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      return {
+        ok: false,
+        reason: "invalid_session_id",
+      };
+    }
+    const result = await this.requestJson(`/admin/sessions/${encodeURIComponent(normalizedSessionId)}/expire`, {
+      method: "POST",
+      authOptions,
+    });
+    if (!result.ok) {
+      return {
+        ok: false,
+        status: result.status,
+        reason: result.reason,
+      };
+    }
+    const okValue = result.payload?.ok === true;
+    return {
+      ok: okValue,
+      status: result.status,
+      sessionId:
+        typeof result.payload?.sessionId === "string" ? result.payload.sessionId : normalizedSessionId,
+      roomInventoryChanged: result.payload?.roomInventoryChanged === true,
+      principal: isRecord(result.payload?.principal) ? (result.payload.principal as AdminPrincipal) : null,
+    };
+  }
+
+  async removeParticipant(
+    sessionId: string,
+    playerId: string,
+    authOptions: AdminRequestAuthOptions = {}
+  ): Promise<AdminMutationResult> {
+    const normalizedSessionId = sessionId.trim();
+    const normalizedPlayerId = playerId.trim();
+    if (!normalizedSessionId) {
+      return {
+        ok: false,
+        reason: "invalid_session_id",
+      };
+    }
+    if (!normalizedPlayerId) {
+      return {
+        ok: false,
+        reason: "invalid_player_id",
+      };
+    }
+    const path = `/admin/sessions/${encodeURIComponent(normalizedSessionId)}/participants/${encodeURIComponent(normalizedPlayerId)}/remove`;
+    const result = await this.requestJson(path, {
+      method: "POST",
+      authOptions,
+    });
+    if (!result.ok) {
+      return {
+        ok: false,
+        status: result.status,
+        reason: result.reason,
+      };
+    }
+    const okValue = result.payload?.ok === true;
+    return {
+      ok: okValue,
+      status: result.status,
+      sessionId:
+        typeof result.payload?.sessionId === "string" ? result.payload.sessionId : normalizedSessionId,
+      playerId:
+        typeof result.payload?.playerId === "string" ? result.payload.playerId : normalizedPlayerId,
+      sessionExpired: result.payload?.sessionExpired === true,
+      roomInventoryChanged: result.payload?.roomInventoryChanged === true,
+      principal: isRecord(result.payload?.principal) ? (result.payload.principal as AdminPrincipal) : null,
+    };
+  }
+
   private async requestJson(
     path: string,
     options: {
-      method: "GET" | "PUT";
+      method: "GET" | "PUT" | "POST";
       body?: unknown;
       authOptions?: AdminRequestAuthOptions;
     }

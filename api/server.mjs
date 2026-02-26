@@ -272,6 +272,19 @@ async function handleRequest(req, res) {
       return;
     }
 
+    if (req.method === "POST" && /^\/api\/admin\/sessions\/[^/]+\/expire$/.test(pathname)) {
+      await handleAdminExpireSession(req, res, pathname);
+      return;
+    }
+
+    if (
+      req.method === "POST" &&
+      /^\/api\/admin\/sessions\/[^/]+\/participants\/[^/]+\/remove$/.test(pathname)
+    ) {
+      await handleAdminRemoveParticipant(req, res, pathname);
+      return;
+    }
+
     if (req.method === "POST" && pathname === "/api/auth/token/refresh") {
       await handleRefreshToken(req, res);
       return;
@@ -881,11 +894,6 @@ async function handleSessionHeartbeat(req, res, pathname) {
 
 async function handleLeaveSession(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
-  const session = store.multiplayerSessions[sessionId];
-  if (!session) {
-    sendJson(res, 200, { ok: true });
-    return;
-  }
 
   const body = await parseJsonBody(req);
   const playerId = typeof body?.playerId === "string" ? body.playerId : "";
@@ -893,16 +901,55 @@ async function handleLeaveSession(req, res, pathname) {
     sendJson(res, 400, { error: "playerId is required" });
     return;
   }
+  const removal = removeParticipantFromSession(sessionId, playerId, {
+    source: "leave",
+    socketReason: "left_session",
+  });
+  if (!removal.ok && removal.reason === "unknown_session") {
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+  if (!removal.ok && removal.reason === "unknown_player") {
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+  if (!removal.ok) {
+    sendJson(res, 404, { error: "Player not found in session", reason: removal.reason });
+    return;
+  }
+  await persistStore();
+  sendJson(res, 200, { ok: true });
+}
+
+function removeParticipantFromSession(
+  sessionId,
+  playerId,
+  options = { source: "leave", socketReason: "left_session" }
+) {
+  const session = store.multiplayerSessions[sessionId];
+  if (!session) {
+    return {
+      ok: false,
+      reason: "unknown_session",
+    };
+  }
+  if (!session.participants?.[playerId]) {
+    return {
+      ok: false,
+      reason: "unknown_player",
+    };
+  }
 
   delete session.participants[playerId];
   disconnectPlayerSockets(
     sessionId,
     playerId,
     WS_CLOSE_CODES.normal,
-    "left_session"
+    options.socketReason ?? "left_session"
   );
   ensureSessionTurnState(session);
   const now = Date.now();
+
   if (getHumanParticipantCount(session) === 0) {
     const roomKind = getSessionRoomKind(session);
     if (roomKind === ROOM_KINDS.private) {
@@ -910,6 +957,7 @@ async function handleLeaveSession(req, res, pathname) {
     } else {
       resetPublicRoomForIdle(session, now);
       reconcileSessionLoops(sessionId);
+      broadcastSessionState(session, options.source ?? "leave");
     }
   } else {
     markSessionActivity(session, undefined, now);
@@ -918,12 +966,15 @@ async function handleLeaveSession(req, res, pathname) {
     if (turnStart) {
       broadcastToSession(sessionId, JSON.stringify(turnStart), null);
     }
-    broadcastSessionState(session, "leave");
+    broadcastSessionState(session, options.source ?? "leave");
   }
 
-  reconcilePublicRoomInventory(now);
-  await persistStore();
-  sendJson(res, 200, { ok: true });
+  const roomInventoryChanged = reconcilePublicRoomInventory(now);
+  return {
+    ok: true,
+    roomInventoryChanged,
+    sessionExpired: !store.multiplayerSessions[sessionId],
+  };
 }
 
 async function handleRefreshSessionAuth(req, res, pathname) {
@@ -1112,6 +1163,102 @@ async function handleAdminRoleUpsert(req, res, pathname) {
   sendJson(res, 200, {
     ok: true,
     roleRecord: buildAdminRoleRecord(targetUid, next),
+    principal: buildAdminPrincipal(auth),
+  });
+}
+
+async function handleAdminExpireSession(req, res, pathname) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.operator });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const sessionId = decodeURIComponent(pathname.split("/")[4] ?? "").trim();
+  if (!sessionId) {
+    sendJson(res, 400, {
+      error: "Invalid session ID",
+      reason: "invalid_session_id",
+    });
+    return;
+  }
+  if (!store.multiplayerSessions[sessionId]) {
+    sendJson(res, 404, {
+      error: "Session not found",
+      reason: "unknown_session",
+    });
+    return;
+  }
+
+  expireSession(sessionId, "admin_expired");
+  const roomInventoryChanged = reconcilePublicRoomInventory(Date.now());
+  await persistStore();
+
+  log.info(
+    `Admin expired session ${sessionId} by ${auth.uid ?? auth.authType ?? "unknown"} (${auth.role ?? "n/a"})`
+  );
+  sendJson(res, 200, {
+    ok: true,
+    sessionId,
+    roomInventoryChanged,
+    principal: buildAdminPrincipal(auth),
+  });
+}
+
+async function handleAdminRemoveParticipant(req, res, pathname) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.operator });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const segments = pathname.split("/");
+  const sessionId = decodeURIComponent(segments[4] ?? "").trim();
+  const playerId = decodeURIComponent(segments[6] ?? "").trim();
+  if (!sessionId) {
+    sendJson(res, 400, {
+      error: "Invalid session ID",
+      reason: "invalid_session_id",
+    });
+    return;
+  }
+  if (!playerId) {
+    sendJson(res, 400, {
+      error: "Invalid player ID",
+      reason: "invalid_player_id",
+    });
+    return;
+  }
+
+  const removal = removeParticipantFromSession(sessionId, playerId, {
+    source: "admin_remove",
+    socketReason: "removed_by_admin",
+  });
+  if (!removal.ok) {
+    const status = removal.reason === "unknown_session" || removal.reason === "unknown_player" ? 404 : 409;
+    sendJson(res, status, {
+      error: "Failed to remove participant",
+      reason: removal.reason,
+    });
+    return;
+  }
+
+  await persistStore();
+  log.info(
+    `Admin removed participant ${playerId} from ${sessionId} by ${auth.uid ?? auth.authType ?? "unknown"} (${auth.role ?? "n/a"})`
+  );
+  sendJson(res, 200, {
+    ok: true,
+    sessionId,
+    playerId,
+    sessionExpired: removal.sessionExpired,
+    roomInventoryChanged: removal.roomInventoryChanged,
     principal: buildAdminPrincipal(auth),
   });
 }

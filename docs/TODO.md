@@ -170,7 +170,10 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
     - owner-only role management controls
 - **Next Steps**:
   - [ ] Define admin auth/roles + audit logging policy for privileged mutations
-  - [ ] Add controlled admin mutations (expire room, remove participant, room visibility toggle)
+  - ✅ Added first controlled admin mutations:
+    - expire room
+    - remove participant
+  - [ ] Add additional controlled admin mutations (room visibility toggle, turn recovery helpers)
   - [ ] Add dedicated internal web dashboard for live operations and historical trend views
 
 ### Visual Settings & Dice Visibility Enhancement (COMPLETE) 🎨

@@ -639,6 +639,55 @@ async function runAdminMonitorChecks() {
     roleUpsert?.roleRecord?.role === "viewer",
     "admin role upsert returned unexpected role"
   );
+
+  const adminHostId = `e2e-admin-host-${randomUUID().slice(0, 8)}`;
+  const adminGuestId = `e2e-admin-guest-${randomUUID().slice(0, 8)}`;
+  const adminSession = await apiRequest("/multiplayer/sessions", {
+    method: "POST",
+    body: {
+      playerId: adminHostId,
+      displayName: "Admin Host",
+    },
+  });
+  assert(typeof adminSession?.sessionId === "string", "admin mutation probe session missing id");
+
+  const adminJoin = await apiRequest(
+    `/multiplayer/sessions/${encodeURIComponent(adminSession.sessionId)}/join`,
+    {
+      method: "POST",
+      body: {
+        playerId: adminGuestId,
+        displayName: "Admin Guest",
+      },
+    }
+  );
+  assert(Array.isArray(adminJoin?.participants), "admin mutation probe join missing participants[]");
+
+  const removePlayerResult = await apiRequest(
+    `/admin/sessions/${encodeURIComponent(adminSession.sessionId)}/participants/${encodeURIComponent(adminGuestId)}/remove`,
+    {
+      method: "POST",
+      headers: adminHeaders,
+    }
+  );
+  assert(removePlayerResult?.ok === true, "admin participant remove did not report success");
+  assert(
+    removePlayerResult?.playerId === adminGuestId,
+    "admin participant remove returned unexpected player"
+  );
+
+  const expireRoomResult = await apiRequest(
+    `/admin/sessions/${encodeURIComponent(adminSession.sessionId)}/expire`,
+    {
+      method: "POST",
+      headers: adminHeaders,
+    }
+  );
+  assert(expireRoomResult?.ok === true, "admin room expire did not report success");
+  assert(
+    expireRoomResult?.sessionId === adminSession.sessionId,
+    "admin room expire returned unexpected session"
+  );
   log("Admin monitor checks passed.");
 }
 
