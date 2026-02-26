@@ -8,6 +8,7 @@ import { environment } from "../environments/environment.js";
 import { logger } from "../utils/logger.js";
 import type { MultiplayerRoomListing } from "../services/backendApi.js";
 import type { SplashBackground3D } from "./splashBackground3d.js";
+import biscuitsLogoUrl from "../assets/logos/Biscuits_logo.png";
 
 const log = logger.create("SplashScreen");
 
@@ -45,7 +46,9 @@ export class SplashScreen {
     this.container.innerHTML = `
       <canvas id="splash-canvas" aria-hidden="true"></canvas>
       <div class="splash-content">
-        <h1 class="splash-title">${this.gameTitle}</h1>
+        <div class="splash-logo-wrap">
+          <img class="splash-logo" src="${biscuitsLogoUrl}" alt="${this.gameTitle}" />
+        </div>
         <p class="splash-subtitle">Push Your Luck Dice Game</p>
         <p class="splash-tagline">Roll • Select • Score Low to Win</p>
         <div class="splash-mode-picker" role="radiogroup" aria-label="Play mode">

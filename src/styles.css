@@ -190,6 +190,15 @@ h1, h2, h3, h4, h5, h6 {
   align-items: center;
 }
 
+.stats-mini-logo {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.4));
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+
 #multiplayer-scoreboard {
   display: flex;
   flex-wrap: wrap;
@@ -1403,14 +1412,17 @@ button.danger,
   }
 }
 
-.splash-title {
-  font-family: 'Caprasimo', cursive, system-ui;
-  font-size: 72px;
-  font-weight: 400;
-  color: #e94560;
+.splash-logo-wrap {
   margin: 0 0 16px 0;
-  letter-spacing: 4px;
-  text-shadow: 0 4px 20px rgba(233, 69, 96, 0.5);
+  display: flex;
+  justify-content: center;
+}
+
+.splash-logo {
+  width: min(620px, 84vw);
+  max-height: 190px;
+  object-fit: contain;
+  filter: drop-shadow(0 9px 22px rgba(0, 0, 0, 0.46));
 }
 
 .splash-subtitle {
@@ -3200,6 +3212,11 @@ button.danger,
     height: 32px;
   }
 
+  .stats-mini-logo {
+    width: 26px;
+    height: 26px;
+  }
+
   .stat-compact {
     gap: 6px;
   }
@@ -3600,9 +3617,9 @@ button.danger,
     padding: 40px 30px;
   }
 
-  .splash-title {
-    font-size: 48px;
-    letter-spacing: 2px;
+  .splash-logo {
+    width: min(520px, 88vw);
+    max-height: 150px;
   }
 
   .splash-subtitle {
@@ -3792,6 +3809,11 @@ button.danger,
     height: 30px;
   }
 
+  .stats-mini-logo {
+    width: 22px;
+    height: 22px;
+  }
+
   /* Hide dice pool and selected info on mobile */
   #dice-pool,
   #selected-info {
@@ -3931,10 +3953,13 @@ button.danger,
     padding: 30px 20px;
   }
 
-  .splash-title {
-    font-size: 36px;
-    letter-spacing: 1px;
+  .splash-logo-wrap {
     margin-bottom: 12px;
+  }
+
+  .splash-logo {
+    width: min(420px, 88vw);
+    max-height: 120px;
   }
 
   .splash-subtitle {
@@ -4081,8 +4106,9 @@ button.danger,
     font-size: 14px;
   }
 
-  .splash-title {
-    font-size: 32px;
+  .splash-logo {
+    width: min(360px, 82vw);
+    max-height: 100px;
   }
 
   .splash-content {
