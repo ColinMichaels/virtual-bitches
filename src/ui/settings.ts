@@ -246,11 +246,11 @@ export class SettingsModal {
         </div>
 
         <div class="settings-buttons">
-          <button id="settings-return-lobby">Main Menu</button>
-          <button id="settings-how-to-play">How to Play</button>
-          <button id="settings-close" class="primary">Close</button>
-          <button id="settings-new-game" class="danger">New Game</button>
-          <button id="settings-reset">Reset to Defaults</button>
+          <button id="settings-return-lobby" class="btn btn-secondary">Main Menu</button>
+          <button id="settings-how-to-play" class="btn btn-outline">How to Play</button>
+          <button id="settings-close" class="btn btn-primary primary">Close</button>
+          <button id="settings-new-game" class="btn btn-danger danger">New Game</button>
+          <button id="settings-reset" class="btn btn-secondary">Reset to Defaults</button>
         </div>
       </div>
     `;
@@ -711,15 +711,15 @@ export class SettingsModal {
           <div class="settings-account-actions">
             ${
               authConfigured && !isAuthenticated
-                ? '<button type="button" class="settings-account-btn" data-action="settings-signin">Sign In with Google</button>'
+                ? '<button type="button" class="btn btn-primary settings-account-btn" data-action="settings-signin">Sign In with Google</button>'
                 : ""
             }
             ${
               isAuthenticated
-                ? '<button type="button" class="settings-account-btn" data-action="settings-signout">Sign Out</button>'
+                ? '<button type="button" class="btn btn-danger settings-account-btn" data-action="settings-signout">Sign Out</button>'
                 : ""
             }
-            <button type="button" class="settings-account-btn" data-action="settings-refresh">Refresh</button>
+            <button type="button" class="btn btn-secondary settings-account-btn" data-action="settings-refresh">Refresh</button>
           </div>
         </div>
 
@@ -735,7 +735,7 @@ export class SettingsModal {
                     placeholder="Your public leaderboard name"
                     value="${escapeAttribute(leaderboardName)}"
                   />
-                  <button type="button" class="settings-account-btn" data-action="settings-save-name">Save</button>
+                  <button type="button" class="btn btn-primary settings-account-btn" data-action="settings-save-name">Save</button>
                 </div>
               </div>`
             : `<p class="setting-description settings-account-help">

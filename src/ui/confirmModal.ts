@@ -65,8 +65,8 @@ export class ConfirmModal {
         <div class="confirm-modal-body">
           <p class="confirm-modal-message" data-confirm-message></p>
           <div class="confirm-modal-actions">
-            <button class="btn-confirm-cancel">Cancel</button>
-            <button class="btn-confirm-accept">Confirm</button>
+            <button class="btn btn-secondary btn-confirm-cancel">Cancel</button>
+            <button class="btn btn-primary btn-confirm-accept">Confirm</button>
           </div>
         </div>
       </div>

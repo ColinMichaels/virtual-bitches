@@ -2307,6 +2307,10 @@ class Game implements GameCallbacks {
     notificationService.show("New Game!", "success");
   }
 
+  handleReturnToMainMenu(): void {
+    void this.returnToLobby();
+  }
+
   startNewGame(): void {
     // Unpause if paused
     if (this.paused) {
@@ -2341,7 +2345,7 @@ class Game implements GameCallbacks {
         ? `Waiting: ${this.activeTurnPlayerId ? this.getParticipantLabel(this.activeTurnPlayerId) : "Sync"}`
         : "Roll";
       this.actionBtn.disabled = this.animating || this.paused || isTurnLocked;
-      this.actionBtn.className = "primary";
+      this.actionBtn.className = "btn btn-primary primary";
       this.deselectBtn.style.display = "none";
     } else if (this.state.status === "ROLLED") {
       const hasSelection = this.state.selected.size > 0;
@@ -2353,14 +2357,14 @@ class Game implements GameCallbacks {
           ? `Waiting: ${this.activeTurnPlayerId ? this.getParticipantLabel(this.activeTurnPlayerId) : "Sync"}`
           : `Score +${points} (Space)`;
         this.actionBtn.disabled = this.animating || this.paused || isTurnLocked;
-        this.actionBtn.className = "primary";
+        this.actionBtn.className = "btn btn-primary primary";
         this.deselectBtn.style.display = isTurnLocked ? "none" : "inline-block";
       } else {
         this.actionBtn.textContent = isTurnLocked
           ? `Waiting: ${this.activeTurnPlayerId ? this.getParticipantLabel(this.activeTurnPlayerId) : "Sync"}`
           : "Select Dice to Score";
         this.actionBtn.disabled = true;
-        this.actionBtn.className = "";
+        this.actionBtn.className = "btn btn-secondary secondary";
         this.deselectBtn.style.display = "none";
       }
     } else {

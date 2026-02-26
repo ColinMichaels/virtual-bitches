@@ -49,8 +49,8 @@ export class SessionExpiryModal {
           <p data-session-expiry-reason></p>
           <p>You can return to the lobby to join/create another room, or continue solo immediately.</p>
           <div class="session-expiry-actions">
-            <button class="btn-session-lobby">Return to Lobby</button>
-            <button class="btn-session-solo">Continue Solo</button>
+            <button class="btn btn-danger btn-session-lobby">Return to Lobby</button>
+            <button class="btn btn-primary btn-session-solo">Continue Solo</button>
           </div>
         </div>
       </div>

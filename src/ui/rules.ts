@@ -27,7 +27,7 @@ export class RulesModal {
           <button class="modal-close" aria-label="Close">&times;</button>
         </div>
         <div class="rules-actions">
-          <button class="btn-rules-replay" type="button">Replay Tutorial</button>
+          <button class="btn btn-outline btn-rules-replay" type="button">Replay Tutorial</button>
         </div>
         <div class="modal-body rules-body">
           <div class="loading">Loading rules...</div>

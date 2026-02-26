@@ -71,7 +71,7 @@ export class AlphaWarningModal {
           </div>
 
           <div class="alpha-actions">
-            <button id="alpha-accept-btn" class="primary">I Understand, Let's Play!</button>
+            <button id="alpha-accept-btn" class="btn btn-primary primary">I Understand, Let's Play!</button>
           </div>
         </div>
       </div>

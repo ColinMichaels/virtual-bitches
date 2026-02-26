@@ -17,6 +17,13 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 400;
 }
 
+:root {
+  --btn-border-radius: 10px;
+  --btn-border: 1px solid rgba(255, 255, 255, 0.22);
+  --btn-shadow: 0 8px 20px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  --btn-focus-ring: 0 0 0 2px rgba(138, 189, 255, 0.45);
+}
+
 /* Main Layout */
 #app {
   width: 100vw;
@@ -1105,59 +1112,118 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    filter 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease;
+}
+
+.btn,
+button.primary,
+button.secondary,
+button.danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 12px 24px;
   font-size: 16px;
-  font-weight: 600;
-  border: none;
-  border-radius: 6px;
+  font-weight: 700;
+  border-radius: var(--btn-border-radius);
+  border: var(--btn-border);
   cursor: pointer;
-  background: #0f3460;
-  color: white;
-  transition: all 0.2s;
+  background: linear-gradient(180deg, rgba(41, 72, 112, 0.95) 0%, rgba(18, 38, 67, 0.95) 100%);
+  color: #fff;
+  box-shadow: var(--btn-shadow);
+  transition:
+    transform 0.16s ease,
+    filter 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease;
 }
 
-button:hover:not(:disabled) {
-  background: #16213e;
-  transform: translateY(-2px);
+.btn:hover:not(:disabled),
+button.primary:hover:not(:disabled),
+button.secondary:hover:not(:disabled),
+button.danger:hover:not(:disabled) {
+  filter: brightness(1.07);
+  transform: translateY(-1px);
 }
 
-button:active:not(:disabled) {
-  transform: scale(0.98);
+.btn:active:not(:disabled),
+button.primary:active:not(:disabled),
+button.secondary:active:not(:disabled),
+button.danger:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
-button:disabled {
-  opacity: 0.5;
+.btn:focus-visible,
+button.primary:focus-visible,
+button.secondary:focus-visible,
+button.danger:focus-visible {
+  outline: none;
+  box-shadow: var(--btn-shadow), var(--btn-focus-ring);
+}
+
+.btn:disabled,
+button.primary:disabled,
+button.secondary:disabled,
+button.danger:disabled {
+  opacity: 0.55;
   cursor: not-allowed;
+  transform: none;
 }
 
-button.primary {
-  background: #e94560;
+button.primary,
+.btn-primary {
+  border-color: rgba(255, 136, 165, 0.75);
+  background: linear-gradient(180deg, #ff5f86 0%, #d53f62 100%);
 }
 
-button.primary:hover:not(:disabled) {
-  background: #c23652;
+button.primary:hover:not(:disabled),
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.05);
 }
 
-button.primary:active:not(:disabled) {
-  background: #a82e44;
+button.secondary,
+.btn-secondary {
+  border-color: rgba(182, 215, 255, 0.55);
+  background: linear-gradient(180deg, rgba(67, 98, 145, 0.82) 0%, rgba(35, 58, 95, 0.92) 100%);
+  color: #eaf3ff;
 }
 
-button.secondary {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ddd;
-}
-
-button.secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-button.danger {
-  background: #d9534f;
+button.danger,
+.btn-danger {
+  border-color: rgba(255, 149, 149, 0.75);
+  background: linear-gradient(180deg, #f56666 0%, #cf3b3b 100%);
   color: #fff;
 }
 
-button.danger:hover:not(:disabled) {
-  background: #c9302c;
+.btn-outline {
+  border-color: rgba(128, 190, 255, 0.7);
+  background: rgba(39, 74, 125, 0.34);
+  color: #93c8ff;
+}
+
+.btn-sm {
+  padding: 8px 12px;
+  font-size: 13px;
 }
 
 /* Game Over Screen */
@@ -1166,9 +1232,13 @@ button.danger:hover:not(:disabled) {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(0,0,0,0.9);
+  width: min(640px, calc(100vw - 28px));
+  background: linear-gradient(165deg, rgba(11, 18, 34, 0.95), rgba(10, 18, 30, 0.9));
   padding: 40px;
-  border-radius: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(133, 173, 235, 0.24);
+  box-shadow: 0 22px 52px rgba(0, 0, 0, 0.46);
+  backdrop-filter: blur(6px);
   text-align: center;
   display: none;
 }
@@ -1194,7 +1264,7 @@ button.danger:hover:not(:disabled) {
   padding: 16px;
   background: rgba(255,255,255,0.05);
   border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.14);
 }
 
 .seed-info {
@@ -1211,31 +1281,25 @@ button.danger:hover:not(:disabled) {
 }
 
 .seed-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  background: rgba(74, 158, 255, 0.15);
-  border: 1px solid #4a9eff;
-  color: #4a9eff;
-  border-radius: 6px;
-  cursor: pointer;
+  min-width: 168px;
   font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.seed-btn:hover {
-  background: rgba(74, 158, 255, 0.25);
-  transform: translateY(-2px);
-}
-
-.seed-btn:active {
-  transform: translateY(0);
+  font-weight: 700;
 }
 
 .seed-btn svg {
   flex-shrink: 0;
+}
+
+.game-over-actions {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.game-over-actions .btn {
+  min-width: 168px;
 }
 
 /* Splash Screen */
@@ -1515,8 +1579,10 @@ button.danger:hover:not(:disabled) {
 .modal-close {
   background: none;
   border: none;
+  box-shadow: none;
   color: #999;
   font-size: 36px;
+  font-weight: 400;
   cursor: pointer;
   padding: 0;
   width: 40px;
@@ -1544,18 +1610,8 @@ button.danger:hover:not(:disabled) {
 }
 
 .btn-rules-replay {
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.26);
-  background: rgba(87, 165, 255, 0.28);
-  color: #fff;
-  font-weight: 700;
   font-size: 13px;
   padding: 9px 12px;
-  cursor: pointer;
-}
-
-.btn-rules-replay:hover {
-  background: rgba(255, 255, 255, 0.2);
 }
 
 .rules-body {
@@ -1946,18 +2002,10 @@ button.danger:hover:not(:disabled) {
 }
 
 .settings-account-btn {
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  padding: 8px 10px;
+  min-height: 34px;
+  padding: 8px 12px;
   font-size: 12px;
   font-weight: 700;
-  cursor: pointer;
-}
-
-.settings-account-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
 }
 
 .settings-account-name-row {
@@ -2360,18 +2408,8 @@ button.danger:hover:not(:disabled) {
 }
 
 .btn-clear-history {
-  background: rgba(255, 85, 85, 0.2);
-  color: #ff5555;
-  border: 1px solid #ff5555;
-  padding: 6px 12px;
-  border-radius: 4px;
+  padding: 7px 12px;
   font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-clear-history:hover {
-  background: rgba(255, 85, 85, 0.3);
 }
 
 .score-list {
@@ -2437,21 +2475,9 @@ button.danger:hover:not(:disabled) {
 }
 
 .btn-replay {
-  background: rgba(74, 158, 255, 0.2);
-  border: 1px solid #4a9eff;
-  color: #4a9eff;
   padding: 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.btn-replay:hover {
-  background: rgba(74, 158, 255, 0.3);
-  transform: scale(1.05);
+  min-width: 42px;
+  min-height: 42px;
 }
 
 .btn-replay svg {
@@ -2531,19 +2557,10 @@ button.danger:hover:not(:disabled) {
 
 .btn-global-auth,
 .btn-global-refresh {
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  border-radius: 6px;
-  padding: 7px 10px;
+  min-height: 34px;
+  padding: 7px 11px;
   font-size: 12px;
   font-weight: 700;
-  cursor: pointer;
-}
-
-.btn-global-auth:hover,
-.btn-global-refresh:hover {
-  background: rgba(255, 255, 255, 0.16);
 }
 
 .score-entry.is-current-player {
@@ -2615,26 +2632,8 @@ button.danger:hover:not(:disabled) {
 
 .btn-auth-google,
 .btn-auth-guest {
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  padding: 10px 12px;
-  color: #fff;
-  font-weight: 700;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.btn-auth-google {
-  background: rgba(74, 158, 255, 0.35);
-}
-
-.btn-auth-guest {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.btn-auth-google:hover,
-.btn-auth-guest:hover {
-  background: rgba(255, 255, 255, 0.2);
+  min-width: 180px;
+  font-size: 14px;
 }
 
 .confirm-modal-content {
@@ -2664,30 +2663,13 @@ button.danger:hover:not(:disabled) {
 
 .btn-confirm-cancel,
 .btn-confirm-accept {
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  padding: 10px 12px;
-  color: #fff;
-  font-weight: 700;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.btn-confirm-cancel {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.btn-confirm-accept {
-  background: rgba(87, 165, 255, 0.28);
+  min-width: 132px;
+  font-size: 14px;
 }
 
 .btn-confirm-accept.is-danger {
-  background: rgba(245, 107, 107, 0.35);
-}
-
-.btn-confirm-cancel:hover,
-.btn-confirm-accept:hover {
-  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 149, 149, 0.75);
+  background: linear-gradient(180deg, #f56666 0%, #cf3b3b 100%);
 }
 
 .session-expiry-modal-content {
@@ -2715,26 +2697,8 @@ button.danger:hover:not(:disabled) {
 
 .btn-session-lobby,
 .btn-session-solo {
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  padding: 10px 12px;
-  color: #fff;
-  font-weight: 700;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.btn-session-lobby {
-  background: rgba(245, 107, 107, 0.35);
-}
-
-.btn-session-solo {
-  background: rgba(87, 165, 255, 0.28);
-}
-
-.btn-session-lobby:hover,
-.btn-session-solo:hover {
-  background: rgba(255, 255, 255, 0.2);
+  min-width: 168px;
+  font-size: 14px;
 }
 
 /* Profile Modal */
@@ -2812,18 +2776,9 @@ button.danger:hover:not(:disabled) {
 }
 
 .btn-profile-action {
-  border-radius: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
   padding: 8px 10px;
   font-size: 12px;
   font-weight: 700;
-  cursor: pointer;
-}
-
-.btn-profile-action:hover {
-  background: rgba(255, 255, 255, 0.18);
 }
 
 .profile-name-setup {
@@ -3587,6 +3542,11 @@ button.danger:hover:not(:disabled) {
   #game-over {
     width: 90%;
     padding: 30px 20px;
+  }
+
+  .game-over-actions .btn {
+    min-width: 0;
+    width: 100%;
   }
 
   #game-over h1 {
@@ -4923,38 +4883,8 @@ button.danger:hover:not(:disabled) {
 .camera-action-btn {
   width: 100%;
   padding: 12px 16px;
-  background: linear-gradient(135deg, #2d3748, #1a202c);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  color: #ffffff;
   font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.camera-action-btn:hover {
-  background: linear-gradient(135deg, #4a5568, #2d3748);
-  border-color: rgba(255, 255, 255, 0.3);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.camera-action-btn:active {
-  transform: translateY(0);
-}
-
-.camera-save-btn {
-  background: linear-gradient(135deg, #48bb78, #38a169);
-  border-color: #48bb78;
-}
-
-.camera-save-btn:hover {
-  background: linear-gradient(135deg, #68d391, #48bb78);
+  font-weight: 600;
 }
 
 .camera-locked-section {

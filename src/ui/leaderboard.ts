@@ -160,7 +160,7 @@ export class LeaderboardModal {
       <div class="scores-section">
         <div class="section-header">
           <h3>Top 10 Scores</h3>
-          <button class="btn-clear-history">Clear History</button>
+          <button class="btn btn-danger btn-sm btn-clear-history">Clear History</button>
         </div>
         ${topScores.length > 0 ? this.renderScoreList(topScores) : '<p class="empty-message">No scores yet. Play a game to get started!</p>'}
       </div>
@@ -208,7 +208,7 @@ export class LeaderboardModal {
                 <span class="mode-badge ${modeClass}">${modeName}</span>
               </div>
             </div>
-            <button class="btn-replay" data-score-id="${score.id}" title="Replay this game">
+            <button class="btn btn-outline btn-sm btn-replay" data-score-id="${score.id}" title="Replay this game">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 12a9 9 0 009 9 9 9 0 009-9 9 9 0 00-9-9"/>
                 <path d="M3 12l3-3m-3 3l3 3"/>
@@ -277,13 +277,13 @@ export class LeaderboardModal {
           <div class="global-auth-user">${escapeHtml(displayName)}</div>
           <div class="global-auth-badge">${escapeHtml(authBadge)}</div>
         </div>
-        <div class="global-auth-actions">
+          <div class="global-auth-actions">
           ${
             showGoogleSignIn
-              ? '<button class="btn-global-auth" data-action="google-signin">Sign In with Google</button>'
+              ? '<button class="btn btn-primary btn-global-auth" data-action="google-signin">Sign In with Google</button>'
               : ""
           }
-          <button class="btn-global-refresh" data-action="refresh-global">Refresh</button>
+          <button class="btn btn-secondary btn-global-refresh" data-action="refresh-global">Refresh</button>
         </div>
       </div>
       ${
@@ -293,7 +293,7 @@ export class LeaderboardModal {
               <p>Pick the public name shown on the global leaderboard.</p>
               <div class="global-name-row">
                 <input id="leaderboard-name-input" type="text" maxlength="24" placeholder="Your player name" />
-                <button class="btn-global-auth" data-action="save-name">Save Name</button>
+                <button class="btn btn-primary btn-global-auth" data-action="save-name">Save Name</button>
               </div>
             </div>`
           : ""

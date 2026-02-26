@@ -62,10 +62,10 @@ export class CameraControlsPanel {
               placeholder="Position name..."
               maxlength="30"
             />
-            <button id="camera-save-btn" class="camera-action-btn camera-save-btn">
+            <button id="camera-save-btn" class="btn btn-primary camera-action-btn camera-save-btn">
               💾 Save Current
             </button>
-            <button id="camera-reset-btn" class="camera-action-btn">
+            <button id="camera-reset-btn" class="btn btn-secondary camera-action-btn">
               🔄 Reset to Default
             </button>
           </div>
@@ -74,10 +74,10 @@ export class CameraControlsPanel {
         <div class="camera-section">
           <h3>Import / Export</h3>
           <div class="camera-actions">
-            <button id="camera-export-btn" class="camera-action-btn">
+            <button id="camera-export-btn" class="btn btn-secondary camera-action-btn">
               📤 Export All
             </button>
-            <button id="camera-import-btn" class="camera-action-btn">
+            <button id="camera-import-btn" class="btn btn-secondary camera-action-btn">
               📥 Import
             </button>
             <input
