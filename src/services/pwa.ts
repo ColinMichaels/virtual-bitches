@@ -159,8 +159,8 @@ class PWAService {
           <p>Add to home screen for quick access and offline play</p>
         </div>
         <div class="pwa-banner-actions">
-          <button id="pwa-install-btn" class="primary">Install</button>
-          <button id="pwa-dismiss-btn" class="secondary">Not Now</button>
+          <button id="pwa-install-btn" class="btn btn-primary primary">Install</button>
+          <button id="pwa-dismiss-btn" class="btn btn-secondary secondary">Not Now</button>
         </div>
       </div>
     `;
@@ -198,7 +198,7 @@ class PWAService {
       <div class="pwa-update-content">
         <strong>Update Available</strong>
         <p>A new version of BISCUITS is ready</p>
-        <button id="pwa-update-btn" class="primary">Reload</button>
+        <button id="pwa-update-btn" class="btn btn-primary primary">Reload</button>
       </div>
     `;
 

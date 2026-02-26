@@ -99,15 +99,15 @@ export class ProfileModal {
           <div class="profile-identity-actions">
             ${
               showSignIn
-                ? '<button class="btn-profile-action" data-action="google-signin">Sign In with Google</button>'
+                ? '<button class="btn btn-primary btn-profile-action" data-action="google-signin">Sign In with Google</button>'
                 : ""
             }
             ${
               isAuthenticated
-                ? '<button class="btn-profile-action" data-action="signout">Sign Out</button>'
+                ? '<button class="btn btn-danger btn-profile-action" data-action="signout">Sign Out</button>'
                 : ""
             }
-            <button class="btn-profile-action" data-action="refresh-profile">Refresh</button>
+            <button class="btn btn-secondary btn-profile-action" data-action="refresh-profile">Refresh</button>
           </div>
         </section>
 
@@ -124,7 +124,7 @@ export class ProfileModal {
                     placeholder="Your leaderboard name"
                     value="${escapeAttribute(leaderboardName)}"
                   />
-                  <button class="btn-profile-action" data-action="save-name">Save Name</button>
+                  <button class="btn btn-primary btn-profile-action" data-action="save-name">Save Name</button>
                 </div>
               </section>`
             : `<section class="profile-name-setup">

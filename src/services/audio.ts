@@ -5,6 +5,7 @@
 
 import { settingsService } from "./settings.js";
 import { logger } from "../utils/logger.js";
+import gameMusicUrl from "../assets/music/game music.mp3";
 
 const log = logger.create('AudioService');
 
@@ -19,6 +20,7 @@ export class AudioService {
   private soundBuffers = new Map<SoundEffect, AudioBuffer>();
   private musicSource: AudioBufferSourceNode | null = null;
   private musicBuffer: AudioBuffer | null = null;
+  private musicBufferPromise: Promise<AudioBuffer | null> | null = null;
   private musicPlaying = false;
 
   constructor() {
@@ -197,15 +199,18 @@ export class AudioService {
   }
 
   /**
-   * Start playing background music (simple ambient drone)
+   * Start playing background music
    */
   async playMusic(): Promise<void> {
     if (!this.context || !this.musicGain || this.musicPlaying) return;
 
     try {
-      // Generate ambient music buffer if not already created
+      // Decode bundled music file once and reuse it for loop playback.
       if (!this.musicBuffer) {
-        this.musicBuffer = this.createAmbientMusic();
+        this.musicBuffer = await this.loadMusicBuffer();
+      }
+      if (!this.musicBuffer) {
+        return;
       }
 
       this.musicSource = this.context.createBufferSource();
@@ -217,6 +222,36 @@ export class AudioService {
     } catch (error) {
       log.error("Failed to play music:", error);
     }
+  }
+
+  private async loadMusicBuffer(): Promise<AudioBuffer | null> {
+    if (!this.context) {
+      return null;
+    }
+
+    if (this.musicBufferPromise) {
+      return this.musicBufferPromise;
+    }
+
+    this.musicBufferPromise = (async () => {
+      try {
+        // Hardcoded for now. Future media service can supply CDN-backed track URLs.
+        const response = await fetch(gameMusicUrl);
+        if (!response.ok) {
+          throw new Error(`music_fetch_failed:${response.status}`);
+        }
+        const fileBuffer = await response.arrayBuffer();
+        const decoded = await this.context!.decodeAudioData(fileBuffer);
+        return decoded;
+      } catch (error) {
+        log.error("Failed to load bundled music track, using fallback loop:", error);
+        return this.createAmbientMusic();
+      }
+    })();
+
+    const loaded = await this.musicBufferPromise;
+    this.musicBufferPromise = null;
+    return loaded;
   }
 
   /**
@@ -231,7 +266,7 @@ export class AudioService {
   }
 
   /**
-   * Create ambient background music (simple drone with harmonics)
+   * Procedural fallback when bundled track fails to load.
    */
   private createAmbientMusic(): AudioBuffer {
     const sampleRate = this.context!.sampleRate;

@@ -29,6 +29,7 @@
 
     <div id="unified-hud">
         <div id="stats-bar">
+            <img id="stats-mini-logo" class="stats-mini-logo" alt="" aria-hidden="true" />
             <div class="stat-compact">
                 <span class="stat-label-compact">Roll</span>
                 <span class="stat-value-compact" id="roll-count">0</span>
@@ -83,9 +84,9 @@
     <aside id="effect-hud" aria-live="polite" aria-label="Active camera effects"></aside>
 
     <div id="controls">
-        <button id="action-btn" class="primary">Roll Dice (Space)</button>
-        <button id="deselect-btn" class="secondary" style="display: none;">Deselect All</button>
-        <button id="undo-btn" class="secondary" style="display: none;" title="Undo last selection">
+        <button id="action-btn" class="btn btn-primary primary">Roll Dice (Space)</button>
+        <button id="deselect-btn" class="btn btn-secondary secondary" style="display: none;">Deselect All</button>
+        <button id="undo-btn" class="btn btn-secondary secondary" style="display: none;" title="Undo last selection">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                 <path d="M3 7v6h6"/>
                 <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/>
@@ -252,14 +253,14 @@
         <div id="seed-actions">
             <p class="seed-info">Save your game seed to replay this exact run later</p>
             <div class="seed-buttons">
-                <button id="copy-seed-btn" class="seed-btn">
+                <button id="copy-seed-btn" class="btn btn-outline seed-btn">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                     </svg>
                     Copy Seed
                 </button>
-                <button id="download-seed-btn" class="seed-btn">
+                <button id="download-seed-btn" class="btn btn-outline seed-btn">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="7 10 12 15 17 10"></polyline>
@@ -269,9 +270,10 @@
                 </button>
             </div>
         </div>
-        <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-            <button id="view-leaderboard-btn" class="primary">View Leaderboard</button>
-            <button id="new-game-btn" class="primary">New Game</button>
+        <div class="game-over-actions">
+            <button id="return-main-menu-btn" class="btn btn-secondary">Main Menu</button>
+            <button id="view-leaderboard-btn" class="btn btn-outline">View Leaderboard</button>
+            <button id="new-game-btn" class="btn btn-primary">New Game</button>
         </div>
     </div>
 </div>

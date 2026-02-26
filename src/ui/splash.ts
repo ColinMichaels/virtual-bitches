@@ -8,6 +8,7 @@ import { environment } from "../environments/environment.js";
 import { logger } from "../utils/logger.js";
 import type { MultiplayerRoomListing } from "../services/backendApi.js";
 import type { SplashBackground3D } from "./splashBackground3d.js";
+import biscuitsLogoUrl from "../assets/logos/Biscuits_logo.png";
 
 const log = logger.create("SplashScreen");
 
@@ -45,7 +46,9 @@ export class SplashScreen {
     this.container.innerHTML = `
       <canvas id="splash-canvas" aria-hidden="true"></canvas>
       <div class="splash-content">
-        <h1 class="splash-title">${this.gameTitle}</h1>
+        <div class="splash-logo-wrap">
+          <img class="splash-logo" src="${biscuitsLogoUrl}" alt="${this.gameTitle}" />
+        </div>
         <p class="splash-subtitle">Push Your Luck Dice Game</p>
         <p class="splash-tagline">Roll • Select • Score Low to Win</p>
         <div class="splash-mode-picker" role="radiogroup" aria-label="Play mode">
@@ -81,17 +84,17 @@ export class SplashScreen {
             <select id="splash-room-select">
               <option value="">Create New Room</option>
             </select>
-            <button type="button" id="splash-room-refresh" class="secondary">Refresh</button>
+            <button type="button" id="splash-room-refresh" class="btn btn-secondary secondary">Refresh</button>
           </div>
           <p id="splash-room-status">No active rooms found. Starting creates a new room.</p>
           <p>Bots send lightweight update and chaos events for multiplayer testing.</p>
         </div>
         <div class="splash-buttons">
-          <button id="start-game-btn" class="primary splash-btn">Start Game</button>
-          <button id="splash-replay-tutorial-btn" class="secondary splash-btn">Replay Tutorial</button>
-          <button id="splash-rules-btn" class="splash-btn">How to Play</button>
-          <button id="splash-leaderboard-btn" class="splash-btn">Leaderboard</button>
-          <button id="splash-settings-btn" class="splash-btn">Settings</button>
+          <button id="start-game-btn" class="btn btn-primary primary splash-btn">Start Game</button>
+          <button id="splash-replay-tutorial-btn" class="btn btn-secondary secondary splash-btn">Replay Tutorial</button>
+          <button id="splash-rules-btn" class="btn btn-secondary splash-btn">How to Play</button>
+          <button id="splash-leaderboard-btn" class="btn btn-secondary splash-btn">Leaderboard</button>
+          <button id="splash-settings-btn" class="btn btn-secondary splash-btn">Settings</button>
         </div>
       </div>
     `;

@@ -94,9 +94,9 @@ export class TutorialModal {
           <h2 class="tutorial-title">Welcome!</h2>
           <div class="tutorial-body"></div>
           <div class="tutorial-nav">
-            <button id="tutorial-skip" class="secondary">Skip Tutorial</button>
+            <button id="tutorial-skip" class="btn btn-secondary secondary">Skip Tutorial</button>
             <div class="tutorial-dots"></div>
-            <button id="tutorial-next" class="primary">Next</button>
+            <button id="tutorial-next" class="btn btn-primary primary">Next</button>
           </div>
         </div>
       </div>

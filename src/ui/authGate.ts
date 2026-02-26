@@ -43,8 +43,8 @@ export class AuthGateModal {
           <p>Sign in to compete on the global leaderboard and save your player name.</p>
           <p>You can also continue as Guest and play without leaderboard posting.</p>
           <div class="auth-gate-actions">
-            <button class="btn-auth-google">Continue with Google</button>
-            <button class="btn-auth-guest">Play as Guest</button>
+            <button class="btn btn-primary btn-auth-google">Continue with Google</button>
+            <button class="btn btn-secondary btn-auth-guest">Play as Guest</button>
           </div>
         </div>
       </div>

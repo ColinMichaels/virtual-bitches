@@ -23,6 +23,7 @@ export interface GameCallbacks {
   handleDeselectAll: () => void;
   handleUndo: () => void;
   handleNewGame: () => void;
+  handleReturnToMainMenu: () => void;
   startNewGame: () => void;
   togglePause: () => void;
   handleDieClick: (dieId: string) => void;
@@ -50,6 +51,7 @@ export class InputController {
   private deselectBtn: HTMLButtonElement;
   private undoBtn: HTMLButtonElement;
   private newGameBtn: HTMLButtonElement;
+  private returnMainMenuBtn: HTMLButtonElement | null;
   private viewLeaderboardBtn: HTMLButtonElement;
   private settingsGearBtn: HTMLButtonElement;
   private leaderboardBtn: HTMLButtonElement;
@@ -83,6 +85,7 @@ export class InputController {
     this.deselectBtn = document.getElementById("deselect-btn") as HTMLButtonElement;
     this.undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
     this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement;
+    this.returnMainMenuBtn = document.getElementById("return-main-menu-btn") as HTMLButtonElement | null;
     this.viewLeaderboardBtn = document.getElementById("view-leaderboard-btn") as HTMLButtonElement;
     this.settingsGearBtn = document.getElementById("settings-gear-btn") as HTMLButtonElement;
     this.leaderboardBtn = document.getElementById("leaderboard-btn") as HTMLButtonElement;
@@ -131,6 +134,13 @@ export class InputController {
       audioService.playSfx("click");
       hapticsService.buttonPress();
       this.callbacks.handleNewGame();
+    });
+
+    // Return to main menu button (game complete modal)
+    this.returnMainMenuBtn?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      hapticsService.buttonPress();
+      this.callbacks.handleReturnToMainMenu();
     });
 
     // View leaderboard button
