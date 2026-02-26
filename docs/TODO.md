@@ -735,6 +735,11 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - ✅ Added identity-aware settings/profile sync with local-first offline fallback + remote conflict handling
 - ✅ Added continuous leaderboard auto-sync and cached global leaderboard fallback for offline reads
 - ✅ Added subtle sync health indicators in Settings/Leaderboard (live online/sync/pending/offline/error state)
+- ✅ Added splash start-mode selector (`Solo` vs `Multiplayer`) with multiplayer session auto-create flow
+- ✅ Added optional multiplayer bot participants (`botCount`) for websocket session testing (`player_notification`, `game_update`, `chaos_attack`)
+- ✅ Added optional bot-traffic assertion mode for API smoke tests (`E2E_ASSERT_BOTS=1`)
+- ✅ Added multiplayer seat population from session participants (humans + bots shown around table)
+- ✅ Added clockwise turn-order planning scaffold from seat assignments (foundation for per-turn roll flow)
 
 ---
 

@@ -106,6 +106,34 @@ await test("posts log batch payload", async () => {
   assert(typeof fetchCalls[0].init?.body === "string", "Expected JSON request body");
 });
 
+await test("passes botCount in multiplayer session create payload", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    jsonResponse({
+      sessionId: "session-1",
+      roomCode: "ROOM42",
+      wsUrl: "ws://localhost:3000",
+      createdAt: Date.now(),
+    });
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.createMultiplayerSession({
+    playerId: "player-1",
+    botCount: 2,
+  });
+
+  assert(result !== null, "Expected create session response");
+  assertEqual(fetchCalls.length, 1, "Expected one fetch call");
+  const rawBody = String(fetchCalls[0].init?.body ?? "");
+  const parsedBody = JSON.parse(rawBody) as { botCount?: number };
+  assertEqual(parsedBody.botCount, 2, "Expected botCount in request payload");
+});
+
 await test("returns null on non-ok responses", async () => {
   authSessionService.clear();
   fetchCalls.length = 0;

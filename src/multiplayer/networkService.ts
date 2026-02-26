@@ -55,6 +55,27 @@ export interface MultiplayerPlayerNotificationMessage {
   timestamp?: number;
 }
 
+export interface MultiplayerTurnStartMessage {
+  type: "turn_start";
+  sessionId?: string;
+  playerId: string;
+  round?: number;
+  turnNumber?: number;
+  timestamp?: number;
+  order?: string[];
+  source?: string;
+}
+
+export interface MultiplayerTurnEndMessage {
+  type: "turn_end";
+  sessionId?: string;
+  playerId?: string;
+  round?: number;
+  turnNumber?: number;
+  timestamp?: number;
+  source?: string;
+}
+
 function isCameraAttackMessage(value: unknown): value is CameraAttackMessage {
   if (!value || typeof value !== "object") return false;
 
@@ -107,6 +128,20 @@ function isMultiplayerPlayerNotificationMessage(
 
   const msg = value as Partial<MultiplayerPlayerNotificationMessage>;
   return msg.type === "player_notification" && typeof msg.message === "string";
+}
+
+function isMultiplayerTurnStartMessage(value: unknown): value is MultiplayerTurnStartMessage {
+  if (!value || typeof value !== "object") return false;
+
+  const msg = value as Partial<MultiplayerTurnStartMessage>;
+  return msg.type === "turn_start" && typeof msg.playerId === "string";
+}
+
+function isMultiplayerTurnEndMessage(value: unknown): value is MultiplayerTurnEndMessage {
+  if (!value || typeof value !== "object") return false;
+
+  const msg = value as Partial<MultiplayerTurnEndMessage>;
+  return msg.type === "turn_end";
 }
 
 function isAuthExpiredCloseCode(code: number): boolean {
@@ -183,6 +218,20 @@ export class MultiplayerNetworkService {
     if (isMultiplayerPlayerNotificationMessage(parsed)) {
       this.eventTarget.dispatchEvent(
         createCustomEvent("multiplayer:notification:received", parsed)
+      );
+      return;
+    }
+
+    if (isMultiplayerTurnStartMessage(parsed)) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:turn:start", parsed)
+      );
+      return;
+    }
+
+    if (isMultiplayerTurnEndMessage(parsed)) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:turn:end", parsed)
       );
       return;
     }
@@ -306,6 +355,26 @@ export class MultiplayerNetworkService {
     );
   };
 
+  private readonly onTurnEndSend = (event: Event) => {
+    const custom = event as CustomEvent<MultiplayerTurnEndMessage>;
+    if (!custom.detail) return;
+    const sent = this.sendTurnEnd(custom.detail);
+    if (sent) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:turn:end:sent", {
+          message: custom.detail,
+        })
+      );
+      return;
+    }
+
+    this.eventTarget.dispatchEvent(
+      createCustomEvent("multiplayer:turn:end:sendFailed", {
+        message: custom.detail,
+      })
+    );
+  };
+
   constructor(options: MultiplayerNetworkOptions = {}) {
     const hasExplicitWsUrl = Object.prototype.hasOwnProperty.call(options, "wsUrl");
     this.wsUrl = hasExplicitWsUrl
@@ -341,6 +410,7 @@ export class MultiplayerNetworkService {
       "multiplayer:notification:send",
       this.onPlayerNotificationSend
     );
+    this.eventTarget.addEventListener("multiplayer:turn:end:send", this.onTurnEndSend);
   }
 
   disableEventBridge(): void {
@@ -357,6 +427,7 @@ export class MultiplayerNetworkService {
       "multiplayer:notification:send",
       this.onPlayerNotificationSend
     );
+    this.eventTarget.removeEventListener("multiplayer:turn:end:send", this.onTurnEndSend);
   }
 
   connect(): boolean {
@@ -406,6 +477,10 @@ export class MultiplayerNetworkService {
   }
 
   sendPlayerNotification(message: MultiplayerPlayerNotificationMessage): boolean {
+    return this.sendRaw(message);
+  }
+
+  sendTurnEnd(message: MultiplayerTurnEndMessage): boolean {
     return this.sendRaw(message);
   }
 

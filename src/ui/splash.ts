@@ -10,15 +10,26 @@ import type { SplashBackground3D } from "./splashBackground3d.js";
 
 const log = logger.create("SplashScreen");
 
+export type SplashPlayMode = "solo" | "multiplayer";
+
+export interface SplashStartOptions {
+  playMode: SplashPlayMode;
+  multiplayer?: {
+    botCount: number;
+  };
+}
+
 export class SplashScreen {
   private readonly container: HTMLElement;
   private readonly canvas: HTMLCanvasElement;
   private background3d: SplashBackground3D | null = null;
   private backgroundLoadPromise: Promise<void> | null = null;
+  private playMode: SplashPlayMode = "solo";
+  private botCount = 1;
   gameTitle = environment.gameTitle;
 
   constructor(
-    onStart: () => boolean | Promise<boolean>,
+    onStart: (options: SplashStartOptions) => boolean | Promise<boolean>,
     onSettings: () => void,
     onLeaderboard: () => void,
     onRules: () => void
@@ -31,6 +42,36 @@ export class SplashScreen {
         <h1 class="splash-title">${this.gameTitle}</h1>
         <p class="splash-subtitle">Push Your Luck Dice Game</p>
         <p class="splash-tagline">Roll • Select • Score Low to Win</p>
+        <div class="splash-mode-picker" role="radiogroup" aria-label="Play mode">
+          <button
+            type="button"
+            class="splash-mode-btn active"
+            data-play-mode="solo"
+            role="radio"
+            aria-checked="true"
+          >
+            Solo
+          </button>
+          <button
+            type="button"
+            class="splash-mode-btn"
+            data-play-mode="multiplayer"
+            role="radio"
+            aria-checked="false"
+          >
+            Multiplayer
+          </button>
+        </div>
+        <div id="splash-multiplayer-options" class="splash-multiplayer-options" style="display: none;">
+          <label for="splash-bot-count">Testing Bots</label>
+          <select id="splash-bot-count">
+            <option value="0">0 (human-only)</option>
+            <option value="1" selected>1 bot</option>
+            <option value="2">2 bots</option>
+            <option value="3">3 bots</option>
+          </select>
+          <p>Bots send lightweight update and chaos events for multiplayer testing.</p>
+        </div>
         <div class="splash-buttons">
           <button id="start-game-btn" class="primary splash-btn">Start Game</button>
           <button id="splash-rules-btn" class="splash-btn">How to Play</button>
@@ -42,6 +83,20 @@ export class SplashScreen {
 
     document.body.appendChild(this.container);
     this.canvas = this.container.querySelector("#splash-canvas") as HTMLCanvasElement;
+
+    this.container.querySelectorAll<HTMLElement>("[data-play-mode]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const mode = button.dataset.playMode === "multiplayer" ? "multiplayer" : "solo";
+        this.playMode = mode;
+        this.syncPlayModeUi();
+      });
+    });
+
+    const botCountSelect = this.container.querySelector<HTMLSelectElement>("#splash-bot-count");
+    botCountSelect?.addEventListener("change", () => {
+      const parsed = Number(botCountSelect.value);
+      this.botCount = Number.isFinite(parsed) ? Math.max(0, Math.min(3, Math.floor(parsed))) : 0;
+    });
 
     document.getElementById("start-game-btn")?.addEventListener("click", async () => {
       audioService.playSfx("click");
@@ -55,7 +110,17 @@ export class SplashScreen {
       }
 
       try {
-        const shouldStart = await Promise.resolve(onStart());
+        const shouldStart = await Promise.resolve(
+          onStart({
+            playMode: this.playMode,
+            multiplayer:
+              this.playMode === "multiplayer"
+                ? {
+                    botCount: this.botCount,
+                  }
+                : undefined,
+          })
+        );
         if (!shouldStart) {
           return;
         }
@@ -81,6 +146,8 @@ export class SplashScreen {
       audioService.playSfx("click");
       onSettings();
     });
+
+    this.syncPlayModeUi();
   }
 
   async prepareBackground(onStatus?: (message: string) => void): Promise<void> {
@@ -129,5 +196,19 @@ export class SplashScreen {
     this.background3d = null;
     this.backgroundLoadPromise = null;
     this.container.remove();
+  }
+
+  private syncPlayModeUi(): void {
+    const modeButtons = this.container.querySelectorAll<HTMLElement>("[data-play-mode]");
+    modeButtons.forEach((button) => {
+      const isActive = button.dataset.playMode === this.playMode;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-checked", isActive ? "true" : "false");
+    });
+
+    const multiplayerOptions = this.container.querySelector<HTMLElement>("#splash-multiplayer-options");
+    if (multiplayerOptions) {
+      multiplayerOptions.style.display = this.playMode === "multiplayer" ? "flex" : "none";
+    }
   }
 }

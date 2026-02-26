@@ -23,6 +23,7 @@ export interface SeatState {
   index: number;
   occupied: boolean;
   isCurrentPlayer: boolean;
+  isBot?: boolean;
   playerName?: string;
   avatarColor?: Color3;
 }
@@ -261,46 +262,72 @@ export class PlayerSeatRenderer {
     const avatarMat = pedestal.getChildMeshes()[0].material as StandardMaterial;
     const headMat = pedestal.getChildMeshes()[1].material as StandardMaterial;
     const pedestalMat = pedestal.material as StandardMaterial;
+    const isCurrentPlayer = state.isCurrentPlayer === true;
+    const isOccupied = state.occupied === true || isCurrentPlayer;
+    const isBot = state.isBot === true;
 
-    if (state.occupied) {
-      // Occupied seat - use custom color or default
-      const color = state.avatarColor || new Color3(0.5, 0.6, 0.8);
+    if (isCurrentPlayer) {
+      const color = state.avatarColor || new Color3(0.24, 0.84, 0.36);
+      pedestalMat.diffuseColor = new Color3(0.2, 0.8, 0.3);
+      pedestalMat.emissiveColor = new Color3(0.1, 0.38, 0.15);
+      pedestalMat.alpha = 1;
       avatarMat.diffuseColor = color;
       avatarMat.emissiveColor = color.scale(0.3);
       headMat.diffuseColor = new Color3(0.9, 0.7, 0.5);
-    } else if (!state.isCurrentPlayer) {
-      // Empty seat - muted
-      avatarMat.diffuseColor = new Color3(0.4, 0.4, 0.45);
-      avatarMat.emissiveColor = new Color3(0.08, 0.08, 0.1);
+      avatarMat.alpha = 1;
+      headMat.alpha = 1;
+    } else if (isOccupied) {
+      const color = state.avatarColor || (isBot ? new Color3(0.84, 0.52, 0.24) : new Color3(0.4, 0.62, 0.9));
+      pedestalMat.diffuseColor = isBot ? new Color3(0.44, 0.3, 0.2) : new Color3(0.24, 0.3, 0.42);
+      pedestalMat.emissiveColor = new Color3(0.05, 0.05, 0.08);
+      pedestalMat.alpha = 1;
+      avatarMat.diffuseColor = color;
+      avatarMat.emissiveColor = color.scale(0.24);
+      headMat.diffuseColor = isBot ? new Color3(0.76, 0.62, 0.52) : new Color3(0.9, 0.7, 0.5);
+      avatarMat.alpha = 1;
+      headMat.alpha = 1;
+    } else {
+      pedestalMat.diffuseColor = new Color3(0.15, 0.15, 0.17);
+      pedestalMat.emissiveColor = new Color3(0, 0, 0);
+      pedestalMat.alpha = 0.5;
+      avatarMat.diffuseColor = new Color3(0.2, 0.2, 0.22);
+      avatarMat.emissiveColor = new Color3(0, 0, 0);
       headMat.diffuseColor = new Color3(0.5, 0.5, 0.55);
+      avatarMat.alpha = 0.5;
+      headMat.alpha = 0.5;
     }
 
-    // Update name plate text
-    if (state.playerName) {
-      const texture = (namePlate.material as StandardMaterial).diffuseTexture as DynamicTexture;
-      const ctx = texture.getContext() as CanvasRenderingContext2D;
+    const texture = (namePlate.material as StandardMaterial).diffuseTexture as DynamicTexture;
+    const ctx = texture.getContext() as CanvasRenderingContext2D;
+    const nameText =
+      typeof state.playerName === "string" && state.playerName.trim().length > 0
+        ? state.playerName.trim().slice(0, 20)
+        : isCurrentPlayer
+          ? "YOU"
+          : isOccupied
+            ? `Seat ${seatIndex + 1}`
+            : "Empty";
 
-      ctx.clearRect(0, 0, 512, 128);
+    ctx.clearRect(0, 0, 512, 128);
 
-      // Background
-      if (state.isCurrentPlayer) {
-        ctx.fillStyle = "#2a8f3a";
-      } else if (state.occupied) {
-        ctx.fillStyle = "#4a5a7a";
-      } else {
-        ctx.fillStyle = "#3a3a4a";
-      }
-      ctx.fillRect(0, 0, 512, 128);
-
-      // Text
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 60px Arial";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
-      ctx.fillText(state.playerName, 256, 64);
-      texture.update();
+    if (isCurrentPlayer) {
+      ctx.fillStyle = "#2a8f3a";
+    } else if (isOccupied && isBot) {
+      ctx.fillStyle = "#7a4f2a";
+    } else if (isOccupied) {
+      ctx.fillStyle = "#4a5a7a";
+    } else {
+      ctx.fillStyle = "#2a2a2c";
     }
+    ctx.fillRect(0, 0, 512, 128);
+
+    ctx.fillStyle = isOccupied || isCurrentPlayer ? "#ffffff" : "#666666";
+    ctx.font = "bold 52px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    ctx.fillText(nameText, 256, 64);
+    texture.update();
   }
 
   /**
@@ -326,6 +353,10 @@ export class PlayerSeatRenderer {
   clearHighlights(): void {
     this.seatMeshes.forEach((pedestal) => {
       pedestal.scaling = new Vector3(1, 1, 1);
+      const pedestalMat = pedestal.material as StandardMaterial;
+      if (pedestalMat) {
+        pedestalMat.emissiveColor = new Color3(0, 0, 0);
+      }
     });
   }
 

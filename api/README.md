@@ -59,6 +59,9 @@ SQL files define the intended longer-term relational schema.
 - Session creation/join returns:
   - `playerToken` for WS query auth
   - `auth` bundle (`accessToken`, `refreshToken`, `expiresAt`, `tokenType`)
+  - `participants[]` snapshot (`playerId`, `displayName`, `isBot`, `joinedAt`, `lastHeartbeatAt`)
+  - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `updatedAt`)
+- `POST /api/multiplayer/sessions` accepts optional `botCount` (`0..4`) to add lightweight AI bot participants for websocket testing.
 - `GET /api/players/:playerId/profile` returns `204 No Content` when profile does not exist yet.
 - WS endpoint is available at `/` and expects query params:
   - `session=<sessionId>`
@@ -69,6 +72,11 @@ SQL files define the intended longer-term relational schema.
   - `particle:emit`
   - `game_update` (`title` + `content` required)
   - `player_notification` (`message` required, optional `targetPlayerId`)
+- Turn flow messages:
+  - client -> server: `turn_end`
+  - server -> clients: `turn_end`, `turn_start`
+  - validation: only the current `activeTurnPlayerId` may advance turn order
+- Bot participants can emit periodic `player_notification`, `game_update`, and `chaos_attack` messages to connected humans.
 - Leaderboard ordering is deterministic:
   1. Lower score first
   2. Lower duration first
@@ -89,6 +97,12 @@ Smoke test against deployed API/Cloud Run:
 
 ```bash
 E2E_API_BASE_URL="https://<your-cloud-run-host>" npm run test:e2e:api
+```
+
+Optional bot traffic assertion in smoke tests:
+
+```bash
+E2E_ASSERT_BOTS=1 npm run test:e2e:api:local
 ```
 
 ## File Store -> Firestore Migration (Sprint 1.5)

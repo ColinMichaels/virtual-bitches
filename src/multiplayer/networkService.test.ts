@@ -2,6 +2,8 @@ import {
   MultiplayerNetworkService,
   type MultiplayerGameUpdateMessage,
   type MultiplayerPlayerNotificationMessage,
+  type MultiplayerTurnEndMessage,
+  type MultiplayerTurnStartMessage,
   type WebSocketLike,
 } from "./networkService.js";
 import type { CameraAttackMessage } from "../chaos/types.js";
@@ -144,6 +146,29 @@ function createPlayerNotificationMessage(): MultiplayerPlayerNotificationMessage
     title: "Heads Up",
     message: "You have been targeted by a chaos attack",
     severity: "warning",
+    timestamp: Date.now(),
+  };
+}
+
+function createTurnStartMessage(): MultiplayerTurnStartMessage {
+  return {
+    type: "turn_start",
+    sessionId: "session-1",
+    playerId: "player-1",
+    round: 1,
+    turnNumber: 1,
+    timestamp: Date.now(),
+    order: ["player-1", "player-2"],
+  };
+}
+
+function createTurnEndMessage(): MultiplayerTurnEndMessage {
+  return {
+    type: "turn_end",
+    sessionId: "session-1",
+    playerId: "player-1",
+    round: 1,
+    turnNumber: 1,
     timestamp: Date.now(),
   };
 }
@@ -425,6 +450,40 @@ await test("dispatches inbound multiplayer player notification event", () => {
   assertEqual(received!.severity, "warning", "Expected notification severity");
 });
 
+await test("dispatches inbound multiplayer turn start/end events", () => {
+  const eventTarget = new EventTarget();
+  let socket: MockWebSocket | null = null;
+  let started: MultiplayerTurnStartMessage | null = null;
+  let ended: MultiplayerTurnEndMessage | null = null;
+
+  eventTarget.addEventListener("multiplayer:turn:start", (event: Event) => {
+    started = (event as CustomEvent<MultiplayerTurnStartMessage>).detail;
+  });
+  eventTarget.addEventListener("multiplayer:turn:end", (event: Event) => {
+    ended = (event as CustomEvent<MultiplayerTurnEndMessage>).detail;
+  });
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local",
+    eventTarget,
+    autoReconnect: false,
+    webSocketFactory: () => {
+      socket = new MockWebSocket();
+      return socket;
+    },
+  });
+
+  network.connect();
+  socket!.emitOpen();
+  socket!.emitMessage(createTurnStartMessage());
+  socket!.emitMessage(createTurnEndMessage());
+
+  assert(started !== null, "Expected inbound turn start");
+  assertEqual(started!.playerId, "player-1", "Expected turn start player");
+  assert(ended !== null, "Expected inbound turn end");
+  assertEqual(ended!.playerId, "player-1", "Expected turn end player");
+});
+
 await test("bridges outgoing multiplayer game update to websocket", () => {
   const eventTarget = new EventTarget();
   let socket: MockWebSocket | null = null;
@@ -489,6 +548,39 @@ await test("bridges outgoing player notification to websocket", () => {
   const sent = JSON.parse(socket!.sentPayloads[0]) as MultiplayerPlayerNotificationMessage;
   assertEqual(sent.id, outgoing.id, "Expected sent notification payload to match");
   assertEqual(sentEventCount, 1, "Expected notification sent feedback event");
+});
+
+await test("bridges outgoing turn_end to websocket", () => {
+  const eventTarget = new EventTarget();
+  let socket: MockWebSocket | null = null;
+  let sentEventCount = 0;
+  eventTarget.addEventListener("multiplayer:turn:end:sent", () => {
+    sentEventCount += 1;
+  });
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local",
+    eventTarget,
+    autoReconnect: false,
+    webSocketFactory: () => {
+      socket = new MockWebSocket();
+      return socket;
+    },
+  });
+
+  network.enableEventBridge();
+  network.connect();
+  socket!.emitOpen();
+
+  const outgoing = createTurnEndMessage();
+  eventTarget.dispatchEvent(
+    new CustomEvent("multiplayer:turn:end:send", { detail: outgoing })
+  );
+
+  assertEqual(socket!.sentPayloads.length, 1, "Expected one outbound turn_end payload");
+  const sent = JSON.parse(socket!.sentPayloads[0]) as MultiplayerTurnEndMessage;
+  assertEqual(sent.type, "turn_end", "Expected turn_end payload type");
+  assertEqual(sentEventCount, 1, "Expected turn_end sent feedback event");
 });
 
 console.log("\nMultiplayerNetworkService tests passed! ✓");

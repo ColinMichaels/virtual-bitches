@@ -38,12 +38,30 @@ export interface MultiplayerHeartbeatResponse {
 
 export interface MultiplayerSessionAuth extends AuthTokenBundle {}
 
+export interface MultiplayerSessionParticipant {
+  playerId: string;
+  displayName?: string;
+  joinedAt: number;
+  lastHeartbeatAt: number;
+  isBot?: boolean;
+}
+
+export interface MultiplayerSessionTurnState {
+  order: string[];
+  activeTurnPlayerId: string | null;
+  round: number;
+  turnNumber: number;
+  updatedAt: number;
+}
+
 export interface MultiplayerSessionRecord {
   sessionId: string;
   roomCode: string;
   wsUrl?: string;
   playerToken?: string;
   auth?: MultiplayerSessionAuth;
+  participants?: MultiplayerSessionParticipant[];
+  turnState?: MultiplayerSessionTurnState | null;
   createdAt: number;
   expiresAt?: number;
 }
@@ -51,6 +69,7 @@ export interface MultiplayerSessionRecord {
 export interface CreateMultiplayerSessionRequest {
   playerId: string;
   roomCode?: string;
+  botCount?: number;
 }
 
 export interface JoinMultiplayerSessionRequest {
