@@ -82,12 +82,12 @@ export class SplashScreen {
           <label for="splash-room-select">Join Existing Room</label>
           <div class="splash-room-picker">
             <select id="splash-room-select">
-              <option value="">Create New Room</option>
+              <option value="">Create Private Room</option>
             </select>
             <button type="button" id="splash-room-refresh" class="btn btn-secondary secondary">Refresh</button>
           </div>
-          <p id="splash-room-status">No active rooms found. Starting creates a new room.</p>
-          <p>Bots send lightweight update and chaos events for multiplayer testing.</p>
+          <p id="splash-room-status">No active public rooms found. Starting creates a private room.</p>
+          <p>Pick a public lobby, or create a private room and invite others with your share link.</p>
         </div>
         <div class="splash-buttons">
           <button id="start-game-btn" class="btn btn-primary primary splash-btn">Start Game</button>
@@ -278,15 +278,27 @@ export class SplashScreen {
       const selected = this.roomList.find((room) => room.sessionId === this.selectedRoomSessionId);
       if (selected) {
         const expiresInMinutes = Math.max(1, Math.ceil((selected.expiresAt - Date.now()) / 60000));
-        statusEl.textContent = `Joining room ${selected.roomCode}. Expires in ~${expiresInMinutes}m without activity.`;
+        const maxPlayers =
+          typeof selected.maxHumanCount === "number" && Number.isFinite(selected.maxHumanCount)
+            ? Math.max(1, Math.floor(selected.maxHumanCount))
+            : 8;
+        const availableSlots =
+          typeof selected.availableHumanSlots === "number" && Number.isFinite(selected.availableHumanSlots)
+            ? Math.max(0, Math.floor(selected.availableHumanSlots))
+            : Math.max(0, maxPlayers - selected.humanCount);
+        const joinability = availableSlots > 0 ? `${availableSlots} open seat(s)` : "Room is currently full";
+        statusEl.textContent =
+          availableSlots > 0
+            ? `Joining room ${selected.roomCode} (${joinability}). Expires in ~${expiresInMinutes}m without activity.`
+            : `Joining room ${selected.roomCode} (${joinability}). Select "Create Private Room" to start your own room now.`;
         return;
       }
     }
     if (this.roomList.length === 0) {
-      statusEl.textContent = "No active rooms found. Starting creates a new room.";
+      statusEl.textContent = "No active public rooms found. Starting creates a private room.";
       return;
     }
-    statusEl.textContent = "Select a room to join, or choose Create New Room.";
+    statusEl.textContent = "Select a public room to join, or choose Create Private Room at any time.";
   }
 
   private async refreshRoomList(force: boolean): Promise<void> {
@@ -321,14 +333,28 @@ export class SplashScreen {
       roomSelect.innerHTML = "";
       const createOption = document.createElement("option");
       createOption.value = "";
-      createOption.textContent = "Create New Room";
+      createOption.textContent = "Create Private Room";
       roomSelect.appendChild(createOption);
 
       this.roomList.forEach((room) => {
         const option = document.createElement("option");
         option.value = room.sessionId;
+        const maxPlayers =
+          typeof room.maxHumanCount === "number" && Number.isFinite(room.maxHumanCount)
+            ? Math.max(1, Math.floor(room.maxHumanCount))
+            : 8;
+        const availableSlots =
+          typeof room.availableHumanSlots === "number" && Number.isFinite(room.availableHumanSlots)
+            ? Math.max(0, Math.floor(room.availableHumanSlots))
+            : Math.max(0, maxPlayers - room.humanCount);
+        const roomFlavor =
+          room.roomType === "public_default"
+            ? "Lobby"
+            : room.roomType === "public_overflow"
+              ? "Overflow"
+              : "Custom";
         const sessionState = room.sessionComplete ? "complete" : `${room.activeHumanCount} active`;
-        option.textContent = `${room.roomCode} • ${room.humanCount}H/${room.botCount}B • ${sessionState}`;
+        option.textContent = `${room.roomCode} • ${roomFlavor} • ${room.humanCount}/${maxPlayers} players • ${sessionState} • ${availableSlots} open`;
         roomSelect.appendChild(option);
       });
 
@@ -346,7 +372,7 @@ export class SplashScreen {
         roomSelect.innerHTML = "";
         const createOption = document.createElement("option");
         createOption.value = "";
-        createOption.textContent = "Create New Room";
+        createOption.textContent = "Create Private Room";
         roomSelect.appendChild(createOption);
         roomSelect.value = "";
       }

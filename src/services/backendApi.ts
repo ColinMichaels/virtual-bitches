@@ -95,6 +95,10 @@ export interface MultiplayerSessionRecord {
   sessionId: string;
   roomCode: string;
   gameDifficulty?: MultiplayerGameDifficulty;
+  roomType?: "private" | "public_default" | "public_overflow";
+  isPublic?: boolean;
+  maxHumanCount?: number;
+  availableHumanSlots?: number;
   wsUrl?: string;
   playerToken?: string;
   auth?: MultiplayerSessionAuth;
@@ -112,6 +116,8 @@ export interface MultiplayerRoomListing {
   sessionId: string;
   roomCode: string;
   gameDifficulty?: MultiplayerGameDifficulty;
+  roomType?: "private" | "public_default" | "public_overflow";
+  isPublic?: boolean;
   createdAt: number;
   lastActivityAt: number;
   expiresAt: number;
@@ -119,6 +125,8 @@ export interface MultiplayerRoomListing {
   humanCount: number;
   activeHumanCount: number;
   readyHumanCount: number;
+  maxHumanCount?: number;
+  availableHumanSlots?: number;
   botCount: number;
   sessionComplete: boolean;
 }
@@ -133,6 +141,14 @@ export interface CreateMultiplayerSessionRequest {
 export interface JoinMultiplayerSessionRequest {
   playerId: string;
   displayName?: string;
+}
+
+export type MultiplayerJoinFailureReason = "room_full" | "session_expired" | "unknown";
+
+export interface MultiplayerJoinSessionResult {
+  session: MultiplayerSessionRecord | null;
+  reason?: MultiplayerJoinFailureReason;
+  status?: number;
 }
 
 export interface LeaderboardScoreSubmission {
@@ -252,14 +268,37 @@ export class BackendApiService {
   async joinMultiplayerSession(
     sessionId: string,
     request: JoinMultiplayerSessionRequest
-  ): Promise<MultiplayerSessionRecord | null> {
-    return this.request<MultiplayerSessionRecord>(
-      `/multiplayer/sessions/${encodeURIComponent(sessionId)}/join`,
-      {
-        method: "POST",
-        body: request,
+  ): Promise<MultiplayerJoinSessionResult> {
+    const path = `/multiplayer/sessions/${encodeURIComponent(sessionId)}/join`;
+    const requestOptions = {
+      method: "POST",
+      body: request,
+    };
+
+    const firstResponse = await this.executeRequest(path, requestOptions, "session");
+    if (!firstResponse) {
+      return { session: null, reason: "unknown" };
+    }
+
+    if (firstResponse.status === 401) {
+      const refreshed = await authSessionService.refreshTokens({
+        baseUrl: this.baseUrl,
+        fetchImpl: this.fetchImpl,
+        timeoutMs: this.timeoutMs,
+      });
+      if (!refreshed) {
+        authSessionService.markSessionExpired("http_401_refresh_failed");
+        return { session: null, reason: "session_expired", status: 401 };
       }
-    );
+
+      const retryResponse = await this.executeRequest(path, requestOptions, "session");
+      if (!retryResponse) {
+        return { session: null, reason: "unknown" };
+      }
+      return this.parseJoinSessionResponse(retryResponse, path);
+    }
+
+    return this.parseJoinSessionResponse(firstResponse, path);
   }
 
   async heartbeatMultiplayerSession(
@@ -459,6 +498,41 @@ export class BackendApiService {
     return (await response.json()) as T;
   }
 
+  private async parseJoinSessionResponse(
+    response: Response,
+    path: string
+  ): Promise<MultiplayerJoinSessionResult> {
+    if (!response.ok) {
+      const errorSummary = await readErrorSummary(response);
+      if (errorSummary) {
+        log.warn(
+          `API request failed: POST ${path} (${response.status}) - ${errorSummary}`
+        );
+      } else {
+        log.warn(`API request failed: POST ${path} (${response.status})`);
+      }
+      return {
+        session: null,
+        reason: resolveJoinFailureReason(response.status, errorSummary),
+        status: response.status,
+      };
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      return {
+        session: null,
+        reason: "unknown",
+        status: response.status,
+      };
+    }
+
+    return {
+      session: (await response.json()) as MultiplayerSessionRecord,
+      status: response.status,
+    };
+  }
+
   private dispatchFirebaseSessionExpired(path: string, reason?: string): void {
     if (typeof document === "undefined" || typeof CustomEvent === "undefined") {
       return;
@@ -486,6 +560,24 @@ export class BackendApiService {
 
 function normalizeBaseUrl(url: string): string {
   return url.endsWith("/") ? url.slice(0, -1) : url;
+}
+
+function resolveJoinFailureReason(
+  status: number,
+  errorSummary?: string
+): MultiplayerJoinFailureReason {
+  const normalized = typeof errorSummary === "string" ? errorSummary.toLowerCase() : "";
+  if (status === 409 && normalized.includes("room_full")) {
+    return "room_full";
+  }
+  if (
+    status === 410 ||
+    normalized.includes("session expired") ||
+    normalized.includes("session_expired")
+  ) {
+    return "session_expired";
+  }
+  return "unknown";
 }
 
 async function readErrorSummary(response: Response): Promise<string> {

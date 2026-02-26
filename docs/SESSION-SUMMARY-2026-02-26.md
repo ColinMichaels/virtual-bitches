@@ -31,6 +31,17 @@
   - Tutorial replay behavior
 - Added structured layout support (cards, callouts, keyboard key styling, responsive tables).
 
+### Friends System Planning + Scaffold (Deferred for Stability)
+- Added a dedicated friends system architecture doc with:
+  - data model direction
+  - endpoint shape
+  - privacy/abuse constraints
+  - rollout phases and multiplayer stability gates
+- Added client-side scaffold contracts (types + placeholder service) without runtime wiring:
+  - `src/social/friends/types.ts`
+  - `src/social/friends/friendsService.ts`
+- Intentional decision: keep this deferred until core multiplayer mechanics (turn flow/room lifecycle/recovery) are stabilized.
+
 ---
 
 ## Updated Tracking
@@ -44,4 +55,3 @@
 ## Validation
 
 - Production build completed successfully after documentation/UI updates.
-

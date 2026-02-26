@@ -2,6 +2,7 @@ import { logger } from "../utils/logger.js";
 import {
   backendApiService,
   type MultiplayerGameDifficulty,
+  type MultiplayerJoinFailureReason,
   type MultiplayerSessionRecord,
 } from "../services/backendApi.js";
 import { getLocalPlayerId } from "../services/playerIdentity.js";
@@ -15,6 +16,7 @@ export class MultiplayerSessionService {
   private readonly playerId: string;
   private activeSession: MultiplayerSessionRecord | null = null;
   private heartbeatHandle?: ReturnType<typeof setInterval>;
+  private lastJoinFailureReason: MultiplayerJoinFailureReason | null = null;
 
   constructor(playerId: string = getLocalPlayerId()) {
     this.playerId = playerId;
@@ -26,6 +28,10 @@ export class MultiplayerSessionService {
 
   getActiveSession(): MultiplayerSessionRecord | null {
     return this.activeSession;
+  }
+
+  getLastJoinFailureReason(): MultiplayerJoinFailureReason | null {
+    return this.lastJoinFailureReason;
   }
 
   async createSession(
@@ -48,14 +54,18 @@ export class MultiplayerSessionService {
   }
 
   async joinSession(sessionId: string, displayName?: string): Promise<MultiplayerSessionRecord | null> {
-    const joined = await backendApiService.joinMultiplayerSession(sessionId, {
+    const joinResult = await backendApiService.joinMultiplayerSession(sessionId, {
       playerId: this.playerId,
       displayName,
     });
-    if (!joined) return null;
+    if (!joinResult.session) {
+      this.lastJoinFailureReason = joinResult.reason ?? "unknown";
+      return null;
+    }
 
-    this.setActiveSession(joined);
-    return joined;
+    this.lastJoinFailureReason = null;
+    this.setActiveSession(joinResult.session);
+    return joinResult.session;
   }
 
   async leaveSession(): Promise<void> {
@@ -149,6 +159,7 @@ export class MultiplayerSessionService {
 
   private setActiveSession(session: MultiplayerSessionRecord): void {
     this.activeSession = session;
+    this.lastJoinFailureReason = null;
     if (session.auth?.accessToken) {
       authSessionService.setTokens(session.auth);
     }

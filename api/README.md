@@ -50,6 +50,13 @@ SQL files define the intended longer-term relational schema.
 - `POST /api/multiplayer/sessions/:sessionId/leave`
 - `POST /api/multiplayer/sessions/:sessionId/auth/refresh`
 
+Planned (not implemented yet):
+
+- `GET /api/social/friends`
+- `POST /api/social/friends/requests`
+- `POST /api/social/presence/heartbeat`
+- `POST /api/social/invites/room`
+
 ## Notes
 
 - Auth contract is bearer token based with refresh token rotation.
@@ -65,6 +72,7 @@ SQL files define the intended longer-term relational schema.
   - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `phase`, `activeRollServerId`, optional `activeRoll`, `updatedAt`)
 - `POST /api/multiplayer/sessions` accepts optional `botCount` (`0..4`) to add lightweight AI bot participants for websocket testing.
 - Bot turn strategy is isolated in [`api/bot/engine.mjs`](./bot/engine.mjs) behind `createBotEngine()` so implementations can be swapped without rewriting websocket/session orchestration.
+- Friends/presence architecture plan lives in `docs/FRIENDS-SYSTEM-PLAN.md`; endpoints above are intentionally deferred until multiplayer stability gate completion.
 - `GET /api/players/:playerId/profile` returns `204 No Content` when profile does not exist yet.
 - WS endpoint is available at `/` and expects query params:
   - `session=<sessionId>`
