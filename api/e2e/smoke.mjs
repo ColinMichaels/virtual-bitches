@@ -176,6 +176,24 @@ async function run() {
     "turn_action_invalid_score",
     "expected invalid score rejection"
   );
+  const hostTurnSyncAfterInvalidScore = await waitForBufferedMessage(
+    hostMessageBuffer,
+    (payload) =>
+      payload?.type === "turn_start" &&
+      payload?.playerId === hostPlayerId &&
+      payload?.activeRollServerId === rollServerId,
+    "host turn sync after invalid score"
+  );
+  assertEqual(
+    hostTurnSyncAfterInvalidScore.activeRollServerId,
+    rollServerId,
+    "turn sync activeRollServerId mismatch"
+  );
+  assert(
+    Array.isArray(hostTurnSyncAfterInvalidScore?.activeRoll?.dice) &&
+      hostTurnSyncAfterInvalidScore.activeRoll.dice.length > 0,
+    "turn sync missing active roll snapshot"
+  );
 
   const guestTurnScorePromise = waitForBufferedMessage(
     guestMessageBuffer,

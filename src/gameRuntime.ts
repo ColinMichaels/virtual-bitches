@@ -37,6 +37,7 @@ import {
   MultiplayerNetworkService,
   type MultiplayerTurnActionMessage,
   type MultiplayerTurnEndMessage,
+  type MultiplayerTurnPhase,
   type MultiplayerTurnStartMessage,
 } from "./multiplayer/networkService.js";
 import { MultiplayerSessionService } from "./multiplayer/sessionService.js";
@@ -117,6 +118,7 @@ class Game implements GameCallbacks {
   private activeTurnPlayerId: string | null = null;
   private activeRollServerId: string | null = null;
   private awaitingMultiplayerRoll = false;
+  private pendingTurnEndSync = false;
   private lobbyRedirectInProgress = false;
   private participantSeatById = new Map<string, number>();
   private participantLabelById = new Map<string, string>();
@@ -169,6 +171,7 @@ class Game implements GameCallbacks {
 
     document.addEventListener("multiplayer:connected", () => {
       particleService.enableNetworkSync(true);
+      this.flushPendingTurnEndSync();
     });
     document.addEventListener("multiplayer:disconnected", () => {
       particleService.enableNetworkSync(false);
@@ -781,6 +784,11 @@ class Game implements GameCallbacks {
           ? session.turnState.activeRollServerId
           : null;
       this.updateTurnSeatHighlight(serverActiveTurnPlayerId);
+      this.recoverLocalTurnFromSnapshot(
+        serverActiveTurnPlayerId,
+        session.turnState?.phase,
+        session.turnState?.activeRoll
+      );
       return;
     }
 
@@ -789,6 +797,7 @@ class Game implements GameCallbacks {
       (this.playMode === "multiplayer" ? this.localPlayerId : null);
     this.activeTurnPlayerId = fallbackActive;
     this.activeRollServerId = null;
+    this.pendingTurnEndSync = false;
     this.updateTurnSeatHighlight(fallbackActive);
   }
 
@@ -829,6 +838,11 @@ class Game implements GameCallbacks {
         ? message.activeRollServerId
         : null;
     this.updateTurnSeatHighlight(message.playerId);
+    this.recoverLocalTurnFromSnapshot(
+      message.playerId,
+      message.phase,
+      message.activeRoll
+    );
 
     if (message.playerId === this.localPlayerId) {
       const suffix =
@@ -847,6 +861,7 @@ class Game implements GameCallbacks {
   }
 
   private handleMultiplayerTurnEnd(message: MultiplayerTurnEndMessage): void {
+    this.pendingTurnEndSync = false;
     if (typeof message.playerId !== "string" || !message.playerId) {
       return;
     }
@@ -871,6 +886,7 @@ class Game implements GameCallbacks {
     if (message.playerId === this.localPlayerId) {
       if (message.action === "roll") {
         this.awaitingMultiplayerRoll = false;
+        this.pendingTurnEndSync = false;
         this.activeRollServerId =
           typeof message.roll?.serverRollId === "string" && message.roll.serverRollId
             ? message.roll.serverRollId
@@ -908,6 +924,7 @@ class Game implements GameCallbacks {
 
     if (code === "turn_action_invalid_phase") {
       this.awaitingMultiplayerRoll = false;
+      this.pendingTurnEndSync = false;
       notificationService.show("Turn sync conflict. Wait for turn update.", "warning", 2000);
       return;
     }
@@ -956,6 +973,45 @@ class Game implements GameCallbacks {
 
   private isLocalPlayersTurn(): boolean {
     return this.activeTurnPlayerId === this.localPlayerId;
+  }
+
+  private recoverLocalTurnFromSnapshot(
+    activePlayerId: string | null | undefined,
+    phase: MultiplayerTurnPhase | undefined,
+    activeRoll: MultiplayerTurnActionMessage["roll"] | null | undefined
+  ): void {
+    if (!this.isMultiplayerTurnEnforced() || activePlayerId !== this.localPlayerId) {
+      this.pendingTurnEndSync = false;
+      return;
+    }
+
+    if (phase === "ready_to_end") {
+      this.pendingTurnEndSync = true;
+      this.flushPendingTurnEndSync();
+      return;
+    }
+
+    this.pendingTurnEndSync = false;
+    if (phase !== "await_score" || this.state.status !== "READY") {
+      return;
+    }
+
+    const restored = this.applyAuthoritativeRoll(activeRoll ?? undefined);
+    if (!restored) {
+      notificationService.show("Turn state sync incomplete. Roll to continue.", "warning", 1800);
+    }
+  }
+
+  private flushPendingTurnEndSync(): void {
+    if (!this.pendingTurnEndSync) {
+      return;
+    }
+    if (!this.multiplayerNetwork?.isConnected()) {
+      return;
+    }
+
+    this.pendingTurnEndSync = false;
+    this.emitTurnEnd();
   }
 
   private emitTurnEnd(): void {
@@ -1174,6 +1230,7 @@ class Game implements GameCallbacks {
     this.multiplayerNetwork?.dispose();
     this.multiplayerNetwork = undefined;
     this.awaitingMultiplayerRoll = false;
+    this.pendingTurnEndSync = false;
     playerDataSyncService.setSessionId(undefined);
     this.clearSessionQueryParam();
 

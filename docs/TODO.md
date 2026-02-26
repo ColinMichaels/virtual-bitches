@@ -744,6 +744,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - ✅ Added roll/score payload validation against canonical turn roll snapshots (score points must match selected dice from accepted roll)
 - ✅ Added server-issued roll ids (`roll.serverRollId`) required by score actions to prevent cross-roll/replay submissions
 - ✅ Made multiplayer roll outcomes server-authoritative (client sends roll intent, server returns canonical die values)
+- ✅ Added turn-state recovery snapshots (`turn_start.activeRoll` / `turnState.activeRoll`) for reconnect/mid-turn resync
 - ✅ Added in-game `Main Menu` action in Settings to leave multiplayer sessions and return to lobby
 - ✅ Tuned bot chaos traffic down (lower chaos frequency, shake-only, shorter/safer intensity) to avoid disruptive camera failures
 

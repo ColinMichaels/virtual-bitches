@@ -1130,6 +1130,7 @@ function serializeTurnState(turnState) {
     return null;
   }
 
+  const activeRoll = serializeTurnRollSnapshot(turnState.lastRollSnapshot);
   return {
     order: Array.isArray(turnState.order) ? [...turnState.order] : [],
     activeTurnPlayerId:
@@ -1141,12 +1142,62 @@ function serializeTurnState(turnState) {
       ? Number(turnState.turnNumber)
       : 1,
     phase: normalizeTurnPhase(turnState.phase),
+    activeRoll,
     activeRollServerId:
-      typeof turnState?.lastRollSnapshot?.serverRollId === "string"
-        ? turnState.lastRollSnapshot.serverRollId
+      typeof activeRoll?.serverRollId === "string"
+        ? activeRoll.serverRollId
         : null,
     updatedAt:
       Number.isFinite(turnState.updatedAt) ? Number(turnState.updatedAt) : Date.now(),
+  };
+}
+
+function serializeTurnRollSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") {
+    return null;
+  }
+
+  const rollIndex = Number.isFinite(snapshot.rollIndex) ? Math.floor(snapshot.rollIndex) : NaN;
+  const rawDice = Array.isArray(snapshot.dice) ? snapshot.dice : [];
+  if (!Number.isFinite(rollIndex) || rollIndex <= 0 || rawDice.length === 0) {
+    return null;
+  }
+
+  const dice = [];
+  for (const die of rawDice.slice(0, MAX_TURN_ROLL_DICE)) {
+    if (!die || typeof die !== "object") {
+      continue;
+    }
+    const dieId = typeof die.dieId === "string" ? die.dieId.trim() : "";
+    const sides = Number.isFinite(die.sides) ? Math.floor(die.sides) : NaN;
+    const value = Number.isFinite(die.value) ? Math.floor(die.value) : NaN;
+    if (!dieId || !Number.isFinite(sides) || !Number.isFinite(value)) {
+      continue;
+    }
+    if (sides < 2 || sides > 1000 || value < 1 || value > sides) {
+      continue;
+    }
+    dice.push({
+      dieId,
+      sides,
+      value,
+    });
+  }
+
+  if (dice.length === 0) {
+    return null;
+  }
+
+  const serverRollId =
+    typeof snapshot.serverRollId === "string" && snapshot.serverRollId.trim()
+      ? snapshot.serverRollId.trim()
+      : null;
+
+  return {
+    rollIndex,
+    dice,
+    serverRollId,
+    updatedAt: Number.isFinite(snapshot.updatedAt) ? Number(snapshot.updatedAt) : Date.now(),
   };
 }
 
@@ -1564,6 +1615,8 @@ function buildTurnStartMessage(session, options = {}) {
     return null;
   }
 
+  const activeRoll = serializeTurnRollSnapshot(turnState.lastRollSnapshot);
+
   return {
     type: "turn_start",
     sessionId: session.sessionId,
@@ -1571,9 +1624,10 @@ function buildTurnStartMessage(session, options = {}) {
     round: turnState.round,
     turnNumber: turnState.turnNumber,
     phase: normalizeTurnPhase(turnState.phase),
+    activeRoll,
     activeRollServerId:
-      typeof turnState?.lastRollSnapshot?.serverRollId === "string"
-        ? turnState.lastRollSnapshot.serverRollId
+      typeof activeRoll?.serverRollId === "string"
+        ? activeRoll.serverRollId
         : null,
     timestamp: Date.now(),
     order: [...turnState.order],

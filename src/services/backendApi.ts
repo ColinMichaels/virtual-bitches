@@ -47,6 +47,16 @@ export interface MultiplayerSessionParticipant {
 }
 
 export interface MultiplayerSessionTurnState {
+  activeRoll?: {
+    rollIndex: number;
+    dice: Array<{
+      dieId: string;
+      sides: number;
+      value: number;
+    }>;
+    serverRollId?: string;
+    updatedAt?: number;
+  } | null;
   order: string[];
   activeTurnPlayerId: string | null;
   round: number;
