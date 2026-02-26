@@ -228,7 +228,10 @@ async function handleGetProfile(req, res, pathname) {
 
   const profile = store.players[playerId];
   if (!profile) {
-    sendJson(res, 404, { error: "Profile not found" });
+    // No remote profile yet for first-time players.
+    // Return 204 to avoid noisy 404s in clients that probe for existence.
+    res.writeHead(204);
+    res.end();
     return;
   }
 

@@ -3,17 +3,16 @@
  * Provides offline caching and improves load performance
  */
 
-const CACHE_NAME = 'biscuits-v1';
-const RUNTIME_CACHE = 'biscuits-runtime';
+const CACHE_NAME = 'biscuits-v3';
+const RUNTIME_CACHE = 'biscuits-runtime-v3';
 
 // Assets to cache on install
 const PRECACHE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  // Icons will be added when they exist
-  // './icon-192.png',
-  // './icon-512.png',
+  './icon-192.png',
+  './icon-512.png',
 ];
 
 /**
@@ -69,6 +68,11 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // Never intercept non-GET requests. Cache API does not support PUT/POST/etc.
+  if (request.method !== 'GET') {
+    return;
+  }
+
   // Skip cross-origin requests
   if (url.origin !== location.origin) {
     return;
@@ -79,9 +83,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network first for API calls (if we add them later)
+  // Network first for navigation so new deployments are picked up quickly.
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirst(request, { cacheResponse: true }));
+    return;
+  }
+
+  // Network first for API calls; do not cache dynamic API responses.
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirst(request));
+    event.respondWith(networkFirst(request, { cacheResponse: false }));
     return;
   }
 
@@ -135,12 +145,14 @@ async function cacheFirst(request) {
 /**
  * Network first strategy - try network, fallback to cache
  */
-async function networkFirst(request) {
+async function networkFirst(request, options = {}) {
+  const cacheResponse = options.cacheResponse !== false;
+
   try {
     const networkResponse = await fetch(request);
 
     // Cache successful responses
-    if (networkResponse && networkResponse.status === 200) {
+    if (cacheResponse && networkResponse && networkResponse.status === 200) {
       const cache = await caches.open(RUNTIME_CACHE);
       cache.put(request, networkResponse.clone());
     }

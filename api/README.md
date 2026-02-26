@@ -40,6 +40,7 @@ The running server uses JSON-file persistence for now. SQL files define the inte
 - Session creation/join returns:
   - `playerToken` for WS query auth
   - `auth` bundle (`accessToken`, `refreshToken`, `expiresAt`, `tokenType`)
+- `GET /api/players/:playerId/profile` returns `204 No Content` when profile does not exist yet.
 - WS endpoint is available at `/` and expects query params:
   - `session=<sessionId>`
   - `playerId=<playerId>`
