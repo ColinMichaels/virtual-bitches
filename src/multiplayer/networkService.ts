@@ -143,7 +143,13 @@ export class MultiplayerNetworkService {
     const closeCode = typeof closeEvent?.code === "number" ? closeEvent.code : 0;
     const closeReason = closeEvent?.reason ?? "";
 
-    log.warn("WebSocket disconnected");
+    if (this.manuallyDisconnected || closeCode === 1000) {
+      log.info("WebSocket disconnected");
+    } else if (closeCode === 1006) {
+      log.info("WebSocket transport interrupted");
+    } else {
+      log.warn(`WebSocket disconnected (code=${closeCode}, reason=${closeReason || "n/a"})`);
+    }
     this.eventTarget.dispatchEvent(
       createCustomEvent("multiplayer:disconnected", {
         code: closeCode,
@@ -168,7 +174,8 @@ export class MultiplayerNetworkService {
   };
 
   private readonly onSocketError = () => {
-    log.warn("WebSocket error");
+    if (this.manuallyDisconnected) return;
+    log.info("WebSocket error");
   };
 
   private readonly onParticleEmit = (event: Event) => {
