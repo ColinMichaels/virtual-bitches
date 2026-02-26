@@ -725,6 +725,8 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - ✅ Added Firebase auth bootstrap service (anonymous default + Google sign-in upgrade path)
 - ✅ Added backend identity endpoint + leaderboard submit/query API scaffolding
 - ✅ Wired game-over score submission + global leaderboard UI rendering path
+- ✅ Added profile access in HUD/mobile menu + dedicated Player Profile modal (stats + account actions)
+- ✅ Reorganized settings into dedicated tabs (`Game`, `Graphics`, `Audio`, `Account`) for cleaner UX scaling
 
 ---
 
@@ -732,7 +734,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 
 1. **Firestore Persistence**: Move leaderboard/profile persistence from JSON file store to Firestore-backed storage.
 2. **Auth Hardening**: Replace tokeninfo-based verification with Firebase Admin/JWKS verification + stricter issuer checks.
-3. **Identity UX**: Add explicit account/profile UI (display name/avatar, signed-in state in HUD/settings).
+3. **Identity UX (Phase 1 Complete)**: Profile/account UI now exists in HUD + Settings + Profile modal; next is profile-edit flows/avatar polish.
 4. **Leaderboard UX**: Add filters (mode/difficulty), pagination, and player history views.
 5. **Theme Polish Follow-up**: Finish remaining UV/lighting consistency checks across all die types.
 
