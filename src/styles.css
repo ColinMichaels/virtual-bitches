@@ -518,6 +518,60 @@ h1, h2, h3, h4, h5, h6 {
   min-height: 84px;
 }
 
+#turn-action-banner {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 16px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #f4f8ff;
+  background: linear-gradient(140deg, rgba(15, 28, 49, 0.9), rgba(27, 39, 67, 0.86));
+  border-bottom: 1px solid rgba(158, 197, 255, 0.28);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.32);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+#turn-action-banner.is-visible {
+  display: flex;
+}
+
+#turn-action-banner[data-tone="action"] {
+  color: #fff7cf;
+  background: linear-gradient(130deg, rgba(74, 45, 7, 0.86), rgba(41, 29, 11, 0.9));
+  border-bottom-color: rgba(255, 214, 102, 0.45);
+}
+
+#turn-action-banner[data-tone="waiting"] {
+  color: #dbe9ff;
+  background: linear-gradient(130deg, rgba(18, 28, 47, 0.86), rgba(20, 34, 56, 0.9));
+  border-bottom-color: rgba(143, 185, 255, 0.38);
+}
+
+#turn-action-banner[data-tone="sync"] {
+  color: #d4f8ff;
+  background: linear-gradient(130deg, rgba(6, 41, 56, 0.84), rgba(7, 29, 45, 0.9));
+  border-bottom-color: rgba(111, 226, 255, 0.42);
+}
+
+#turn-action-banner.is-urgent {
+  animation: turn-banner-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes turn-banner-pulse {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.08);
+  }
+}
+
 /* Die type divider - separates different die types */
 .die-type-divider {
   width: 2px;
@@ -1338,6 +1392,7 @@ button.danger,
 body.splash-active :is(
   #unified-hud,
   #effect-hud,
+  #turn-action-banner,
   #dice-row,
   #controls,
   #camera-controls,
@@ -6161,6 +6216,13 @@ body.splash-active :is(
     padding: 14px 10px;
   }
 
+  #turn-action-banner {
+    min-height: 50px;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.3;
+  }
+
   body[data-mobile-dice-layout="single-row"] #dice-row {
     flex-wrap: nowrap;
     justify-content: flex-start;
@@ -6256,6 +6318,12 @@ body.splash-active :is(
   #mobile-controls-menu {
     right: max(6px, calc(env(safe-area-inset-right) + 4px));
     bottom: max(8px, calc(env(safe-area-inset-bottom) + 4px));
+  }
+
+  #turn-action-banner {
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 12px;
   }
 
   body[data-mobile-dice-layout="single-row"] #dice-row {
