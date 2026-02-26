@@ -18,6 +18,7 @@ import {
 } from "../services/playerDataSync.js";
 import { logger } from "../utils/logger.js";
 import { confirmAction } from "./confirmModal.js";
+import { modalManager } from "./modalManager.js";
 
 const log = logger.create("LeaderboardModal");
 type SyncIndicatorTone = "ok" | "syncing" | "pending" | "offline" | "error";
@@ -47,6 +48,10 @@ export class LeaderboardModal {
     this.container = this.createModal();
     this.contentContainer = this.container.querySelector(".leaderboard-content")!;
     document.body.appendChild(this.container);
+    modalManager.register({
+      id: "leaderboard-modal",
+      close: () => this.hide(),
+    });
     document.addEventListener("auth:firebaseUserChanged", this.onFirebaseAuthChanged as EventListener);
     document.addEventListener(
       "sync:playerDataStatusChanged",
@@ -450,6 +455,7 @@ export class LeaderboardModal {
    * Show leaderboard modal
    */
   show(): void {
+    modalManager.requestOpen("leaderboard-modal");
     this.container.style.display = "flex";
     this.switchTab("personal"); // Always start on personal tab
     this.updateSyncIndicator();
@@ -459,7 +465,11 @@ export class LeaderboardModal {
    * Hide leaderboard modal
    */
   hide(): void {
+    if (this.container.style.display === "none") {
+      return;
+    }
     this.container.style.display = "none";
+    modalManager.notifyClosed("leaderboard-modal");
   }
 
   /**

@@ -1,4 +1,5 @@
 import { audioService } from "../services/audio.js";
+import { modalManager } from "./modalManager.js";
 
 export type ConfirmModalTone = "primary" | "danger";
 
@@ -31,6 +32,10 @@ export class ConfirmModal {
     this.confirmBtn = this.container.querySelector<HTMLButtonElement>(".btn-confirm-accept");
     this.cancelBtn = this.container.querySelector<HTMLButtonElement>(".btn-confirm-cancel");
     document.body.appendChild(this.container);
+    modalManager.register({
+      id: "confirm-modal",
+      close: () => this.resolve(false),
+    });
     document.addEventListener("keydown", this.onKeyDown);
   }
 
@@ -47,6 +52,7 @@ export class ConfirmModal {
     }
     this.resolve(false);
     document.removeEventListener("keydown", this.onKeyDown);
+    modalManager.notifyClosed("confirm-modal");
     this.container.remove();
   }
 
@@ -107,6 +113,7 @@ export class ConfirmModal {
     this.confirmBtn!.textContent = options.confirmLabel?.trim() || "Confirm";
     this.confirmBtn!.classList.toggle("is-danger", options.tone === "danger");
 
+    modalManager.requestOpen("confirm-modal");
     this.container.style.display = "flex";
     this.resolver = pending.resolve;
     this.confirmBtn?.focus();
@@ -130,6 +137,9 @@ export class ConfirmModal {
   };
 
   private resolve(confirmed: boolean): void {
+    if (this.container.style.display !== "none") {
+      modalManager.notifyClosed("confirm-modal");
+    }
     this.container.style.display = "none";
     const current = this.resolver;
     this.resolver = null;

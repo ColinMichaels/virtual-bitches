@@ -5,6 +5,7 @@
 
 import { audioService } from "../services/audio.js";
 import { logger } from "../utils/logger.js";
+import { modalManager } from "./modalManager.js";
 
 const log = logger.create('AlphaWarning');
 
@@ -78,6 +79,10 @@ export class AlphaWarningModal {
     `;
 
     document.body.appendChild(this.container);
+    modalManager.register({
+      id: "alpha-warning-modal",
+      close: () => this.hide(),
+    });
 
     // Setup event handlers
     this.setupEventHandlers();
@@ -147,6 +152,7 @@ export class AlphaWarningModal {
    * Show the warning modal
    */
   show(): void {
+    modalManager.requestOpen("alpha-warning-modal");
     this.container.style.display = "flex";
     log.debug("Alpha warning displayed");
   }
@@ -155,7 +161,11 @@ export class AlphaWarningModal {
    * Hide the warning modal
    */
   hide(): void {
+    if (this.container.style.display === "none") {
+      return;
+    }
     this.container.style.display = "none";
+    modalManager.notifyClosed("alpha-warning-modal");
   }
 
   /**
@@ -181,6 +191,7 @@ export class AlphaWarningModal {
    * Dispose modal
    */
   dispose(): void {
+    modalManager.notifyClosed("alpha-warning-modal");
     this.container.remove();
   }
 }

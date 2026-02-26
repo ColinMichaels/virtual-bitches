@@ -503,6 +503,9 @@ class Game implements GameCallbacks {
       if (this.leaderboardModal.isVisible()) {
         this.leaderboardModal.hide();
       }
+      if (profileModal.isVisible()) {
+        profileModal.hide();
+      }
     });
 
     this.inputController.initialize();

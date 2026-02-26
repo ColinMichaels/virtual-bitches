@@ -22,6 +22,7 @@ import { scoreHistoryService } from "../services/score-history.js";
 import type { AuthenticatedUserProfile } from "../services/backendApi.js";
 import { logger } from "../utils/logger.js";
 import { confirmAction } from "./confirmModal.js";
+import { modalManager } from "./modalManager.js";
 
 const log = logger.create("SettingsModal");
 
@@ -256,6 +257,12 @@ export class SettingsModal {
     `;
 
     document.body.appendChild(this.container);
+    modalManager.register({
+      id: "settings-modal",
+      close: () => this.hide(),
+      canStackWith: ["tutorial-modal"],
+      allowStackOnMobile: true,
+    });
 
     // Create and add theme switcher
     this.themeSwitcher = new ThemeSwitcher();
@@ -1003,6 +1010,7 @@ export class SettingsModal {
    * Show settings modal
    */
   show(): void {
+    modalManager.requestOpen("settings-modal");
     this.refresh();
     this.container.style.display = "flex";
     if (this.activeTab === "account") {
@@ -1014,7 +1022,11 @@ export class SettingsModal {
    * Hide settings modal
    */
   hide(): void {
+    if (this.container.style.display === "none") {
+      return;
+    }
     this.container.style.display = "none";
+    modalManager.notifyClosed("settings-modal");
 
     if (this.onClose) {
       this.onClose();
