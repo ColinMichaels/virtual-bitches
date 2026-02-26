@@ -2661,7 +2661,7 @@ function reconcileTurnTimeoutLoop(sessionId) {
   }
 
   const activeParticipant = session.participants[turnState.activeTurnPlayerId];
-  if (!activeParticipant || isBotParticipant(activeParticipant)) {
+  if (!activeParticipant) {
     stopTurnTimeoutLoop(sessionId);
     return;
   }

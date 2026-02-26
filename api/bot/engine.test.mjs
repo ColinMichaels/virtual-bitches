@@ -210,6 +210,59 @@ test("easy difficulty bots make weaker scoring choices than hard difficulty bots
   assert(easy.points >= hard.points, "Expected easy bots to take at least as many points as hard bots");
 });
 
+test("easy difficulty injects high-risk picks while hard stays conservative", () => {
+  const engine = createBotEngine();
+  const rollSnapshot = {
+    serverRollId: "roll-difficulty-2",
+    dice: [
+      { dieId: "d6-a", sides: 6, value: 6 }, // 0
+      { dieId: "d6-b", sides: 6, value: 5 }, // 1
+      { dieId: "d8-c", sides: 8, value: 7 }, // 1
+      { dieId: "d10-d", sides: 10, value: 3 }, // 7
+      { dieId: "d12-e", sides: 12, value: 2 }, // 10
+      { dieId: "d20-f", sides: 20, value: 2 }, // 18
+    ],
+  };
+  const sessionParticipants = [
+    { playerId: "bot-alpha", score: 3, remainingDice: 12, joinedAt: 1 },
+    { playerId: "human-1", score: 11, remainingDice: 12, joinedAt: 2 },
+  ];
+
+  const easy = engine.buildTurnScoreSummary({
+    rollSnapshot,
+    playerId: "bot-alpha",
+    remainingDice: 12,
+    turnNumber: 6,
+    botProfile: "balanced",
+    sessionParticipants,
+    gameDifficulty: "easy",
+  });
+  const hard = engine.buildTurnScoreSummary({
+    rollSnapshot,
+    playerId: "bot-alpha",
+    remainingDice: 12,
+    turnNumber: 6,
+    botProfile: "balanced",
+    sessionParticipants,
+    gameDifficulty: "hard",
+  });
+
+  assert(easy, "Expected easy score summary");
+  assert(hard, "Expected hard score summary");
+  assert(
+    easy.selectedDiceIds.includes("d20-f"),
+    "Expected easy difficulty to include a high-risk die"
+  );
+  assert(
+    !hard.selectedDiceIds.includes("d20-f"),
+    "Expected hard difficulty to avoid the worst die"
+  );
+  assert(
+    easy.points > hard.points,
+    "Expected easy difficulty to post a riskier/higher point total"
+  );
+});
+
 test("turn delay responds to difficulty level", () => {
   const engine = createBotEngine({
     defaultTurnDelayRange: { min: 1000, max: 1000 },

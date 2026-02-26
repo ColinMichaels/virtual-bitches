@@ -123,6 +123,8 @@ function normalizeCompletedAt(value: unknown): number | null {
   return Math.floor(value);
 }
 
+const TURN_NUDGE_COOLDOWN_MS = 7000;
+
 class Game implements GameCallbacks {
   private state: GameState;
   private scene: GameScene;
@@ -161,7 +163,9 @@ class Game implements GameCallbacks {
   private sessionExpiryRecoveryInProgress = false;
   private hudClockHandle: ReturnType<typeof setInterval> | null = null;
   private participantSeatById = new Map<string, number>();
+  private participantIdBySeat = new Map<number, string>();
   private participantLabelById = new Map<string, string>();
+  private nudgeCooldownByPlayerId = new Map<string, number>();
   private lastTurnPlanPreview = "";
   private lastSessionComplete = false;
 
@@ -450,17 +454,38 @@ class Game implements GameCallbacks {
       void this.returnToLobby();
     });
 
-    // Handle player seat clicks for multiplayer invites
+    // Handle player seat clicks for multiplayer invites and nudges
     this.scene.setPlayerSeatClickHandler((seatIndex: number) => {
       const activeSession = this.multiplayerSessionService.getActiveSession();
+      audioService.playSfx("click");
       if (activeSession) {
+        const targetPlayerId = this.participantIdBySeat.get(seatIndex);
+        if (
+          this.playMode === "multiplayer" &&
+          targetPlayerId &&
+          targetPlayerId !== this.localPlayerId &&
+          this.activeTurnPlayerId === targetPlayerId
+        ) {
+          this.triggerTurnNudge(targetPlayerId);
+          return;
+        }
+
+        if (targetPlayerId && targetPlayerId !== this.localPlayerId) {
+          const targetLabel = this.getParticipantLabel(targetPlayerId);
+          notificationService.show(
+            `${targetLabel} is waiting for their turn.`,
+            "info",
+            2000
+          );
+          return;
+        }
+
         notificationService.show(
           `Seat ${seatIndex + 1} is open. Invite others with room ${activeSession.roomCode}.`,
           "info",
           2600
         );
         void this.copySessionInviteLink(activeSession.sessionId);
-        audioService.playSfx("click");
         return;
       }
 
@@ -469,7 +494,6 @@ class Game implements GameCallbacks {
       } else {
         notificationService.show("Start a Multiplayer game from the splash screen to fill seats.", "info", 3000);
       }
-      audioService.playSfx("click");
     });
 
     // Provide callback to check if game is in progress
@@ -716,6 +740,7 @@ class Game implements GameCallbacks {
     const participantBySeat = new Map<number, SeatedMultiplayerParticipant>();
     const previousParticipantIds = new Set(this.participantSeatById.keys());
     this.participantSeatById.clear();
+    this.participantIdBySeat.clear();
     this.participantLabelById.clear();
     const showReadyState =
       seatedParticipants.filter((participant) => !participant.isBot && !participant.isComplete)
@@ -724,6 +749,7 @@ class Game implements GameCallbacks {
       participantBySeat.set(participant.seatIndex, participant);
       const isCurrentPlayer = participant.playerId === this.localPlayerId;
       this.participantSeatById.set(participant.playerId, participant.seatIndex);
+      this.participantIdBySeat.set(participant.seatIndex, participant.playerId);
       this.participantLabelById.set(
         participant.playerId,
         this.formatParticipantLabel(participant, isCurrentPlayer)
@@ -733,6 +759,11 @@ class Game implements GameCallbacks {
     previousParticipantIds.forEach((playerId) => {
       if (!activeParticipantIds.has(playerId) && playerId !== this.localPlayerId) {
         this.diceRenderer.cancelSpectatorPreview(this.buildSpectatorPreviewKey(playerId));
+      }
+    });
+    this.nudgeCooldownByPlayerId.forEach((_, playerId) => {
+      if (!activeParticipantIds.has(playerId)) {
+        this.nudgeCooldownByPlayerId.delete(playerId);
       }
     });
 
@@ -797,7 +828,9 @@ class Game implements GameCallbacks {
 
   private applySoloSeatState(): void {
     this.participantSeatById.clear();
+    this.participantIdBySeat.clear();
     this.participantLabelById.clear();
+    this.nudgeCooldownByPlayerId.clear();
     this.multiplayerTurnPlan = null;
 
     const seatCount = Math.max(1, this.scene.playerSeats.length || 8);
@@ -1164,6 +1197,59 @@ class Game implements GameCallbacks {
       (participant) =>
         participant?.playerId === playerId &&
         participant.isBot === true
+    );
+  }
+
+  private triggerTurnNudge(targetPlayerId: string): void {
+    if (!this.activeTurnPlayerId || this.activeTurnPlayerId !== targetPlayerId) {
+      return;
+    }
+
+    const lastSentAt = this.nudgeCooldownByPlayerId.get(targetPlayerId) ?? 0;
+    const now = Date.now();
+    if (now - lastSentAt < TURN_NUDGE_COOLDOWN_MS) {
+      const waitSeconds = Math.ceil((TURN_NUDGE_COOLDOWN_MS - (now - lastSentAt)) / 1000);
+      notificationService.show(
+        `Nudge cooldown: ${waitSeconds}s`,
+        "info",
+        1200
+      );
+      return;
+    }
+
+    const targetLabel = this.getParticipantLabel(targetPlayerId);
+    const sent = this.multiplayerNetwork?.sendPlayerNotification({
+      type: "player_notification",
+      id: `nudge-${targetPlayerId}-${now}`,
+      playerId: this.localPlayerId,
+      sourcePlayerId: this.localPlayerId,
+      title: "Nudge",
+      message: "Your turn is up. Take your turn!",
+      severity: "info",
+      targetPlayerId,
+      timestamp: now,
+    }) ?? false;
+
+    this.nudgeCooldownByPlayerId.set(targetPlayerId, now);
+    this.showSeatBubbleForPlayer(targetPlayerId, "Nudged!", {
+      tone: "warning",
+      durationMs: 1200,
+      isBot: this.isBotParticipant(targetPlayerId),
+    });
+
+    if (!sent) {
+      notificationService.show(
+        `${targetLabel} nudged locally.`,
+        "info",
+        1400
+      );
+      return;
+    }
+
+    notificationService.show(
+      `${targetLabel} nudged.`,
+      "info",
+      1400
     );
   }
 

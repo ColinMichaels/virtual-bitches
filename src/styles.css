@@ -309,6 +309,12 @@ h1, h2, h3, h4, h5, h6 {
   line-height: 1;
 }
 
+.stat-subvalue-compact.is-self-turn {
+  color: #8fffb5;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(94, 255, 153, 0.35);
+}
+
 .stat-subvalue-compact.is-warning {
   color: #ffd27a;
 }
