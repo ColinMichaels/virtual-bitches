@@ -444,7 +444,9 @@ async function handleAuthMe(req, res) {
   upsertFirebasePlayer(authCheck.uid, {
     displayName: authCheck.displayName,
     email: authCheck.email,
+    photoUrl: authCheck.photoUrl,
     provider: authCheck.provider,
+    providerId: authCheck.providerId,
     isAnonymous: authCheck.isAnonymous,
   });
 
@@ -457,6 +459,12 @@ async function handleAuthMe(req, res) {
     email: authCheck.email,
     isAnonymous: authCheck.isAnonymous,
     provider: authCheck.provider,
+    providerId:
+      authCheck.providerId ??
+      (typeof playerRecord?.providerId === "string" ? playerRecord.providerId : undefined),
+    photoUrl:
+      authCheck.photoUrl ??
+      (typeof playerRecord?.photoUrl === "string" ? playerRecord.photoUrl : undefined),
     admin: {
       role: adminAccess.role,
       isAdmin: Boolean(adminAccess.role),
@@ -488,7 +496,9 @@ async function handleUpdateAuthMe(req, res) {
   upsertFirebasePlayer(authCheck.uid, {
     displayName,
     email: authCheck.email,
+    photoUrl: authCheck.photoUrl,
     provider: authCheck.provider,
+    providerId: authCheck.providerId,
     isAnonymous: false,
   });
   await persistStore();
@@ -501,6 +511,8 @@ async function handleUpdateAuthMe(req, res) {
     email: authCheck.email,
     isAnonymous: false,
     provider: authCheck.provider,
+    providerId: authCheck.providerId,
+    photoUrl: authCheck.photoUrl,
     admin: {
       role: adminAccess.role,
       isAdmin: Boolean(adminAccess.role),
@@ -530,7 +542,9 @@ async function handleSubmitLeaderboardScore(req, res) {
   const scoreKey = `${authCheck.uid}:${parsed.scoreId}`;
   upsertFirebasePlayer(authCheck.uid, {
     email: authCheck.email,
+    photoUrl: authCheck.photoUrl,
     provider: authCheck.provider,
+    providerId: authCheck.providerId,
     isAnonymous: false,
   });
 
@@ -550,7 +564,9 @@ async function handleSubmitLeaderboardScore(req, res) {
   upsertFirebasePlayer(authCheck.uid, {
     displayName: effectiveName,
     email: authCheck.email,
+    photoUrl: authCheck.photoUrl,
     provider: authCheck.provider,
+    providerId: authCheck.providerId,
     isAnonymous: false,
   });
 
@@ -838,6 +854,8 @@ async function handleCreateSession(req, res) {
     [playerId]: {
       playerId,
       displayName: typeof body?.displayName === "string" ? body.displayName : undefined,
+      avatarUrl: normalizeAvatarUrl(body?.avatarUrl),
+      providerId: normalizeProviderId(body?.providerId),
       joinedAt: now,
       lastHeartbeatAt: now,
       isReady: false,
@@ -931,7 +949,11 @@ async function handleJoinSessionByTarget(req, res, target) {
 
   session.participants[playerId] = {
     playerId,
-    displayName: typeof body?.displayName === "string" ? body.displayName : undefined,
+    displayName:
+      typeof body?.displayName === "string" ? body.displayName : existingParticipant?.displayName,
+    avatarUrl: normalizeAvatarUrl(body?.avatarUrl) ?? normalizeAvatarUrl(existingParticipant?.avatarUrl),
+    providerId:
+      normalizeProviderId(body?.providerId) ?? normalizeProviderId(existingParticipant?.providerId),
     joinedAt: existingParticipant?.joinedAt ?? now,
     lastHeartbeatAt: now,
     isReady: false,
@@ -1472,6 +1494,8 @@ function buildAdminRoomDiagnostic(sessionId, session, now = Date.now()) {
     participants: participants.map((participant) => ({
       playerId: participant.playerId,
       displayName: participant.displayName,
+      avatarUrl: participant.avatarUrl,
+      providerId: participant.providerId,
       isBot: participant.isBot,
       isReady: participant.isReady,
       isComplete: participant.isComplete,
@@ -1694,7 +1718,9 @@ async function authorizeAdminRequest(req, options = {}) {
   upsertFirebasePlayer(identity.uid, {
     displayName: identity.displayName,
     email: identity.email,
+    photoUrl: identity.photoUrl,
     provider: identity.provider,
+    providerId: identity.providerId,
     isAnonymous: false,
   });
 
@@ -1914,7 +1940,9 @@ function buildAdminRoleRecord(uid, playerRecord) {
     uid: normalizedUid,
     displayName: typeof record.displayName === "string" ? record.displayName : undefined,
     email: typeof record.email === "string" ? record.email : undefined,
+    photoUrl: typeof record.photoUrl === "string" ? record.photoUrl : undefined,
     provider: typeof record.provider === "string" ? record.provider : undefined,
+    providerId: typeof record.providerId === "string" ? record.providerId : undefined,
     role: roleInfo.role,
     source: roleInfo.source,
     updatedAt: Number.isFinite(record.updatedAt) ? Math.floor(record.updatedAt) : undefined,
@@ -2019,8 +2047,10 @@ async function authorizeIdentityRequest(req, options = {}) {
         uid: `local:${accessRecord.playerId}`,
         displayName: accessRecord.playerId,
         email: undefined,
+        photoUrl: undefined,
         isAnonymous: true,
         provider: "session",
+        providerId: "session",
       };
     }
   }
@@ -2042,8 +2072,10 @@ async function authorizeIdentityRequest(req, options = {}) {
     uid: firebaseClaims.uid,
     displayName: firebaseClaims.name,
     email: firebaseClaims.email,
+    photoUrl: normalizeAvatarUrl(firebaseClaims.picture),
     isAnonymous: firebaseClaims.isAnonymous,
     provider: "firebase",
+    providerId: normalizeProviderId(firebaseClaims.signInProvider),
   };
 }
 
@@ -3283,6 +3315,8 @@ function serializeSessionParticipants(session) {
         playerId: participant.playerId,
         displayName:
           typeof participant.displayName === "string" ? participant.displayName : undefined,
+        avatarUrl: normalizeAvatarUrl(participant.avatarUrl),
+        providerId: normalizeProviderId(participant.providerId),
         joinedAt:
           typeof participant.joinedAt === "number" ? participant.joinedAt : Date.now(),
         lastHeartbeatAt:
@@ -4097,6 +4131,8 @@ function addBotsToSession(session, requestedBotCount, now = Date.now()) {
     session.participants[botId] = {
       playerId: botId,
       displayName: BOT_NAMES[botOffset % BOT_NAMES.length],
+      avatarUrl: undefined,
+      providerId: "bot",
       joinedAt,
       lastHeartbeatAt: joinedAt,
       isBot: true,
@@ -4904,16 +4940,66 @@ function sanitizeDisplayName(value) {
   return normalized;
 }
 
+function normalizeAvatarUrl(value) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2048) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return undefined;
+    }
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeProviderId(value) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  const safe = normalized.replace(/[^a-z0-9._:-]/g, "").slice(0, 64);
+  return safe || undefined;
+}
+
 function upsertFirebasePlayer(uid, patch) {
   if (!uid) return;
   const current = store.firebasePlayers[uid] ?? { uid };
 
-  store.firebasePlayers[uid] = {
+  const next = {
     ...current,
-    ...patch,
     uid,
     updatedAt: Date.now(),
   };
+  if (patch && typeof patch === "object") {
+    Object.entries(patch).forEach(([key, value]) => {
+      if (value !== undefined) {
+        next[key] = value;
+      }
+    });
+  }
+  const normalizedPhotoUrl = normalizeAvatarUrl(next.photoUrl);
+  if (normalizedPhotoUrl) {
+    next.photoUrl = normalizedPhotoUrl;
+  } else {
+    delete next.photoUrl;
+  }
+  const normalizedProviderId = normalizeProviderId(next.providerId);
+  if (normalizedProviderId) {
+    next.providerId = normalizedProviderId;
+  } else {
+    delete next.providerId;
+  }
+  store.firebasePlayers[uid] = next;
 }
 
 function compareLeaderboardEntries(left, right) {

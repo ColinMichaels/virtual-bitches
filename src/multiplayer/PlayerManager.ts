@@ -210,6 +210,7 @@ export class PlayerManager {
       occupied: true,
       isCurrentPlayer: player.isLocal,
       playerName: player.profile.name,
+      avatarUrl: player.profile.avatarUrl,
       avatarColor: avatarColor,
     });
   }

@@ -13,6 +13,8 @@ const log = logger.create("MultiplayerSession");
 const HEARTBEAT_INTERVAL_MS = 15000;
 type JoinSessionOptions = {
   displayName?: string;
+  avatarUrl?: string;
+  providerId?: string;
   botCount?: number;
 };
 
@@ -41,6 +43,9 @@ export class MultiplayerSessionService {
   async createSession(
     options: {
       roomCode?: string;
+      displayName?: string;
+      avatarUrl?: string;
+      providerId?: string;
       botCount?: number;
       gameDifficulty?: MultiplayerGameDifficulty;
     } = {}
@@ -48,6 +53,9 @@ export class MultiplayerSessionService {
     const created = await backendApiService.createMultiplayerSession({
       playerId: this.playerId,
       roomCode: options.roomCode,
+      displayName: options.displayName,
+      avatarUrl: options.avatarUrl,
+      providerId: options.providerId,
       botCount: options.botCount,
       gameDifficulty: options.gameDifficulty,
     });
@@ -65,6 +73,8 @@ export class MultiplayerSessionService {
     const joinResult = await backendApiService.joinMultiplayerSession(sessionId, {
       playerId: this.playerId,
       displayName: joinOptions.displayName,
+      avatarUrl: joinOptions.avatarUrl,
+      providerId: joinOptions.providerId,
       botCount: joinOptions.botCount,
     });
     if (!joinResult.session) {
@@ -85,6 +95,8 @@ export class MultiplayerSessionService {
     const joinResult = await backendApiService.joinMultiplayerRoomByCode(roomCode, {
       playerId: this.playerId,
       displayName: joinOptions.displayName,
+      avatarUrl: joinOptions.avatarUrl,
+      providerId: joinOptions.providerId,
       botCount: joinOptions.botCount,
     });
     if (!joinResult.session) {
@@ -245,12 +257,18 @@ export class MultiplayerSessionService {
     const options = displayNameOrOptions ?? {};
     const hasDisplayName =
       typeof options.displayName === "string" && options.displayName.trim().length > 0;
+    const hasAvatarUrl =
+      typeof options.avatarUrl === "string" && options.avatarUrl.trim().length > 0;
+    const hasProviderId =
+      typeof options.providerId === "string" && options.providerId.trim().length > 0;
     const parsedBotCount =
       typeof options.botCount === "number" && Number.isFinite(options.botCount)
         ? Math.max(0, Math.floor(options.botCount))
         : undefined;
     return {
       displayName: hasDisplayName ? options.displayName : undefined,
+      avatarUrl: hasAvatarUrl ? options.avatarUrl : undefined,
+      providerId: hasProviderId ? options.providerId : undefined,
       botCount: parsedBotCount,
     };
   }

@@ -43,6 +43,8 @@ export interface MultiplayerSessionAuth extends AuthTokenBundle {}
 export interface MultiplayerSessionParticipant {
   playerId: string;
   displayName?: string;
+  avatarUrl?: string;
+  providerId?: string;
   joinedAt: number;
   lastHeartbeatAt: number;
   isBot?: boolean;
@@ -57,6 +59,8 @@ export interface MultiplayerSessionParticipant {
 export interface MultiplayerSessionStanding {
   playerId: string;
   displayName?: string;
+  avatarUrl?: string;
+  providerId?: string;
   joinedAt: number;
   lastHeartbeatAt: number;
   isBot?: boolean;
@@ -134,6 +138,9 @@ export interface MultiplayerRoomListing {
 export interface CreateMultiplayerSessionRequest {
   playerId: string;
   roomCode?: string;
+  displayName?: string;
+  avatarUrl?: string;
+  providerId?: string;
   botCount?: number;
   gameDifficulty?: MultiplayerGameDifficulty;
 }
@@ -141,6 +148,8 @@ export interface CreateMultiplayerSessionRequest {
 export interface JoinMultiplayerSessionRequest {
   playerId: string;
   displayName?: string;
+  avatarUrl?: string;
+  providerId?: string;
   botCount?: number;
 }
 
@@ -224,6 +233,8 @@ export interface AuthenticatedUserProfile {
   email?: string;
   isAnonymous: boolean;
   provider?: string;
+  providerId?: string;
+  photoUrl?: string;
   admin?: {
     role: "viewer" | "operator" | "owner" | null;
     isAdmin: boolean;

@@ -89,17 +89,24 @@ export class ProfileModal {
         "Guest Player";
       const email = accountProfile?.email?.trim() || firebaseUser?.email?.trim() || "";
       const provider = accountProfile?.provider?.trim() || (isAuthenticated ? "google" : "guest");
+      const providerId = accountProfile?.providerId?.trim() || firebaseUser?.providerId?.trim() || "";
+      const providerLabel = providerId ? `${provider} (${providerId})` : provider;
+      const photoUrl = accountProfile?.photoUrl?.trim() || firebaseUser?.photoURL?.trim() || "";
       const leaderboardName = accountProfile?.leaderboardName?.trim() ?? "";
       const showSignIn = authConfigured && !isAuthenticated;
 
       this.contentContainer.innerHTML = `
         <section class="profile-identity-card">
-          <div class="profile-avatar">${this.getAvatarInitial(displayName)}</div>
+          <div class="profile-avatar">${
+            photoUrl
+              ? `<img class="profile-avatar-image" src="${escapeAttribute(photoUrl)}" alt="${escapeAttribute(displayName)} profile photo" referrerpolicy="no-referrer" />`
+              : this.getAvatarInitial(displayName)
+          }</div>
           <div class="profile-identity">
             <div class="profile-name">${escapeHtml(displayName)}</div>
             <div class="profile-subtitle">${escapeHtml(isAuthenticated ? "Authenticated account" : "Guest account")}</div>
             ${email ? `<div class="profile-email">${escapeHtml(email)}</div>` : ""}
-            <div class="profile-provider">Provider: ${escapeHtml(provider)}</div>
+            <div class="profile-provider">Provider: ${escapeHtml(providerLabel)}</div>
           </div>
           <div class="profile-identity-actions">
             ${

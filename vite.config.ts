@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import { resolve } from "path";
+import { readFileSync } from "fs";
 import { viteStaticCopy } from "vite-plugin-static-copy";
 
 /**
@@ -18,6 +19,10 @@ import { viteStaticCopy } from "vite-plugin-static-copy";
  */
 export default defineConfig(({ mode }) => {
   const isProduction = mode === "production";
+  const facebookShareMetaTemplate = readFileSync(
+    resolve(__dirname, "src/social/share/facebook-share-meta.template.html"),
+    "utf8"
+  );
 
   // Determine which environment file to use
   const envFile = isProduction
@@ -29,6 +34,12 @@ export default defineConfig(({ mode }) => {
   return {
     base: "./",
     plugins: [
+      {
+        name: "inject-facebook-share-meta-template",
+        transformIndexHtml(html) {
+          return html.replace("<!-- FACEBOOK_SHARE_META_TEMPLATE -->", facebookShareMetaTemplate);
+        },
+      },
       viteStaticCopy({
         targets: [
           {

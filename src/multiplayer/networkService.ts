@@ -153,6 +153,8 @@ export interface MultiplayerTurnActionMessage {
 export interface MultiplayerSessionStateParticipant {
   playerId: string;
   displayName?: string;
+  avatarUrl?: string;
+  providerId?: string;
   joinedAt: number;
   lastHeartbeatAt: number;
   isBot?: boolean;
@@ -167,6 +169,8 @@ export interface MultiplayerSessionStateParticipant {
 export interface MultiplayerSessionStateStanding {
   playerId: string;
   displayName?: string;
+  avatarUrl?: string;
+  providerId?: string;
   joinedAt: number;
   lastHeartbeatAt: number;
   isBot?: boolean;

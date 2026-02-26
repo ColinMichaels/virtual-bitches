@@ -2,6 +2,7 @@ import { environment } from "@env";
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import {
   browserLocalPersistence,
+  FacebookAuthProvider,
   GoogleAuthProvider,
   getAuth,
   onAuthStateChanged,
@@ -21,8 +22,11 @@ export interface FirebaseUserProfile {
   displayName?: string;
   email?: string;
   photoURL?: string;
+  providerId?: string;
   isAnonymous: boolean;
 }
+
+export type FirebaseSocialProvider = "google" | "facebook";
 
 export class FirebaseAuthService {
   private app: FirebaseApp | null = null;
@@ -82,20 +86,31 @@ export class FirebaseAuthService {
   }
 
   async signInWithGoogle(): Promise<boolean> {
+    return this.signInWithProvider("google");
+  }
+
+  async signInWithFacebook(): Promise<boolean> {
+    return this.signInWithProvider("facebook");
+  }
+
+  async signInWithProvider(providerName: FirebaseSocialProvider): Promise<boolean> {
     await this.initialize();
     if (!this.auth) {
       return false;
     }
 
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({
-        prompt: "select_account",
-      });
+      const provider =
+        providerName === "facebook" ? new FacebookAuthProvider() : new GoogleAuthProvider();
+      if (providerName === "google") {
+        (provider as GoogleAuthProvider).setCustomParameters({
+          prompt: "select_account",
+        });
+      }
       await signInWithPopup(this.auth, provider);
       return true;
     } catch (error) {
-      log.warn("Google sign-in failed", error);
+      log.warn(`${providerName} sign-in failed`, error);
       return false;
     }
   }
@@ -225,11 +240,16 @@ function hasFirebaseConfig(): boolean {
 }
 
 function mapUser(user: User): FirebaseUserProfile {
+  const providerId =
+    Array.isArray(user.providerData) && user.providerData.length > 0
+      ? user.providerData.find((entry) => typeof entry?.providerId === "string")?.providerId
+      : undefined;
   return {
     uid: user.uid,
     displayName: user.displayName ?? undefined,
     email: user.email ?? undefined,
     photoURL: user.photoURL ?? undefined,
+    providerId: typeof providerId === "string" && providerId.trim().length > 0 ? providerId : undefined,
     isAnonymous: Boolean(user.isAnonymous),
   };
 }
