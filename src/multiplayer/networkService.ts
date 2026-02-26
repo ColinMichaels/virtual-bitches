@@ -22,6 +22,8 @@ export interface MultiplayerNetworkOptions {
   eventTarget?: EventTarget;
   autoReconnect?: boolean;
   reconnectDelayMs?: number;
+  reconnectMaxDelayMs?: number;
+  reconnectBackoffMultiplier?: number;
   webSocketFactory?: (url: string) => WebSocketLike;
   onAuthExpired?: () => Promise<string | undefined> | string | undefined;
 }
@@ -120,16 +122,21 @@ export class MultiplayerNetworkService {
   private readonly eventTarget: EventTarget;
   private readonly autoReconnect: boolean;
   private readonly reconnectDelayMs: number;
+  private readonly reconnectMaxDelayMs: number;
+  private readonly reconnectBackoffMultiplier: number;
   private readonly webSocketFactory: (url: string) => WebSocketLike;
   private readonly onAuthExpired?: () => Promise<string | undefined> | string | undefined;
 
   private socket: WebSocketLike | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private nextReconnectDelayMs = 3000;
+  private reconnectAttemptCount = 0;
   private manuallyDisconnected = false;
   private bridgeEnabled = false;
   private authRecoveryInFlight = false;
 
   private readonly onSocketOpen = () => {
+    this.resetReconnectBackoff();
     log.info("WebSocket connected");
     this.eventTarget.dispatchEvent(
       createCustomEvent("multiplayer:connected", { wsUrl: this.wsUrl })
@@ -306,10 +313,18 @@ export class MultiplayerNetworkService {
       : (environment.features.multiplayer ? environment.wsUrl : undefined);
     this.eventTarget = options.eventTarget ?? document;
     this.autoReconnect = options.autoReconnect ?? true;
-    this.reconnectDelayMs = options.reconnectDelayMs ?? 3000;
+    this.reconnectDelayMs = normalizeReconnectDelay(options.reconnectDelayMs, 3000);
+    this.reconnectMaxDelayMs = Math.max(
+      this.reconnectDelayMs,
+      normalizeReconnectDelay(options.reconnectMaxDelayMs, 30000)
+    );
+    this.reconnectBackoffMultiplier = normalizeBackoffMultiplier(
+      options.reconnectBackoffMultiplier
+    );
     this.onAuthExpired = options.onAuthExpired;
     this.webSocketFactory =
       options.webSocketFactory ?? ((url: string) => new WebSocket(url));
+    this.nextReconnectDelayMs = this.reconnectDelayMs;
   }
 
   enableEventBridge(): void {
@@ -372,6 +387,7 @@ export class MultiplayerNetworkService {
   disconnect(): void {
     this.manuallyDisconnected = true;
     this.clearReconnectTimer();
+    this.resetReconnectBackoff();
 
     if (!this.socket) return;
     this.socket.close(1000, "client_disconnect");
@@ -415,11 +431,24 @@ export class MultiplayerNetworkService {
   private scheduleReconnect(): void {
     if (this.reconnectTimer || !this.wsUrl) return;
 
+    const reconnectDelayMs = this.nextReconnectDelayMs;
+    this.reconnectAttemptCount += 1;
+    log.info(
+      `Scheduling reconnect attempt ${this.reconnectAttemptCount} in ${reconnectDelayMs}ms`
+    );
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.manuallyDisconnected) return;
       this.connect();
-    }, this.reconnectDelayMs);
+    }, reconnectDelayMs);
+
+    this.nextReconnectDelayMs = Math.min(
+      this.reconnectMaxDelayMs,
+      Math.max(
+        this.reconnectDelayMs,
+        Math.round(reconnectDelayMs * this.reconnectBackoffMultiplier)
+      )
+    );
   }
 
   private async recoverFromAuthExpiry(): Promise<void> {
@@ -460,4 +489,23 @@ export class MultiplayerNetworkService {
     clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
   }
+
+  private resetReconnectBackoff(): void {
+    this.reconnectAttemptCount = 0;
+    this.nextReconnectDelayMs = this.reconnectDelayMs;
+  }
+}
+
+function normalizeReconnectDelay(value: number | undefined, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return fallback;
+  }
+  return Math.floor(value);
+}
+
+function normalizeBackoffMultiplier(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 1) {
+    return 2;
+  }
+  return value;
 }

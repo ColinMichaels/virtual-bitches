@@ -29,6 +29,21 @@ function test(name: string, fn: () => Promise<void> | void): Promise<void> {
     });
 }
 
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs: number = 250,
+  pollIntervalMs: number = 2
+): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+  throw new Error(`Timed out waiting for condition after ${timeoutMs}ms`);
+}
+
 class MockMessageEvent extends Event {
   data: string;
 
@@ -245,6 +260,88 @@ await test("attempts auth recovery on auth-expired close code", async () => {
 
   assertEqual(createdUrls.length, 2, "Expected reconnect after auth recovery");
   assertEqual(createdUrls[1], "ws://refreshed.local", "Expected refreshed ws url");
+});
+
+await test("auto-reconnects after transient websocket close", async () => {
+  const eventTarget = new EventTarget();
+  const sockets: MockWebSocket[] = [];
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local",
+    eventTarget,
+    autoReconnect: true,
+    reconnectDelayMs: 10,
+    webSocketFactory: () => {
+      const socket = new MockWebSocket();
+      sockets.push(socket);
+      return socket;
+    },
+  });
+
+  network.connect();
+  assertEqual(sockets.length, 1, "Expected initial websocket connection");
+  sockets[0].emitOpen();
+  sockets[0].emitClose(1006, "transport_interrupted");
+
+  await waitFor(() => sockets.length === 2, 400);
+  network.dispose();
+});
+
+await test("applies reconnect backoff and resets after successful reconnect", async () => {
+  const eventTarget = new EventTarget();
+  const sockets: MockWebSocket[] = [];
+  const connectTimes: number[] = [];
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local",
+    eventTarget,
+    autoReconnect: true,
+    reconnectDelayMs: 10,
+    reconnectBackoffMultiplier: 2,
+    reconnectMaxDelayMs: 40,
+    webSocketFactory: () => {
+      connectTimes.push(Date.now());
+      const socket = new MockWebSocket();
+      sockets.push(socket);
+      return socket;
+    },
+  });
+
+  network.connect();
+  sockets[0].emitOpen();
+
+  sockets[0].emitClose(1006, "drop-1");
+  await waitFor(() => sockets.length === 2, 500);
+  const firstDelay = connectTimes[1] - connectTimes[0];
+
+  sockets[1].emitClose(1006, "drop-2");
+  await waitFor(() => sockets.length === 3, 500);
+  const secondDelay = connectTimes[2] - connectTimes[1];
+
+  sockets[2].emitClose(1006, "drop-3");
+  await waitFor(() => sockets.length === 4, 500);
+  const thirdDelay = connectTimes[3] - connectTimes[2];
+
+  assert(
+    secondDelay > firstDelay,
+    `Expected second reconnect delay to increase (first=${firstDelay}ms second=${secondDelay}ms)`
+  );
+  assert(
+    thirdDelay >= secondDelay,
+    `Expected third reconnect delay to increase/cap (second=${secondDelay}ms third=${thirdDelay}ms)`
+  );
+
+  sockets[3].emitOpen();
+  sockets[3].emitClose(1006, "drop-after-open");
+  await waitFor(() => sockets.length === 5, 500);
+  const resetDelay = connectTimes[4] - connectTimes[3];
+
+  assert(
+    resetDelay < thirdDelay,
+    `Expected reconnect delay reset after open (reset=${resetDelay}ms third=${thirdDelay}ms)`
+  );
+
+  network.dispose();
 });
 
 await test("dispatches inbound particle event to local event bus", () => {
