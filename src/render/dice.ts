@@ -107,7 +107,7 @@ const SELECTION_EMISSIVE_COLOR = new Color3(1, 1, 0.3);
 
 // Color conversion constant
 const RGB_MAX_VALUE = 255;
-const SPECTATOR_PREVIEW_TTL_MS = 7000;
+const SPECTATOR_PREVIEW_TTL_MS = 65000;
 
 const SIDES_TO_DIE_KIND: Record<number, DieKind> = {
   4: "d4",
@@ -119,9 +119,10 @@ const SIDES_TO_DIE_KIND: Record<number, DieKind> = {
 };
 
 interface SpectatorPreviewState {
-  dice: DieState[];
-  sourceToTempId: Map<string, string>;
-  tempIds: string[];
+  rollingDice: DieState[];
+  rollingSourceToTempId: Map<string, string>;
+  rollingTempIds: string[];
+  scoredTempIds: string[];
   scoreAreaPosition: Vector3;
   cleanupTimer: ReturnType<typeof setTimeout> | null;
 }
@@ -1264,7 +1265,8 @@ export class DiceRenderer {
     dice: DieState[],
     selected: Set<string>,
     onComplete: () => void,
-    scoreAreaPosition?: Vector3
+    scoreAreaPosition?: Vector3,
+    options?: { gridStartIndex?: number }
   ) {
     const toScore = dice.filter((d) => selected.has(d.id));
     if (toScore.length === 0) {
@@ -1273,6 +1275,10 @@ export class DiceRenderer {
     }
 
     const alreadyScored = dice.filter((d) => d.scored && !selected.has(d.id)).length;
+    const gridStartIndex =
+      typeof options?.gridStartIndex === "number" && Number.isFinite(options.gridStartIndex)
+        ? Math.max(0, Math.floor(options.gridStartIndex))
+        : alreadyScored;
 
     const gridCols = 3;
     const gridRows = 4;
@@ -1291,7 +1297,7 @@ export class DiceRenderer {
 
       this.highlightLayer.removeMesh(mesh);
 
-      const totalIndex = alreadyScored + i;
+      const totalIndex = gridStartIndex + i;
       let targetX: number, targetY: number, targetZ: number;
 
       if (totalIndex < maxGridDice) {
@@ -1366,7 +1372,21 @@ export class DiceRenderer {
       return false;
     }
 
-    this.cancelSpectatorPreview(key);
+    let preview = this.spectatorPreviews.get(key);
+    if (!preview) {
+      preview = {
+        rollingDice: [],
+        rollingSourceToTempId: new Map<string, string>(),
+        rollingTempIds: [],
+        scoredTempIds: [],
+        scoreAreaPosition: scoreAreaPosition.clone(),
+        cleanupTimer: null,
+      };
+      this.spectatorPreviews.set(key, preview);
+    } else {
+      this.clearSpectatorRollingDice(preview);
+      preview.scoreAreaPosition = scoreAreaPosition.clone();
+    }
 
     const sourceToTempId = new Map<string, string>();
     const dice: DieState[] = [];
@@ -1398,16 +1418,13 @@ export class DiceRenderer {
     }
 
     const rollAreaPosition = this.resolveSpectatorRollArea(scoreAreaPosition);
-    this.spectatorPreviews.set(key, {
-      dice,
-      sourceToTempId,
-      tempIds: dice.map((die) => die.id),
-      scoreAreaPosition: scoreAreaPosition.clone(),
-      cleanupTimer: null,
-    });
+    preview.rollingDice = dice;
+    preview.rollingSourceToTempId = sourceToTempId;
+    preview.rollingTempIds = dice.map((die) => die.id);
+    preview.scoreAreaPosition = scoreAreaPosition.clone();
 
     this.animateRoll(dice, () => {
-      this.scheduleSpectatorPreviewCleanup(key);
+      this.scheduleSpectatorRollingCleanup(key);
     }, rollAreaPosition);
     return true;
   }
@@ -1428,20 +1445,41 @@ export class DiceRenderer {
     }
 
     const selectedTempIds = selectedSourceDiceIds
-      .map((sourceId) => preview.sourceToTempId.get(sourceId))
+      .map((sourceId) => preview.rollingSourceToTempId.get(sourceId))
       .filter((dieId): dieId is string => typeof dieId === "string");
     if (selectedTempIds.length === 0) {
-      this.cancelSpectatorPreview(key);
+      this.clearSpectatorRollingDice(preview);
+      if (preview.scoredTempIds.length === 0) {
+        this.spectatorPreviews.delete(key);
+      }
       return false;
     }
 
+    const selectedSet = new Set(selectedTempIds);
+    const diceToScore = preview.rollingDice.filter((die) => selectedSet.has(die.id));
+    if (diceToScore.length === 0) {
+      this.clearSpectatorRollingDice(preview);
+      if (preview.scoredTempIds.length === 0) {
+        this.spectatorPreviews.delete(key);
+      }
+      return false;
+    }
+
+    const unselectedTempIds = preview.rollingTempIds.filter((dieId) => !selectedSet.has(dieId));
+    this.disposeSpectatorDiceIds(unselectedTempIds);
+
+    const gridStartIndex = preview.scoredTempIds.length;
+    preview.scoredTempIds.push(...selectedTempIds);
+    preview.rollingDice = [];
+    preview.rollingTempIds = [];
+    preview.rollingSourceToTempId.clear();
+
     this.animateScore(
-      preview.dice,
-      new Set(selectedTempIds),
-      () => {
-        this.scheduleSpectatorPreviewCleanup(key, 900);
-      },
-      preview.scoreAreaPosition
+      diceToScore,
+      selectedSet,
+      () => {},
+      preview.scoreAreaPosition,
+      { gridStartIndex }
     );
     return true;
   }
@@ -1459,17 +1497,27 @@ export class DiceRenderer {
     if (preview.cleanupTimer) {
       clearTimeout(preview.cleanupTimer);
     }
-    preview.tempIds.forEach((dieId) => {
-      this.selectedMeshes.delete(dieId);
-      this.dieColors.delete(dieId);
-      const mesh = this.meshes.get(dieId);
-      if (mesh) {
-        this.highlightLayer.removeMesh(mesh);
-        mesh.dispose();
-      }
-      this.meshes.delete(dieId);
-    });
+    this.clearSpectatorRollingDice(preview);
+    this.disposeSpectatorDiceIds(preview.scoredTempIds);
+    preview.scoredTempIds = [];
     this.spectatorPreviews.delete(key);
+  }
+
+  clearSpectatorRollingPreview(previewKey: string): void {
+    const key = typeof previewKey === "string" ? previewKey.trim() : "";
+    if (!key) {
+      return;
+    }
+
+    const preview = this.spectatorPreviews.get(key);
+    if (!preview) {
+      return;
+    }
+
+    this.clearSpectatorRollingDice(preview);
+    if (preview.scoredTempIds.length === 0) {
+      this.spectatorPreviews.delete(key);
+    }
   }
 
   cancelAllSpectatorPreviews(): void {
@@ -1479,7 +1527,7 @@ export class DiceRenderer {
     });
   }
 
-  private scheduleSpectatorPreviewCleanup(previewKey: string, delayMs: number = SPECTATOR_PREVIEW_TTL_MS): void {
+  private scheduleSpectatorRollingCleanup(previewKey: string, delayMs: number = SPECTATOR_PREVIEW_TTL_MS): void {
     const preview = this.spectatorPreviews.get(previewKey);
     if (!preview) {
       return;
@@ -1489,8 +1537,39 @@ export class DiceRenderer {
     }
 
     preview.cleanupTimer = setTimeout(() => {
-      this.cancelSpectatorPreview(previewKey);
+      const currentPreview = this.spectatorPreviews.get(previewKey);
+      if (!currentPreview) {
+        return;
+      }
+      this.clearSpectatorRollingDice(currentPreview);
+      if (currentPreview.scoredTempIds.length === 0) {
+        this.spectatorPreviews.delete(previewKey);
+      }
     }, Math.max(200, Math.floor(delayMs)));
+  }
+
+  private clearSpectatorRollingDice(preview: SpectatorPreviewState): void {
+    if (preview.cleanupTimer) {
+      clearTimeout(preview.cleanupTimer);
+      preview.cleanupTimer = null;
+    }
+    this.disposeSpectatorDiceIds(preview.rollingTempIds);
+    preview.rollingDice = [];
+    preview.rollingSourceToTempId.clear();
+    preview.rollingTempIds = [];
+  }
+
+  private disposeSpectatorDiceIds(dieIds: string[]): void {
+    dieIds.forEach((dieId) => {
+      this.selectedMeshes.delete(dieId);
+      this.dieColors.delete(dieId);
+      const mesh = this.meshes.get(dieId);
+      if (mesh) {
+        this.highlightLayer.removeMesh(mesh);
+        mesh.dispose();
+      }
+      this.meshes.delete(dieId);
+    });
   }
 
   private resolveSpectatorRollArea(scoreAreaPosition: Vector3): Vector3 {

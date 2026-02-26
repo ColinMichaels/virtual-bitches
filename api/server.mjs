@@ -2898,6 +2898,8 @@ function buildBotSocketPayload(sessionId, actor, target, connectedHumanCount) {
       type: "player_notification",
       bot: true,
       id: randomUUID(),
+      playerId: actor.playerId,
+      sourcePlayerId: actor.playerId,
       title: actorName,
       message: `${actorName} cheers from the sidelines. ${connectedHumanCount} player${connectedHumanCount === 1 ? "" : "s"} connected.`,
       severity: "info",
@@ -2911,6 +2913,9 @@ function buildBotSocketPayload(sessionId, actor, target, connectedHumanCount) {
       type: "game_update",
       bot: true,
       id: randomUUID(),
+      playerId: actor.playerId,
+      sourcePlayerId: actor.playerId,
+      targetPlayerId: target.playerId,
       title: `${actorName} update`,
       content: `${actorName} is watching your turn queue. Keep the score low.`,
       date: new Date(now).toISOString(),
@@ -3439,7 +3444,28 @@ function handleSocketMessage(client, rawMessage) {
   const now = Date.now();
   session.participants[client.playerId].lastHeartbeatAt = now;
   markSessionActivity(session, client.playerId, now);
-  broadcastToSession(client.sessionId, rawMessage, client);
+
+  let outboundRawMessage = rawMessage;
+  if (payload.type === "game_update" || payload.type === "player_notification") {
+    const enrichedPayload = {
+      ...payload,
+      playerId:
+        typeof payload.playerId === "string" && payload.playerId.trim().length > 0
+          ? payload.playerId
+          : client.playerId,
+      sourcePlayerId:
+        typeof payload.sourcePlayerId === "string" && payload.sourcePlayerId.trim().length > 0
+          ? payload.sourcePlayerId
+          : client.playerId,
+      timestamp:
+        typeof payload.timestamp === "number" && Number.isFinite(payload.timestamp)
+          ? payload.timestamp
+          : now,
+    };
+    outboundRawMessage = JSON.stringify(enrichedPayload);
+  }
+
+  broadcastToSession(client.sessionId, outboundRawMessage, client);
 }
 
 function isSupportedSocketPayload(payload) {

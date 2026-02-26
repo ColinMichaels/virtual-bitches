@@ -37,6 +37,8 @@ import { playerDataSyncService } from "./services/playerDataSync.js";
 import { getLocalPlayerId } from "./services/playerIdentity.js";
 import {
   MultiplayerNetworkService,
+  type MultiplayerGameUpdateMessage,
+  type MultiplayerPlayerNotificationMessage,
   type MultiplayerSessionStateMessage,
   type MultiplayerTurnAutoAdvancedMessage,
   type MultiplayerTurnActionMessage,
@@ -269,6 +271,16 @@ class Game implements GameCallbacks {
       const detail = (event as CustomEvent<{ code?: string; message?: string }>).detail;
       if (!detail?.code) return;
       this.handleMultiplayerProtocolError(detail.code, detail.message);
+    }) as EventListener);
+    document.addEventListener("multiplayer:update:received", ((event: Event) => {
+      const detail = (event as CustomEvent<MultiplayerGameUpdateMessage>).detail;
+      if (!detail) return;
+      this.handleMultiplayerRealtimeUpdate(detail);
+    }) as EventListener);
+    document.addEventListener("multiplayer:notification:received", ((event: Event) => {
+      const detail = (event as CustomEvent<MultiplayerPlayerNotificationMessage>).detail;
+      if (!detail) return;
+      this.handleMultiplayerRealtimeNotification(detail);
     }) as EventListener);
 
     document.addEventListener("chaos:cameraAttack:sent", ((event: Event) => {
@@ -702,6 +714,7 @@ class Game implements GameCallbacks {
   private applyMultiplayerSeatState(session: MultiplayerSessionRecord): void {
     const seatedParticipants = this.computeSeatedParticipants(session);
     const participantBySeat = new Map<number, SeatedMultiplayerParticipant>();
+    const previousParticipantIds = new Set(this.participantSeatById.keys());
     this.participantSeatById.clear();
     this.participantLabelById.clear();
     const showReadyState =
@@ -715,6 +728,12 @@ class Game implements GameCallbacks {
         participant.playerId,
         this.formatParticipantLabel(participant, isCurrentPlayer)
       );
+    });
+    const activeParticipantIds = new Set(seatedParticipants.map((participant) => participant.playerId));
+    previousParticipantIds.forEach((playerId) => {
+      if (!activeParticipantIds.has(playerId) && playerId !== this.localPlayerId) {
+        this.diceRenderer.cancelSpectatorPreview(this.buildSpectatorPreviewKey(playerId));
+      }
     });
 
     const seatCount = Math.max(1, this.scene.playerSeats.length || 8);
@@ -1120,12 +1139,12 @@ class Game implements GameCallbacks {
     return `${sessionId}:${playerId}`;
   }
 
-  private cancelSpectatorPreviewForPlayer(playerId: string | null | undefined): void {
+  private clearSpectatorRollingPreviewForPlayer(playerId: string | null | undefined): void {
     const targetPlayerId = typeof playerId === "string" ? playerId.trim() : "";
     if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
       return;
     }
-    this.diceRenderer.cancelSpectatorPreview(this.buildSpectatorPreviewKey(targetPlayerId));
+    this.diceRenderer.clearSpectatorRollingPreview(this.buildSpectatorPreviewKey(targetPlayerId));
   }
 
   private getParticipantLabel(playerId: string): string {
@@ -1137,6 +1156,159 @@ class Game implements GameCallbacks {
       return label;
     }
     return `Player ${playerId.slice(0, 4)}`;
+  }
+
+  private isBotParticipant(playerId: string): boolean {
+    const participants = this.multiplayerSessionService.getActiveSession()?.participants ?? [];
+    return participants.some(
+      (participant) =>
+        participant?.playerId === playerId &&
+        participant.isBot === true
+    );
+  }
+
+  private showSeatBubbleForPlayer(
+    playerId: string | null | undefined,
+    message: string,
+    options?: { tone?: "info" | "success" | "warning" | "error"; durationMs?: number; isBot?: boolean }
+  ): boolean {
+    const targetPlayerId = typeof playerId === "string" ? playerId.trim() : "";
+    if (!targetPlayerId) {
+      return false;
+    }
+    const seatIndex = this.participantSeatById.get(targetPlayerId);
+    if (typeof seatIndex !== "number") {
+      return false;
+    }
+    const normalizedMessage =
+      typeof message === "string" ? message.trim().replace(/\s+/g, " ") : "";
+    if (!normalizedMessage) {
+      return false;
+    }
+    this.scene.playerSeatRenderer.showSeatChatBubble(seatIndex, normalizedMessage, {
+      tone: options?.tone ?? "info",
+      durationMs: options?.durationMs,
+      isBot: options?.isBot ?? this.isBotParticipant(targetPlayerId),
+    });
+    return true;
+  }
+
+  private normalizeParticipantLookupToken(value: string): string {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/^bot\s+/, "")
+      .replace(/\s+update$/, "");
+  }
+
+  private resolvePlayerIdByParticipantToken(token: string): string | null {
+    const normalizedToken = this.normalizeParticipantLookupToken(token);
+    if (!normalizedToken) {
+      return null;
+    }
+
+    for (const [playerId, label] of this.participantLabelById.entries()) {
+      if (this.normalizeParticipantLookupToken(label) === normalizedToken) {
+        return playerId;
+      }
+    }
+
+    const participants = this.multiplayerSessionService.getActiveSession()?.participants ?? [];
+    for (const participant of participants) {
+      if (!participant || typeof participant.playerId !== "string") {
+        continue;
+      }
+      const displayName =
+        typeof participant.displayName === "string" ? participant.displayName : "";
+      if (this.normalizeParticipantLookupToken(displayName) === normalizedToken) {
+        return participant.playerId;
+      }
+    }
+
+    return null;
+  }
+
+  private resolveRealtimeSourcePlayerId(
+    payload: MultiplayerGameUpdateMessage | MultiplayerPlayerNotificationMessage
+  ): string | null {
+    const sourcePlayerId =
+      typeof payload.sourcePlayerId === "string" ? payload.sourcePlayerId.trim() : "";
+    if (sourcePlayerId && this.participantSeatById.has(sourcePlayerId)) {
+      return sourcePlayerId;
+    }
+
+    const fallbackPlayerId = typeof payload.playerId === "string" ? payload.playerId.trim() : "";
+    if (fallbackPlayerId && this.participantSeatById.has(fallbackPlayerId)) {
+      return fallbackPlayerId;
+    }
+
+    if (typeof payload.title === "string" && payload.title.trim()) {
+      return this.resolvePlayerIdByParticipantToken(payload.title.trim());
+    }
+
+    return null;
+  }
+
+  private handleMultiplayerRealtimeUpdate(payload: MultiplayerGameUpdateMessage): void {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return;
+    }
+    const sourcePlayerId = this.resolveRealtimeSourcePlayerId(payload);
+    if (!sourcePlayerId || sourcePlayerId === this.localPlayerId) {
+      return;
+    }
+
+    const message = payload.content?.trim() || payload.title?.trim();
+    if (!message) {
+      return;
+    }
+
+    this.showSeatBubbleForPlayer(sourcePlayerId, message, {
+      tone: "info",
+      durationMs: 3200,
+      isBot: payload.bot === true,
+    });
+  }
+
+  private handleMultiplayerRealtimeNotification(
+    payload: MultiplayerPlayerNotificationMessage
+  ): void {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return;
+    }
+    if (payload.targetPlayerId && payload.targetPlayerId !== this.localPlayerId) {
+      return;
+    }
+
+    const message = payload.message?.trim();
+    if (!message) {
+      return;
+    }
+
+    const sourcePlayerId = this.resolveRealtimeSourcePlayerId(payload);
+    const tone =
+      payload.severity === "success" ||
+      payload.severity === "warning" ||
+      payload.severity === "error"
+        ? payload.severity
+        : "info";
+
+    if (sourcePlayerId && sourcePlayerId !== this.localPlayerId) {
+      const bubbled = this.showSeatBubbleForPlayer(sourcePlayerId, message, {
+        tone,
+        durationMs: 3200,
+        isBot: payload.bot === true,
+      });
+      if (bubbled) {
+        return;
+      }
+    }
+
+    if (tone === "warning" || tone === "error") {
+      const title = payload.title?.trim() || "Multiplayer";
+      notificationService.show(`${title}: ${message}`, tone, 3200);
+    }
   }
 
   private handleMultiplayerSessionState(message: MultiplayerSessionStateMessage): void {
@@ -1204,7 +1376,7 @@ class Game implements GameCallbacks {
       message.activeRoll
     );
     if (previousActiveTurnPlayerId && previousActiveTurnPlayerId !== message.playerId) {
-      this.cancelSpectatorPreviewForPlayer(previousActiveTurnPlayerId);
+      this.clearSpectatorRollingPreviewForPlayer(previousActiveTurnPlayerId);
     }
 
     if (message.playerId === this.localPlayerId) {
@@ -1216,11 +1388,10 @@ class Game implements GameCallbacks {
       return;
     }
 
-    notificationService.show(
-      `${this.getParticipantLabel(message.playerId)} turn`,
-      "info",
-      1600
-    );
+    this.showSeatBubbleForPlayer(message.playerId, "My turn", {
+      tone: "info",
+      durationMs: 1800,
+    });
   }
 
   private handleMultiplayerTurnEnd(message: MultiplayerTurnEndMessage): void {
@@ -1234,18 +1405,18 @@ class Game implements GameCallbacks {
     if (typeof message.playerId !== "string" || !message.playerId) {
       return;
     }
-    this.cancelSpectatorPreviewForPlayer(message.playerId);
 
     if (message.playerId === this.localPlayerId) {
       notificationService.show("Turn ended", "info", 1200);
       return;
     }
 
-    notificationService.show(
-      `${this.getParticipantLabel(message.playerId)} ended turn`,
-      "info",
-      1200
-    );
+    this.clearSpectatorRollingPreviewForPlayer(message.playerId);
+
+    this.showSeatBubbleForPlayer(message.playerId, "Turn ended", {
+      tone: "info",
+      durationMs: 1500,
+    });
   }
 
   private handleMultiplayerTurnTimeoutWarning(
@@ -1274,12 +1445,10 @@ class Game implements GameCallbacks {
           ? Math.max(0, expiresAt - Date.now())
           : 0;
     const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
-    const targetLabel = this.getParticipantLabel(message.playerId);
-    notificationService.show(
-      `${targetLabel} turn expires in ${remainingSeconds}s`,
-      "warning",
-      1600
-    );
+    this.showSeatBubbleForPlayer(message.playerId, `${remainingSeconds}s left`, {
+      tone: "warning",
+      durationMs: 1700,
+    });
   }
 
   private handleMultiplayerTurnAutoAdvanced(
@@ -1294,9 +1463,11 @@ class Game implements GameCallbacks {
     if (!playerId) {
       return;
     }
-    this.cancelSpectatorPreviewForPlayer(playerId);
-    const targetLabel = this.getParticipantLabel(playerId);
-    notificationService.show(`${targetLabel} turn timed out`, "warning", 1800);
+    this.clearSpectatorRollingPreviewForPlayer(playerId);
+    this.showSeatBubbleForPlayer(playerId, "Turn timed out", {
+      tone: "warning",
+      durationMs: 2000,
+    });
   }
 
   private handleMultiplayerTurnAction(message: MultiplayerTurnActionMessage): void {
@@ -1363,18 +1534,17 @@ class Game implements GameCallbacks {
       }
     }
 
-    const actionLabel = message.action === "score" ? "scored" : "rolled";
+    const actionLabel = message.action === "score" ? "Scored" : "Rolled";
     const scoreSuffix =
       message.action === "score" &&
       typeof message.score?.points === "number" &&
       Number.isFinite(message.score.points)
         ? ` (+${Math.max(0, Math.floor(message.score.points))})`
         : "";
-    notificationService.show(
-      `${this.getParticipantLabel(message.playerId)} ${actionLabel}${scoreSuffix}`,
-      "info",
-      1200
-    );
+    this.showSeatBubbleForPlayer(message.playerId, `${actionLabel}${scoreSuffix}`, {
+      tone: message.action === "score" ? "success" : "info",
+      durationMs: 1400,
+    });
   }
 
   private handleMultiplayerProtocolError(code: string, message?: string): void {

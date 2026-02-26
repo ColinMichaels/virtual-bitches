@@ -16,6 +16,17 @@ import {
 import { PlayerSeat } from "./octagonGeometry.js";
 
 const SCORE_ZONE_DISTANCE_FACTOR = 0.46;
+const CHAT_BUBBLE_DEFAULT_DURATION_MS = 2400;
+const CHAT_BUBBLE_MIN_DURATION_MS = 900;
+const CHAT_BUBBLE_MAX_DURATION_MS = 8000;
+
+type SeatChatBubbleTone = "info" | "success" | "warning" | "error";
+
+export interface SeatChatBubbleOptions {
+  tone?: SeatChatBubbleTone;
+  durationMs?: number;
+  isBot?: boolean;
+}
 
 /**
  * Player seat state.
@@ -39,10 +50,12 @@ export class PlayerSeatRenderer {
   private seatMeshes: Map<number, Mesh> = new Map();
   private namePlateMeshes: Map<number, Mesh> = new Map();
   private scoreBadgeMeshes: Map<number, Mesh> = new Map();
+  private chatBubbleMeshes: Map<number, Mesh> = new Map();
   private scoreZoneMeshes: Map<number, Mesh> = new Map();
   private turnMarkerMeshes: Map<number, Mesh> = new Map();
   private seatStates: Map<number, SeatState> = new Map();
   private scorePulseTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
+  private chatBubbleHideTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
   private highlightedSeatIndex: number | null = null;
   private onSeatClickCallback?: (seatIndex: number) => void;
 
@@ -65,6 +78,7 @@ export class PlayerSeatRenderer {
       this.createSeatAvatar(seat);
       this.createNamePlate(seat);
       this.createScoreBadge(seat);
+      this.createChatBubble(seat);
       this.createScoredZone(seat);
       this.createTurnMarker(seat);
 
@@ -221,6 +235,41 @@ export class PlayerSeatRenderer {
   }
 
   /**
+   * Create floating chat bubble above avatar head.
+   */
+  private createChatBubble(seat: PlayerSeat): void {
+    const pedestal = this.seatMeshes.get(seat.index);
+    const bubble = MeshBuilder.CreatePlane(
+      `seat-chat-bubble-${seat.index}`,
+      { width: 3.8, height: 1.35 },
+      this.scene
+    );
+    bubble.position = new Vector3(0, 6.65, 0);
+    if (pedestal) {
+      bubble.parent = pedestal;
+    }
+    bubble.isPickable = false;
+    bubble.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    bubble.isVisible = false;
+
+    const texture = new DynamicTexture(
+      `seat-chat-bubble-texture-${seat.index}`,
+      { width: 640, height: 224 },
+      this.scene,
+      false
+    );
+
+    const material = new StandardMaterial(`seat-chat-bubble-mat-${seat.index}`, this.scene);
+    material.diffuseTexture = texture;
+    material.emissiveTexture = texture;
+    material.backFaceCulling = false;
+    material.useAlphaFromDiffuseTexture = true;
+    bubble.material = material;
+
+    this.chatBubbleMeshes.set(seat.index, bubble);
+  }
+
+  /**
    * Create a scored-dice section near this seat.
    */
   private createScoredZone(seat: PlayerSeat): void {
@@ -283,6 +332,51 @@ export class PlayerSeatRenderer {
       this.applySeatVisuals(seatIndex, state);
     }, 260);
     this.scorePulseTimers.set(seatIndex, timer);
+  }
+
+  showSeatChatBubble(seatIndex: number, message: string, options: SeatChatBubbleOptions = {}): void {
+    const bubble = this.chatBubbleMeshes.get(seatIndex);
+    if (!bubble) {
+      return;
+    }
+
+    const normalizedMessage = typeof message === "string" ? message.trim().replace(/\s+/g, " ") : "";
+    if (!normalizedMessage) {
+      this.hideSeatChatBubble(seatIndex);
+      return;
+    }
+
+    const state = this.seatStates.get(seatIndex);
+    const tone: SeatChatBubbleTone = options.tone ?? "info";
+    const isBot = options.isBot ?? state?.isBot === true;
+    this.drawChatBubble(bubble, normalizedMessage, tone, isBot);
+    bubble.isVisible = true;
+
+    const existingTimer = this.chatBubbleHideTimers.get(seatIndex);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const durationRaw = Number.isFinite(options.durationMs) ? Math.floor(options.durationMs as number) : CHAT_BUBBLE_DEFAULT_DURATION_MS;
+    const durationMs = Math.max(CHAT_BUBBLE_MIN_DURATION_MS, Math.min(CHAT_BUBBLE_MAX_DURATION_MS, durationRaw));
+    const hideTimer = setTimeout(() => {
+      this.chatBubbleHideTimers.delete(seatIndex);
+      this.hideSeatChatBubble(seatIndex);
+    }, durationMs);
+    this.chatBubbleHideTimers.set(seatIndex, hideTimer);
+  }
+
+  hideSeatChatBubble(seatIndex: number): void {
+    const existingTimer = this.chatBubbleHideTimers.get(seatIndex);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      this.chatBubbleHideTimers.delete(seatIndex);
+    }
+
+    const bubble = this.chatBubbleMeshes.get(seatIndex);
+    if (bubble) {
+      bubble.isVisible = false;
+    }
   }
 
   /**
@@ -463,6 +557,10 @@ export class PlayerSeatRenderer {
         turnMarker.isVisible = true;
       }
     }
+
+    if (!isOccupied) {
+      this.hideSeatChatBubble(seatIndex);
+    }
   }
 
   private drawNamePlate(
@@ -565,6 +663,133 @@ export class PlayerSeatRenderer {
     material.alpha = isOccupied || isCurrentPlayer ? 0.95 : 0.32;
   }
 
+  private drawChatBubble(
+    bubble: Mesh,
+    message: string,
+    tone: SeatChatBubbleTone,
+    isBot: boolean
+  ): void {
+    const texture = (bubble.material as StandardMaterial).diffuseTexture as DynamicTexture;
+    if (!texture) {
+      return;
+    }
+
+    const ctx = texture.getContext() as CanvasRenderingContext2D;
+    const width = 640;
+    const height = 224;
+    const palette = this.resolveChatBubblePalette(tone, isBot);
+
+    ctx.clearRect(0, 0, width, height);
+
+    this.drawRoundedRect(ctx, 18, 14, width - 36, 156, 20);
+    ctx.fillStyle = palette.fill;
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = palette.stroke;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(width / 2 - 24, 168);
+    ctx.lineTo(width / 2 + 24, 168);
+    ctx.lineTo(width / 2, 208);
+    ctx.closePath();
+    ctx.fillStyle = palette.fill;
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = palette.stroke;
+    ctx.stroke();
+
+    const lines = this.wrapChatBubbleText(message, 2, 31);
+    ctx.fillStyle = palette.text;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 36px Arial";
+    lines.forEach((line, lineIndex) => {
+      const y = lines.length > 1 ? 74 + lineIndex * 44 : 86;
+      ctx.fillText(line, width / 2, y);
+    });
+
+    texture.update();
+  }
+
+  private wrapChatBubbleText(text: string, maxLines: number, maxCharsPerLine: number): string[] {
+    const words = text.trim().split(/\s+/);
+    if (words.length === 0) {
+      return [""];
+    }
+
+    const lines: string[] = [];
+    let currentLine = "";
+
+    words.forEach((word) => {
+      const candidate = currentLine ? `${currentLine} ${word}` : word;
+      if (candidate.length <= maxCharsPerLine || !currentLine) {
+        currentLine = candidate;
+        return;
+      }
+      lines.push(currentLine);
+      currentLine = word;
+    });
+
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+
+    if (lines.length <= maxLines) {
+      return lines;
+    }
+
+    const capped = lines.slice(0, maxLines);
+    const overflow = lines.slice(maxLines - 1).join(" ");
+    const trimmedOverflow =
+      overflow.length > maxCharsPerLine
+        ? `${overflow.slice(0, maxCharsPerLine - 3).trim()}...`
+        : overflow;
+    capped[maxLines - 1] = trimmedOverflow;
+    return capped;
+  }
+
+  private resolveChatBubblePalette(
+    tone: SeatChatBubbleTone,
+    isBot: boolean
+  ): { fill: string; stroke: string; text: string } {
+    if (tone === "error") {
+      return { fill: "#822c2c", stroke: "#eaa8a8", text: "#ffffff" };
+    }
+    if (tone === "warning") {
+      return { fill: "#7d5921", stroke: "#f3d188", text: "#ffffff" };
+    }
+    if (tone === "success") {
+      return { fill: "#246f3b", stroke: "#a9f0c0", text: "#ffffff" };
+    }
+    if (isBot) {
+      return { fill: "#6a4023", stroke: "#e3b88f", text: "#ffffff" };
+    }
+    return { fill: "#2f4f76", stroke: "#a8c8f0", text: "#ffffff" };
+  }
+
+  private drawRoundedRect(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number
+  ): void {
+    const r = Math.max(2, Math.min(radius, Math.floor(Math.min(width, height) / 2)));
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
   /**
    * Highlight current player's seat with stronger marker/effect.
    */
@@ -592,17 +817,21 @@ export class PlayerSeatRenderer {
    */
   dispose(): void {
     this.scorePulseTimers.forEach((timer) => clearTimeout(timer));
+    this.chatBubbleHideTimers.forEach((timer) => clearTimeout(timer));
     this.seatMeshes.forEach((mesh) => mesh.dispose());
     this.namePlateMeshes.forEach((mesh) => mesh.dispose());
     this.scoreBadgeMeshes.forEach((mesh) => mesh.dispose());
+    this.chatBubbleMeshes.forEach((mesh) => mesh.dispose());
     this.scoreZoneMeshes.forEach((mesh) => mesh.dispose());
     this.turnMarkerMeshes.forEach((mesh) => mesh.dispose());
     this.seatMeshes.clear();
     this.namePlateMeshes.clear();
     this.scoreBadgeMeshes.clear();
+    this.chatBubbleMeshes.clear();
     this.scoreZoneMeshes.clear();
     this.turnMarkerMeshes.clear();
     this.scorePulseTimers.clear();
+    this.chatBubbleHideTimers.clear();
     this.seatStates.clear();
   }
 }
