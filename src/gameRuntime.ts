@@ -186,6 +186,7 @@ class Game implements GameCallbacks {
   private undoBtn: HTMLButtonElement;
   private inviteLinkBtn: HTMLButtonElement | null = null;
   private mobileInviteLinkBtn: HTMLButtonElement | null = null;
+  private turnActionBannerEl: HTMLElement | null = null;
 
   constructor(sessionBootstrap: GameSessionBootstrapOptions) {
     this.playMode = sessionBootstrap.playMode;
@@ -391,6 +392,7 @@ class Game implements GameCallbacks {
     this.undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
     this.inviteLinkBtn = document.getElementById("invite-link-btn") as HTMLButtonElement | null;
     this.mobileInviteLinkBtn = document.getElementById("mobile-invite-link-btn") as HTMLButtonElement | null;
+    this.turnActionBannerEl = this.ensureTurnActionBanner();
 
     // Initialize modals (shared with splash)
     this.settingsModal = settingsModal;
@@ -2662,6 +2664,7 @@ class Game implements GameCallbacks {
     // Hide game UI when debug mode is active
     const hudEl = document.getElementById("hud");
     const diceRowEl = document.getElementById("dice-row");
+    const turnActionBannerEl = document.getElementById("turn-action-banner");
     const controlsEl = document.getElementById("controls");
     const cameraControlsEl = document.getElementById("camera-controls");
     const effectHudEl = document.getElementById("effect-hud");
@@ -2670,6 +2673,7 @@ class Game implements GameCallbacks {
       // Hide game UI
       if (hudEl) hudEl.style.display = "none";
       if (diceRowEl) diceRowEl.style.display = "none";
+      if (turnActionBannerEl) turnActionBannerEl.style.display = "none";
       if (controlsEl) controlsEl.style.display = "none";
       if (cameraControlsEl) cameraControlsEl.style.display = "none";
       if (effectHudEl) effectHudEl.style.display = "none";
@@ -2682,6 +2686,7 @@ class Game implements GameCallbacks {
       // Restore game UI
       if (hudEl) hudEl.style.display = "block";
       if (diceRowEl) diceRowEl.style.display = "flex";
+      if (turnActionBannerEl) turnActionBannerEl.style.display = "";
       if (controlsEl) controlsEl.style.display = "flex";
       if (cameraControlsEl) cameraControlsEl.style.display = "flex";
       if (effectHudEl) effectHudEl.style.display = "flex";
@@ -3018,6 +3023,107 @@ class Game implements GameCallbacks {
     notificationService.show("New Game Started!", "success");
   }
 
+  private ensureTurnActionBanner(): HTMLElement | null {
+    const existing = document.getElementById("turn-action-banner");
+    if (existing) {
+      return existing;
+    }
+
+    const unifiedHud = document.getElementById("unified-hud");
+    if (!unifiedHud) {
+      return null;
+    }
+
+    const banner = document.createElement("div");
+    banner.id = "turn-action-banner";
+    banner.className = "turn-action-banner";
+    banner.setAttribute("role", "status");
+    banner.setAttribute("aria-live", "polite");
+    banner.setAttribute("aria-atomic", "true");
+
+    const diceRowEl = document.getElementById("dice-row");
+    if (diceRowEl) {
+      unifiedHud.insertBefore(banner, diceRowEl);
+    } else {
+      unifiedHud.appendChild(banner);
+    }
+
+    return banner;
+  }
+
+  private getActivePlayableDiceCount(): number {
+    return this.state.dice.filter((die) => die.inPlay && !die.scored && die.value > 0).length;
+  }
+
+  private shouldShowDiceRowForCurrentTurn(activePlayableDiceCount: number): boolean {
+    if (activePlayableDiceCount <= 0) {
+      return false;
+    }
+
+    if (!this.isMultiplayerTurnEnforced()) {
+      return true;
+    }
+
+    if (!this.isLocalPlayersTurn()) {
+      return false;
+    }
+
+    return this.state.status === "ROLLED";
+  }
+
+  private updateTurnActionBanner(isDiceRowVisible: boolean): void {
+    const bannerEl = this.turnActionBannerEl;
+    if (!bannerEl) {
+      return;
+    }
+
+    const hideBanner = () => {
+      bannerEl.classList.remove("is-visible", "is-urgent");
+      bannerEl.removeAttribute("data-tone");
+      bannerEl.textContent = "";
+    };
+
+    if (!this.isMultiplayerTurnEnforced() || this.state.status === "COMPLETE") {
+      hideBanner();
+      return;
+    }
+
+    let message = "";
+    let tone: "waiting" | "action" | "sync" | "info" = "info";
+    let urgent = false;
+
+    if (!this.activeTurnPlayerId) {
+      message = "Syncing turn state...";
+      tone = "sync";
+    } else if (!this.isLocalPlayersTurn()) {
+      message = `${this.getParticipantLabel(this.activeTurnPlayerId)} is taking their turn`;
+      tone = "waiting";
+    } else if (this.awaitingMultiplayerRoll) {
+      message = "Rolling... waiting for server sync";
+      tone = "sync";
+    } else if (this.state.status === "READY") {
+      message = "Your turn: Roll dice";
+      tone = "action";
+      urgent = true;
+    } else if (this.state.status === "ROLLED" && !isDiceRowVisible) {
+      const selectedCount = this.state.selected.size;
+      message =
+        selectedCount > 0
+          ? `Your turn: score ${selectedCount} die${selectedCount === 1 ? "" : "s"}`
+          : "Your turn: Select dice to score";
+      tone = "action";
+      urgent = true;
+    } else {
+      hideBanner();
+      return;
+    }
+
+    bannerEl.textContent = message;
+    bannerEl.dataset.tone = tone;
+    bannerEl.classList.add("is-visible");
+    bannerEl.classList.toggle("is-urgent", urgent);
+  }
+
   private updateUI(): void {
     this.updateInviteLinkControlVisibility();
     this.hud.update(this.state);
@@ -3025,6 +3131,13 @@ class Game implements GameCallbacks {
       score: this.state.score,
     });
     this.diceRow.update(this.state);
+    const diceRowEl = document.getElementById("dice-row");
+    const activePlayableDiceCount = this.getActivePlayableDiceCount();
+    const shouldShowDiceRow = this.shouldShowDiceRowForCurrentTurn(activePlayableDiceCount);
+    if (diceRowEl) {
+      diceRowEl.style.display = shouldShowDiceRow ? "flex" : "none";
+    }
+    this.updateTurnActionBanner(shouldShowDiceRow);
     const isTurnLocked =
       this.isMultiplayerTurnEnforced() &&
       (!this.activeTurnPlayerId || !this.isLocalPlayersTurn());
