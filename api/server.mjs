@@ -531,6 +531,7 @@ async function handleCreateSession(req, res) {
       joinedAt: now,
       lastHeartbeatAt: now,
       isReady: false,
+      score: 0,
     },
   };
 
@@ -543,6 +544,7 @@ async function handleCreateSession(req, res) {
       lastHeartbeatAt: now,
       isBot: true,
       isReady: true,
+      score: 0,
     };
   }
 
@@ -580,12 +582,14 @@ async function handleJoinSession(req, res, pathname) {
     return;
   }
 
+  const existingParticipant = session.participants[playerId];
   session.participants[playerId] = {
     playerId,
     displayName: typeof body?.displayName === "string" ? body.displayName : undefined,
-    joinedAt: session.participants[playerId]?.joinedAt ?? Date.now(),
+    joinedAt: existingParticipant?.joinedAt ?? Date.now(),
     lastHeartbeatAt: Date.now(),
     isReady: false,
+    score: normalizeParticipantScore(existingParticipant?.score),
   };
   ensureSessionTurnState(session);
   reconcileSessionLoops(sessionId);
@@ -1534,6 +1538,7 @@ function serializeSessionParticipants(session) {
           : Date.now(),
       isBot: Boolean(participant.isBot),
       isReady: participant.isBot ? true : participant.isReady === true,
+      score: normalizeParticipantScore(participant.score),
     }))
     .sort((left, right) => {
       const joinedDelta = left.joinedAt - right.joinedAt;
@@ -1856,6 +1861,14 @@ function normalizeBotCount(value) {
 
 function isBotParticipant(participant) {
   return Boolean(participant?.isBot);
+}
+
+function normalizeParticipantScore(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+  return Math.floor(parsed);
 }
 
 function getHumanParticipantCount(session) {
@@ -2925,9 +2938,19 @@ function handleTurnActionMessage(client, session, payload) {
       return;
     }
 
-    turnState.lastScoreSummary = parsedScore.value;
+    const participant = session.participants[client.playerId];
+    const nextParticipantScore =
+      normalizeParticipantScore(participant?.score) + parsedScore.value.points;
+    if (participant) {
+      participant.score = nextParticipantScore;
+    }
+
+    turnState.lastScoreSummary = {
+      ...parsedScore.value,
+      projectedTotalScore: nextParticipantScore,
+    };
     turnState.phase = TURN_PHASES.readyToEnd;
-    details = { score: parsedScore.value };
+    details = { score: turnState.lastScoreSummary };
   }
 
   turnState.updatedAt = Date.now();

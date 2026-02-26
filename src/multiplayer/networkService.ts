@@ -149,6 +149,7 @@ export interface MultiplayerSessionStateParticipant {
   lastHeartbeatAt: number;
   isBot?: boolean;
   isReady?: boolean;
+  score?: number;
 }
 
 export interface MultiplayerSessionStateTurnSnapshot {

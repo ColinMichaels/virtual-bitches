@@ -257,6 +257,27 @@ async function run() {
   );
   const guestTurnScored = await guestTurnScorePromise;
   assertEqual(guestTurnScored.action, "score", "turn_action score mismatch");
+  const guestSessionAfterScore = await waitForBufferedMessage(
+    guestMessageBuffer,
+    (payload) =>
+      payload?.type === "session_state" &&
+      payload?.sessionId === activeSessionId &&
+      payload?.turnState?.phase === "ready_to_end" &&
+      Array.isArray(payload?.participants) &&
+      payload.participants.some(
+        (participant) =>
+          participant?.playerId === hostPlayerId && participant?.score === expectedScorePoints
+      ),
+    "guest session_state after score"
+  );
+  const hostParticipantAfterScore = guestSessionAfterScore.participants.find(
+    (participant) => participant?.playerId === hostPlayerId
+  );
+  assertEqual(
+    hostParticipantAfterScore?.score,
+    expectedScorePoints,
+    "expected host participant score update after validated score action"
+  );
 
   const guestTurnEndedPromise = waitForBufferedMessage(
     guestMessageBuffer,
