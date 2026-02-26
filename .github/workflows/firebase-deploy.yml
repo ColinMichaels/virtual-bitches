@@ -299,38 +299,6 @@ jobs:
           echo "Deploy project: $PROJECT_ID"
           echo "Hosting site target: $SITE_ID"
 
-          SITE_LIST_JSON="$(npx firebase-tools hosting:sites:list --project "$PROJECT_ID" --json)"
-          if ! printf '%s' "$SITE_LIST_JSON" | jq -e --arg site "$SITE_ID" '
-            def rows:
-              if type == "array" then .
-              elif (.result? | type) == "array" then .result
-              elif (.sites? | type) == "array" then .sites
-              else [] end;
-            rows
-            | any(
-                if type == "object" then
-                  ((.name? // "") | tostring | endswith("/sites/\($site)"))
-                  or ((.site? // .siteId? // .id? // "") | tostring == $site)
-                else
-                  (tostring == $site)
-                end
-              )
-          ' >/dev/null; then
-            echo "Firebase Hosting site '$SITE_ID' was not found in project '$PROJECT_ID'."
-            echo "Available hosting sites:"
-            printf '%s' "$SITE_LIST_JSON" | jq -r '
-              if type == "array" then .
-              elif (.result? | type) == "array" then .result
-              elif (.sites? | type) == "array" then .sites
-              else [] end
-              | .[]
-              | if type == "object" then (.site // .siteId // .name // .id // tostring) else tostring end
-            ' || true
-            echo "Create it once with:"
-            echo "  npx firebase-tools hosting:sites:create $SITE_ID --project $PROJECT_ID"
-            exit 1
-          fi
-
           # Ensure a deterministic hosting target for this project in CI.
-          npx firebase-tools target:apply hosting app "$SITE_ID" --project "$PROJECT_ID" --non-interactive
-          npx firebase-tools deploy --project "$PROJECT_ID" --only firestore,hosting:app --non-interactive
+          npx firebase-tools@15.8.0 target:apply hosting app "$SITE_ID" --project "$PROJECT_ID" --non-interactive
+          npx firebase-tools@15.8.0 deploy --project "$PROJECT_ID" --only firestore,hosting:app --non-interactive
