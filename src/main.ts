@@ -4,6 +4,7 @@ import { notificationService } from "./ui/notifications.js";
 import { themeManager } from "./services/themeManager.js";
 import { environment } from "@env";
 import { logger } from "./utils/logger.js";
+import type { SplashStartOptions } from "./ui/splash.js";
 
 import type { SettingsModal } from "./ui/settings.js";
 import type { LeaderboardModal } from "./ui/leaderboard.js";
@@ -63,7 +64,7 @@ async function initializeShellUi(): Promise<void> {
   setBootStatus("Preparing main menu...", 18);
 
   splash = new SplashScreen(
-    () => startGame(),
+    (startOptions) => startGame(startOptions),
     () => {
       void showSettings();
     },
@@ -108,7 +109,7 @@ async function initializeShellUi(): Promise<void> {
   }
 }
 
-async function startGame(): Promise<boolean> {
+async function startGame(startOptions: SplashStartOptions): Promise<boolean> {
   const { firebaseAuthService } = await getAuthServices();
   await firebaseAuthService.initialize();
 
@@ -137,6 +138,8 @@ async function startGame(): Promise<boolean> {
       rulesModal,
       tutorialModal,
       profileModal,
+      playMode: startOptions.playMode,
+      multiplayer: startOptions.multiplayer,
     });
 
     gameStarted = true;

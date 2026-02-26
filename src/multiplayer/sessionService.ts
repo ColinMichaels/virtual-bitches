@@ -24,10 +24,16 @@ export class MultiplayerSessionService {
     return this.activeSession;
   }
 
-  async createSession(roomCode?: string): Promise<MultiplayerSessionRecord | null> {
+  async createSession(
+    options: {
+      roomCode?: string;
+      botCount?: number;
+    } = {}
+  ): Promise<MultiplayerSessionRecord | null> {
     const created = await backendApiService.createMultiplayerSession({
       playerId: this.playerId,
-      roomCode,
+      roomCode: options.roomCode,
+      botCount: options.botCount,
     });
     if (!created) return null;
 

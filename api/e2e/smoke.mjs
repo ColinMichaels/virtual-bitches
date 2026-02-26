@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 const REQUEST_TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 10000);
 const WS_TIMEOUT_MS = Number(process.env.E2E_WS_TIMEOUT_MS ?? 10000);
 const firebaseIdToken = process.env.E2E_FIREBASE_ID_TOKEN?.trim() ?? "";
+const assertBotTraffic = process.env.E2E_ASSERT_BOTS === "1";
 
 const baseInput = (process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:3000").trim();
 const wsOverride = process.env.E2E_WS_URL?.trim();
@@ -13,6 +14,8 @@ let hostPlayerId = "";
 let guestPlayerId = "";
 let hostSocket;
 let guestSocket;
+let hostMessageBuffer;
+let guestMessageBuffer;
 
 async function run() {
   log(`API base URL: ${targets.apiBaseUrl}`);
@@ -29,6 +32,7 @@ async function run() {
     body: {
       playerId: hostPlayerId,
       displayName: "E2E Host",
+      botCount: assertBotTraffic ? 1 : 0,
     },
   });
   assert(typeof created?.sessionId === "string", "create session returned no sessionId");
@@ -46,14 +50,79 @@ async function run() {
     }
   );
   assert(joined?.auth?.accessToken, "join session returned no access token");
+  assert(Array.isArray(joined?.participants), "join session missing participants array");
+  assert(
+    joined.participants.some((participant) => participant?.playerId === guestPlayerId),
+    "join session response missing guest participant"
+  );
+  assert(Array.isArray(joined?.turnState?.order), "join session missing turnState.order");
+  assert(
+    joined.turnState.order.includes(hostPlayerId),
+    "turnState.order missing host player"
+  );
+  assert(
+    joined.turnState.order.includes(guestPlayerId),
+    "turnState.order missing guest player"
+  );
 
   hostSocket = await openSocket(
     "host",
     buildSocketUrl(activeSessionId, hostPlayerId, created.auth.accessToken)
   );
+  hostMessageBuffer = createSocketMessageBuffer(hostSocket);
   guestSocket = await openSocket(
     "guest",
     buildSocketUrl(activeSessionId, guestPlayerId, joined.auth.accessToken)
+  );
+  guestMessageBuffer = createSocketMessageBuffer(guestSocket);
+
+  const expectedFirstTurnPlayerId =
+    typeof joined?.turnState?.activeTurnPlayerId === "string"
+      ? joined.turnState.activeTurnPlayerId
+      : hostPlayerId;
+
+  guestSocket.send(JSON.stringify({ type: "turn_end" }));
+  const guestTurnError = await waitForBufferedMessage(
+    guestMessageBuffer,
+    (payload) => payload?.type === "error" && payload?.code === "turn_not_active",
+    "guest invalid turn_end rejection"
+  );
+  assertEqual(guestTurnError.code, "turn_not_active", "expected turn_not_active rejection");
+  const guestTurnSync = await waitForBufferedMessage(
+    guestMessageBuffer,
+    (payload) =>
+      payload?.type === "turn_start" && payload?.playerId === expectedFirstTurnPlayerId,
+    "guest turn sync receive"
+  );
+  assertEqual(
+    guestTurnSync.playerId,
+    expectedFirstTurnPlayerId,
+    "guest turn sync active player mismatch"
+  );
+
+  const expectedSecondTurnPlayerId =
+    Array.isArray(joined?.turnState?.order) && joined.turnState.order.length > 1
+      ? joined.turnState.order[1]
+      : (joined?.turnState?.order?.[0] ?? guestPlayerId);
+  const guestTurnEndedPromise = waitForBufferedMessage(
+    guestMessageBuffer,
+    (payload) => payload?.type === "turn_end" && payload?.playerId === hostPlayerId,
+    "guest turn_end receive"
+  );
+  const guestTurnStartedPromise = waitForBufferedMessage(
+    guestMessageBuffer,
+    (payload) =>
+      payload?.type === "turn_start" && payload?.playerId === expectedSecondTurnPlayerId,
+    "guest next turn_start receive"
+  );
+  hostSocket.send(JSON.stringify({ type: "turn_end", playerId: hostPlayerId }));
+  const guestTurnEnded = await guestTurnEndedPromise;
+  assertEqual(guestTurnEnded.playerId, hostPlayerId, "turn_end player mismatch");
+  const guestTurnStarted = await guestTurnStartedPromise;
+  assertEqual(
+    guestTurnStarted.playerId,
+    expectedSecondTurnPlayerId,
+    "turn_start next player mismatch"
   );
 
   const chaosAttack = createChaosAttack(runSuffix);
@@ -106,6 +175,10 @@ async function run() {
     hostPlayerNotification.message === playerNotification.message,
     "player notification message mismatch on host receive"
   );
+
+  if (assertBotTraffic) {
+    await waitForMessage(hostSocket, isBotPayload, "host bot websocket traffic receive");
+  }
 
   const heartbeat = await apiRequest(
     `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/heartbeat`,
@@ -315,6 +388,34 @@ function waitForMessage(socket, matcher, label) {
   });
 }
 
+function createSocketMessageBuffer(socket) {
+  const messages = [];
+  socket.addEventListener("message", (event) => {
+    const raw = toText(event.data);
+    if (!raw) return;
+    try {
+      messages.push(JSON.parse(raw));
+    } catch {
+      // Ignore malformed test payloads.
+    }
+  });
+  return messages;
+}
+
+async function waitForBufferedMessage(buffer, matcher, label) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < WS_TIMEOUT_MS) {
+    const index = buffer.findIndex((payload) => matcher(payload));
+    if (index >= 0) {
+      const [match] = buffer.splice(index, 1);
+      return match;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  throw new Error(`${label} timed out after ${WS_TIMEOUT_MS}ms`);
+}
+
 async function safeCloseSocket(socket) {
   if (!socket) return;
   if (socket.readyState >= 2) return;
@@ -394,6 +495,10 @@ function createPlayerNotification(suffix) {
   };
 }
 
+function isBotPayload(payload) {
+  return payload?.bot === true;
+}
+
 function toText(data) {
   if (typeof data === "string") return data;
   if (data instanceof ArrayBuffer) {
@@ -412,6 +517,12 @@ function stripTrailingSlash(value) {
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
+  }
+}
+
+function assertEqual(actual, expected, message) {
+  if (actual !== expected) {
+    throw new Error(`${message} (expected: ${expected}, actual: ${actual})`);
   }
 }
 

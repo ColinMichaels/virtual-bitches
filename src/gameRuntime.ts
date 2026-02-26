@@ -14,7 +14,7 @@ import { ProfileModal } from "./ui/profile.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
 import { GameState, Action, GameDifficulty } from "./engine/types.js";
-import { PointerEventTypes } from "@babylonjs/core";
+import { Color3, PointerEventTypes } from "@babylonjs/core";
 import { audioService } from "./services/audio.js";
 import { hapticsService } from "./services/haptics.js";
 import { settingsService } from "./services/settings.js";
@@ -33,13 +33,43 @@ import type { CameraAttackMessage } from "./chaos/types.js";
 import type { ParticleNetworkEvent } from "./services/particleService.js";
 import { playerDataSyncService } from "./services/playerDataSync.js";
 import { getLocalPlayerId } from "./services/playerIdentity.js";
-import { MultiplayerNetworkService } from "./multiplayer/networkService.js";
+import {
+  MultiplayerNetworkService,
+  type MultiplayerTurnEndMessage,
+  type MultiplayerTurnStartMessage,
+} from "./multiplayer/networkService.js";
 import { MultiplayerSessionService } from "./multiplayer/sessionService.js";
 import { environment } from "@env";
-import type { MultiplayerSessionRecord } from "./services/backendApi.js";
+import type {
+  MultiplayerSessionParticipant,
+  MultiplayerSessionRecord,
+} from "./services/backendApi.js";
 import { leaderboardService } from "./services/leaderboard.js";
+import {
+  buildClockwiseTurnPlan,
+  type MultiplayerTurnPlan,
+} from "./multiplayer/turnPlanner.js";
 
 const log = logger.create('Game');
+
+export type GamePlayMode = "solo" | "multiplayer";
+
+export interface MultiplayerBootstrapOptions {
+  roomCode?: string;
+  botCount?: number;
+}
+
+interface GameSessionBootstrapOptions {
+  playMode: GamePlayMode;
+  multiplayer?: MultiplayerBootstrapOptions;
+}
+
+interface SeatedMultiplayerParticipant {
+  playerId: string;
+  displayName: string;
+  seatIndex: number;
+  isBot: boolean;
+}
 
 function formatCameraAttackLabel(effectType: string): string {
   switch (effectType) {
@@ -80,12 +110,21 @@ class Game implements GameCallbacks {
   private inputController: InputController;
   private gameOverController: GameOverController;
   private readonly localPlayerId = getLocalPlayerId();
+  private readonly playMode: GamePlayMode;
+  private readonly multiplayerOptions: MultiplayerBootstrapOptions;
+  private multiplayerTurnPlan: MultiplayerTurnPlan | null = null;
+  private activeTurnPlayerId: string | null = null;
+  private participantSeatById = new Map<string, number>();
+  private participantLabelById = new Map<string, string>();
 
   private actionBtn: HTMLButtonElement;
   private deselectBtn: HTMLButtonElement;
   private undoBtn: HTMLButtonElement;
 
-  constructor() {
+  constructor(sessionBootstrap: GameSessionBootstrapOptions) {
+    this.playMode = sessionBootstrap.playMode;
+    this.multiplayerOptions = sessionBootstrap.multiplayer ?? {};
+
     // Initialize game state from URL or create new game
     this.state = GameFlowController.initializeGameState();
 
@@ -139,6 +178,16 @@ class Game implements GameCallbacks {
     document.addEventListener("auth:sessionExpired", () => {
       notificationService.show("Session expired. Please rejoin multiplayer.", "warning", 2600);
     });
+    document.addEventListener("multiplayer:turn:start", ((event: Event) => {
+      const detail = (event as CustomEvent<MultiplayerTurnStartMessage>).detail;
+      if (!detail?.playerId) return;
+      this.handleMultiplayerTurnStart(detail);
+    }) as EventListener);
+    document.addEventListener("multiplayer:turn:end", ((event: Event) => {
+      const detail = (event as CustomEvent<MultiplayerTurnEndMessage>).detail;
+      if (!detail) return;
+      this.handleMultiplayerTurnEnd(detail);
+    }) as EventListener);
 
     document.addEventListener("chaos:cameraAttack:sent", ((event: Event) => {
       const detail = (event as CustomEvent<{ message?: CameraAttackMessage }>).detail;
@@ -296,9 +345,25 @@ class Game implements GameCallbacks {
       rulesModal.show();
     });
 
-    // Handle player seat clicks (show multiplayer coming soon notification)
+    // Handle player seat clicks for multiplayer invites
     this.scene.setPlayerSeatClickHandler((seatIndex: number) => {
-      notificationService.show("Multiplayer Coming Soon!", "info", 3000);
+      const activeSession = this.multiplayerSessionService.getActiveSession();
+      if (activeSession) {
+        notificationService.show(
+          `Seat ${seatIndex + 1} is open. Invite others with room ${activeSession.roomCode}.`,
+          "info",
+          2600
+        );
+        void this.copySessionInviteLink(activeSession.sessionId);
+        audioService.playSfx("click");
+        return;
+      }
+
+      if (this.playMode === "multiplayer") {
+        notificationService.show("Starting multiplayer session...", "info", 2200);
+      } else {
+        notificationService.show("Start a Multiplayer game from the splash screen to fill seats.", "info", 3000);
+      }
       audioService.playSfx("click");
     });
 
@@ -402,22 +467,433 @@ class Game implements GameCallbacks {
     playerDataSyncService.start();
     void leaderboardService.flushPendingScores();
 
+    void this.bootstrapMultiplayerSession();
+  }
+
+  private async bootstrapMultiplayerSession(): Promise<void> {
     const query = new URLSearchParams(window.location.search);
-    const sessionId = query.get("session");
-    if (!sessionId) return;
+    const sessionIdFromUrl = query.get("session")?.trim();
+    if (sessionIdFromUrl) {
+      await this.joinMultiplayerSession(sessionIdFromUrl, true);
+      return;
+    }
 
+    if (!environment.features.multiplayer || this.playMode !== "multiplayer") {
+      return;
+    }
+
+    const createdSession = await this.multiplayerSessionService.createSession({
+      roomCode: this.multiplayerOptions.roomCode,
+      botCount: this.multiplayerOptions.botCount,
+    });
+    if (!createdSession) {
+      notificationService.show("Failed to create multiplayer session. Continuing in solo mode.", "warning", 2800);
+      return;
+    }
+
+    this.bindMultiplayerSession(createdSession, true);
+    const botCount = Math.max(0, Math.floor(this.multiplayerOptions.botCount ?? 0));
+    if (botCount > 0) {
+      notificationService.show(
+        `Multiplayer session ready (${createdSession.roomCode}) with ${botCount} bot${botCount === 1 ? "" : "s"}.`,
+        "success",
+        3200
+      );
+      return;
+    }
+
+    notificationService.show(
+      `Multiplayer session ready. Room code: ${createdSession.roomCode}`,
+      "success",
+      3200
+    );
+  }
+
+  private async joinMultiplayerSession(sessionId: string, fromInviteLink: boolean): Promise<void> {
     playerDataSyncService.setSessionId(sessionId);
-    void this.multiplayerSessionService.joinSession(sessionId).then((session) => {
-      if (!session) return;
+    const session = await this.multiplayerSessionService.joinSession(sessionId);
+    if (!session) {
+      notificationService.show("Unable to join multiplayer session.", "error", 2600);
+      return;
+    }
 
-      const sessionWsUrl = this.buildSessionWsUrl(session);
-      if (sessionWsUrl) {
-        this.setMultiplayerNetwork(sessionWsUrl);
-        log.info(`Rebound multiplayer network to session socket: ${session.sessionId}`);
+    this.bindMultiplayerSession(session, !fromInviteLink);
+    if (fromInviteLink) {
+      notificationService.show(`Joined multiplayer room ${session.roomCode}.`, "success", 2600);
+    }
+  }
+
+  private bindMultiplayerSession(
+    session: MultiplayerSessionRecord,
+    updateUrlSessionParam: boolean
+  ): void {
+    playerDataSyncService.setSessionId(session.sessionId);
+    this.applyMultiplayerSeatState(session);
+
+    const sessionWsUrl = this.buildSessionWsUrl(session);
+    if (sessionWsUrl) {
+      this.setMultiplayerNetwork(sessionWsUrl);
+      log.info(`Rebound multiplayer network to session socket: ${session.sessionId}`);
+    }
+
+    if (updateUrlSessionParam) {
+      this.updateSessionQueryParam(session.sessionId);
+    }
+
+    log.info(`Joined multiplayer session via API scaffold: ${session.sessionId}`);
+  }
+
+  private applyMultiplayerSeatState(session: MultiplayerSessionRecord): void {
+    const seatedParticipants = this.computeSeatedParticipants(session);
+    const participantBySeat = new Map<number, SeatedMultiplayerParticipant>();
+    this.participantSeatById.clear();
+    this.participantLabelById.clear();
+    seatedParticipants.forEach((participant) => {
+      participantBySeat.set(participant.seatIndex, participant);
+      const isCurrentPlayer = participant.playerId === this.localPlayerId;
+      this.participantSeatById.set(participant.playerId, participant.seatIndex);
+      this.participantLabelById.set(
+        participant.playerId,
+        this.formatSeatDisplayName(participant, isCurrentPlayer)
+      );
+    });
+
+    const seatCount = Math.max(1, this.scene.playerSeats.length || 8);
+    const currentSeatIndex = this.scene.currentPlayerSeat;
+
+    for (let seatIndex = 0; seatIndex < seatCount; seatIndex += 1) {
+      const participant = participantBySeat.get(seatIndex);
+      if (participant) {
+        const isCurrentPlayer = participant.playerId === this.localPlayerId;
+        this.scene.playerSeatRenderer.updateSeat(seatIndex, {
+          occupied: true,
+          isCurrentPlayer,
+          isBot: participant.isBot,
+          playerName: this.formatSeatDisplayName(participant, isCurrentPlayer),
+          avatarColor: this.resolveSeatColor(participant, isCurrentPlayer),
+        });
+        continue;
       }
 
-      log.info(`Joined multiplayer session via API scaffold: ${session.sessionId}`);
+      const isCurrentSeat = seatIndex === currentSeatIndex;
+      this.scene.playerSeatRenderer.updateSeat(seatIndex, {
+        occupied: isCurrentSeat,
+        isCurrentPlayer: isCurrentSeat,
+        isBot: false,
+        playerName: isCurrentSeat ? "YOU" : "Empty",
+        avatarColor: isCurrentSeat ? new Color3(0.24, 0.84, 0.36) : undefined,
+      });
+    }
+
+    this.multiplayerTurnPlan = buildClockwiseTurnPlan(
+      seatedParticipants.map((participant) => ({
+        playerId: participant.playerId,
+        displayName: this.formatSeatDisplayName(
+          participant,
+          participant.playerId === this.localPlayerId
+        ),
+        seatIndex: participant.seatIndex,
+        isBot: participant.isBot,
+      })),
+      currentSeatIndex
+    );
+
+    if (this.multiplayerTurnPlan.order.length > 1) {
+      const preview = this.buildTurnPlanPreview(this.multiplayerTurnPlan);
+      log.info(`Clockwise turn order planned (${session.sessionId}): ${preview}`);
+      notificationService.show(`Turn order (clockwise): ${preview}`, "info", 3400);
+    }
+
+    this.applyTurnStateFromSession(session);
+  }
+
+  private computeSeatedParticipants(session: MultiplayerSessionRecord): SeatedMultiplayerParticipant[] {
+    const normalizedParticipants = this.normalizeSessionParticipants(session.participants);
+    const seatCount = Math.max(2, this.scene.playerSeats.length || 8);
+    const currentSeatIndex = this.scene.currentPlayerSeat;
+    const availableSeats: number[] = [];
+
+    for (let offset = 1; offset < seatCount; offset += 1) {
+      availableSeats.push((currentSeatIndex + offset) % seatCount);
+    }
+
+    const localParticipant = normalizedParticipants.find(
+      (participant) => participant.playerId === this.localPlayerId
+    );
+
+    const seated: SeatedMultiplayerParticipant[] = [];
+    seated.push({
+      playerId: this.localPlayerId,
+      displayName: localParticipant?.displayName ?? "You",
+      seatIndex: currentSeatIndex,
+      isBot: false,
     });
+
+    const others = normalizedParticipants.filter(
+      (participant) => participant.playerId !== this.localPlayerId
+    );
+
+    others.slice(0, availableSeats.length).forEach((participant, index) => {
+      seated.push({
+        playerId: participant.playerId,
+        displayName: participant.displayName,
+        seatIndex: availableSeats[index],
+        isBot: participant.isBot,
+      });
+    });
+
+    return seated;
+  }
+
+  private normalizeSessionParticipants(
+    participants: MultiplayerSessionParticipant[] | undefined
+  ): Array<{ playerId: string; displayName: string; isBot: boolean; joinedAt: number }> {
+    const seen = new Map<string, { playerId: string; displayName: string; isBot: boolean; joinedAt: number }>();
+    const list = Array.isArray(participants) ? participants : [];
+
+    list.forEach((participant) => {
+      if (!participant || typeof participant.playerId !== "string") {
+        return;
+      }
+
+      const playerId = participant.playerId.trim();
+      if (!playerId) {
+        return;
+      }
+
+      const displayName =
+        typeof participant.displayName === "string" && participant.displayName.trim().length > 0
+          ? participant.displayName.trim()
+          : this.buildDefaultParticipantName(playerId, Boolean(participant.isBot));
+
+      seen.set(playerId, {
+        playerId,
+        displayName,
+        isBot: Boolean(participant.isBot),
+        joinedAt:
+          typeof participant.joinedAt === "number" && Number.isFinite(participant.joinedAt)
+            ? participant.joinedAt
+            : 0,
+      });
+    });
+
+    if (!seen.has(this.localPlayerId)) {
+      seen.set(this.localPlayerId, {
+        playerId: this.localPlayerId,
+        displayName: "You",
+        isBot: false,
+        joinedAt: -1,
+      });
+    }
+
+    return Array.from(seen.values()).sort((left, right) => {
+      if (left.playerId === this.localPlayerId && right.playerId !== this.localPlayerId) {
+        return -1;
+      }
+      if (right.playerId === this.localPlayerId && left.playerId !== this.localPlayerId) {
+        return 1;
+      }
+
+      const joinedDelta = left.joinedAt - right.joinedAt;
+      if (joinedDelta !== 0) {
+        return joinedDelta;
+      }
+
+      return left.playerId.localeCompare(right.playerId);
+    });
+  }
+
+  private buildDefaultParticipantName(playerId: string, isBot: boolean): string {
+    if (isBot) {
+      return `Bot ${playerId.slice(-3).toUpperCase()}`;
+    }
+    return `Player ${playerId.slice(0, 4)}`;
+  }
+
+  private formatSeatDisplayName(
+    participant: SeatedMultiplayerParticipant,
+    isCurrentPlayer: boolean
+  ): string {
+    if (isCurrentPlayer) {
+      return "YOU";
+    }
+
+    const baseName = participant.displayName.trim() || this.buildDefaultParticipantName(participant.playerId, participant.isBot);
+    const label = participant.isBot ? `BOT ${baseName}` : baseName;
+    return label.slice(0, 20);
+  }
+
+  private resolveSeatColor(
+    participant: SeatedMultiplayerParticipant,
+    isCurrentPlayer: boolean
+  ): Color3 {
+    if (isCurrentPlayer) {
+      return new Color3(0.24, 0.84, 0.36);
+    }
+    if (participant.isBot) {
+      return new Color3(0.84, 0.52, 0.24);
+    }
+    return new Color3(0.36, 0.62, 0.9);
+  }
+
+  private buildTurnPlanPreview(plan: MultiplayerTurnPlan): string {
+    const labels = plan.order.map((participant) => participant.displayName);
+    if (labels.length <= 5) {
+      return labels.join(" -> ");
+    }
+    return `${labels.slice(0, 5).join(" -> ")} -> ...`;
+  }
+
+  private applyTurnStateFromSession(session: MultiplayerSessionRecord): void {
+    const serverActiveTurnPlayerId = session.turnState?.activeTurnPlayerId ?? null;
+    if (serverActiveTurnPlayerId) {
+      this.activeTurnPlayerId = serverActiveTurnPlayerId;
+      this.updateTurnSeatHighlight(serverActiveTurnPlayerId);
+      return;
+    }
+
+    const fallbackActive =
+      this.multiplayerTurnPlan?.order[0]?.playerId ??
+      (this.playMode === "multiplayer" ? this.localPlayerId : null);
+    this.activeTurnPlayerId = fallbackActive;
+    this.updateTurnSeatHighlight(fallbackActive);
+  }
+
+  private updateTurnSeatHighlight(activePlayerId: string | null): void {
+    this.scene.playerSeatRenderer.clearHighlights();
+    if (!activePlayerId) {
+      this.scene.playerSeatRenderer.highlightSeat(this.scene.currentPlayerSeat);
+      return;
+    }
+
+    const seatIndex = this.participantSeatById.get(activePlayerId);
+    if (typeof seatIndex === "number") {
+      this.scene.playerSeatRenderer.highlightSeat(seatIndex);
+      return;
+    }
+
+    this.scene.playerSeatRenderer.highlightSeat(this.scene.currentPlayerSeat);
+  }
+
+  private getParticipantLabel(playerId: string): string {
+    if (playerId === this.localPlayerId) {
+      return "YOU";
+    }
+    const label = this.participantLabelById.get(playerId);
+    if (label) {
+      return label;
+    }
+    return `Player ${playerId.slice(0, 4)}`;
+  }
+
+  private handleMultiplayerTurnStart(message: MultiplayerTurnStartMessage): void {
+    this.activeTurnPlayerId = message.playerId;
+    this.updateTurnSeatHighlight(message.playerId);
+
+    if (message.playerId === this.localPlayerId) {
+      const suffix =
+        typeof message.round === "number" && Number.isFinite(message.round)
+          ? ` (Round ${Math.floor(message.round)})`
+          : "";
+      notificationService.show(`Your turn${suffix}`, "success", 1800);
+      return;
+    }
+
+    notificationService.show(
+      `${this.getParticipantLabel(message.playerId)} turn`,
+      "info",
+      1600
+    );
+  }
+
+  private handleMultiplayerTurnEnd(message: MultiplayerTurnEndMessage): void {
+    if (typeof message.playerId !== "string" || !message.playerId) {
+      return;
+    }
+
+    if (message.playerId === this.localPlayerId) {
+      notificationService.show("Turn ended", "info", 1200);
+      return;
+    }
+
+    notificationService.show(
+      `${this.getParticipantLabel(message.playerId)} ended turn`,
+      "info",
+      1200
+    );
+  }
+
+  private isMultiplayerTurnEnforced(): boolean {
+    return this.playMode === "multiplayer" && environment.features.multiplayer;
+  }
+
+  private canLocalPlayerTakeTurnAction(): boolean {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return true;
+    }
+
+    if (!this.activeTurnPlayerId) {
+      notificationService.show("Waiting for turn sync...", "warning", 1600);
+      return false;
+    }
+
+    if (!this.isLocalPlayersTurn()) {
+      notificationService.show(
+        `Waiting for ${this.getParticipantLabel(this.activeTurnPlayerId)} turn`,
+        "warning",
+        1800
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  private isLocalPlayersTurn(): boolean {
+    return this.activeTurnPlayerId === this.localPlayerId;
+  }
+
+  private emitTurnEnd(): void {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return;
+    }
+
+    if (!this.multiplayerNetwork?.isConnected()) {
+      notificationService.show("Unable to end turn while disconnected.", "warning", 1800);
+      return;
+    }
+
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    const sent = this.multiplayerNetwork.sendTurnEnd({
+      type: "turn_end",
+      sessionId: activeSession?.sessionId,
+      playerId: this.localPlayerId,
+      timestamp: Date.now(),
+    });
+    if (!sent) {
+      notificationService.show("Failed to signal turn end.", "warning", 1800);
+    }
+  }
+
+  private updateSessionQueryParam(sessionId: string): void {
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set("session", sessionId);
+    window.history.replaceState(window.history.state, "", currentUrl.toString());
+  }
+
+  private async copySessionInviteLink(sessionId: string): Promise<void> {
+    if (typeof window === "undefined" || !window.navigator?.clipboard?.writeText) {
+      return;
+    }
+
+    try {
+      const inviteUrl = new URL(window.location.href);
+      inviteUrl.searchParams.set("session", sessionId);
+      await window.navigator.clipboard.writeText(inviteUrl.toString());
+      notificationService.show("Invite link copied to clipboard.", "info", 1600);
+    } catch {
+      // Clipboard APIs may be unavailable in some environments.
+    }
   }
 
   // GameCallbacks implementation
@@ -656,6 +1132,7 @@ class Game implements GameCallbacks {
 
   private handleRoll(): void {
     if (this.paused) return;
+    if (!this.canLocalPlayerTakeTurnAction()) return;
 
     // Invalid action reminder
     if (this.state.status === "ROLLED") {
@@ -690,6 +1167,7 @@ class Game implements GameCallbacks {
 
   private handleScore(): void {
     if (this.paused) return;
+    if (!this.canLocalPlayerTakeTurnAction()) return;
 
     if (this.animating || this.state.status !== "ROLLED" || this.state.selected.size === 0) {
       return;
@@ -721,6 +1199,7 @@ class Game implements GameCallbacks {
     });
 
     this.dispatch({ t: "SCORE_SELECTED" });
+    this.emitTurnEnd();
 
     // Notify tutorial of score action
     if (tutorialModal.isActive()) {
@@ -757,11 +1236,16 @@ class Game implements GameCallbacks {
   private updateUI(): void {
     this.hud.update(this.state);
     this.diceRow.update(this.state);
+    const isTurnLocked =
+      this.isMultiplayerTurnEnforced() &&
+      (!this.activeTurnPlayerId || !this.isLocalPlayersTurn());
 
     // Update multipurpose action button
     if (this.state.status === "READY") {
-      this.actionBtn.textContent = "Roll";
-      this.actionBtn.disabled = this.animating || this.paused;
+      this.actionBtn.textContent = isTurnLocked
+        ? `Waiting: ${this.activeTurnPlayerId ? this.getParticipantLabel(this.activeTurnPlayerId) : "Sync"}`
+        : "Roll";
+      this.actionBtn.disabled = this.animating || this.paused || isTurnLocked;
       this.actionBtn.className = "primary";
       this.deselectBtn.style.display = "none";
     } else if (this.state.status === "ROLLED") {
@@ -770,12 +1254,16 @@ class Game implements GameCallbacks {
         // Calculate points for button text
         const scoredDice = this.state.dice.filter((d) => this.state.selected.has(d.id));
         const points = scoredDice.reduce((sum, die) => sum + (die.def.sides - die.value), 0);
-        this.actionBtn.textContent = `Score +${points} (Space)`;
-        this.actionBtn.disabled = this.animating || this.paused;
+        this.actionBtn.textContent = isTurnLocked
+          ? `Waiting: ${this.activeTurnPlayerId ? this.getParticipantLabel(this.activeTurnPlayerId) : "Sync"}`
+          : `Score +${points} (Space)`;
+        this.actionBtn.disabled = this.animating || this.paused || isTurnLocked;
         this.actionBtn.className = "primary";
-        this.deselectBtn.style.display = "inline-block";
+        this.deselectBtn.style.display = isTurnLocked ? "none" : "inline-block";
       } else {
-        this.actionBtn.textContent = "Select Dice to Score";
+        this.actionBtn.textContent = isTurnLocked
+          ? `Waiting: ${this.activeTurnPlayerId ? this.getParticipantLabel(this.activeTurnPlayerId) : "Sync"}`
+          : "Select Dice to Score";
         this.actionBtn.disabled = true;
         this.actionBtn.className = "";
         this.deselectBtn.style.display = "none";
@@ -809,6 +1297,8 @@ export interface GameRuntimeBootstrapOptions {
   rulesModal: RulesModal;
   tutorialModal: TutorialModal;
   profileModal: ProfileModal;
+  playMode: GamePlayMode;
+  multiplayer?: MultiplayerBootstrapOptions;
 }
 
 export function startGameRuntime(options: GameRuntimeBootstrapOptions): void {
@@ -822,5 +1312,8 @@ export function startGameRuntime(options: GameRuntimeBootstrapOptions): void {
     return;
   }
 
-  gameInstance = new Game();
+  gameInstance = new Game({
+    playMode: options.playMode,
+    multiplayer: options.multiplayer,
+  });
 }

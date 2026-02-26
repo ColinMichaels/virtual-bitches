@@ -31,6 +31,13 @@ const MAX_LEADERBOARD_ENTRIES = 200;
 const MAX_STORED_GAME_LOGS = 10000;
 const MAX_WS_MESSAGE_BYTES = 16 * 1024;
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+const MAX_MULTIPLAYER_BOTS = 4;
+const BOT_TICK_MIN_MS = 2600;
+const BOT_TICK_MAX_MS = 5200;
+const BOT_NAMES = ["Byte Bessie", "Lag Larry", "Packet Patty", "Dicebot Dave"];
+const BOT_CAMERA_EFFECTS = ["shake", "spin", "zoom", "drunk"];
+const BOT_TURN_ADVANCE_MIN_MS = 1600;
+const BOT_TURN_ADVANCE_MAX_MS = 3200;
 
 const WS_CLOSE_CODES = {
   normal: 1000,
@@ -46,13 +53,14 @@ const firebaseTokenCache = new Map();
 let storeAdapter = null;
 let firebaseAdminAuthClientPromise = null;
 
-await bootstrap();
-
 const server = createServer((req, res) => {
   void handleRequest(req, res);
 });
 const wsSessionClients = new Map();
 const wsClientMeta = new WeakMap();
+const botSessionLoops = new Map();
+
+await bootstrap();
 
 server.on("upgrade", (req, socket) => {
   try {
@@ -101,6 +109,9 @@ async function bootstrap() {
   store = await storeAdapter.load();
   log.info(`Using ${storeAdapter.name} store backend`);
   log.info(`Firebase auth verifier mode: ${FIREBASE_AUTH_MODE}`);
+  Object.keys(store.multiplayerSessions).forEach((sessionId) => {
+    reconcileBotLoop(sessionId);
+  });
 }
 
 async function handleRequest(req, res) {
@@ -496,25 +507,42 @@ async function handleCreateSession(req, res) {
 
   const sessionId = randomUUID();
   const roomCode = normalizeRoomCode(body?.roomCode);
+  const botCount = normalizeBotCount(body?.botCount);
   const now = Date.now();
   const expiresAt = now + MULTIPLAYER_SESSION_TTL_MS;
+  const participants = {
+    [playerId]: {
+      playerId,
+      displayName: typeof body?.displayName === "string" ? body.displayName : undefined,
+      joinedAt: now,
+      lastHeartbeatAt: now,
+    },
+  };
+
+  for (let index = 0; index < botCount; index += 1) {
+    const botId = `bot-${sessionId.slice(0, 6)}-${index + 1}`;
+    participants[botId] = {
+      playerId: botId,
+      displayName: BOT_NAMES[index % BOT_NAMES.length],
+      joinedAt: now,
+      lastHeartbeatAt: now,
+      isBot: true,
+    };
+  }
+
   const session = {
     sessionId,
     roomCode,
     wsUrl: WS_BASE_URL,
     createdAt: now,
     expiresAt,
-    participants: {
-      [playerId]: {
-        playerId,
-        displayName: typeof body?.displayName === "string" ? body.displayName : undefined,
-        joinedAt: now,
-        lastHeartbeatAt: now,
-      },
-    },
+    participants,
+    turnState: null,
   };
 
   store.multiplayerSessions[sessionId] = session;
+  ensureSessionTurnState(session);
+  reconcileBotLoop(sessionId);
   const auth = issueAuthTokenBundle(playerId, sessionId);
   const response = buildSessionResponse(session, playerId, auth);
   await persistStore();
@@ -542,6 +570,8 @@ async function handleJoinSession(req, res, pathname) {
     joinedAt: session.participants[playerId]?.joinedAt ?? Date.now(),
     lastHeartbeatAt: Date.now(),
   };
+  ensureSessionTurnState(session);
+  reconcileBotLoop(sessionId);
 
   const auth = issueAuthTokenBundle(playerId, sessionId);
   const response = buildSessionResponse(session, playerId, auth);
@@ -597,8 +627,16 @@ async function handleLeaveSession(req, res, pathname) {
     WS_CLOSE_CODES.normal,
     "left_session"
   );
-  if (Object.keys(session.participants).length === 0) {
+  ensureSessionTurnState(session);
+  if (getHumanParticipantCount(session) === 0) {
     expireSession(sessionId, "session_empty");
+  } else {
+    reconcileBotLoop(sessionId);
+    const turnStart = buildTurnStartMessage(session, { source: "reassign" });
+    if (turnStart) {
+      broadcastToSession(sessionId, JSON.stringify(turnStart), null);
+    }
+    scheduleBotTurnIfNeeded(sessionId);
   }
 
   await persistStore();
@@ -1066,14 +1104,229 @@ function hashToken(value) {
 }
 
 function buildSessionResponse(session, playerId, auth) {
+  const turnState = ensureSessionTurnState(session);
   return {
     sessionId: session.sessionId,
     roomCode: session.roomCode,
     wsUrl: session.wsUrl,
     playerToken: auth.accessToken,
     auth,
+    participants: serializeSessionParticipants(session),
+    turnState: serializeTurnState(turnState),
     createdAt: session.createdAt,
     expiresAt: session.expiresAt,
+  };
+}
+
+function serializeTurnState(turnState) {
+  if (!turnState) {
+    return null;
+  }
+
+  return {
+    order: Array.isArray(turnState.order) ? [...turnState.order] : [],
+    activeTurnPlayerId:
+      typeof turnState.activeTurnPlayerId === "string"
+        ? turnState.activeTurnPlayerId
+        : null,
+    round: Number.isFinite(turnState.round) ? Number(turnState.round) : 1,
+    turnNumber: Number.isFinite(turnState.turnNumber)
+      ? Number(turnState.turnNumber)
+      : 1,
+    updatedAt:
+      Number.isFinite(turnState.updatedAt) ? Number(turnState.updatedAt) : Date.now(),
+  };
+}
+
+function serializeSessionParticipants(session) {
+  const participants = Object.values(session?.participants ?? {})
+    .filter((participant) => participant && typeof participant.playerId === "string")
+    .map((participant) => ({
+      playerId: participant.playerId,
+      displayName:
+        typeof participant.displayName === "string" ? participant.displayName : undefined,
+      joinedAt:
+        typeof participant.joinedAt === "number" ? participant.joinedAt : Date.now(),
+      lastHeartbeatAt:
+        typeof participant.lastHeartbeatAt === "number"
+          ? participant.lastHeartbeatAt
+          : Date.now(),
+      isBot: Boolean(participant.isBot),
+    }))
+    .sort((left, right) => {
+      const joinedDelta = left.joinedAt - right.joinedAt;
+      if (joinedDelta !== 0) {
+        return joinedDelta;
+      }
+      return left.playerId.localeCompare(right.playerId);
+    });
+
+  return participants;
+}
+
+function serializeParticipantsInJoinOrder(session) {
+  return Object.values(session?.participants ?? {})
+    .filter((participant) => participant && typeof participant.playerId === "string")
+    .map((participant) => ({
+      playerId: participant.playerId,
+      joinedAt:
+        typeof participant.joinedAt === "number" && Number.isFinite(participant.joinedAt)
+          ? participant.joinedAt
+          : 0,
+    }))
+    .sort((left, right) => {
+      const joinedDelta = left.joinedAt - right.joinedAt;
+      if (joinedDelta !== 0) {
+        return joinedDelta;
+      }
+      return left.playerId.localeCompare(right.playerId);
+    });
+}
+
+function ensureSessionTurnState(session) {
+  if (!session) {
+    return null;
+  }
+
+  const orderedParticipants = serializeParticipantsInJoinOrder(session);
+  const participantIds = orderedParticipants.map((participant) => participant.playerId);
+  const participantIdSet = new Set(participantIds);
+  const currentState = session.turnState ?? null;
+  const nextOrder = [];
+
+  if (Array.isArray(currentState?.order)) {
+    currentState.order.forEach((playerId) => {
+      if (participantIdSet.has(playerId) && !nextOrder.includes(playerId)) {
+        nextOrder.push(playerId);
+      }
+    });
+  }
+
+  participantIds.forEach((playerId) => {
+    if (!nextOrder.includes(playerId)) {
+      nextOrder.push(playerId);
+    }
+  });
+
+  const now = Date.now();
+  let activeTurnPlayerId =
+    typeof currentState?.activeTurnPlayerId === "string"
+      ? currentState.activeTurnPlayerId
+      : null;
+  if (!activeTurnPlayerId || !nextOrder.includes(activeTurnPlayerId)) {
+    activeTurnPlayerId = nextOrder[0] ?? null;
+  }
+
+  const round =
+    typeof currentState?.round === "number" && Number.isFinite(currentState.round) && currentState.round > 0
+      ? Math.floor(currentState.round)
+      : 1;
+  const turnNumber =
+    typeof currentState?.turnNumber === "number" &&
+    Number.isFinite(currentState.turnNumber) &&
+    currentState.turnNumber > 0
+      ? Math.floor(currentState.turnNumber)
+      : 1;
+
+  session.turnState = {
+    order: nextOrder,
+    activeTurnPlayerId,
+    round,
+    turnNumber,
+    updatedAt: now,
+  };
+
+  if (!session.turnState.activeTurnPlayerId && session.turnState.order.length > 0) {
+    session.turnState.activeTurnPlayerId = session.turnState.order[0];
+  }
+
+  return session.turnState;
+}
+
+function buildTurnStartMessage(session, options = {}) {
+  const turnState = ensureSessionTurnState(session);
+  if (!turnState?.activeTurnPlayerId) {
+    return null;
+  }
+
+  return {
+    type: "turn_start",
+    sessionId: session.sessionId,
+    playerId: turnState.activeTurnPlayerId,
+    round: turnState.round,
+    turnNumber: turnState.turnNumber,
+    timestamp: Date.now(),
+    order: [...turnState.order],
+    source: options.source ?? "server",
+  };
+}
+
+function buildTurnEndMessage(session, playerId, options = {}) {
+  const turnState = ensureSessionTurnState(session);
+  if (!turnState) {
+    return null;
+  }
+
+  return {
+    type: "turn_end",
+    sessionId: session.sessionId,
+    playerId,
+    round: turnState.round,
+    turnNumber: turnState.turnNumber,
+    timestamp: Date.now(),
+    source: options.source ?? "player",
+  };
+}
+
+function advanceSessionTurn(session, endedByPlayerId, options = {}) {
+  const turnState = ensureSessionTurnState(session);
+  if (!turnState || turnState.order.length === 0 || !turnState.activeTurnPlayerId) {
+    return null;
+  }
+
+  if (turnState.activeTurnPlayerId !== endedByPlayerId) {
+    return null;
+  }
+
+  const currentIndex = turnState.order.indexOf(endedByPlayerId);
+  if (currentIndex < 0) {
+    return null;
+  }
+
+  const timestamp = Date.now();
+  const turnEnd = {
+    type: "turn_end",
+    sessionId: session.sessionId,
+    playerId: endedByPlayerId,
+    round: turnState.round,
+    turnNumber: turnState.turnNumber,
+    timestamp,
+    source: options.source ?? "player",
+  };
+
+  const nextIndex = (currentIndex + 1) % turnState.order.length;
+  const wrapped = nextIndex === 0;
+  turnState.activeTurnPlayerId = turnState.order[nextIndex];
+  turnState.turnNumber = Math.max(1, Math.floor(turnState.turnNumber) + 1);
+  if (wrapped) {
+    turnState.round = Math.max(1, Math.floor(turnState.round) + 1);
+  }
+  turnState.updatedAt = timestamp;
+
+  const turnStart = {
+    type: "turn_start",
+    sessionId: session.sessionId,
+    playerId: turnState.activeTurnPlayerId,
+    round: turnState.round,
+    turnNumber: turnState.turnNumber,
+    timestamp,
+    order: [...turnState.order],
+    source: options.source ?? "player",
+  };
+
+  return {
+    turnEnd,
+    turnStart,
   };
 }
 
@@ -1082,6 +1335,256 @@ function normalizeRoomCode(value) {
     return value.trim().toUpperCase().slice(0, 8);
   }
   return randomToken().slice(0, 6).toUpperCase();
+}
+
+function normalizeBotCount(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(MAX_MULTIPLAYER_BOTS, Math.floor(parsed)));
+}
+
+function isBotParticipant(participant) {
+  return Boolean(participant?.isBot);
+}
+
+function getHumanParticipantCount(session) {
+  if (!session?.participants) {
+    return 0;
+  }
+  return Object.values(session.participants).filter((participant) => participant && !isBotParticipant(participant))
+    .length;
+}
+
+function getBotParticipants(session) {
+  if (!session?.participants) {
+    return [];
+  }
+  return Object.values(session.participants).filter((participant) => participant && isBotParticipant(participant));
+}
+
+function reconcileBotLoop(sessionId) {
+  const session = store.multiplayerSessions[sessionId];
+  if (!session) {
+    stopBotLoop(sessionId);
+    return;
+  }
+
+  ensureSessionTurnState(session);
+
+  if (getBotParticipants(session).length === 0) {
+    stopBotLoop(sessionId);
+    return;
+  }
+
+  if (botSessionLoops.has(sessionId)) {
+    return;
+  }
+
+  botSessionLoops.set(sessionId, {
+    timer: null,
+    turnTimer: null,
+  });
+  scheduleNextBotTick(sessionId);
+  scheduleBotTurnIfNeeded(sessionId);
+}
+
+function stopBotLoop(sessionId) {
+  const existing = botSessionLoops.get(sessionId);
+  if (!existing) {
+    return;
+  }
+  if (existing.timer) {
+    clearTimeout(existing.timer);
+  }
+  if (existing.turnTimer) {
+    clearTimeout(existing.turnTimer);
+  }
+  botSessionLoops.delete(sessionId);
+}
+
+function scheduleNextBotTick(sessionId) {
+  const loop = botSessionLoops.get(sessionId);
+  if (!loop) {
+    return;
+  }
+
+  const session = store.multiplayerSessions[sessionId];
+  if (!session) {
+    stopBotLoop(sessionId);
+    return;
+  }
+
+  const delay = BOT_TICK_MIN_MS + Math.floor(Math.random() * (BOT_TICK_MAX_MS - BOT_TICK_MIN_MS + 1));
+  loop.timer = setTimeout(() => {
+    loop.timer = null;
+    dispatchBotMessage(sessionId);
+    scheduleNextBotTick(sessionId);
+  }, delay);
+}
+
+function dispatchBotMessage(sessionId) {
+  const session = store.multiplayerSessions[sessionId];
+  if (!session) {
+    stopBotLoop(sessionId);
+    return;
+  }
+
+  const bots = getBotParticipants(session);
+  if (bots.length === 0) {
+    stopBotLoop(sessionId);
+    return;
+  }
+
+  const humans = Object.values(session.participants).filter(
+    (participant) => participant && !isBotParticipant(participant)
+  );
+  if (humans.length === 0) {
+    return;
+  }
+
+  const connectedHumans = humans.filter((participant) =>
+    isSessionParticipantConnected(sessionId, participant.playerId)
+  );
+  if (connectedHumans.length === 0) {
+    return;
+  }
+
+  const actor = bots[Math.floor(Math.random() * bots.length)];
+  const target = connectedHumans[Math.floor(Math.random() * connectedHumans.length)];
+  const payload = buildBotSocketPayload(actor, target, connectedHumans.length);
+  if (!payload) {
+    return;
+  }
+
+  broadcastToSession(sessionId, JSON.stringify(payload), null);
+}
+
+function scheduleBotTurnIfNeeded(sessionId) {
+  const loop = botSessionLoops.get(sessionId);
+  const session = store.multiplayerSessions[sessionId];
+  if (!loop || !session) {
+    return;
+  }
+
+  if (loop.turnTimer) {
+    clearTimeout(loop.turnTimer);
+    loop.turnTimer = null;
+  }
+
+  const turnState = ensureSessionTurnState(session);
+  const activePlayerId = turnState?.activeTurnPlayerId;
+  if (!activePlayerId) {
+    return;
+  }
+
+  const activeParticipant = session.participants[activePlayerId];
+  if (!isBotParticipant(activeParticipant)) {
+    return;
+  }
+
+  const hasConnectedHuman = Object.values(session.participants).some(
+    (participant) =>
+      participant &&
+      !isBotParticipant(participant) &&
+      isSessionParticipantConnected(sessionId, participant.playerId)
+  );
+  if (!hasConnectedHuman) {
+    return;
+  }
+
+  const delayMs =
+    BOT_TURN_ADVANCE_MIN_MS +
+    Math.floor(Math.random() * (BOT_TURN_ADVANCE_MAX_MS - BOT_TURN_ADVANCE_MIN_MS + 1));
+  loop.turnTimer = setTimeout(() => {
+    loop.turnTimer = null;
+    const latestSession = store.multiplayerSessions[sessionId];
+    if (!latestSession) {
+      return;
+    }
+    const advanced = advanceSessionTurn(latestSession, activePlayerId, {
+      source: "bot_auto",
+    });
+    if (!advanced) {
+      return;
+    }
+
+    broadcastToSession(sessionId, JSON.stringify(advanced.turnEnd), null);
+    broadcastToSession(sessionId, JSON.stringify(advanced.turnStart), null);
+    persistStore().catch((error) => {
+      log.warn("Failed to persist session after bot turn advance", error);
+    });
+    scheduleBotTurnIfNeeded(sessionId);
+  }, delayMs);
+}
+
+function isSessionParticipantConnected(sessionId, playerId) {
+  const clients = wsSessionClients.get(sessionId);
+  if (!clients || clients.size === 0) {
+    return false;
+  }
+
+  for (const client of clients) {
+    if (!client || client.playerId !== playerId || client.closed || client.socket.destroyed) {
+      continue;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+function buildBotSocketPayload(actor, target, connectedHumanCount) {
+  if (!actor || !target) {
+    return null;
+  }
+
+  const now = Date.now();
+  const actorName = actor.displayName || actor.playerId;
+  const roll = Math.random();
+
+  if (roll < 0.55) {
+    return {
+      type: "player_notification",
+      bot: true,
+      id: randomUUID(),
+      title: actorName,
+      message: `${actorName} cheers from the sidelines. ${connectedHumanCount} player${connectedHumanCount === 1 ? "" : "s"} connected.`,
+      severity: "info",
+      targetPlayerId: target.playerId,
+      timestamp: now,
+    };
+  }
+
+  if (roll < 0.82) {
+    return {
+      type: "game_update",
+      bot: true,
+      id: randomUUID(),
+      title: `${actorName} update`,
+      content: `${actorName} is watching your turn queue. Keep the score low.`,
+      date: new Date(now).toISOString(),
+      version: "bot",
+      updateType: "announcement",
+      timestamp: now,
+    };
+  }
+
+  const effectType = BOT_CAMERA_EFFECTS[Math.floor(Math.random() * BOT_CAMERA_EFFECTS.length)];
+  return {
+    type: "chaos_attack",
+    bot: true,
+    id: randomUUID(),
+    attackType: "camera_effect",
+    sourceId: actor.playerId,
+    targetId: target.playerId,
+    abilityId: `bot-${randomUUID().slice(0, 8)}`,
+    effectType,
+    duration: 1200 + Math.floor(Math.random() * 1600),
+    level: 1,
+    timestamp: now,
+  };
 }
 
 function parseLeaderboardPayload(body) {
@@ -1350,6 +1853,15 @@ function handleSocketConnection(socket, auth) {
   registerSocketClient(client, client.sessionId);
   log.info(`WebSocket connected: session=${client.sessionId} player=${client.playerId}`);
 
+  const session = store.multiplayerSessions[client.sessionId];
+  if (session) {
+    const turnStart = buildTurnStartMessage(session, { source: "sync" });
+    if (turnStart) {
+      sendSocketPayload(client, turnStart);
+    }
+    scheduleBotTurnIfNeeded(client.sessionId);
+  }
+
   const msUntilExpiry = Math.max(0, auth.tokenExpiresAt - Date.now());
   client.tokenExpiryTimer = setTimeout(() => {
     sendSocketError(client, "session_expired", "access_token_expired");
@@ -1543,6 +2055,11 @@ function handleSocketMessage(client, rawMessage) {
     return;
   }
 
+  if (payload.type === "turn_end") {
+    handleTurnEndMessage(client, session);
+    return;
+  }
+
   session.participants[client.playerId].lastHeartbeatAt = Date.now();
   broadcastToSession(client.sessionId, rawMessage, client);
 }
@@ -1567,7 +2084,47 @@ function isSupportedSocketPayload(payload) {
       payload.message.trim().length > 0
     );
   }
+  if (messageType === "turn_end") {
+    return true;
+  }
   return false;
+}
+
+function handleTurnEndMessage(client, session) {
+  session.participants[client.playerId].lastHeartbeatAt = Date.now();
+  const turnState = ensureSessionTurnState(session);
+  log.info(
+    `Turn end request: session=${client.sessionId} player=${client.playerId} active=${turnState?.activeTurnPlayerId ?? "n/a"} order=${Array.isArray(turnState?.order) ? turnState.order.join(",") : "n/a"}`
+  );
+  if (!turnState?.activeTurnPlayerId) {
+    sendSocketError(client, "turn_unavailable", "turn_unavailable");
+    return;
+  }
+
+  if (turnState.activeTurnPlayerId !== client.playerId) {
+    sendSocketError(client, "turn_not_active", "not_your_turn");
+    const syncMessage = buildTurnStartMessage(session, { source: "sync" });
+    if (syncMessage) {
+      sendSocketPayload(client, syncMessage);
+    }
+    return;
+  }
+
+  const advanced = advanceSessionTurn(session, client.playerId, { source: "player" });
+  if (!advanced) {
+    sendSocketError(client, "turn_advance_failed", "turn_advance_failed");
+    return;
+  }
+  log.info(
+    `Turn advanced: session=${client.sessionId} endedBy=${advanced.turnEnd.playerId} next=${advanced.turnStart.playerId} round=${advanced.turnStart.round} turn=${advanced.turnStart.turnNumber}`
+  );
+
+  broadcastToSession(client.sessionId, JSON.stringify(advanced.turnEnd), null);
+  broadcastToSession(client.sessionId, JSON.stringify(advanced.turnStart), null);
+  persistStore().catch((error) => {
+    log.warn("Failed to persist session after turn advance", error);
+  });
+  scheduleBotTurnIfNeeded(client.sessionId);
 }
 
 function registerSocketClient(client, sessionId) {
@@ -1610,6 +2167,7 @@ function disconnectPlayerSockets(sessionId, playerId, closeCode, reason) {
 }
 
 function expireSession(sessionId, reason) {
+  stopBotLoop(sessionId);
   if (store.multiplayerSessions[sessionId]) {
     delete store.multiplayerSessions[sessionId];
   }
@@ -1648,19 +2206,24 @@ function broadcastToSession(sessionId, rawMessage, sender) {
   }
 }
 
+function sendSocketPayload(client, payload) {
+  if (!client || client.closed || client.socket.destroyed) return;
+  try {
+    const raw = JSON.stringify(payload);
+    writeSocketFrame(client.socket, 0x1, Buffer.from(raw, "utf8"));
+  } catch (error) {
+    log.warn("Failed to send WebSocket payload", error);
+  }
+}
+
 function sendSocketError(client, code, message) {
   if (client.closed || client.socket.destroyed) return;
-  const payload = JSON.stringify({
+  const payload = {
     type: "error",
     code,
     message,
-  });
-
-  try {
-    writeSocketFrame(client.socket, 0x1, Buffer.from(payload, "utf8"));
-  } catch (error) {
-    log.warn("Failed to send WebSocket error payload", error);
-  }
+  };
+  sendSocketPayload(client, payload);
 }
 
 function safeCloseSocket(client, closeCode, closeReason) {
