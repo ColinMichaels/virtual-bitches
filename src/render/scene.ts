@@ -23,6 +23,7 @@ import { PlayerSeatRenderer } from "./playerSeats.js";
 import { cameraService, type CameraPosition } from "../services/cameraService.js";
 import { settingsService } from "../services/settings.js";
 import { particleService } from "../services/particleService.js";
+import { resolveAssetUrl } from "../services/assetUrl.js";
 import { logger } from "../utils/logger.js";
 
 // Register custom shaders once at module load
@@ -213,7 +214,7 @@ export class GameScene {
 
     // Load leather texture for table border
     const tableTexture = new Texture(
-      "./assets/game-textures/leatherwrap_texture.jpg",
+      resolveAssetUrl("assets/game-textures/leatherwrap_texture.jpg"),
       this.scene,
       undefined,
       true, // invertY for proper orientation
@@ -259,7 +260,7 @@ export class GameScene {
     // Load custom table felt texture
     // Custom octagon felt texture provided by user
     const trayTexture = new Texture(
-      "./assets/game-textures/biscuits_felt_table_texture_darker.jpg",
+      resolveAssetUrl("assets/game-textures/biscuits_felt_table_texture_darker.jpg"),
       this.scene,
       undefined,
       true, // invertY for proper orientation

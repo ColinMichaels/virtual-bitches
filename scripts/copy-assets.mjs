@@ -11,6 +11,24 @@ const CONTENT_DESTINATION = path.join(projectRoot, "public", "rules.md");
 
 const THEME_SOURCE_ROOT = path.join(projectRoot, "src", "assets", "textures");
 const THEME_DESTINATION_ROOT = path.join(projectRoot, "public", "assets", "themes");
+const STATIC_ASSET_DIRECTORIES = [
+  {
+    source: path.join(projectRoot, "src", "assets", "ads"),
+    destination: path.join(projectRoot, "public", "assets", "ads"),
+  },
+  {
+    source: path.join(projectRoot, "src", "assets", "game-textures"),
+    destination: path.join(projectRoot, "public", "assets", "game-textures"),
+  },
+  {
+    source: path.join(projectRoot, "src", "assets", "logos"),
+    destination: path.join(projectRoot, "public", "assets", "logos"),
+  },
+  {
+    source: path.join(projectRoot, "src", "assets", "music"),
+    destination: path.join(projectRoot, "public", "assets", "music"),
+  },
+];
 
 const IGNORED_FILENAMES = new Set([".DS_Store"]);
 const TIMESTAMP_EPSILON_MS = 1;
@@ -64,8 +82,12 @@ async function copyFileAlways(sourcePath, destinationPath) {
   return true;
 }
 
-async function syncThemeDirectory(sourceDir, destinationDir, copyStrategy) {
+async function syncDirectory(sourceDir, destinationDir, copyStrategy) {
   let copiedCount = 0;
+  const sourceExists = await pathExists(sourceDir);
+  if (!sourceExists) {
+    return copiedCount;
+  }
   const entries = await fs.readdir(sourceDir, { withFileTypes: true });
 
   for (const entry of entries) {
@@ -77,7 +99,7 @@ async function syncThemeDirectory(sourceDir, destinationDir, copyStrategy) {
     const destinationPath = path.join(destinationDir, entry.name);
 
     if (entry.isDirectory()) {
-      copiedCount += await syncThemeDirectory(sourcePath, destinationPath, copyStrategy);
+      copiedCount += await syncDirectory(sourcePath, destinationPath, copyStrategy);
       continue;
     }
 
@@ -183,18 +205,27 @@ async function validatePublicThemeAssets(themeRoot) {
 
 async function run() {
   const copiedContent = await copyFileIfNewer(CONTENT_SOURCE, CONTENT_DESTINATION);
-  const copyStrategy = shouldSyncThemes ? copyFileAlways : copyFileIfMissing;
-  const copiedThemeFiles = await syncThemeDirectory(
+  const themeCopyStrategy = shouldSyncThemes ? copyFileAlways : copyFileIfMissing;
+  const staticCopyStrategy = shouldSyncThemes ? copyFileAlways : copyFileIfNewer;
+  const copiedThemeFiles = await syncDirectory(
     THEME_SOURCE_ROOT,
     THEME_DESTINATION_ROOT,
-    copyStrategy
+    themeCopyStrategy
   );
+  let copiedStaticFiles = 0;
+  for (const assetDirectory of STATIC_ASSET_DIRECTORIES) {
+    copiedStaticFiles += await syncDirectory(
+      assetDirectory.source,
+      assetDirectory.destination,
+      staticCopyStrategy
+    );
+  }
   await validatePublicThemeAssets(THEME_DESTINATION_ROOT);
 
   const contentStatus = copiedContent ? "updated" : "unchanged";
   const themeMode = shouldSyncThemes ? "full-sync" : "fill-missing";
   console.log(
-    `[copy-assets] rules.md ${contentStatus}; mode=${themeMode}; synced ${copiedThemeFiles} theme file(s); theme assets validated`
+    `[copy-assets] rules.md ${contentStatus}; mode=${themeMode}; synced ${copiedThemeFiles} theme file(s) + ${copiedStaticFiles} static asset file(s); theme assets validated`
   );
 }
 

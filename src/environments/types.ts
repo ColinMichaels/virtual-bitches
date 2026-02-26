@@ -5,6 +5,7 @@
 export interface Environment {
   production: boolean;
   apiBaseUrl: string;
+  assetBaseUrl: string;
   gameTitle: string;
   wsUrl?: string; // WebSocket URL for real-time multiplayer
   adminUiEnabled: boolean;

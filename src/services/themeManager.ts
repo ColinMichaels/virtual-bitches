@@ -21,6 +21,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { getThemeAssetBase, getThemeConfigUrl } from "./assetUrl.js";
 
 // Create module-specific logger
 const log = logger.create('ThemeManager');
@@ -237,7 +238,7 @@ class ThemeManager {
   private async loadThemeConfig(themeName: string): Promise<ThemeConfig | null> {
     for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
       try {
-        const configPath = `./assets/themes/${themeName}/theme.config.json`;
+        const configPath = getThemeConfigUrl(themeName);
         const response = await fetch(configPath);
 
         if (!response.ok) {
@@ -376,8 +377,7 @@ class ThemeManager {
    * @returns Path to current theme folder
    */
   getCurrentThemePath(): string {
-    const basePath = import.meta.env.BASE_URL || './';
-    return `${basePath}assets/themes/${this.currentTheme}`;
+    return getThemeAssetBase(this.currentTheme);
   }
 
   /**
@@ -387,8 +387,7 @@ class ThemeManager {
    * @returns Path to theme folder
    */
   getThemePath(themeName: string): string {
-    const basePath = import.meta.env.BASE_URL || './';
-    return `${basePath}assets/themes/${themeName}`;
+    return getThemeAssetBase(themeName);
   }
 
   /**

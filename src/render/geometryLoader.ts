@@ -9,6 +9,7 @@
 import { Scene, Mesh, VertexData, Quaternion, Vector3 } from "@babylonjs/core";
 import { DieKind } from "../engine/types.js";
 import { ThemeConfig } from "../services/themeManager.js";
+import { resolveAssetUrl } from "../services/assetUrl.js";
 import { logger } from "../utils/logger.js";
 
 const log = logger.create('GeometryLoader');
@@ -48,8 +49,7 @@ export async function loadDiceGeometry(): Promise<DiceGeometryFile> {
     return geometryData;
   }
 
-  const basePath = import.meta.env.BASE_URL || './';
-  const response = await fetch(`${basePath}assets/themes/diceOfRolling/smoothDice.json`);
+  const response = await fetch(resolveAssetUrl("assets/themes/diceOfRolling/smoothDice.json"));
   if (!response.ok) {
     throw new Error(`Failed to load geometry: ${response.statusText}`);
   }

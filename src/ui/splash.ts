@@ -9,7 +9,7 @@ import { logger } from "../utils/logger.js";
 import type { MultiplayerRoomListing } from "../services/backendApi.js";
 import type { SplashBackground3D } from "./splashBackground3d.js";
 import { getLocalPlayerId } from "../services/playerIdentity.js";
-import biscuitsLogoUrl from "../assets/logos/Biscuits_logo.png";
+import { getBrandLogoUrl } from "../services/assetUrl.js";
 
 const log = logger.create("SplashScreen");
 
@@ -39,6 +39,7 @@ export class SplashScreen {
   private selectedRoomSessionId: string | null = null;
   private privateRoomCode = "";
   private roomCodeJoinInFlight = false;
+  private readonly logoUrl = getBrandLogoUrl();
   private roomCodeFeedback:
     | {
         tone: "info" | "success" | "error";
@@ -60,7 +61,7 @@ export class SplashScreen {
       <canvas id="splash-canvas" aria-hidden="true"></canvas>
       <div class="splash-content">
         <div class="splash-logo-wrap">
-          <img class="splash-logo" src="${biscuitsLogoUrl}" alt="${this.gameTitle}" />
+          <img class="splash-logo" src="${this.logoUrl}" alt="${this.gameTitle}" />
         </div>
         <p class="splash-subtitle">Push Your Luck Dice Game</p>
         <p class="splash-tagline">Roll • Select • Score Low to Win</p>

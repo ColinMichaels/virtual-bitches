@@ -4,6 +4,7 @@
  */
 
 import { audioService } from "../services/audio.js";
+import { getUpdatesFeedUrl } from "../services/assetUrl.js";
 import { getLocalPlayerId } from "../services/playerIdentity.js";
 import { logger } from "../utils/logger.js";
 import type {
@@ -148,7 +149,7 @@ export class UpdatesPanel {
    */
   private async loadUpdates(): Promise<void> {
     try {
-      const response = await fetch("./updates.json");
+      const response = await fetch(getUpdatesFeedUrl());
       if (!response.ok) {
         throw new Error(`Failed to load updates: ${response.status}`);
       }

@@ -5,6 +5,7 @@
 
 import { marked } from "marked";
 import { audioService } from "../services/audio.js";
+import { getRulesMarkdownUrl } from "../services/assetUrl.js";
 import { logger } from "../utils/logger.js";
 import { modalManager } from "./modalManager.js";
 
@@ -47,8 +48,7 @@ export class RulesModal {
 
   private async loadRules(): Promise<void> {
     try {
-      const basePath = import.meta.env.BASE_URL || './';
-      const response = await fetch(`${basePath}rules.md`);
+      const response = await fetch(getRulesMarkdownUrl());
       const markdown = await response.text();
       this.rulesContent = await marked.parse(markdown);
       this.renderRules();
