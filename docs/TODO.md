@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Multiplayer UX iteration + particle log-noise throttling + friends model scaffold planning)
+**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Multiplayer UX iteration + admin role security hardening + monitor foundation + particle log-noise throttling + friends model scaffold planning)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -152,14 +152,26 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 
 ## 🟡 Medium Priority
 
-### Live Ops / Admin Dashboard Foundation (Planned)
-- **Status**: 🟡 Planned (deferred until core multiplayer stability milestones are complete)
-- **Description**: Add internal admin tooling for monitoring active rooms/sessions and executing moderation/ops actions safely.
+### Live Ops / Admin Dashboard Foundation
+- **Status**: 🟡 Foundation partial (2026-02-26) - monitoring scaffold shipped, privileged ops deferred
+- **Description**: Internal tooling for monitoring active rooms/sessions and executing moderation/ops actions safely.
+- **Completed**:
+  - ✅ Added read-only monitoring endpoints:
+    - `GET /api/admin/overview`
+    - `GET /api/admin/rooms`
+    - `GET /api/admin/metrics`
+  - ✅ Added configurable admin access modes (`auto` | `open` | `token` | `role` | `hybrid` | `disabled`)
+  - ✅ Added role-protected admin access (Firebase-authenticated `viewer`/`operator`/`owner`)
+  - ✅ Added owner role assignment API (`GET /api/admin/roles`, `PUT /api/admin/roles/:uid`) with bootstrap owner allowlists
+  - ✅ Added dev-facing in-app monitor panel under `Settings > Account` with:
+    - room/participant/turn snapshots
+    - aggregate room metrics
+    - refresh control + persisted admin-token input
+    - owner-only role management controls
 - **Next Steps**:
-  - [ ] Define admin auth/roles + audit logging policy for `/api/admin/*`
-  - [ ] Add room/session monitoring endpoints (active rooms, turn state, idle/timeout health)
+  - [ ] Define admin auth/roles + audit logging policy for privileged mutations
   - [ ] Add controlled admin mutations (expire room, remove participant, room visibility toggle)
-  - [ ] Add a lightweight internal dashboard UI for live operations
+  - [ ] Add dedicated internal web dashboard for live operations and historical trend views
 
 ### Visual Settings & Dice Visibility Enhancement (COMPLETE) 🎨
 - **Status**: ✅ Phase 1 COMPLETE (2026-02-25)

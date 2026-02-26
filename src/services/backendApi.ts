@@ -190,6 +190,11 @@ export interface AuthenticatedUserProfile {
   email?: string;
   isAnonymous: boolean;
   provider?: string;
+  admin?: {
+    role: "viewer" | "operator" | "owner" | null;
+    isAdmin: boolean;
+    source?: string;
+  };
 }
 
 export interface BackendApiOptions {
