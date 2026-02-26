@@ -729,6 +729,8 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - ✅ Reorganized settings into dedicated tabs (`Game`, `Graphics`, `Audio`, `Account`) for cleaner UX scaling
 - ✅ Added pluggable API store backend (`file` / `firestore`) with Firestore sync adapter (`API_STORE_BACKEND`)
 - ✅ Added Firebase Admin token verification path in API (`FIREBASE_AUTH_MODE=admin|auto|legacy`)
+- ✅ Added Sprint 1.5 migration utility (`api/scripts/migrate-file-store-to-firestore.mjs`) with merge/replace + digest verification
+- ✅ Added deploy-time Cloud Run env controls in GitHub Actions (`API_STORE_BACKEND`, `API_FIRESTORE_PREFIX`, `FIREBASE_AUTH_MODE`)
 
 ---
 
