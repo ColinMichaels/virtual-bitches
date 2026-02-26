@@ -1158,6 +1158,9 @@ button.danger:hover:not(:disabled) {
   left: 0;
   width: 100%;
   height: 100%;
+  background:
+    radial-gradient(70% 55% at 50% 20%, rgba(233, 69, 96, 0.2), rgba(233, 69, 96, 0) 65%),
+    linear-gradient(180deg, #2a3545 0%, #1f2935 34%, #151c26 68%, #0a0f16 100%);
 }
 
 .splash-content {
@@ -1559,6 +1562,46 @@ button.danger:hover:not(:disabled) {
   color: rgba(255, 255, 255, 0.72);
 }
 
+.sync-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 2px 0;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.sync-indicator-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(136, 194, 160, 0.8);
+  box-shadow: 0 0 0 1px rgba(136, 194, 160, 0.24);
+}
+
+.sync-indicator--ok .sync-indicator-dot {
+  background: rgba(136, 194, 160, 0.86);
+  box-shadow: 0 0 0 1px rgba(136, 194, 160, 0.24);
+}
+
+.sync-indicator--syncing .sync-indicator-dot {
+  background: rgba(134, 168, 205, 0.9);
+  box-shadow: 0 0 0 1px rgba(134, 168, 205, 0.24);
+}
+
+.sync-indicator--pending .sync-indicator-dot {
+  background: rgba(195, 176, 123, 0.9);
+  box-shadow: 0 0 0 1px rgba(195, 176, 123, 0.24);
+}
+
+.sync-indicator--offline .sync-indicator-dot,
+.sync-indicator--error .sync-indicator-dot {
+  background: rgba(187, 145, 145, 0.9);
+  box-shadow: 0 0 0 1px rgba(187, 145, 145, 0.24);
+}
+
 .settings-account-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1887,6 +1930,20 @@ button.danger:hover:not(:disabled) {
   max-width: 700px;
   max-height: 80vh;
   overflow-y: auto;
+}
+
+.leaderboard-modal-content .modal-header {
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.leaderboard-modal-content .modal-close {
+  margin-left: auto;
+}
+
+.leaderboard-modal-content .sync-indicator {
+  margin-top: 0;
+  opacity: 0.72;
 }
 
 .leaderboard-tabs {

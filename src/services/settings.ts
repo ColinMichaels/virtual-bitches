@@ -106,29 +106,51 @@ const DEFAULT_SETTINGS: Settings = {
 
 const STORAGE_KEY = "biscuits-settings";
 
+interface StoredSettingsPayload {
+  settings: Settings;
+  updatedAt: number;
+}
+
 export class SettingsService {
   private settings: Settings;
+  private lastUpdatedAt: number;
   private listeners: Array<(settings: Settings) => void> = [];
 
   constructor() {
-    this.settings = this.loadSettings();
+    const loaded = this.loadSettings();
+    this.settings = loaded.settings;
+    this.lastUpdatedAt = loaded.updatedAt;
   }
 
   /**
    * Load settings from localStorage or use defaults
    */
-  private loadSettings(): Settings {
+  private loadSettings(): StoredSettingsPayload {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Merge with defaults to handle new settings added in updates
-        return this.mergeWithDefaults(parsed);
+        if (isStoredSettingsPayload(parsed)) {
+          return {
+            settings: this.mergeWithDefaults(parsed.settings),
+            updatedAt: normalizeTimestamp(parsed.updatedAt),
+          };
+        }
+
+        // Legacy format: raw settings object only.
+        return {
+          settings: this.mergeWithDefaults(parsed),
+          updatedAt: 0,
+        };
       }
     } catch (error) {
       log.warn("Failed to load settings:", error);
     }
-    return { ...DEFAULT_SETTINGS };
+
+    return {
+      settings: { ...DEFAULT_SETTINGS },
+      updatedAt: 0,
+    };
   }
 
   /**
@@ -148,6 +170,7 @@ export class SettingsService {
       controls: { ...DEFAULT_SETTINGS.controls, ...loaded.controls },
       camera: { ...DEFAULT_SETTINGS.camera, ...(loaded.camera || {}) },
       game: { ...DEFAULT_SETTINGS.game, ...loaded.game },
+      haptics: typeof loaded.haptics === "boolean" ? loaded.haptics : DEFAULT_SETTINGS.haptics,
     };
   }
 
@@ -156,7 +179,11 @@ export class SettingsService {
    */
   private saveSettings(): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
+      const payload: StoredSettingsPayload = {
+        settings: this.settings,
+        updatedAt: this.lastUpdatedAt,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (error) {
       log.error("Failed to save settings:", error);
     }
@@ -169,11 +196,16 @@ export class SettingsService {
     return { ...this.settings };
   }
 
+  getLastUpdatedAt(): number {
+    return this.lastUpdatedAt;
+  }
+
   /**
    * Update audio settings
    */
   updateAudio(audio: Partial<AudioSettings>): void {
     this.settings.audio = { ...this.settings.audio, ...audio };
+    this.touchUpdatedAt();
     this.saveSettings();
     this.notifyListeners();
   }
@@ -188,6 +220,7 @@ export class SettingsService {
       delete display.visual; // Prevent shallow overwrite
     }
     this.settings.display = { ...this.settings.display, ...display };
+    this.touchUpdatedAt();
     this.saveSettings();
     this.notifyListeners();
   }
@@ -197,6 +230,7 @@ export class SettingsService {
    */
   updateVisual(visual: Partial<VisualSettings>): void {
     this.settings.display.visual = { ...this.settings.display.visual, ...visual };
+    this.touchUpdatedAt();
     this.saveSettings();
     this.notifyListeners();
   }
@@ -206,6 +240,7 @@ export class SettingsService {
    */
   updateControls(controls: Partial<ControlSettings>): void {
     this.settings.controls = { ...this.settings.controls, ...controls };
+    this.touchUpdatedAt();
     this.saveSettings();
     this.notifyListeners();
   }
@@ -215,6 +250,7 @@ export class SettingsService {
    */
   updateHaptics(enabled: boolean): void {
     this.settings.haptics = enabled;
+    this.touchUpdatedAt();
     this.saveSettings();
     this.notifyListeners();
   }
@@ -224,6 +260,7 @@ export class SettingsService {
    */
   updateGame(game: Partial<GameSettings>): void {
     this.settings.game = { ...this.settings.game, ...game };
+    this.touchUpdatedAt();
     this.saveSettings();
     this.notifyListeners();
   }
@@ -231,8 +268,9 @@ export class SettingsService {
   /**
    * Replace full settings snapshot (used by remote profile sync)
    */
-  replaceSettings(nextSettings: Settings): void {
+  replaceSettings(nextSettings: Settings, updatedAt?: number): void {
     this.settings = this.mergeWithDefaults(nextSettings);
+    this.lastUpdatedAt = normalizeTimestamp(updatedAt) || Date.now();
     this.saveSettings();
     this.notifyListeners();
   }
@@ -242,6 +280,7 @@ export class SettingsService {
    */
   resetToDefaults(): void {
     this.settings = { ...DEFAULT_SETTINGS };
+    this.touchUpdatedAt();
     this.saveSettings();
     this.notifyListeners();
   }
@@ -264,6 +303,10 @@ export class SettingsService {
     this.listeners.forEach((listener) => listener(this.settings));
   }
 
+  private touchUpdatedAt(): void {
+    this.lastUpdatedAt = Date.now();
+  }
+
   /**
    * Get effective SFX volume (master * sfx * enabled)
    */
@@ -283,3 +326,19 @@ export class SettingsService {
 
 // Singleton instance
 export const settingsService = new SettingsService();
+
+function normalizeTimestamp(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return Math.floor(value);
+}
+
+function isStoredSettingsPayload(value: unknown): value is StoredSettingsPayload {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<StoredSettingsPayload>;
+  return Boolean(candidate.settings && typeof candidate.settings === "object");
+}

@@ -732,6 +732,9 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - ✅ Added Sprint 1.5 migration utility (`api/scripts/migrate-file-store-to-firestore.mjs`) with merge/replace + digest verification
 - ✅ Added deploy-time Cloud Run env controls in GitHub Actions (`API_STORE_BACKEND`, `API_FIRESTORE_PREFIX`, `FIREBASE_AUTH_MODE`)
 - ✅ Added WebSocket reconnect backoff behavior + tests for Cloud Run disconnect scenarios
+- ✅ Added identity-aware settings/profile sync with local-first offline fallback + remote conflict handling
+- ✅ Added continuous leaderboard auto-sync and cached global leaderboard fallback for offline reads
+- ✅ Added subtle sync health indicators in Settings/Leaderboard (live online/sync/pending/offline/error state)
 
 ---
 
