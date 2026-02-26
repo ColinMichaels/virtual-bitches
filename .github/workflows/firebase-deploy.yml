@@ -290,8 +290,23 @@ jobs:
       - name: Deploy Firebase Hosting + Firestore
         env:
           PROJECT_ID: ${{ steps.target.outputs.project_id }}
+          FIREBASE_HOSTING_SITE_SECRET: ${{ secrets.FIREBASE_HOSTING_SITE }}
+          FIREBASE_HOSTING_SITE_VAR: ${{ vars.FIREBASE_HOSTING_SITE }}
         run: |
           set -euo pipefail
+          SITE_ID="${FIREBASE_HOSTING_SITE_SECRET:-${FIREBASE_HOSTING_SITE_VAR:-$PROJECT_ID}}"
+
+          echo "Deploy project: $PROJECT_ID"
+          echo "Hosting site target: $SITE_ID"
+
+          SITE_LIST_JSON="$(npx firebase-tools hosting:sites:list --project "$PROJECT_ID" --json)"
+          if ! printf '%s' "$SITE_LIST_JSON" | jq -e --arg site "$SITE_ID" '(.result // []) | any(.name | endswith("/sites/\($site)"))' >/dev/null; then
+            echo "Firebase Hosting site '$SITE_ID' was not found in project '$PROJECT_ID'."
+            echo "Create it once with:"
+            echo "  npx firebase-tools hosting:sites:create $SITE_ID --project $PROJECT_ID"
+            exit 1
+          fi
+
           # Ensure a deterministic hosting target for this project in CI.
-          npx firebase-tools target:apply hosting app "$PROJECT_ID" --project "$PROJECT_ID" --non-interactive
+          npx firebase-tools target:apply hosting app "$SITE_ID" --project "$PROJECT_ID" --non-interactive
           npx firebase-tools deploy --project "$PROJECT_ID" --only firestore,hosting:app --non-interactive
