@@ -74,6 +74,8 @@ interface SeatedMultiplayerParticipant {
   displayName: string;
   seatIndex: number;
   isBot: boolean;
+  isReady: boolean;
+  score: number;
 }
 
 function formatCameraAttackLabel(effectType: string): string {
@@ -89,6 +91,13 @@ function formatCameraAttackLabel(effectType: string): string {
     default:
       return "Camera Attack";
   }
+}
+
+function normalizeParticipantScore(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+  return Math.floor(value);
 }
 
 class Game implements GameCallbacks {
@@ -623,13 +632,14 @@ class Game implements GameCallbacks {
     const participantBySeat = new Map<number, SeatedMultiplayerParticipant>();
     this.participantSeatById.clear();
     this.participantLabelById.clear();
+    const showReadyState = seatedParticipants.filter((participant) => !participant.isBot).length > 1;
     seatedParticipants.forEach((participant) => {
       participantBySeat.set(participant.seatIndex, participant);
       const isCurrentPlayer = participant.playerId === this.localPlayerId;
       this.participantSeatById.set(participant.playerId, participant.seatIndex);
       this.participantLabelById.set(
         participant.playerId,
-        this.formatSeatDisplayName(participant, isCurrentPlayer)
+        this.formatParticipantLabel(participant, isCurrentPlayer)
       );
     });
 
@@ -644,7 +654,7 @@ class Game implements GameCallbacks {
           occupied: true,
           isCurrentPlayer,
           isBot: participant.isBot,
-          playerName: this.formatSeatDisplayName(participant, isCurrentPlayer),
+          playerName: this.formatSeatDisplayName(participant, isCurrentPlayer, showReadyState),
           avatarColor: this.resolveSeatColor(participant, isCurrentPlayer),
         });
         continue;
@@ -663,7 +673,7 @@ class Game implements GameCallbacks {
     this.multiplayerTurnPlan = buildClockwiseTurnPlan(
       seatedParticipants.map((participant) => ({
         playerId: participant.playerId,
-        displayName: this.formatSeatDisplayName(
+        displayName: this.formatParticipantLabel(
           participant,
           participant.playerId === this.localPlayerId
         ),
@@ -707,6 +717,8 @@ class Game implements GameCallbacks {
       displayName: localParticipant?.displayName ?? "You",
       seatIndex: currentSeatIndex,
       isBot: false,
+      isReady: localParticipant?.isReady === true,
+      score: normalizeParticipantScore(localParticipant?.score),
     });
 
     const others = normalizedParticipants.filter(
@@ -719,6 +731,8 @@ class Game implements GameCallbacks {
         displayName: participant.displayName,
         seatIndex: availableSeats[index],
         isBot: participant.isBot,
+        isReady: participant.isReady,
+        score: participant.score,
       });
     });
 
@@ -727,8 +741,25 @@ class Game implements GameCallbacks {
 
   private normalizeSessionParticipants(
     participants: MultiplayerSessionParticipant[] | undefined
-  ): Array<{ playerId: string; displayName: string; isBot: boolean; joinedAt: number }> {
-    const seen = new Map<string, { playerId: string; displayName: string; isBot: boolean; joinedAt: number }>();
+  ): Array<{
+    playerId: string;
+    displayName: string;
+    isBot: boolean;
+    isReady: boolean;
+    score: number;
+    joinedAt: number;
+  }> {
+    const seen = new Map<
+      string,
+      {
+        playerId: string;
+        displayName: string;
+        isBot: boolean;
+        isReady: boolean;
+        score: number;
+        joinedAt: number;
+      }
+    >();
     const list = Array.isArray(participants) ? participants : [];
 
     list.forEach((participant) => {
@@ -750,6 +781,8 @@ class Game implements GameCallbacks {
         playerId,
         displayName,
         isBot: Boolean(participant.isBot),
+        isReady: Boolean(participant.isBot) ? true : participant.isReady === true,
+        score: normalizeParticipantScore(participant.score),
         joinedAt:
           typeof participant.joinedAt === "number" && Number.isFinite(participant.joinedAt)
             ? participant.joinedAt
@@ -762,6 +795,8 @@ class Game implements GameCallbacks {
         playerId: this.localPlayerId,
         displayName: "You",
         isBot: false,
+        isReady: true,
+        score: normalizeParticipantScore(this.state.score),
         joinedAt: -1,
       });
     }
@@ -790,7 +825,7 @@ class Game implements GameCallbacks {
     return `Player ${playerId.slice(0, 4)}`;
   }
 
-  private formatSeatDisplayName(
+  private formatParticipantLabel(
     participant: SeatedMultiplayerParticipant,
     isCurrentPlayer: boolean
   ): string {
@@ -801,6 +836,22 @@ class Game implements GameCallbacks {
     const baseName = participant.displayName.trim() || this.buildDefaultParticipantName(participant.playerId, participant.isBot);
     const label = participant.isBot ? `BOT ${baseName}` : baseName;
     return label.slice(0, 20);
+  }
+
+  private formatSeatDisplayName(
+    participant: SeatedMultiplayerParticipant,
+    isCurrentPlayer: boolean,
+    showReadyState: boolean
+  ): string {
+    const label = this.formatParticipantLabel(participant, isCurrentPlayer);
+    const scoreText = ` • ${normalizeParticipantScore(participant.score)}`;
+    const readinessText =
+      !participant.isBot && showReadyState
+        ? participant.isReady
+          ? " • READY"
+          : " • WAIT"
+        : "";
+    return `${label}${scoreText}${readinessText}`.slice(0, 24);
   }
 
   private resolveSeatColor(

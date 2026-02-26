@@ -751,6 +751,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - ✅ Added top-bar game clock with live turn countdown indicator for multiplayer/timed-trial readiness
 - ✅ Added in-game `Main Menu` action in Settings to leave multiplayer sessions and return to lobby
 - ✅ Added single-human multiplayer fallback (no turn-sync lock) so solo/one-human sessions can always play through
+- ✅ Added authoritative per-participant score sync in multiplayer `session_state` + seat label score/readiness display
 - ✅ Tuned bot chaos traffic down (lower chaos frequency, shake-only, shorter/safer intensity) to avoid disruptive camera failures
 
 ---
