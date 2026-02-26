@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "./logger.mjs";
 import { createStoreAdapter, DEFAULT_STORE } from "./storage/index.mjs";
+import { createBotEngine } from "./bot/engine.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,6 +49,11 @@ const BOT_PROFILES = ["cautious", "balanced", "aggressive"];
 const BOT_CAMERA_EFFECTS = ["shake"];
 const BOT_TURN_ADVANCE_MIN_MS = 1600;
 const BOT_TURN_ADVANCE_MAX_MS = 3200;
+const BOT_TURN_ADVANCE_DELAY_BY_PROFILE = {
+  cautious: { min: 2300, max: 4200 },
+  balanced: { min: 1500, max: 3100 },
+  aggressive: { min: 900, max: 2200 },
+};
 const DEFAULT_PARTICIPANT_DICE_COUNT = 15;
 const BOT_ROLL_DICE_SIDES = [8, 12, 10, 6, 6, 6, 20, 6, 4, 6, 6, 6, 10, 6, 6];
 const TURN_TIMEOUT_MS = normalizeTurnTimeoutValue(process.env.TURN_TIMEOUT_MS, 45000);
@@ -85,6 +91,16 @@ const wsSessionClients = new Map();
 const wsClientMeta = new WeakMap();
 const botSessionLoops = new Map();
 const sessionTurnTimeoutLoops = new Map();
+const botEngine = createBotEngine({
+  maxTurnRollDice: MAX_TURN_ROLL_DICE,
+  defaultParticipantDiceCount: DEFAULT_PARTICIPANT_DICE_COUNT,
+  rollDiceSides: BOT_ROLL_DICE_SIDES,
+  defaultTurnDelayRange: {
+    min: BOT_TURN_ADVANCE_MIN_MS,
+    max: BOT_TURN_ADVANCE_MAX_MS,
+  },
+  turnDelayByProfile: BOT_TURN_ADVANCE_DELAY_BY_PROFILE,
+});
 
 await bootstrap();
 
@@ -2318,12 +2334,14 @@ function reconcileBotLoop(sessionId) {
   }
 
   if (botSessionLoops.has(sessionId)) {
+    scheduleBotTurnIfNeeded(sessionId);
     return;
   }
 
   botSessionLoops.set(sessionId, {
     timer: null,
     turnTimer: null,
+    scheduledTurnKey: "",
   });
   scheduleNextBotTick(sessionId);
   scheduleBotTurnIfNeeded(sessionId);
@@ -2400,129 +2418,6 @@ function dispatchBotMessage(sessionId) {
   broadcastToSession(sessionId, JSON.stringify(payload), null);
 }
 
-function buildBotTurnRollPayload(playerId, turnNumber, remainingDice) {
-  const safeTurnNumber =
-    Number.isFinite(turnNumber) && turnNumber > 0 ? Math.floor(turnNumber) : 1;
-  const diceCount = Math.max(
-    1,
-    Math.min(MAX_TURN_ROLL_DICE, normalizeParticipantRemainingDice(remainingDice))
-  );
-  const dice = [];
-
-  for (let index = 0; index < diceCount; index += 1) {
-    const sides = BOT_ROLL_DICE_SIDES[index % BOT_ROLL_DICE_SIDES.length] ?? 6;
-    dice.push({
-      dieId: `${playerId}-t${safeTurnNumber}-d${index + 1}-s${sides}`,
-      sides,
-    });
-  }
-
-  return {
-    rollIndex: safeTurnNumber,
-    dice,
-  };
-}
-
-function resolveBotSelectionCount(botProfile, remainingDice, availableDice, turnNumber) {
-  const remaining = Math.max(1, normalizeParticipantRemainingDice(remainingDice, availableDice));
-  const available = Math.max(1, Math.min(availableDice, remaining));
-  const safeTurnNumber =
-    Number.isFinite(turnNumber) && turnNumber > 0 ? Math.floor(turnNumber) : 1;
-  const profile = normalizeBotProfile(botProfile);
-
-  if (remaining <= 2) {
-    return Math.min(remaining, available);
-  }
-
-  if (profile === "cautious") {
-    if (remaining <= 4 && safeTurnNumber > 8) {
-      return Math.min(2, available, remaining);
-    }
-    return 1;
-  }
-
-  if (profile === "aggressive") {
-    if (remaining <= 5) {
-      return Math.min(remaining, available);
-    }
-    const base = safeTurnNumber > 5 ? 4 : 3;
-    return Math.min(base, available, remaining);
-  }
-
-  // balanced
-  if (remaining <= 4) {
-    return Math.min(2, available, remaining);
-  }
-  if (safeTurnNumber > 7) {
-    return Math.min(3, available, remaining);
-  }
-  return Math.min(2, available, remaining);
-}
-
-function buildBotTurnScoreSummary(rollSnapshot, remainingDice, options = {}) {
-  if (!rollSnapshot || !Array.isArray(rollSnapshot.dice) || rollSnapshot.dice.length === 0) {
-    return null;
-  }
-
-  const rollServerId =
-    typeof rollSnapshot.serverRollId === "string" && rollSnapshot.serverRollId
-      ? rollSnapshot.serverRollId
-      : "";
-  if (!rollServerId) {
-    return null;
-  }
-
-  const scoredCandidates = rollSnapshot.dice
-    .map((die) => {
-      const dieId = typeof die?.dieId === "string" ? die.dieId : "";
-      const sides = Number.isFinite(die?.sides) ? Math.floor(die.sides) : NaN;
-      const value = Number.isFinite(die?.value) ? Math.floor(die.value) : NaN;
-      if (!dieId || !Number.isFinite(sides) || !Number.isFinite(value)) {
-        return null;
-      }
-      return {
-        dieId,
-        points: Math.max(0, sides - value),
-        value,
-      };
-    })
-    .filter((entry) => entry !== null);
-
-  if (scoredCandidates.length === 0) {
-    return null;
-  }
-
-  scoredCandidates.sort((left, right) => {
-    const pointsDelta = left.points - right.points;
-    if (pointsDelta !== 0) {
-      return pointsDelta;
-    }
-    const valueDelta = right.value - left.value;
-    if (valueDelta !== 0) {
-      return valueDelta;
-    }
-    return left.dieId.localeCompare(right.dieId);
-  });
-
-  const selectionCount = resolveBotSelectionCount(
-    options.botProfile,
-    remainingDice,
-    scoredCandidates.length,
-    options.turnNumber
-  );
-
-  const selectedDice = scoredCandidates.slice(0, selectionCount);
-  const points = selectedDice.reduce((sum, die) => sum + die.points, 0);
-
-  return {
-    selectedDiceIds: selectedDice.map((die) => die.dieId),
-    points,
-    expectedPoints: points,
-    rollServerId,
-    updatedAt: Date.now(),
-  };
-}
-
 function executeBotTurn(session, activePlayerId) {
   const turnState = ensureSessionTurnState(session);
   if (!turnState || turnState.activeTurnPlayerId !== activePlayerId) {
@@ -2560,7 +2455,14 @@ function executeBotTurn(session, activePlayerId) {
   }
 
   const remainingDice = normalizeParticipantRemainingDice(participant.remainingDice);
-  const rollPayload = buildBotTurnRollPayload(activePlayerId, turnState.turnNumber, remainingDice);
+  const rollPayload = botEngine.buildTurnRollPayload({
+    playerId: activePlayerId,
+    turnNumber: turnState.turnNumber,
+    remainingDice,
+  });
+  if (!rollPayload) {
+    return null;
+  }
   const parsedRoll = parseTurnRollPayload({ roll: rollPayload });
   if (!parsedRoll.ok) {
     return null;
@@ -2579,9 +2481,13 @@ function executeBotTurn(session, activePlayerId) {
     { source: "bot_auto" }
   );
 
-  const botScoreSummary = buildBotTurnScoreSummary(parsedRoll.value, remainingDice, {
+  const botScoreSummary = botEngine.buildTurnScoreSummary({
+    rollSnapshot: parsedRoll.value,
+    remainingDice,
     botProfile: participant.botProfile,
     turnNumber: turnState.turnNumber,
+    sessionParticipants: session.participants,
+    playerId: activePlayerId,
   });
   if (!botScoreSummary) {
     return null;
@@ -2633,19 +2539,35 @@ function scheduleBotTurnIfNeeded(sessionId) {
     return;
   }
 
-  if (loop.turnTimer) {
-    clearTimeout(loop.turnTimer);
-    loop.turnTimer = null;
-  }
-
   const turnState = ensureSessionTurnState(session);
   const activePlayerId = turnState?.activeTurnPlayerId;
+  const activeTurnNumber =
+    Number.isFinite(turnState?.turnNumber) && turnState.turnNumber > 0
+      ? Math.floor(turnState.turnNumber)
+      : 0;
+  const activeRoundNumber =
+    Number.isFinite(turnState?.round) && turnState.round > 0 ? Math.floor(turnState.round) : 0;
+  const activeTurnKey = activePlayerId
+    ? `${activePlayerId}:${activeRoundNumber}:${activeTurnNumber}`
+    : "";
+
+  if (loop.turnTimer) {
+    if (activeTurnKey && loop.scheduledTurnKey === activeTurnKey) {
+      return;
+    }
+    clearTimeout(loop.turnTimer);
+    loop.turnTimer = null;
+    loop.scheduledTurnKey = "";
+  }
+
   if (!activePlayerId) {
+    loop.scheduledTurnKey = "";
     return;
   }
 
   const activeParticipant = session.participants[activePlayerId];
   if (!isBotParticipant(activeParticipant)) {
+    loop.scheduledTurnKey = "";
     return;
   }
 
@@ -2656,14 +2578,21 @@ function scheduleBotTurnIfNeeded(sessionId) {
       isSessionParticipantConnected(sessionId, participant.playerId)
   );
   if (!hasConnectedHuman) {
+    loop.scheduledTurnKey = "";
     return;
   }
 
-  const delayMs =
-    BOT_TURN_ADVANCE_MIN_MS +
-    Math.floor(Math.random() * (BOT_TURN_ADVANCE_MAX_MS - BOT_TURN_ADVANCE_MIN_MS + 1));
+  const delayMs = botEngine.resolveTurnDelayMs({
+    botProfile: activeParticipant.botProfile,
+    remainingDice: activeParticipant.remainingDice,
+    turnNumber: turnState.turnNumber,
+    sessionParticipants: session.participants,
+    playerId: activePlayerId,
+  });
+  loop.scheduledTurnKey = activeTurnKey;
   loop.turnTimer = setTimeout(() => {
     loop.turnTimer = null;
+    loop.scheduledTurnKey = "";
     const latestSession = store.multiplayerSessions[sessionId];
     if (!latestSession) {
       return;

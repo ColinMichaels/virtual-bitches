@@ -155,6 +155,7 @@ class Game implements GameCallbacks {
   private pendingTurnEndSync = false;
   private lobbyRedirectInProgress = false;
   private sessionExpiryPromptActive = false;
+  private sessionExpiryRecoveryInProgress = false;
   private hudClockHandle: ReturnType<typeof setInterval> | null = null;
   private participantSeatById = new Map<string, number>();
   private participantLabelById = new Map<string, string>();
@@ -219,8 +220,11 @@ class Game implements GameCallbacks {
       notificationService.show("Multiplayer auth expired, refreshing session...", "warning", 2200);
     });
     document.addEventListener("multiplayer:sessionExpired", ((event: Event) => {
-      const detail = (event as CustomEvent<{ reason?: string }>).detail;
-      void this.handleMultiplayerSessionExpired(detail?.reason ?? "multiplayer_session_expired");
+      const detail = (event as CustomEvent<{ reason?: string; sessionId?: string }>).detail;
+      void this.handleMultiplayerSessionExpired(
+        detail?.reason ?? "multiplayer_session_expired",
+        detail?.sessionId
+      );
     }) as EventListener);
     document.addEventListener("auth:sessionExpired", ((event: Event) => {
       const detail = (event as CustomEvent<{ reason?: string }>).detail;
@@ -629,12 +633,18 @@ class Game implements GameCallbacks {
     );
   }
 
-  private async joinMultiplayerSession(sessionId: string, fromInviteLink: boolean): Promise<boolean> {
+  private async joinMultiplayerSession(
+    sessionId: string,
+    fromInviteLink: boolean,
+    options?: { suppressFailureNotification?: boolean }
+  ): Promise<boolean> {
     playerDataSyncService.setSessionId(sessionId);
     const session = await this.multiplayerSessionService.joinSession(sessionId);
     if (!session) {
       playerDataSyncService.setSessionId(undefined);
-      notificationService.show("Unable to join multiplayer session.", "error", 2600);
+      if (!options?.suppressFailureNotification) {
+        notificationService.show("Unable to join multiplayer session.", "error", 2600);
+      }
       return false;
     }
 
@@ -1679,24 +1689,101 @@ class Game implements GameCallbacks {
     window.history.replaceState(window.history.state, "", currentUrl.toString());
   }
 
-  private async handleMultiplayerSessionExpired(reason: string): Promise<void> {
+  private getRecoverySessionId(preferredSessionId?: string): string | null {
+    const preferred = typeof preferredSessionId === "string" ? preferredSessionId.trim() : "";
+    if (preferred) {
+      return preferred;
+    }
+
+    const activeSessionId = this.multiplayerSessionService.getActiveSession()?.sessionId?.trim() ?? "";
+    if (activeSessionId) {
+      return activeSessionId;
+    }
+
+    const querySessionId = new URLSearchParams(window.location.search).get("session")?.trim() ?? "";
+    if (querySessionId) {
+      return querySessionId;
+    }
+
+    return null;
+  }
+
+  private async attemptMultiplayerSessionRecovery(
+    reason: string,
+    preferredSessionId?: string
+  ): Promise<boolean> {
+    const recoverySessionId = this.getRecoverySessionId(preferredSessionId);
+    if (!recoverySessionId) {
+      log.warn("Skipping multiplayer session recovery because no session id is available", { reason });
+      return false;
+    }
+
+    if (this.sessionExpiryRecoveryInProgress) {
+      return false;
+    }
+
+    this.sessionExpiryRecoveryInProgress = true;
+    notificationService.show("Connection issue detected. Rejoining room...", "info", 2200);
+
+    const retryDelaysMs = [0, 900];
+    try {
+      for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+        const delayMs = retryDelaysMs[attempt];
+        if (delayMs > 0) {
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, delayMs);
+          });
+        }
+
+        const joined = await this.joinMultiplayerSession(recoverySessionId, false, {
+          suppressFailureNotification: true,
+        });
+        if (joined) {
+          notificationService.show("Reconnected to multiplayer room.", "success", 2400);
+          log.info("Recovered multiplayer session after expiry signal", {
+            reason,
+            sessionId: recoverySessionId,
+            attempt: attempt + 1,
+          });
+          return true;
+        }
+      }
+    } finally {
+      this.sessionExpiryRecoveryInProgress = false;
+    }
+
+    log.warn("Failed to recover multiplayer session after expiry signal", {
+      reason,
+      sessionId: recoverySessionId,
+    });
+    return false;
+  }
+
+  private async handleMultiplayerSessionExpired(
+    reason: string,
+    preferredSessionId?: string
+  ): Promise<void> {
     if (this.playMode !== "multiplayer" || !environment.features.multiplayer) {
       return;
     }
     if (this.lobbyRedirectInProgress) {
       return;
     }
+    if (this.sessionExpiryRecoveryInProgress) {
+      return;
+    }
     if (this.sessionExpiryPromptActive) {
       return;
     }
 
-    this.sessionExpiryPromptActive = true;
     log.warn("Multiplayer session expired", { reason });
-    notificationService.show(
-      "Multiplayer room expired or became inactive.",
-      "warning",
-      2600
-    );
+    const recovered = await this.attemptMultiplayerSessionRecovery(reason, preferredSessionId);
+    if (recovered) {
+      return;
+    }
+
+    this.sessionExpiryPromptActive = true;
+    notificationService.show("Multiplayer room expired or became inactive.", "warning", 2600);
 
     let choice: "lobby" | "solo" = "solo";
     try {
