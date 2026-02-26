@@ -616,6 +616,13 @@ async function runAdminMonitorChecks() {
     "admin metrics missing activeSessionCount"
   );
 
+  const auditBefore = await apiRequest("/admin/audit?limit=5", {
+    method: "GET",
+    headers: adminHeaders,
+  });
+  assert(typeof auditBefore?.timestamp === "number", "admin audit missing timestamp");
+  assert(Array.isArray(auditBefore?.entries), "admin audit missing entries[]");
+
   const rolesBefore = await apiRequest("/admin/roles?limit=10", {
     method: "GET",
     headers: adminHeaders,
@@ -688,6 +695,27 @@ async function runAdminMonitorChecks() {
     expireRoomResult?.sessionId === adminSession.sessionId,
     "admin room expire returned unexpected session"
   );
+
+  const auditAfter = await apiRequest("/admin/audit?limit=40", {
+    method: "GET",
+    headers: adminHeaders,
+  });
+  assert(Array.isArray(auditAfter?.entries), "admin audit entries missing after mutations");
+  const roleAudit = auditAfter.entries.find(
+    (entry) => entry?.action === "role_upsert" && entry?.target?.uid === roleProbeUid
+  );
+  assert(roleAudit, "admin audit missing role_upsert event");
+  const removeAudit = auditAfter.entries.find(
+    (entry) =>
+      entry?.action === "participant_remove" &&
+      entry?.target?.sessionId === adminSession.sessionId &&
+      entry?.target?.playerId === adminGuestId
+  );
+  assert(removeAudit, "admin audit missing participant_remove event");
+  const expireAudit = auditAfter.entries.find(
+    (entry) => entry?.action === "session_expire" && entry?.target?.sessionId === adminSession.sessionId
+  );
+  assert(expireAudit, "admin audit missing session_expire event");
   log("Admin monitor checks passed.");
 }
 

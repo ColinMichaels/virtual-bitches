@@ -168,8 +168,13 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
     - aggregate room metrics
     - refresh control + persisted admin-token input
     - owner-only role management controls
+  - ✅ Added admin audit trail endpoint (`GET /api/admin/audit`) and mutation audit logging for:
+    - role updates
+    - room expiry
+    - participant removal
+  - ✅ Added frontend admin UI feature flag (`VITE_ENABLE_ADMIN_UI`) so production can expose admin tooling intentionally without `debug=true`
 - **Next Steps**:
-  - [ ] Define admin auth/roles + audit logging policy for privileged mutations
+  - [ ] Define retention policy and export strategy for admin audit history
   - ✅ Added first controlled admin mutations:
     - expire room
     - remove participant

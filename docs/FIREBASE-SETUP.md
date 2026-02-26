@@ -26,6 +26,7 @@ Required keys:
 - `VITE_FIREBASE_MESSAGING_SENDER_ID`
 - `VITE_FIREBASE_APP_ID`
 - `VITE_FIREBASE_MEASUREMENT_ID` (optional but recommended)
+- `VITE_ENABLE_ADMIN_UI` (optional, default `0` in production; set `1` to expose in-app admin monitor UI)
 
 ## 2) Authenticate Firebase CLI
 
@@ -137,6 +138,7 @@ Recommended setup (GitHub Environments):
   - `VITE_FIREBASE_MESSAGING_SENDER_ID`
   - `VITE_FIREBASE_APP_ID`
   - `VITE_FIREBASE_MEASUREMENT_ID` (optional)
+  - `VITE_ENABLE_ADMIN_UI` (optional)
 
 Alternate setup (repo-level branch-suffixed keys):
 - `FIREBASE_PROJECT_ID_PROD`
