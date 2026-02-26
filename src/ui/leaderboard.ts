@@ -217,10 +217,12 @@ export class LeaderboardModal {
 
   private renderGlobalContent(entries: GlobalLeaderboardEntry[], user: FirebaseUserProfile | null): void {
     const authConfigured = firebaseAuthService.isConfigured();
-    const displayName = user?.displayName || user?.email || (user?.isAnonymous ? "Guest Player" : "Not Signed In");
+    const displayName =
+      user?.displayName || user?.email || (user?.isAnonymous ? "Guest Player" : "Not Signed In");
     const authBadge = user
       ? (user.isAnonymous ? "Guest Session" : "Google Account")
-      : "Offline";
+      : "Not Signed In";
+    const showGoogleSignIn = authConfigured && (!user || user.isAnonymous);
 
     this.contentContainer.innerHTML = `
       <div class="global-auth-panel">
@@ -231,7 +233,7 @@ export class LeaderboardModal {
         </div>
         <div class="global-auth-actions">
           ${
-            authConfigured && user?.isAnonymous
+            showGoogleSignIn
               ? '<button class="btn-global-auth" data-action="google-signin">Sign In with Google</button>'
               : ""
           }
@@ -249,7 +251,7 @@ export class LeaderboardModal {
       }
     `;
 
-    if (authConfigured && user?.isAnonymous) {
+    if (showGoogleSignIn) {
       this.contentContainer
         .querySelector('[data-action="google-signin"]')
         ?.addEventListener("click", () => {
