@@ -94,6 +94,27 @@ export interface AdminRoleRecord {
   roleUpdatedBy?: string;
 }
 
+export type AdminAuditAction = "role_upsert" | "session_expire" | "participant_remove" | string;
+
+export interface AdminAuditEntry {
+  id: string;
+  timestamp: number;
+  action: AdminAuditAction;
+  summary?: string;
+  actor: {
+    uid?: string | null;
+    email?: string;
+    role?: AdminUserRole | null;
+    authType?: string;
+  };
+  target: {
+    uid?: string;
+    role?: AdminUserRole | null;
+    sessionId?: string;
+    playerId?: string;
+  };
+}
+
 export interface AdminMonitorResult {
   overview: AdminMonitorOverview | null;
   status?: number;
@@ -110,6 +131,13 @@ export interface AdminRolesResult {
 
 export interface AdminRoleUpdateResult {
   roleRecord: AdminRoleRecord | null;
+  status?: number;
+  reason?: string;
+  principal?: AdminPrincipal | null;
+}
+
+export interface AdminAuditResult {
+  entries: AdminAuditEntry[] | null;
   status?: number;
   reason?: string;
   principal?: AdminPrincipal | null;
@@ -221,6 +249,36 @@ export class AdminApiService {
     }
     return {
       roles: result.payload.roles,
+      status: result.status,
+      principal: result.payload.principal ?? null,
+    };
+  }
+
+  async getAudit(
+    limit: number = 60,
+    authOptions: AdminRequestAuthOptions = {}
+  ): Promise<AdminAuditResult> {
+    const bounded = Math.max(1, Math.min(250, Math.floor(limit)));
+    const result = await this.requestJson(`/admin/audit?limit=${bounded}`, {
+      method: "GET",
+      authOptions,
+    });
+    if (!result.ok) {
+      return {
+        entries: null,
+        status: result.status,
+        reason: result.reason,
+      };
+    }
+    if (!isAdminAuditPayload(result.payload)) {
+      return {
+        entries: null,
+        status: result.status,
+        reason: "invalid_admin_payload",
+      };
+    }
+    return {
+      entries: result.payload.entries,
       status: result.status,
       principal: result.payload.principal ?? null,
     };
@@ -503,6 +561,34 @@ function isAdminRoleUpdatePayload(
     return false;
   }
   return true;
+}
+
+function isAdminAuditEntry(payload: unknown): payload is AdminAuditEntry {
+  if (!isRecord(payload)) {
+    return false;
+  }
+  if (typeof payload.id !== "string" || !payload.id.trim()) {
+    return false;
+  }
+  if (typeof payload.timestamp !== "number" || !Number.isFinite(payload.timestamp)) {
+    return false;
+  }
+  if (typeof payload.action !== "string" || !payload.action.trim()) {
+    return false;
+  }
+  if (!isRecord(payload.actor) || !isRecord(payload.target)) {
+    return false;
+  }
+  return true;
+}
+
+function isAdminAuditPayload(
+  payload: Record<string, unknown> | null
+): payload is { entries: AdminAuditEntry[]; principal?: AdminPrincipal | null } {
+  if (!isRecord(payload) || !Array.isArray(payload.entries)) {
+    return false;
+  }
+  return payload.entries.every((entry) => isAdminAuditEntry(entry));
 }
 
 export const adminApiService = new AdminApiService();

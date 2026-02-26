@@ -23,6 +23,7 @@ import { scoreHistoryService } from "../services/score-history.js";
 import type { AuthenticatedUserProfile } from "../services/backendApi.js";
 import {
   adminApiService,
+  type AdminAuditEntry,
   type AdminMonitorOverview,
   type AdminRoleRecord,
   type AdminUserRole,
@@ -722,7 +723,7 @@ export class SettingsModal {
         : "Auth Not Configured";
       const syncIndicator = this.getSyncIndicatorState();
       let adminMonitorMarkup = "";
-      if (environment.debug) {
+      if (this.isAdminMonitorEnabled()) {
         const adminToken = adminApiService.getAdminToken();
         const adminAuthOptions = {
           firebaseIdToken,
@@ -746,6 +747,9 @@ export class SettingsModal {
         let roleRecords: AdminRoleRecord[] | null = null;
         let roleReason: string | undefined;
         let roleStatus: number | undefined;
+        let auditEntries: AdminAuditEntry[] | null = null;
+        let auditReason: string | undefined;
+        let auditStatus: number | undefined;
         if (resolvedRole === "owner" && canRequestAdmin) {
           const rolesResult = await adminApiService.getRoles(250, adminAuthOptions);
           if (renderVersion !== this.accountRenderVersion) {
@@ -754,6 +758,15 @@ export class SettingsModal {
           roleRecords = rolesResult.roles;
           roleReason = rolesResult.reason;
           roleStatus = rolesResult.status;
+        }
+        if (canRequestAdmin) {
+          const auditResult = await adminApiService.getAudit(40, adminAuthOptions);
+          if (renderVersion !== this.accountRenderVersion) {
+            return;
+          }
+          auditEntries = auditResult.entries;
+          auditReason = auditResult.reason;
+          auditStatus = auditResult.status;
         }
         adminMonitorMarkup = this.renderAdminMonitorMarkup(
           adminResult.overview,
@@ -765,6 +778,9 @@ export class SettingsModal {
             roleRecords,
             roleReason,
             roleStatus,
+            auditEntries,
+            auditReason,
+            auditStatus,
           }
         );
       }
@@ -777,7 +793,7 @@ export class SettingsModal {
             ${email ? `<div class="settings-account-email">${escapeHtml(email)}</div>` : ""}
             <div class="settings-account-provider">Provider: ${escapeHtml(provider)}</div>
             ${
-              environment.debug
+              this.isAdminMonitorEnabled()
                 ? `<div class="settings-account-provider">Admin Role: ${escapeHtml(
                     accountAdminRole ?? "none"
                   )}</div>`
@@ -1097,6 +1113,9 @@ export class SettingsModal {
       roleRecords?: AdminRoleRecord[] | null;
       roleReason?: string;
       roleStatus?: number;
+      auditEntries?: AdminAuditEntry[] | null;
+      auditReason?: string;
+      auditStatus?: number;
     } = {}
   ): string {
     const tokenValue = adminApiService.getAdminToken();
@@ -1153,11 +1172,16 @@ export class SettingsModal {
         : currentRole
           ? `<p class="settings-admin-empty">Role manager requires owner access.</p>`
           : `<p class="settings-admin-empty">Sign in with an admin role to manage endpoint access.</p>`;
+    const auditMarkup = this.renderAdminAuditMarkup(
+      options.auditEntries,
+      options.auditReason,
+      options.auditStatus
+    );
 
     return `
       <div class="settings-admin-monitor">
         <div class="settings-admin-header">
-          <div class="settings-admin-title">Dev Monitor</div>
+          <div class="settings-admin-title">Admin Monitor</div>
           <div class="settings-admin-status settings-admin-status--${statusTone}">
             ${escapeHtml(statusText)}
           </div>
@@ -1189,6 +1213,7 @@ export class SettingsModal {
         </div>
         ${metricsMarkup}
         ${roomsMarkup}
+        ${auditMarkup}
         ${roleManagerMarkup}
       </div>
     `;
@@ -1351,6 +1376,67 @@ export class SettingsModal {
     `;
   }
 
+  private renderAdminAuditMarkup(
+    auditEntries: AdminAuditEntry[] | null | undefined,
+    reason?: string,
+    status?: number
+  ): string {
+    if (!auditEntries) {
+      return `
+        <div class="settings-admin-audit-list">
+          <div class="settings-admin-audit-title">Audit Trail</div>
+          <p class="settings-admin-empty">
+            Audit log unavailable: ${escapeHtml(this.getAdminMonitorFailureMessage(reason, status))}
+          </p>
+        </div>
+      `;
+    }
+    if (!auditEntries.length) {
+      return `
+        <div class="settings-admin-audit-list">
+          <div class="settings-admin-audit-title">Audit Trail</div>
+          <p class="settings-admin-empty">No admin actions recorded yet.</p>
+        </div>
+      `;
+    }
+    const rows = auditEntries
+      .map((entry) => {
+        const actionLabel = this.formatAdminAuditAction(entry.action);
+        const actorLabel =
+          entry.actor.uid?.trim() ||
+          entry.actor.email?.trim() ||
+          entry.actor.authType?.trim() ||
+          "unknown";
+        const targetLabel =
+          entry.target.sessionId?.trim() ||
+          entry.target.playerId?.trim() ||
+          entry.target.uid?.trim() ||
+          "";
+        const summary = entry.summary?.trim()
+          ? entry.summary.trim()
+          : `${actionLabel}${targetLabel ? ` · ${targetLabel}` : ""}`;
+        return `
+          <div class="settings-admin-audit-row">
+            <div class="settings-admin-audit-main">
+              <strong>${escapeHtml(actionLabel)}</strong>
+              <span>${escapeHtml(summary)}</span>
+            </div>
+            <div class="settings-admin-audit-meta">
+              <span>${escapeHtml(actorLabel)}</span>
+              <span>${escapeHtml(this.formatAdminAuditTimestamp(entry.timestamp))}</span>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+    return `
+      <div class="settings-admin-audit-list">
+        <div class="settings-admin-audit-title">Audit Trail</div>
+        ${rows}
+      </div>
+    `;
+  }
+
   private getAdminMonitorFailureMessage(reason?: string, status?: number): string {
     switch (reason) {
       case "missing_admin_auth":
@@ -1418,11 +1504,49 @@ export class SettingsModal {
     }
   }
 
+  private formatAdminAuditAction(action: string): string {
+    switch (action) {
+      case "role_upsert":
+        return "Role Updated";
+      case "session_expire":
+        return "Room Expired";
+      case "participant_remove":
+        return "Player Removed";
+      default:
+        return action
+          .split("_")
+          .filter((part) => part.trim().length > 0)
+          .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+          .join(" ");
+    }
+  }
+
+  private formatAdminAuditTimestamp(timestamp: number): string {
+    if (!Number.isFinite(timestamp)) {
+      return "Unknown time";
+    }
+    try {
+      return new Date(timestamp).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    } catch {
+      return "Unknown time";
+    }
+  }
+
   private normalizeAdminRoleValue(role: unknown): AdminUserRole | null {
     if (role === "viewer" || role === "operator" || role === "owner") {
       return role;
     }
     return null;
+  }
+
+  private isAdminMonitorEnabled(): boolean {
+    return environment.adminUiEnabled || environment.debug;
   }
 
   private async getAdminRequestAuthOptions(): Promise<{
@@ -1462,7 +1586,7 @@ export class SettingsModal {
   }
 
   private startAdminMonitorRefresh(): void {
-    if (!environment.debug) {
+    if (!this.isAdminMonitorEnabled()) {
       return;
     }
     this.stopAdminMonitorRefresh();

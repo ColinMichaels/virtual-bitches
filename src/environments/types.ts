@@ -7,6 +7,7 @@ export interface Environment {
   apiBaseUrl: string;
   gameTitle: string;
   wsUrl?: string; // WebSocket URL for real-time multiplayer
+  adminUiEnabled: boolean;
   features: {
     leaderboard: boolean;
     multiplayer: boolean;

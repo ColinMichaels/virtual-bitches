@@ -50,6 +50,8 @@ const MULTIPLAYER_ROOM_LIST_LIMIT_MAX = 100;
 const MULTIPLAYER_ROOM_LIST_LIMIT_DEFAULT = 24;
 const ADMIN_ROOM_LIST_LIMIT_MAX = 200;
 const ADMIN_ROOM_LIST_LIMIT_DEFAULT = 60;
+const ADMIN_AUDIT_LIST_LIMIT_MAX = 250;
+const ADMIN_AUDIT_LIST_LIMIT_DEFAULT = 60;
 const MAX_MULTIPLAYER_HUMAN_PLAYERS = normalizeHumanPlayerLimitValue(
   process.env.MULTIPLAYER_MAX_HUMAN_PLAYERS,
   8
@@ -259,6 +261,11 @@ async function handleRequest(req, res) {
 
     if (req.method === "GET" && pathname === "/api/admin/metrics") {
       await handleAdminMetrics(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/api/admin/audit") {
+      await handleAdminAudit(req, res, url);
       return;
     }
 
@@ -1059,6 +1066,26 @@ async function handleAdminMetrics(req, res) {
   });
 }
 
+async function handleAdminAudit(req, res, url) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.viewer });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const now = Date.now();
+  const limit = parseAdminAuditLimit(url.searchParams.get("limit"));
+  sendJson(res, 200, {
+    timestamp: now,
+    accessMode: auth.mode,
+    principal: buildAdminPrincipal(auth),
+    entries: collectAdminAuditEntries(limit),
+  });
+}
+
 async function handleAdminRoles(req, res, url) {
   const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.owner });
   if (!auth.ok) {
@@ -1158,6 +1185,11 @@ async function handleAdminRoleUpsert(req, res, pathname) {
   next.adminRoleUpdatedAt = now;
   next.adminRoleUpdatedBy = auth.uid ?? auth.authType;
   store.firebasePlayers[targetUid] = next;
+  recordAdminAuditEvent(auth, "role_upsert", {
+    summary: `Set ${targetUid} role to ${requestedRole ?? "none"}`,
+    targetUid,
+    role: requestedRole,
+  });
   await persistStore();
 
   sendJson(res, 200, {
@@ -1195,6 +1227,10 @@ async function handleAdminExpireSession(req, res, pathname) {
 
   expireSession(sessionId, "admin_expired");
   const roomInventoryChanged = reconcilePublicRoomInventory(Date.now());
+  recordAdminAuditEvent(auth, "session_expire", {
+    summary: `Expired room ${sessionId}`,
+    sessionId,
+  });
   await persistStore();
 
   log.info(
@@ -1249,6 +1285,13 @@ async function handleAdminRemoveParticipant(req, res, pathname) {
     return;
   }
 
+  recordAdminAuditEvent(auth, "participant_remove", {
+    summary: `Removed ${playerId} from ${sessionId}`,
+    sessionId,
+    playerId,
+    sessionExpired: removal.sessionExpired === true,
+    roomInventoryChanged: removal.roomInventoryChanged === true,
+  });
   await persistStore();
   log.info(
     `Admin removed participant ${playerId} from ${sessionId} by ${auth.uid ?? auth.authType ?? "unknown"} (${auth.role ?? "n/a"})`
@@ -1431,6 +1474,14 @@ function parseAdminRoomLimit(rawValue) {
   return Math.max(1, Math.min(ADMIN_ROOM_LIST_LIMIT_MAX, Math.floor(parsed)));
 }
 
+function parseAdminAuditLimit(rawValue) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return ADMIN_AUDIT_LIST_LIMIT_DEFAULT;
+  }
+  return Math.max(1, Math.min(ADMIN_AUDIT_LIST_LIMIT_MAX, Math.floor(parsed)));
+}
+
 async function authorizeAdminRequest(req, options = {}) {
   const minimumRole = normalizeAdminRole(options.minimumRole) ?? ADMIN_ROLES.viewer;
   const mode = resolveAdminAccessMode();
@@ -1579,6 +1630,112 @@ function buildAdminPrincipal(authResult) {
     role: authResult.role ?? null,
     roleSource: authResult.roleSource ?? "none",
   };
+}
+
+function collectAdminAuditEntries(limit = ADMIN_AUDIT_LIST_LIMIT_DEFAULT) {
+  const boundedLimit = Number.isFinite(limit)
+    ? Math.max(1, Math.min(ADMIN_AUDIT_LIST_LIMIT_MAX, Math.floor(limit)))
+    : ADMIN_AUDIT_LIST_LIMIT_DEFAULT;
+
+  return Object.values(store.gameLogs)
+    .filter((entry) => entry && entry.type === "admin_action")
+    .sort((left, right) => Number(right?.timestamp ?? 0) - Number(left?.timestamp ?? 0))
+    .slice(0, boundedLimit)
+    .map((entry) => {
+      const payload = entry?.payload && typeof entry.payload === "object" ? entry.payload : {};
+      const actor =
+        payload?.actor && typeof payload.actor === "object"
+          ? payload.actor
+          : {};
+      const target =
+        payload?.target && typeof payload.target === "object"
+          ? payload.target
+          : {};
+      return {
+        id: typeof entry?.id === "string" ? entry.id : randomUUID(),
+        timestamp: Number.isFinite(entry?.timestamp) ? Math.floor(entry.timestamp) : Date.now(),
+        action: typeof payload.action === "string" ? payload.action : "unknown",
+        summary: typeof payload.summary === "string" ? payload.summary : undefined,
+        actor: {
+          uid: typeof actor.uid === "string" ? actor.uid : null,
+          email: typeof actor.email === "string" ? actor.email : undefined,
+          role: normalizeAdminRole(actor.role),
+          authType: typeof actor.authType === "string" ? actor.authType : "unknown",
+        },
+        target: {
+          uid: typeof target.uid === "string" ? target.uid : undefined,
+          role: normalizeAdminRole(target.role),
+          sessionId: typeof target.sessionId === "string" ? target.sessionId : undefined,
+          playerId: typeof target.playerId === "string" ? target.playerId : undefined,
+        },
+      };
+    });
+}
+
+function recordAdminAuditEvent(authResult, action, details = {}) {
+  const timestamp = Date.now();
+  const actorUid = typeof authResult?.uid === "string" ? authResult.uid : null;
+  const actorEmail = typeof authResult?.email === "string" ? authResult.email : undefined;
+  const actorRole = normalizeAdminRole(authResult?.role);
+  const actorAuthType =
+    typeof authResult?.authType === "string" && authResult.authType
+      ? authResult.authType
+      : "unknown";
+  const rawDetails = details && typeof details === "object" ? details : {};
+  const targetUid =
+    typeof rawDetails.targetUid === "string" && rawDetails.targetUid.trim()
+      ? rawDetails.targetUid.trim()
+      : undefined;
+  const targetRole = normalizeAdminRole(rawDetails.role);
+  const targetSessionId =
+    typeof rawDetails.sessionId === "string" && rawDetails.sessionId.trim()
+      ? rawDetails.sessionId.trim()
+      : undefined;
+  const targetPlayerId =
+    typeof rawDetails.playerId === "string" && rawDetails.playerId.trim()
+      ? rawDetails.playerId.trim()
+      : undefined;
+  const summary =
+    typeof rawDetails.summary === "string" && rawDetails.summary.trim()
+      ? rawDetails.summary.trim()
+      : undefined;
+  const id = randomUUID();
+  const fallbackActorId =
+    actorUid ??
+    (typeof authResult?.authType === "string" && authResult.authType ? `admin:${authResult.authType}` : "admin:unknown");
+
+  const nextDetails = { ...rawDetails };
+  delete nextDetails.targetUid;
+  delete nextDetails.role;
+  delete nextDetails.sessionId;
+  delete nextDetails.playerId;
+  delete nextDetails.summary;
+
+  store.gameLogs[id] = {
+    id,
+    playerId: fallbackActorId,
+    sessionId: targetSessionId,
+    type: "admin_action",
+    timestamp,
+    payload: {
+      action,
+      summary,
+      actor: {
+        uid: actorUid,
+        email: actorEmail,
+        role: actorRole,
+        authType: actorAuthType,
+      },
+      target: {
+        uid: targetUid,
+        role: targetRole,
+        sessionId: targetSessionId,
+        playerId: targetPlayerId,
+      },
+      details: nextDetails,
+    },
+  };
+  compactLogStore();
 }
 
 function collectAdminRoleRecords() {
