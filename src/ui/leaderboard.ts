@@ -271,19 +271,34 @@ export class LeaderboardModal {
       if (this.activeTab !== "global" || renderVersion !== this.globalRenderVersion) {
         return;
       }
+      if (!entries) {
+        const syncStatus = leaderboardService.getSyncStatus();
+        log.error("Global leaderboard fetch returned no entries payload", {
+          syncStatus,
+        });
+        this.renderGlobalLoadFailure();
+        return;
+      }
       this.renderGlobalContent(entries, accountProfile);
     } catch (error) {
       if (this.activeTab !== "global" || renderVersion !== this.globalRenderVersion) {
         return;
       }
-      log.warn("Failed to render global leaderboard", error);
-      this.contentContainer.innerHTML = `
-        <div class="global-placeholder">
-          <h3>Global Leaderboard</h3>
-          <p>Unable to load leaderboard right now.</p>
-        </div>
-      `;
+      log.error("Failed to render global leaderboard", {
+        error,
+        syncStatus: leaderboardService.getSyncStatus(),
+      });
+      this.renderGlobalLoadFailure();
     }
+  }
+
+  private renderGlobalLoadFailure(): void {
+    this.contentContainer.innerHTML = `
+      <div class="global-placeholder">
+        <h3>Global Leaderboard</h3>
+        <p>Unable to load leaderboard right now. Please try again.</p>
+      </div>
+    `;
   }
 
   private renderGlobalContent(

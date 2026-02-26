@@ -144,16 +144,19 @@ export class LeaderboardService {
     }
   }
 
-  async getGlobalLeaderboard(limit: number = 200): Promise<GlobalLeaderboardEntry[]> {
+  async getGlobalLeaderboard(limit: number = 200): Promise<GlobalLeaderboardEntry[] | null> {
     await this.flushPendingScores();
 
     const entries = await backendApiService.getGlobalLeaderboard(limit);
     if (!entries) {
-      log.warn("Failed to load global leaderboard");
+      log.error("Failed to load global leaderboard from API", {
+        limit,
+        online: isNavigatorOnline(),
+      });
       this.syncStatus.state = isNavigatorOnline() ? "error" : "offline";
       this.syncStatus.lastErrorAt = Date.now();
       this.emitSyncStatusChanged();
-      return [];
+      return null;
     }
 
     const normalized = entries
