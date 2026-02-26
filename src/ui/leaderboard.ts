@@ -299,7 +299,6 @@ export class LeaderboardModal {
     const authBadge = isAuthenticated
       ? "Authenticated Account"
       : "Not Signed In";
-    const showGoogleSignIn = authConfigured && !isAuthenticated;
     const leaderboardName = accountProfile?.leaderboardName?.trim() ?? "";
     const requiresNameSetup = isAuthenticated && leaderboardName.length === 0;
 
@@ -311,14 +310,16 @@ export class LeaderboardModal {
           <div class="global-auth-badge">${escapeHtml(authBadge)}</div>
         </div>
           <div class="global-auth-actions">
-          ${
-            showGoogleSignIn
-              ? '<button class="btn btn-primary btn-global-auth" data-action="google-signin">Sign In with Google</button>'
-              : ""
-          }
           <button class="btn btn-secondary btn-global-refresh" data-action="refresh-global">Refresh</button>
         </div>
       </div>
+      ${
+        !isAuthenticated && authConfigured
+          ? `<p class="setting-description" style="margin: 0 0 10px;">
+              Viewing global leaderboard is public. Sign in from Settings to submit scores.
+            </p>`
+          : ""
+      }
       ${
         requiresNameSetup
           ? `<div class="global-name-setup">
@@ -341,20 +342,6 @@ export class LeaderboardModal {
             </div>`
       }
     `;
-
-    if (showGoogleSignIn) {
-      this.contentContainer
-        .querySelector('[data-action="google-signin"]')
-        ?.addEventListener("click", () => {
-          audioService.playSfx("click");
-          void firebaseAuthService.signInWithGoogle().then((ok) => {
-            if (ok) {
-              leaderboardService.clearCachedProfile();
-              void this.renderGlobalLeaderboard();
-            }
-          });
-        });
-    }
 
     if (requiresNameSetup) {
       const saveBtn = this.contentContainer.querySelector('[data-action="save-name"]');
