@@ -208,10 +208,16 @@ await test("returns joined session payload on successful multiplayer join", asyn
 
   const result = await api.joinMultiplayerSession("session-2", {
     playerId: "player-1",
+    botCount: 3,
   });
   assert(result.session !== null, "Expected joined session in result");
   assertEqual(result.session?.sessionId, "session-2", "Expected joined session id");
   assertEqual(result.reason, undefined, "Expected no join failure reason");
+  assert(typeof fetchCalls[0].init?.body === "string", "Expected join request body");
+  const parsedBody = JSON.parse(String(fetchCalls[0].init?.body ?? "{}")) as {
+    botCount?: number;
+  };
+  assertEqual(parsedBody.botCount, 3, "Expected botCount in join request payload");
 });
 
 await test("joins multiplayer room by room code endpoint", async () => {

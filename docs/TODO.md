@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Multiplayer UX iteration + admin role security hardening + monitor foundation + particle log-noise throttling + friends model scaffold planning)
+**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Multiplayer UX iteration + turn-sync hardening + room bot seeding/cleanup + admin metrics expansion + friends model scaffold planning)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -109,6 +109,11 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ Extracted bot decision logic to dedicated API bot engine module (`api/bot/engine.mjs`)
   - ✅ Added bot engine contract tests (`api/bot/engine.test.mjs`)
   - ✅ Added multiplayer session service reliability tests for heartbeat expiry dispatch + auth/session clearing semantics (`src/multiplayer/sessionService.test.ts`)
+  - ✅ Added client-side multiplayer turn-sync watchdog to auto-refresh stale turn state before hard lock
+  - ✅ Added multiplayer HUD sync-status indicator (`Sync Live`/`Resyncing`/`Stale`/`Failed`) for live turn-sync debugging
+  - ✅ Added admin metrics counters for timeout auto-advances and bot auto-advances
+  - ✅ Added optional bot seeding on room join (`sessionId`/`roomCode`) and bot pruning when no live humans remain
+  - ✅ Added explicit splash controls to separate create-room bots from join-room bot seeding
 - **Files Added**:
   - `src/ui/confirmModal.ts`
   - `src/ui/sessionExpiryModal.ts`
@@ -131,6 +136,23 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - **Follow-up TODO**:
   - [ ] Add CI smoke check that all configured theme asset URLs return non-HTML responses
   - [ ] Add explicit error UI for missing theme assets (instead of only console diagnostics)
+
+### Multiplayer Variant Concept: Round-Based Full Turn Mode (Planned)
+- **Status**: 🟡 Planned design note
+- **Proposed Ruleset**:
+  - Active player completes their full scoring run before turn passes (instead of per-roll handoff).
+  - Round ends when all players have completed their dice for that round.
+  - Room creation includes a configurable match target (number of rounds to win / play).
+  - Match winner is determined from round wins across the configured match length.
+- **Implementation Notes (Future)**:
+  - Add multiplayer room config field: `turnMode` (`roll_by_roll` | `full_turn_round`).
+  - Add room config field for round/match target.
+  - Extend server turn state machine with explicit round-complete and match-complete transitions.
+  - Keep current roll-by-roll mode as default for backward compatibility and gradual rollout.
+- **Open Design Questions**:
+  - Tie handling and round winner criteria (lowest score vs highest gain vs custom).
+  - Timeout behavior for a full-turn player (partial progress rules).
+  - Mid-round reconnect semantics and spectator/support handling.
 
 ### Friends System Foundation (Scaffold + Deferred Execution) (2026-02-26)
 - **Status**: 🟡 Planned and scaffolded, implementation intentionally deferred

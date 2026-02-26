@@ -85,6 +85,7 @@ Planned (not implemented yet):
   - `participants[]` snapshot (`playerId`, `displayName`, `isBot`, `joinedAt`, `lastHeartbeatAt`)
   - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `phase`, `activeRollServerId`, optional `activeRoll`, `updatedAt`)
 - `POST /api/multiplayer/sessions` accepts optional `botCount` (`0..4`) to add lightweight AI bot participants for websocket testing.
+- `POST /api/multiplayer/sessions/:sessionId/join` and `POST /api/multiplayer/rooms/:roomCode/join` accept optional `botCount` (`0..4`) to seed bots into an existing room during join (up to the room max bot cap).
 - Bot turn strategy is isolated in [`api/bot/engine.mjs`](./bot/engine.mjs) behind `createBotEngine()` so implementations can be swapped without rewriting websocket/session orchestration.
 - Admin endpoints include monitoring plus role management scaffolds:
   - In `auto` mode:
@@ -96,6 +97,7 @@ Planned (not implemented yet):
     - expire room session
     - remove participant from room
   - `GET /api/admin/storage` exposes active persistence backend + section counts for audit checks.
+  - Admin metrics now include cumulative turn auto-advance counters for timeout advances and bot advances.
   - Mutation actions are written to admin audit logs and exposed via `GET /api/admin/audit`.
   - Pass `x-admin-token: <token>` (or bearer token) when token mode is enabled.
 - Current multiplayer orchestration is server-process authoritative (in-memory + persisted snapshots). Keep Cloud Run API single-instance until distributed room coordination is introduced.

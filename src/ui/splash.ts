@@ -20,6 +20,7 @@ export interface SplashStartOptions {
   forceTutorialReplay?: boolean;
   multiplayer?: {
     botCount: number;
+    joinBotCount?: number;
     sessionId?: string;
     roomCode?: string;
   };
@@ -32,6 +33,8 @@ export class SplashScreen {
   private backgroundLoadPromise: Promise<void> | null = null;
   private playMode: SplashPlayMode = "solo";
   private botCount = 1;
+  private joinBotCount = 1;
+  private seedBotsOnJoin = false;
   private roomList: MultiplayerRoomListing[] = [];
   private selectedRoomSessionId: string | null = null;
   private privateRoomCode = "";
@@ -82,13 +85,29 @@ export class SplashScreen {
           </button>
         </div>
         <div id="splash-multiplayer-options" class="splash-multiplayer-options" style="display: none;">
-          <label for="splash-bot-count">Testing Bots</label>
+          <label for="splash-bot-count">Create Room Bots</label>
           <select id="splash-bot-count">
             <option value="0">0 (human-only)</option>
             <option value="1" selected>1 bot</option>
             <option value="2">2 bots</option>
             <option value="3">3 bots</option>
           </select>
+          <div class="splash-bot-seed-toggle">
+            <label for="splash-seed-join-bots">
+              <input id="splash-seed-join-bots" type="checkbox" />
+              Seed bots when joining rooms (testing)
+            </label>
+          </div>
+          <label for="splash-join-bot-count">Join Room Bot Seed Count</label>
+          <select id="splash-join-bot-count" disabled>
+            <option value="1" selected>1 bot</option>
+            <option value="2">2 bots</option>
+            <option value="3">3 bots</option>
+            <option value="4">4 bots</option>
+          </select>
+          <p class="splash-join-bot-seed-note">
+            Join seeding applies only when joining an existing room.
+          </p>
           <label for="splash-room-select">Join Existing Room</label>
           <div class="splash-room-picker">
             <select id="splash-room-select">
@@ -140,6 +159,20 @@ export class SplashScreen {
     botCountSelect?.addEventListener("change", () => {
       const parsed = Number(botCountSelect.value);
       this.botCount = Number.isFinite(parsed) ? Math.max(0, Math.min(3, Math.floor(parsed))) : 0;
+    });
+    const seedBotsOnJoinCheckbox =
+      this.container.querySelector<HTMLInputElement>("#splash-seed-join-bots");
+    const joinBotCountSelect =
+      this.container.querySelector<HTMLSelectElement>("#splash-join-bot-count");
+    seedBotsOnJoinCheckbox?.addEventListener("change", () => {
+      this.seedBotsOnJoin = seedBotsOnJoinCheckbox.checked === true;
+      this.updateJoinBotSeedUi();
+      this.updateRoomStatus();
+    });
+    joinBotCountSelect?.addEventListener("change", () => {
+      const parsed = Number(joinBotCountSelect.value);
+      this.joinBotCount = Number.isFinite(parsed) ? Math.max(1, Math.min(4, Math.floor(parsed))) : 1;
+      this.updateRoomStatus();
     });
 
     const roomSelect = this.container.querySelector<HTMLSelectElement>("#splash-room-select");
@@ -239,6 +272,7 @@ export class SplashScreen {
           this.playMode === "multiplayer"
             ? {
                 botCount: this.botCount,
+                joinBotCount: this.getJoinBotSeedCount(),
                 sessionId: this.selectedRoomSessionId ?? undefined,
                 roomCode: this.privateRoomCode || undefined,
               }
@@ -345,6 +379,7 @@ export class SplashScreen {
     if (this.playMode === "multiplayer") {
       void this.refreshRoomList(false);
     }
+    this.updateJoinBotSeedUi();
     this.updateRoomCodeValidationUi();
   }
 
@@ -363,7 +398,10 @@ export class SplashScreen {
         statusEl.textContent = "Invite code must be 4-8 letters or numbers.";
         return;
       }
-      statusEl.textContent = `Joining private room ${this.privateRoomCode}.`;
+      const joinSeedNote = this.getJoinBotSeedStatusNote();
+      statusEl.textContent = joinSeedNote
+        ? `Joining private room ${this.privateRoomCode}. ${joinSeedNote}`
+        : `Joining private room ${this.privateRoomCode}.`;
       return;
     }
     if (this.selectedRoomSessionId) {
@@ -381,7 +419,7 @@ export class SplashScreen {
         const joinability = availableSlots > 0 ? `${availableSlots} open seat(s)` : "Room is currently full";
         statusEl.textContent =
           availableSlots > 0
-            ? `Joining room ${selected.roomCode} (${joinability}). Expires in ~${expiresInMinutes}m without activity.`
+            ? `Joining room ${selected.roomCode} (${joinability}). Expires in ~${expiresInMinutes}m without activity.${this.getJoinBotSeedStatusNote(true)}`
             : `Joining room ${selected.roomCode} (${joinability}). Select "Create Private Room" to start your own room now.`;
         return;
       }
@@ -390,7 +428,10 @@ export class SplashScreen {
       statusEl.textContent = "No active public rooms found. Starting creates a private room.";
       return;
     }
-    statusEl.textContent = "Select a public room to join, or choose Create Private Room at any time.";
+    const joinSeedNote = this.getJoinBotSeedStatusNote();
+    statusEl.textContent = joinSeedNote
+      ? `Select a public room to join, or choose Create Private Room at any time. ${joinSeedNote}`
+      : "Select a public room to join, or choose Create Private Room at any time.";
   }
 
   private async refreshRoomList(force: boolean): Promise<void> {
@@ -584,6 +625,7 @@ export class SplashScreen {
       const { backendApiService } = await import("../services/backendApi.js");
       const joinResult = await backendApiService.joinMultiplayerRoomByCode(targetRoomCode, {
         playerId: localPlayerId,
+        botCount: this.getJoinBotSeedCount(),
       });
 
       if (!joinResult.session) {
@@ -603,6 +645,7 @@ export class SplashScreen {
         playMode: "multiplayer",
         multiplayer: {
           botCount: this.botCount,
+          joinBotCount: this.getJoinBotSeedCount(),
           sessionId: joinedSessionId,
           roomCode: targetRoomCode,
         },
@@ -619,5 +662,30 @@ export class SplashScreen {
       this.roomCodeJoinInFlight = false;
       this.updateRoomCodeValidationUi();
     }
+  }
+
+  private getJoinBotSeedCount(): number | undefined {
+    if (!this.seedBotsOnJoin) {
+      return undefined;
+    }
+    return Math.max(1, Math.min(4, Math.floor(this.joinBotCount)));
+  }
+
+  private updateJoinBotSeedUi(): void {
+    const joinBotCountSelect =
+      this.container.querySelector<HTMLSelectElement>("#splash-join-bot-count");
+    if (!joinBotCountSelect) {
+      return;
+    }
+    joinBotCountSelect.disabled = !this.seedBotsOnJoin;
+  }
+
+  private getJoinBotSeedStatusNote(withLeadingSpace: boolean = false): string {
+    const joinSeedCount = this.getJoinBotSeedCount();
+    if (!joinSeedCount) {
+      return "";
+    }
+    const prefix = withLeadingSpace ? " " : "";
+    return `${prefix}Join seeding: +${joinSeedCount} bot${joinSeedCount === 1 ? "" : "s"}.`;
   }
 }

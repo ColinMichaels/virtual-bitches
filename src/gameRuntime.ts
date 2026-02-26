@@ -70,6 +70,7 @@ export type GamePlayMode = "solo" | "multiplayer";
 export interface MultiplayerBootstrapOptions {
   roomCode?: string;
   botCount?: number;
+  joinBotCount?: number;
   sessionId?: string;
 }
 
@@ -127,6 +128,10 @@ function normalizeCompletedAt(value: unknown): number | null {
 }
 
 const TURN_NUDGE_COOLDOWN_MS = 7000;
+const TURN_SYNC_WATCHDOG_INTERVAL_MS = 2500;
+const TURN_SYNC_STALE_MS = 12000;
+const TURN_SYNC_REQUEST_COOLDOWN_MS = 7000;
+const TURN_SYNC_STALE_RECOVERY_MS = 4500;
 
 class Game implements GameCallbacks {
   private state: GameState;
@@ -165,6 +170,10 @@ class Game implements GameCallbacks {
   private sessionExpiryPromptActive = false;
   private sessionExpiryRecoveryInProgress = false;
   private hudClockHandle: ReturnType<typeof setInterval> | null = null;
+  private turnSyncWatchdogHandle: ReturnType<typeof setInterval> | null = null;
+  private turnSyncWatchdogInFlight = false;
+  private lastTurnSyncActivityAt = 0;
+  private lastTurnSyncRequestAt = 0;
   private participantSeatById = new Map<string, number>();
   private participantIdBySeat = new Map<number, string>();
   private participantLabelById = new Map<string, string>();
@@ -223,10 +232,16 @@ class Game implements GameCallbacks {
 
     document.addEventListener("multiplayer:connected", () => {
       particleService.enableNetworkSync(true);
+      this.touchMultiplayerTurnSyncActivity();
+      this.hud.setTurnSyncStatus("ok", "Sync Live");
       this.flushPendingTurnEndSync();
     });
     document.addEventListener("multiplayer:disconnected", () => {
       particleService.enableNetworkSync(false);
+      this.touchMultiplayerTurnSyncActivity();
+      if (this.playMode === "multiplayer") {
+        this.hud.setTurnSyncStatus("stale", "Disconnected");
+      }
     });
     document.addEventListener("multiplayer:authExpired", () => {
       notificationService.show("Multiplayer auth expired, refreshing session...", "warning", 2200);
@@ -360,9 +375,11 @@ class Game implements GameCallbacks {
     particleService.setIntensity(settings.display.particleIntensity);
     this.scene.updateTableContrast(settings.display.visual.tableContrast);
     this.hud = new HUD();
+    this.hud.setTurnSyncStatus(null);
     this.gameStartTime = Date.now();
     this.hud.setGameClockStart(this.gameStartTime);
     this.startHudClockTicker();
+    this.startTurnSyncWatchdog();
     this.diceRow = new DiceRow((dieId) => this.handleDieClick(dieId), this.diceRenderer as any);
 
     // Set initial hint mode based on game mode
@@ -579,6 +596,99 @@ class Game implements GameCallbacks {
     }, 250);
   }
 
+  private touchMultiplayerTurnSyncActivity(): void {
+    this.lastTurnSyncActivityAt = Date.now();
+  }
+
+  private startTurnSyncWatchdog(): void {
+    if (this.turnSyncWatchdogHandle) {
+      clearInterval(this.turnSyncWatchdogHandle);
+    }
+    this.touchMultiplayerTurnSyncActivity();
+    this.turnSyncWatchdogHandle = setInterval(() => {
+      void this.runTurnSyncWatchdogTick();
+    }, TURN_SYNC_WATCHDOG_INTERVAL_MS);
+  }
+
+  private stopTurnSyncWatchdog(): void {
+    if (this.turnSyncWatchdogHandle) {
+      clearInterval(this.turnSyncWatchdogHandle);
+      this.turnSyncWatchdogHandle = null;
+    }
+    this.turnSyncWatchdogInFlight = false;
+  }
+
+  private async runTurnSyncWatchdogTick(): Promise<void> {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return;
+    }
+    if (!this.multiplayerNetwork?.isConnected()) {
+      return;
+    }
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession?.sessionId) {
+      return;
+    }
+
+    const now = Date.now();
+    const staleMs = now - this.lastTurnSyncActivityAt;
+    const deadlineTimedOut =
+      typeof this.activeTurnDeadlineAt === "number" &&
+      Number.isFinite(this.activeTurnDeadlineAt) &&
+      this.activeTurnDeadlineAt > 0 &&
+      now > this.activeTurnDeadlineAt + 1500;
+    const awaitingActionSync = this.awaitingMultiplayerRoll || this.pendingTurnEndSync;
+    const staleThreshold =
+      deadlineTimedOut || awaitingActionSync
+        ? TURN_SYNC_STALE_RECOVERY_MS
+        : TURN_SYNC_STALE_MS;
+    if (staleMs < staleThreshold) {
+      return;
+    }
+
+    this.hud.setTurnSyncStatus("stale", "Sync Stale");
+    await this.requestTurnSyncRefresh("watchdog_stale_turn");
+  }
+
+  private async requestTurnSyncRefresh(reason: string): Promise<boolean> {
+    if (this.turnSyncWatchdogInFlight) {
+      return false;
+    }
+    const now = Date.now();
+    if (now - this.lastTurnSyncRequestAt < TURN_SYNC_REQUEST_COOLDOWN_MS) {
+      return false;
+    }
+
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession?.sessionId) {
+      return false;
+    }
+
+    this.hud.setTurnSyncStatus("syncing", "Resyncing...");
+    this.turnSyncWatchdogInFlight = true;
+    this.lastTurnSyncRequestAt = now;
+    try {
+      const refreshedSession = await this.multiplayerSessionService.refreshSessionAuth();
+      if (!refreshedSession) {
+        this.hud.setTurnSyncStatus("error", "Resync Failed");
+        log.warn(`Turn sync refresh failed (${reason})`, {
+          sessionId: activeSession.sessionId,
+        });
+        return false;
+      }
+      this.touchMultiplayerTurnSyncActivity();
+      this.applyMultiplayerSeatState(refreshedSession);
+      this.flushPendingTurnEndSync();
+      this.hud.setTurnSyncStatus("ok", "Resynced");
+      log.info(`Turn sync refreshed (${reason})`, {
+        sessionId: refreshedSession.sessionId,
+      });
+      return true;
+    } finally {
+      this.turnSyncWatchdogInFlight = false;
+    }
+  }
+
   private syncHudTurnTimer(): void {
     this.hud.setTurnDeadline(this.activeTurnDeadlineAt);
   }
@@ -767,7 +877,9 @@ class Game implements GameCallbacks {
     options?: { suppressFailureNotification?: boolean }
   ): Promise<boolean> {
     playerDataSyncService.setSessionId(sessionId);
-    const session = await this.multiplayerSessionService.joinSession(sessionId);
+    const session = await this.multiplayerSessionService.joinSession(sessionId, {
+      botCount: this.resolveJoinBotCount(),
+    });
     if (!session) {
       playerDataSyncService.setSessionId(undefined);
       if (!options?.suppressFailureNotification) {
@@ -805,7 +917,9 @@ class Game implements GameCallbacks {
       return false;
     }
 
-    const session = await this.multiplayerSessionService.joinRoomByCode(normalizedRoomCode);
+    const session = await this.multiplayerSessionService.joinRoomByCode(normalizedRoomCode, {
+      botCount: this.resolveJoinBotCount(),
+    });
     if (!session) {
       if (!options?.suppressFailureNotification) {
         const joinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason();
@@ -905,6 +1019,18 @@ class Game implements GameCallbacks {
     return candidates[0] ?? null;
   }
 
+  private resolveJoinBotCount(): number | undefined {
+    const parsed =
+      typeof this.multiplayerOptions.joinBotCount === "number" &&
+      Number.isFinite(this.multiplayerOptions.joinBotCount)
+        ? Math.floor(this.multiplayerOptions.joinBotCount)
+        : NaN;
+    if (!Number.isFinite(parsed)) {
+      return undefined;
+    }
+    return Math.max(1, Math.min(4, parsed));
+  }
+
   private bindMultiplayerSession(
     session: MultiplayerSessionRecord,
     updateUrlSessionParam: boolean
@@ -913,6 +1039,8 @@ class Game implements GameCallbacks {
     this.sessionExpiryPromptActive = false;
     this.lastTurnPlanPreview = "";
     this.applyMultiplayerSeatState(session);
+    this.touchMultiplayerTurnSyncActivity();
+    this.hud.setTurnSyncStatus("ok", "Sync Ready");
 
     const sessionWsUrl = this.buildSessionWsUrl(session);
     if (sessionWsUrl) {
@@ -1044,6 +1172,7 @@ class Game implements GameCallbacks {
     this.scene.playerSeatRenderer.setActiveTurnSeat(currentSeatIndex);
     this.hud.setMultiplayerStandings([], null);
     this.hud.setMultiplayerActiveTurn(null);
+    this.hud.setTurnSyncStatus(null);
   }
 
   private computeSeatedParticipants(session: MultiplayerSessionRecord): SeatedMultiplayerParticipant[] {
@@ -1627,6 +1756,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.touchMultiplayerTurnSyncActivity();
     this.applyMultiplayerSeatState(syncedSession);
     if (syncedSession.sessionComplete === true && !this.lastSessionComplete) {
       this.lastSessionComplete = true;
@@ -1641,6 +1771,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.touchMultiplayerTurnSyncActivity();
     const previousActiveTurnPlayerId = this.activeTurnPlayerId;
     this.awaitingMultiplayerRoll = false;
     this.applyTurnTiming(message.turnExpiresAt ?? null);
@@ -1682,6 +1813,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.touchMultiplayerTurnSyncActivity();
     this.pendingTurnEndSync = false;
     this.applyTurnTiming(null);
     this.hud.setMultiplayerActiveTurn(null);
@@ -1709,6 +1841,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.touchMultiplayerTurnSyncActivity();
     const expiresAt =
       typeof message.turnExpiresAt === "number" && Number.isFinite(message.turnExpiresAt)
         ? message.turnExpiresAt
@@ -1741,6 +1874,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.touchMultiplayerTurnSyncActivity();
     this.applyTurnTiming(null);
     const playerId = typeof message.playerId === "string" ? message.playerId : "";
     if (!playerId) {
@@ -1758,6 +1892,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.touchMultiplayerTurnSyncActivity();
     if (!message?.playerId) {
       return;
     }
@@ -1837,6 +1972,7 @@ class Game implements GameCallbacks {
 
     if (code === "turn_not_active") {
       this.awaitingMultiplayerRoll = false;
+      void this.requestTurnSyncRefresh("turn_not_active");
       return;
     }
 
@@ -1849,6 +1985,7 @@ class Game implements GameCallbacks {
       this.awaitingMultiplayerRoll = false;
       this.pendingTurnEndSync = false;
       notificationService.show("Turn sync conflict. Wait for turn update.", "warning", 2000);
+      void this.requestTurnSyncRefresh("turn_action_invalid_phase");
       return;
     }
 
@@ -1860,6 +1997,7 @@ class Game implements GameCallbacks {
     if (code === "turn_action_invalid_payload") {
       this.awaitingMultiplayerRoll = false;
       notificationService.show("Turn payload rejected. Syncing...", "warning", 2200);
+      void this.requestTurnSyncRefresh("turn_action_invalid_payload");
       return;
     }
 
@@ -1995,7 +2133,9 @@ class Game implements GameCallbacks {
     });
     if (!sent) {
       notificationService.show("Failed to signal turn end.", "warning", 1800);
+      return;
     }
+    this.touchMultiplayerTurnSyncActivity();
   }
 
   private emitTurnAction(
@@ -2029,6 +2169,7 @@ class Game implements GameCallbacks {
       return false;
     }
 
+    this.touchMultiplayerTurnSyncActivity();
     return true;
   }
 
@@ -2296,6 +2437,7 @@ class Game implements GameCallbacks {
 
   private continueSoloAfterSessionExpiry(reason: string): void {
     log.info("Continuing game in solo mode after multiplayer expiry", { reason });
+    this.stopTurnSyncWatchdog();
     this.multiplayerNetwork?.dispose();
     this.multiplayerNetwork = undefined;
     this.multiplayerSessionService.dispose();
@@ -2308,6 +2450,7 @@ class Game implements GameCallbacks {
     this.diceRenderer.cancelAllSpectatorPreviews();
     this.lastTurnPlanPreview = "";
     this.lastSessionComplete = false;
+    this.hud.setTurnSyncStatus(null);
     playerDataSyncService.setSessionId(undefined);
     this.clearSessionQueryParam();
     this.applySoloSeatState();
@@ -2330,6 +2473,7 @@ class Game implements GameCallbacks {
 
     this.multiplayerNetwork?.dispose();
     this.multiplayerNetwork = undefined;
+    this.stopTurnSyncWatchdog();
     if (this.hudClockHandle) {
       clearInterval(this.hudClockHandle);
       this.hudClockHandle = null;
@@ -2341,6 +2485,7 @@ class Game implements GameCallbacks {
     this.lastTurnPlanPreview = "";
     this.lastSessionComplete = false;
     this.hud.setMultiplayerStandings([], null);
+    this.hud.setTurnSyncStatus(null);
     playerDataSyncService.setSessionId(undefined);
     this.clearSessionQueryParam();
     this.updateInviteLinkControlVisibility();

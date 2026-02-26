@@ -254,6 +254,39 @@ await test("tracks room_full join failure reason", async () => {
   }
 });
 
+await test("passes botCount through join options for bot seeding", async () => {
+  const service = new MultiplayerSessionService("player-alpha");
+  const originalJoin = backendApiService.joinMultiplayerSession.bind(backendApiService);
+  const capturedRequests: Array<{ playerId: string; botCount?: number }> = [];
+
+  (backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession })
+    .joinMultiplayerSession = async (_sessionId, request) => {
+      capturedRequests.push({
+        playerId: request.playerId,
+        botCount: request.botCount,
+      });
+      return {
+        session: createSession({
+          sessionId: "session-bot-seed",
+          roomCode: "BOTSEED",
+        }),
+      };
+    };
+
+  try {
+    const joined = await service.joinSession("session-bot-seed", { botCount: 2 });
+    assert(joined !== null, "Expected join success");
+    assertEqual(capturedRequests.length, 1, "Expected one join call");
+    assertEqual(capturedRequests[0].playerId, "player-alpha", "Expected player id passthrough");
+    assertEqual(capturedRequests[0].botCount, 2, "Expected botCount passthrough");
+  } finally {
+    service.dispose();
+    (
+      backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession }
+    ).joinMultiplayerSession = originalJoin;
+  }
+});
+
 await test("joins by room code and tracks room_not_found failures", async () => {
   const service = new MultiplayerSessionService("player-alpha");
   const originalJoinByCode = backendApiService.joinMultiplayerRoomByCode.bind(backendApiService);

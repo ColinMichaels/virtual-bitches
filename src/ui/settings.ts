@@ -1175,6 +1175,14 @@ export class SettingsModal {
             <span>Private</span>
             <strong>${overview.metrics.privateRoomCount}</strong>
           </div>
+          <div class="settings-admin-metric">
+            <span>Timeout Auto</span>
+            <strong>${Math.max(0, Math.floor(overview.metrics.turnTimeoutAutoAdvanceCount ?? 0))}</strong>
+          </div>
+          <div class="settings-admin-metric">
+            <span>Bot Auto</span>
+            <strong>${Math.max(0, Math.floor(overview.metrics.botTurnAutoAdvanceCount ?? 0))}</strong>
+          </div>
         </div>
       `
       : "";
