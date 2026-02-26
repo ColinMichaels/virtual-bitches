@@ -9,6 +9,7 @@ import { scoreHistoryService } from "../services/score-history.js";
 import { leaderboardService } from "../services/leaderboard.js";
 import { notificationService } from "../ui/notifications.js";
 import { generateShareURL } from "../game/state.js";
+import { buildScoreSeedShareUrl } from "../social/share/facebookShareMeta.js";
 import { logger } from "../utils/logger.js";
 import type { GameState } from "../engine/types.js";
 import type { GameScene } from "../render/scene.js";
@@ -66,7 +67,12 @@ export class GameOverController {
     this.displayRank(rank, state, scoreHistoryService.getStats());
 
     // Generate and setup share URL
-    const shareURL = generateShareURL(state);
+    const shareURL = buildScoreSeedShareUrl({
+      baseUrl: generateShareURL(state),
+      seed: state.seed,
+      score: state.score,
+      difficulty: state.mode.difficulty,
+    });
     if (this.shareLinkEl) {
       this.shareLinkEl.textContent = shareURL;
     }

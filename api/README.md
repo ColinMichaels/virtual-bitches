@@ -81,13 +81,14 @@ Planned (not implemented yet):
 - `/api/auth/me` supports:
   - `GET` to inspect authenticated account profile
   - `PUT` with `{ "displayName": "<name>" }` to set leaderboard name
+  - profile payload includes provider details (`provider`, `providerId`) and optional `photoUrl` from social auth
 - Session creation/join returns:
   - `playerToken` for WS query auth
   - `auth` bundle (`accessToken`, `refreshToken`, `expiresAt`, `tokenType`)
-  - `participants[]` snapshot (`playerId`, `displayName`, `isBot`, `joinedAt`, `lastHeartbeatAt`)
+  - `participants[]` snapshot (`playerId`, `displayName`, optional `avatarUrl`, optional `providerId`, `isBot`, `joinedAt`, `lastHeartbeatAt`)
   - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `phase`, `activeRollServerId`, optional `activeRoll`, `updatedAt`)
-- `POST /api/multiplayer/sessions` accepts optional `botCount` (`0..4`) to add lightweight AI bot participants for websocket testing.
-- `POST /api/multiplayer/sessions/:sessionId/join` and `POST /api/multiplayer/rooms/:roomCode/join` accept optional `botCount` (`0..4`) to seed bots into an existing room during join (up to the room max bot cap).
+- `POST /api/multiplayer/sessions` accepts optional `displayName`, `avatarUrl`, `providerId`, and `botCount` (`0..4`) to seed the local participant profile and bot seats.
+- `POST /api/multiplayer/sessions/:sessionId/join` and `POST /api/multiplayer/rooms/:roomCode/join` accept optional `displayName`, `avatarUrl`, `providerId`, and `botCount` (`0..4`) to update joining participant profile data and seed bots into an existing room.
 - Bot turn strategy is isolated in [`api/bot/engine.mjs`](./bot/engine.mjs) behind `createBotEngine()` so implementations can be swapped without rewriting websocket/session orchestration.
 - Admin endpoints include monitoring plus role management scaffolds:
   - In `auto` mode:

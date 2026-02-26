@@ -35,6 +35,7 @@ import type { CameraAttackMessage } from "./chaos/types.js";
 import type { ParticleNetworkEvent } from "./services/particleService.js";
 import { playerDataSyncService } from "./services/playerDataSync.js";
 import { getLocalPlayerId } from "./services/playerIdentity.js";
+import { firebaseAuthService } from "./services/firebaseAuth.js";
 import {
   MultiplayerNetworkService,
   type MultiplayerGameUpdateMessage,
@@ -82,6 +83,8 @@ interface GameSessionBootstrapOptions {
 interface SeatedMultiplayerParticipant {
   playerId: string;
   displayName: string;
+  avatarUrl?: string;
+  providerId?: string;
   seatIndex: number;
   isBot: boolean;
   isReady: boolean;
@@ -132,6 +135,7 @@ const TURN_SYNC_WATCHDOG_INTERVAL_MS = 2500;
 const TURN_SYNC_STALE_MS = 12000;
 const TURN_SYNC_REQUEST_COOLDOWN_MS = 7000;
 const TURN_SYNC_STALE_RECOVERY_MS = 4500;
+const MULTIPLAYER_IDENTITY_CACHE_MS = 30000;
 
 class Game implements GameCallbacks {
   private state: GameState;
@@ -181,6 +185,17 @@ class Game implements GameCallbacks {
   private nudgeCooldownByPlayerId = new Map<string, number>();
   private lastTurnPlanPreview = "";
   private lastSessionComplete = false;
+  private localAvatarUrl: string | undefined;
+  private cachedMultiplayerIdentity:
+    | {
+        value: {
+          displayName?: string;
+          avatarUrl?: string;
+          providerId?: string;
+        };
+        fetchedAt: number;
+      }
+    | null = null;
 
   private actionBtn: HTMLButtonElement;
   private deselectBtn: HTMLButtonElement;
@@ -794,6 +809,15 @@ class Game implements GameCallbacks {
   private initializeBackendSyncAndMultiplayerSession(): void {
     playerDataSyncService.start();
     void leaderboardService.flushPendingScores();
+    void this.resolveMultiplayerIdentityPayload()
+      .then(() => {
+        if (this.playMode !== "multiplayer") {
+          this.applySoloSeatState();
+        }
+      })
+      .catch((error) => {
+        log.debug("Unable to resolve multiplayer identity payload", error);
+      });
 
     void this.bootstrapMultiplayerSession();
   }
@@ -881,8 +905,12 @@ class Game implements GameCallbacks {
       return;
     }
 
+    const multiplayerIdentity = await this.resolveMultiplayerIdentityPayload();
     const createdSession = await this.multiplayerSessionService.createSession({
       roomCode: this.multiplayerOptions.roomCode,
+      displayName: multiplayerIdentity.displayName,
+      avatarUrl: multiplayerIdentity.avatarUrl,
+      providerId: multiplayerIdentity.providerId,
       botCount: this.multiplayerOptions.botCount,
       gameDifficulty: this.state.mode.difficulty,
     });
@@ -915,7 +943,11 @@ class Game implements GameCallbacks {
     options?: { suppressFailureNotification?: boolean }
   ): Promise<boolean> {
     playerDataSyncService.setSessionId(sessionId);
+    const multiplayerIdentity = await this.resolveMultiplayerIdentityPayload();
     const session = await this.multiplayerSessionService.joinSession(sessionId, {
+      displayName: multiplayerIdentity.displayName,
+      avatarUrl: multiplayerIdentity.avatarUrl,
+      providerId: multiplayerIdentity.providerId,
       botCount: this.resolveJoinBotCount(),
     });
     if (!session) {
@@ -955,7 +987,11 @@ class Game implements GameCallbacks {
       return false;
     }
 
+    const multiplayerIdentity = await this.resolveMultiplayerIdentityPayload();
     const session = await this.multiplayerSessionService.joinRoomByCode(normalizedRoomCode, {
+      displayName: multiplayerIdentity.displayName,
+      avatarUrl: multiplayerIdentity.avatarUrl,
+      providerId: multiplayerIdentity.providerId,
       botCount: this.resolveJoinBotCount(),
     });
     if (!session) {
@@ -1069,6 +1105,100 @@ class Game implements GameCallbacks {
     return Math.max(1, Math.min(4, parsed));
   }
 
+  private async resolveMultiplayerIdentityPayload(): Promise<{
+    displayName?: string;
+    avatarUrl?: string;
+    providerId?: string;
+  }> {
+    const now = Date.now();
+    if (
+      this.cachedMultiplayerIdentity &&
+      now - this.cachedMultiplayerIdentity.fetchedAt < MULTIPLAYER_IDENTITY_CACHE_MS
+    ) {
+      this.localAvatarUrl = this.cachedMultiplayerIdentity.value.avatarUrl;
+      return this.cachedMultiplayerIdentity.value;
+    }
+
+    await firebaseAuthService.initialize();
+    const firebaseProfile = firebaseAuthService.getCurrentUserProfile();
+    const isAuthenticated = Boolean(firebaseProfile && !firebaseProfile.isAnonymous);
+
+    let accountProfile: Awaited<ReturnType<typeof leaderboardService.getAccountProfile>> = null;
+    if (isAuthenticated) {
+      accountProfile = await leaderboardService.getAccountProfile();
+    }
+
+    const displayNameCandidates = [
+      accountProfile?.leaderboardName,
+      accountProfile?.displayName,
+      firebaseProfile?.displayName,
+    ];
+    const displayName = displayNameCandidates
+      .map((candidate) => this.normalizeMultiplayerDisplayName(candidate))
+      .find((candidate) => typeof candidate === "string" && candidate.length > 0);
+    const avatarUrl = this.normalizeMultiplayerAvatarUrl(
+      accountProfile?.photoUrl ?? firebaseProfile?.photoURL
+    );
+    const providerId = this.normalizeMultiplayerProviderId(
+      accountProfile?.providerId ?? firebaseProfile?.providerId
+    );
+
+    const identity = {
+      displayName,
+      avatarUrl,
+      providerId,
+    };
+    this.localAvatarUrl = avatarUrl;
+    this.cachedMultiplayerIdentity = {
+      value: identity,
+      fetchedAt: now,
+    };
+    return identity;
+  }
+
+  private normalizeMultiplayerDisplayName(value: unknown): string | undefined {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const trimmed = value.trim().replace(/\s+/g, " ");
+    if (!trimmed) {
+      return undefined;
+    }
+    return trimmed.slice(0, 24);
+  }
+
+  private normalizeMultiplayerAvatarUrl(value: unknown): string | undefined {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > 2048) {
+      return undefined;
+    }
+    try {
+      const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://localhost";
+      const parsed = new URL(trimmed, baseUrl);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        return undefined;
+      }
+      return parsed.toString();
+    } catch {
+      return undefined;
+    }
+  }
+
+  private normalizeMultiplayerProviderId(value: unknown): string | undefined {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return undefined;
+    }
+    const safe = normalized.replace(/[^a-z0-9._:-]/g, "").slice(0, 64);
+    return safe || undefined;
+  }
+
   private bindMultiplayerSession(
     session: MultiplayerSessionRecord,
     updateUrlSessionParam: boolean
@@ -1138,6 +1268,7 @@ class Game implements GameCallbacks {
           isCurrentPlayer,
           isBot: participant.isBot,
           playerName: this.formatSeatDisplayName(participant, isCurrentPlayer, showReadyState),
+          avatarUrl: participant.avatarUrl,
           avatarColor: this.resolveSeatColor(participant, isCurrentPlayer),
           score: participant.score,
           isComplete: participant.isComplete,
@@ -1151,6 +1282,7 @@ class Game implements GameCallbacks {
         isCurrentPlayer: isCurrentSeat,
         isBot: false,
         playerName: isCurrentSeat ? "YOU" : "Empty",
+        avatarUrl: isCurrentSeat ? this.localAvatarUrl : undefined,
         avatarColor: isCurrentSeat ? new Color3(0.24, 0.84, 0.36) : undefined,
         score: isCurrentSeat ? this.state.score : undefined,
         isComplete: false,
@@ -1202,6 +1334,7 @@ class Game implements GameCallbacks {
         isCurrentPlayer: isCurrentSeat,
         isBot: false,
         playerName: isCurrentSeat ? "YOU" : "Empty",
+        avatarUrl: isCurrentSeat ? this.localAvatarUrl : undefined,
         avatarColor: isCurrentSeat ? new Color3(0.24, 0.84, 0.36) : undefined,
         score: isCurrentSeat ? this.state.score : undefined,
         isComplete: false,
@@ -1232,6 +1365,8 @@ class Game implements GameCallbacks {
     seated.push({
       playerId: this.localPlayerId,
       displayName: localParticipant?.displayName ?? "You",
+      avatarUrl: localParticipant?.avatarUrl ?? this.localAvatarUrl,
+      providerId: localParticipant?.providerId,
       seatIndex: currentSeatIndex,
       isBot: false,
       isReady: localParticipant?.isReady === true,
@@ -1249,6 +1384,8 @@ class Game implements GameCallbacks {
       seated.push({
         playerId: participant.playerId,
         displayName: participant.displayName,
+        avatarUrl: participant.avatarUrl,
+        providerId: participant.providerId,
         seatIndex: availableSeats[index],
         isBot: participant.isBot,
         isReady: participant.isReady,
@@ -1267,6 +1404,8 @@ class Game implements GameCallbacks {
   ): Array<{
     playerId: string;
     displayName: string;
+    avatarUrl?: string;
+    providerId?: string;
     isBot: boolean;
     isReady: boolean;
     score: number;
@@ -1280,6 +1419,8 @@ class Game implements GameCallbacks {
       {
         playerId: string;
         displayName: string;
+        avatarUrl?: string;
+        providerId?: string;
         isBot: boolean;
         isReady: boolean;
         score: number;
@@ -1309,6 +1450,8 @@ class Game implements GameCallbacks {
       seen.set(playerId, {
         playerId,
         displayName,
+        avatarUrl: this.normalizeMultiplayerAvatarUrl(participant.avatarUrl),
+        providerId: this.normalizeMultiplayerProviderId(participant.providerId),
         isBot: Boolean(participant.isBot),
         isReady: Boolean(participant.isBot) ? true : participant.isReady === true,
         score: normalizeParticipantScore(participant.score),
@@ -1326,6 +1469,8 @@ class Game implements GameCallbacks {
       seen.set(this.localPlayerId, {
         playerId: this.localPlayerId,
         displayName: "You",
+        avatarUrl: this.localAvatarUrl,
+        providerId: undefined,
         isBot: false,
         isReady: true,
         score: normalizeParticipantScore(this.state.score),

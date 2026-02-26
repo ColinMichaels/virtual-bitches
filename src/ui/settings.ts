@@ -740,6 +740,9 @@ export class SettingsModal {
         "Guest Player";
       const email = accountProfile?.email?.trim() || firebaseProfile?.email?.trim() || "";
       const provider = accountProfile?.provider?.trim() || (isAuthenticated ? "google" : "guest");
+      const providerId = accountProfile?.providerId?.trim() || firebaseProfile?.providerId?.trim() || "";
+      const providerLabel = providerId ? `${provider} (${providerId})` : provider;
+      const photoUrl = accountProfile?.photoUrl?.trim() || firebaseProfile?.photoURL?.trim() || "";
       const leaderboardName = accountProfile?.leaderboardName?.trim() ?? "";
       const accountAdminRole = this.normalizeAdminRoleValue(accountProfile?.admin?.role);
       const authLabel = authConfigured
@@ -764,25 +767,34 @@ export class SettingsModal {
 
       panel.innerHTML = `
         <div class="settings-account-header">
-          <div>
-            <div class="settings-account-name">${escapeHtml(displayName)}</div>
-            <div class="settings-account-badge">${escapeHtml(authLabel)}</div>
-            ${email ? `<div class="settings-account-email">${escapeHtml(email)}</div>` : ""}
-            <div class="settings-account-provider">Provider: ${escapeHtml(provider)}</div>
-            ${
-              this.isAdminMonitorEnabled()
-                ? `<div class="settings-account-provider">Admin Role: ${escapeHtml(
-                    accountAdminRole ?? "none"
-                  )}</div>`
-                : ""
-            }
-            <div
-              id="settings-sync-indicator"
-              class="sync-indicator sync-indicator--${syncIndicator.tone}"
-              title="${escapeAttribute(syncIndicator.title)}"
-            >
-              <span class="sync-indicator-dot" aria-hidden="true"></span>
-              <span class="sync-indicator-label">${escapeHtml(syncIndicator.label)}</span>
+          <div class="settings-account-summary">
+            <div class="settings-account-avatar">
+              ${
+                photoUrl
+                  ? `<img class="settings-account-avatar-image" src="${escapeAttribute(photoUrl)}" alt="${escapeAttribute(displayName)} profile photo" referrerpolicy="no-referrer" />`
+                  : `<span>${escapeHtml(this.getAvatarInitial(displayName))}</span>`
+              }
+            </div>
+            <div>
+              <div class="settings-account-name">${escapeHtml(displayName)}</div>
+              <div class="settings-account-badge">${escapeHtml(authLabel)}</div>
+              ${email ? `<div class="settings-account-email">${escapeHtml(email)}</div>` : ""}
+              <div class="settings-account-provider">Provider: ${escapeHtml(providerLabel)}</div>
+              ${
+                this.isAdminMonitorEnabled()
+                  ? `<div class="settings-account-provider">Admin Role: ${escapeHtml(
+                      accountAdminRole ?? "none"
+                    )}</div>`
+                  : ""
+              }
+              <div
+                id="settings-sync-indicator"
+                class="sync-indicator sync-indicator--${syncIndicator.tone}"
+                title="${escapeAttribute(syncIndicator.title)}"
+              >
+                <span class="sync-indicator-dot" aria-hidden="true"></span>
+                <span class="sync-indicator-label">${escapeHtml(syncIndicator.label)}</span>
+              </div>
             </div>
           </div>
           <div class="settings-account-actions">
@@ -2021,6 +2033,14 @@ export class SettingsModal {
     };
 
     infoText.textContent = descriptions[difficulty];
+  }
+
+  private getAvatarInitial(displayName: string): string {
+    const normalized = displayName.trim();
+    if (!normalized) {
+      return "?";
+    }
+    return normalized.charAt(0).toUpperCase();
   }
 
   private formatDuration(ms: number): string {

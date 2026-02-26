@@ -12,6 +12,7 @@ import {
   DynamicTexture,
   ActionManager,
   ExecuteCodeAction,
+  Texture,
 } from "@babylonjs/core";
 import { PlayerSeat } from "./octagonGeometry.js";
 
@@ -37,6 +38,7 @@ export interface SeatState {
   isCurrentPlayer: boolean;
   isBot?: boolean;
   playerName?: string;
+  avatarUrl?: string;
   avatarColor?: Color3;
   score?: number;
   isComplete?: boolean;
@@ -55,6 +57,7 @@ export class PlayerSeatRenderer {
   private turnMarkerMeshes: Map<number, Mesh> = new Map();
   private turnBadgeMeshes: Map<number, Mesh> = new Map();
   private seatStates: Map<number, SeatState> = new Map();
+  private seatAvatarTextures: Map<number, { url?: string; texture: Texture | null }> = new Map();
   private scorePulseTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
   private chatBubbleHideTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
   private highlightedSeatIndex: number | null = null;
@@ -143,6 +146,7 @@ export class PlayerSeatRenderer {
 
     pedestal.rotation.y = seat.angle + Math.PI;
     this.seatMeshes.set(seat.index, pedestal);
+    this.seatAvatarTextures.set(seat.index, { url: undefined, texture: null });
   }
 
   /**
@@ -459,6 +463,7 @@ export class PlayerSeatRenderer {
       isCurrentPlayer: false,
       isBot: false,
       playerName: "Empty",
+      avatarUrl: undefined,
       score: 0,
       isComplete: false,
     };
@@ -475,6 +480,10 @@ export class PlayerSeatRenderer {
     if (!Number.isFinite(merged.score) || (merged.score as number) < 0) {
       merged.score = 0;
     }
+    merged.avatarUrl =
+      typeof merged.avatarUrl === "string" && merged.avatarUrl.trim().length > 0
+        ? merged.avatarUrl.trim()
+        : undefined;
     merged.score = Math.floor(merged.score ?? 0);
     merged.isComplete = merged.isComplete === true;
 
@@ -512,6 +521,11 @@ export class PlayerSeatRenderer {
     const isOccupied = state.occupied === true || isCurrentPlayer;
     const isBot = state.isBot === true;
     const isComplete = state.isComplete === true;
+    const hasAvatarTexture = this.applySeatAvatarTexture(
+      seatIndex,
+      headMat,
+      isOccupied ? state.avatarUrl : undefined
+    );
 
     pedestal.scaling = new Vector3(1, 1, 1);
     scoreZone.scaling = new Vector3(1, 1, 1);
@@ -538,7 +552,8 @@ export class PlayerSeatRenderer {
       pedestalMat.alpha = 1;
       avatarMat.diffuseColor = color;
       avatarMat.emissiveColor = color.scale(0.3);
-      headMat.diffuseColor = new Color3(0.9, 0.7, 0.5);
+      headMat.diffuseColor = hasAvatarTexture ? new Color3(1, 1, 1) : new Color3(0.9, 0.7, 0.5);
+      headMat.emissiveColor = hasAvatarTexture ? new Color3(0.06, 0.06, 0.06) : new Color3(0, 0, 0);
       avatarMat.alpha = 1;
       headMat.alpha = 1;
     } else if (isOccupied) {
@@ -549,7 +564,12 @@ export class PlayerSeatRenderer {
       pedestalMat.alpha = 1;
       avatarMat.diffuseColor = color;
       avatarMat.emissiveColor = color.scale(0.24);
-      headMat.diffuseColor = isBot ? new Color3(0.76, 0.62, 0.52) : new Color3(0.9, 0.7, 0.5);
+      headMat.diffuseColor = hasAvatarTexture
+        ? new Color3(1, 1, 1)
+        : isBot
+          ? new Color3(0.76, 0.62, 0.52)
+          : new Color3(0.9, 0.7, 0.5);
+      headMat.emissiveColor = hasAvatarTexture ? new Color3(0.06, 0.06, 0.06) : new Color3(0, 0, 0);
       avatarMat.alpha = 1;
       headMat.alpha = 1;
     } else {
@@ -559,6 +579,7 @@ export class PlayerSeatRenderer {
       avatarMat.diffuseColor = new Color3(0.2, 0.2, 0.22);
       avatarMat.emissiveColor = new Color3(0, 0, 0);
       headMat.diffuseColor = new Color3(0.5, 0.5, 0.55);
+      headMat.emissiveColor = new Color3(0, 0, 0);
       avatarMat.alpha = 0.5;
       headMat.alpha = 0.5;
     }
@@ -623,6 +644,72 @@ export class PlayerSeatRenderer {
     if (!isOccupied) {
       this.hideSeatChatBubble(seatIndex);
     }
+  }
+
+  private applySeatAvatarTexture(
+    seatIndex: number,
+    headMaterial: StandardMaterial,
+    avatarUrl: string | undefined
+  ): boolean {
+    const normalizedUrl =
+      typeof avatarUrl === "string" && avatarUrl.trim().length > 0 ? avatarUrl.trim() : undefined;
+    const existing = this.seatAvatarTextures.get(seatIndex) ?? { url: undefined, texture: null };
+    if (existing.url === normalizedUrl) {
+      headMaterial.diffuseTexture = existing.texture ?? null;
+      return Boolean(existing.texture);
+    }
+
+    if (existing.texture) {
+      existing.texture.dispose();
+    }
+
+    if (!normalizedUrl) {
+      this.seatAvatarTextures.set(seatIndex, { url: undefined, texture: null });
+      headMaterial.diffuseTexture = null;
+      return false;
+    }
+
+    this.seatAvatarTextures.set(seatIndex, { url: normalizedUrl, texture: null });
+    let texture: Texture | null = null;
+    try {
+      texture = new Texture(
+        normalizedUrl,
+        this.scene,
+        true,
+        false,
+        Texture.TRILINEAR_SAMPLINGMODE,
+        () => {
+          const latest = this.seatAvatarTextures.get(seatIndex);
+          if (!latest || latest.url !== normalizedUrl) {
+            texture?.dispose();
+            return;
+          }
+          headMaterial.diffuseTexture = texture;
+          headMaterial.useAlphaFromDiffuseTexture = false;
+        },
+        () => {
+          const latest = this.seatAvatarTextures.get(seatIndex);
+          if (latest?.texture === texture) {
+            this.seatAvatarTextures.set(seatIndex, { url: undefined, texture: null });
+          }
+          if (texture) {
+            texture.dispose();
+          }
+          headMaterial.diffuseTexture = null;
+        }
+      );
+      texture.wrapU = Texture.CLAMP_ADDRESSMODE;
+      texture.wrapV = Texture.CLAMP_ADDRESSMODE;
+    } catch {
+      this.seatAvatarTextures.set(seatIndex, { url: undefined, texture: null });
+      headMaterial.diffuseTexture = null;
+      return false;
+    }
+
+    this.seatAvatarTextures.set(seatIndex, { url: normalizedUrl, texture });
+    headMaterial.diffuseTexture = texture;
+    headMaterial.useAlphaFromDiffuseTexture = false;
+    return true;
   }
 
   private drawNamePlate(
@@ -966,6 +1053,9 @@ export class PlayerSeatRenderer {
     this.scoreZoneMeshes.forEach((mesh) => mesh.dispose());
     this.turnMarkerMeshes.forEach((mesh) => mesh.dispose());
     this.turnBadgeMeshes.forEach((mesh) => mesh.dispose());
+    this.seatAvatarTextures.forEach((entry) => {
+      entry.texture?.dispose();
+    });
     this.seatMeshes.clear();
     this.namePlateMeshes.clear();
     this.scoreBadgeMeshes.clear();
@@ -973,6 +1063,7 @@ export class PlayerSeatRenderer {
     this.scoreZoneMeshes.clear();
     this.turnMarkerMeshes.clear();
     this.turnBadgeMeshes.clear();
+    this.seatAvatarTextures.clear();
     this.scorePulseTimers.clear();
     this.chatBubbleHideTimers.clear();
     this.seatStates.clear();

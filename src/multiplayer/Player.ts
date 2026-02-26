@@ -20,10 +20,18 @@ export interface PlayerStats {
 /**
  * Player profile information
  */
+export interface PlayerSocialIdentity {
+  provider: string;
+  providerUserId?: string;
+  avatarUrl?: string;
+}
+
 export interface PlayerProfile {
   id: string;
   name: string;
   avatarUrl?: string;
+  socialIdentity?: PlayerSocialIdentity;
+  linkedSocialIdentities?: PlayerSocialIdentity[];
   rank: number;
   stats: PlayerStats;
 }
@@ -55,6 +63,71 @@ export class Player {
     this.profile = profile;
     this.seatIndex = seatIndex;
     this.isLocal = isLocal;
+  }
+
+  /**
+   * Update avatar URL for profile + current primary social identity.
+   */
+  setAvatarUrl(avatarUrl: string | undefined): void {
+    const normalized =
+      typeof avatarUrl === "string" && avatarUrl.trim().length > 0
+        ? avatarUrl.trim()
+        : undefined;
+    this.profile.avatarUrl = normalized;
+    if (this.profile.socialIdentity) {
+      this.profile.socialIdentity = {
+        ...this.profile.socialIdentity,
+        avatarUrl: normalized,
+      };
+    }
+  }
+
+  /**
+   * Set the primary social identity used for provider metadata and avatar defaults.
+   */
+  setPrimarySocialIdentity(identity: PlayerSocialIdentity | undefined): void {
+    if (!identity || typeof identity.provider !== "string" || !identity.provider.trim()) {
+      this.profile.socialIdentity = undefined;
+      return;
+    }
+
+    const normalized: PlayerSocialIdentity = {
+      provider: identity.provider.trim().toLowerCase(),
+      providerUserId:
+        typeof identity.providerUserId === "string" && identity.providerUserId.trim().length > 0
+          ? identity.providerUserId.trim()
+          : undefined,
+      avatarUrl:
+        typeof identity.avatarUrl === "string" && identity.avatarUrl.trim().length > 0
+          ? identity.avatarUrl.trim()
+          : undefined,
+    };
+    this.profile.socialIdentity = normalized;
+    if (!this.profile.avatarUrl && normalized.avatarUrl) {
+      this.profile.avatarUrl = normalized.avatarUrl;
+    }
+  }
+
+  /**
+   * Link an additional identity (future-proofing for multi-provider accounts).
+   */
+  linkSocialIdentity(identity: PlayerSocialIdentity): void {
+    if (!identity || typeof identity.provider !== "string" || !identity.provider.trim()) {
+      return;
+    }
+    const linked = this.profile.linkedSocialIdentities ?? [];
+    linked.push({
+      provider: identity.provider.trim().toLowerCase(),
+      providerUserId:
+        typeof identity.providerUserId === "string" && identity.providerUserId.trim().length > 0
+          ? identity.providerUserId.trim()
+          : undefined,
+      avatarUrl:
+        typeof identity.avatarUrl === "string" && identity.avatarUrl.trim().length > 0
+          ? identity.avatarUrl.trim()
+          : undefined,
+    });
+    this.profile.linkedSocialIdentities = linked;
   }
 
   /**

@@ -7,6 +7,7 @@ import biscuitsLogoUrl from "./assets/logos/Biscuits_logo.png";
 import { environment } from "@env";
 import { logger } from "./utils/logger.js";
 import type { SplashStartOptions } from "./ui/splash.js";
+import { initializeFacebookShareMeta } from "./social/share/facebookShareMeta.js";
 
 import type { SettingsModal } from "./ui/settings.js";
 import type { LeaderboardModal } from "./ui/leaderboard.js";
@@ -53,6 +54,7 @@ let lastFirebaseReauthPromptAt = 0;
 
 registerAuthSessionHandlers();
 hydrateBrandAssets();
+initializeFacebookShareMeta();
 applyMobileDiceLayoutPreference(settingsService.getSettings().controls.mobileDiceLayout);
 settingsService.onChange((settings) => {
   applyMobileDiceLayoutPreference(settings.controls.mobileDiceLayout);
