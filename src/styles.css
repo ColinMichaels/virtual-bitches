@@ -1963,6 +1963,46 @@ button.danger:hover:not(:disabled) {
   border: 1px solid rgba(123, 220, 140, 0.8);
 }
 
+.global-name-setup {
+  margin-bottom: 14px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.global-name-setup h4 {
+  color: #fff;
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.global-name-setup p {
+  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+}
+
+.global-name-row {
+  display: flex;
+  gap: 8px;
+}
+
+.global-name-row input {
+  flex: 1;
+  min-width: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.global-name-row input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
 /* Chaos Upgrade Menu */
 .chaos-upgrade-modal-content {
   max-width: 980px;
@@ -2656,6 +2696,10 @@ button.danger:hover:not(:disabled) {
   .global-auth-panel {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .global-name-row {
+    flex-direction: column;
   }
 }
 

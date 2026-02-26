@@ -62,6 +62,7 @@ export interface LeaderboardScoreSubmission {
   scoreId: string;
   score: number;
   timestamp: number;
+  playerName?: string;
   seed?: string;
   duration: number;
   rollCount: number;
@@ -88,8 +89,10 @@ export interface GlobalLeaderboardEntry {
 export interface AuthenticatedUserProfile {
   uid: string;
   displayName?: string;
+  leaderboardName?: string;
   email?: string;
   isAnonymous: boolean;
+  provider?: string;
 }
 
 export interface BackendApiOptions {
@@ -218,8 +221,8 @@ export class BackendApiService {
     });
   }
 
-  async getGlobalLeaderboard(limit: number = 25): Promise<GlobalLeaderboardEntry[] | null> {
-    const bounded = Math.max(1, Math.min(100, Math.floor(limit)));
+  async getGlobalLeaderboard(limit: number = 200): Promise<GlobalLeaderboardEntry[] | null> {
+    const bounded = Math.max(1, Math.min(200, Math.floor(limit)));
     const response = await this.request<{ entries: GlobalLeaderboardEntry[] }>(
       `/leaderboard/global?limit=${bounded}`,
       {
@@ -233,6 +236,16 @@ export class BackendApiService {
   async getAuthenticatedUserProfile(): Promise<AuthenticatedUserProfile | null> {
     return this.request<AuthenticatedUserProfile>("/auth/me", {
       method: "GET",
+      authMode: "firebase",
+    });
+  }
+
+  async updateAuthenticatedUserProfile(
+    displayName: string
+  ): Promise<AuthenticatedUserProfile | null> {
+    return this.request<AuthenticatedUserProfile>("/auth/me", {
+      method: "PUT",
+      body: { displayName },
       authMode: "firebase",
     });
   }

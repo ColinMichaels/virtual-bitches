@@ -25,6 +25,7 @@ const log = logger.create("Server");
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MULTIPLAYER_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+const MAX_LEADERBOARD_ENTRIES = 200;
 const MAX_STORED_GAME_LOGS = 10000;
 const MAX_WS_MESSAGE_BYTES = 16 * 1024;
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -158,7 +159,7 @@ async function handleRequest(req, res) {
       return;
     }
 
-    if (req.method === "GET" && pathname === "/api/auth/me") {
+    if ((req.method === "GET" || req.method === "PUT") && pathname === "/api/auth/me") {
       await handleAuthMe(req, res);
       return;
     }
@@ -246,23 +247,80 @@ async function handleRefreshToken(req, res) {
 }
 
 async function handleAuthMe(req, res) {
-  const authCheck = await authorizeIdentityRequest(req, { allowSessionToken: true });
+  if (req.method === "PUT") {
+    await handleUpdateAuthMe(req, res);
+    return;
+  }
+
+  const authCheck = await authorizeIdentityRequest(req, {
+    allowSessionToken: false,
+    requireNonAnonymous: false,
+  });
   if (!authCheck.ok) {
     sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "invalid_auth" });
     return;
   }
 
+  upsertFirebasePlayer(authCheck.uid, {
+    email: authCheck.email,
+    provider: authCheck.provider,
+    isAnonymous: authCheck.isAnonymous,
+  });
+
+  const playerRecord = store.firebasePlayers[authCheck.uid] ?? null;
   sendJson(res, 200, {
     uid: authCheck.uid,
     displayName: authCheck.displayName,
+    leaderboardName: playerRecord?.displayName,
     email: authCheck.email,
     isAnonymous: authCheck.isAnonymous,
     provider: authCheck.provider,
   });
 }
 
+async function handleUpdateAuthMe(req, res) {
+  const authCheck = await authorizeIdentityRequest(req, {
+    allowSessionToken: false,
+    requireNonAnonymous: true,
+  });
+  if (!authCheck.ok) {
+    sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "invalid_auth" });
+    return;
+  }
+
+  const body = await parseJsonBody(req);
+  const displayName = sanitizeDisplayName(body?.displayName);
+  if (!displayName) {
+    sendJson(res, 400, {
+      error: "Invalid displayName",
+      reason: "invalid_display_name",
+    });
+    return;
+  }
+
+  upsertFirebasePlayer(authCheck.uid, {
+    displayName,
+    email: authCheck.email,
+    provider: authCheck.provider,
+    isAnonymous: false,
+  });
+  await persistStore();
+
+  sendJson(res, 200, {
+    uid: authCheck.uid,
+    displayName: authCheck.displayName,
+    leaderboardName: displayName,
+    email: authCheck.email,
+    isAnonymous: false,
+    provider: authCheck.provider,
+  });
+}
+
 async function handleSubmitLeaderboardScore(req, res) {
-  const authCheck = await authorizeIdentityRequest(req, { allowSessionToken: true });
+  const authCheck = await authorizeIdentityRequest(req, {
+    allowSessionToken: false,
+    requireNonAnonymous: true,
+  });
   if (!authCheck.ok) {
     sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "invalid_auth" });
     return;
@@ -277,51 +335,61 @@ async function handleSubmitLeaderboardScore(req, res) {
 
   const timestamp = parsed.timestamp ?? Date.now();
   const scoreKey = `${authCheck.uid}:${parsed.scoreId}`;
-  const displayName =
-    parsed.playerName ??
-    authCheck.displayName ??
-    store.firebasePlayers[authCheck.uid]?.displayName ??
-    `Player ${authCheck.uid.slice(0, 8)}`;
+  upsertFirebasePlayer(authCheck.uid, {
+    email: authCheck.email,
+    provider: authCheck.provider,
+    isAnonymous: false,
+  });
+
+  const existingRecord = store.firebasePlayers[authCheck.uid] ?? null;
+  const effectiveName =
+    sanitizeDisplayName(parsed.playerName) ??
+    sanitizeDisplayName(existingRecord?.displayName) ??
+    sanitizeDisplayName(authCheck.displayName);
+  if (!effectiveName) {
+    sendJson(res, 400, {
+      error: "Missing leaderboard display name",
+      reason: "missing_display_name",
+    });
+    return;
+  }
+
+  upsertFirebasePlayer(authCheck.uid, {
+    displayName: effectiveName,
+    email: authCheck.email,
+    provider: authCheck.provider,
+    isAnonymous: false,
+  });
 
   const entry = {
     id: scoreKey,
     uid: authCheck.uid,
-    displayName,
+    displayName: effectiveName,
     score: parsed.score,
     timestamp,
     duration: parsed.duration,
     rollCount: parsed.rollCount,
     seed: parsed.seed,
     mode: parsed.mode,
+    isAnonymous: false,
   };
 
   store.leaderboardScores[scoreKey] = entry;
-  store.firebasePlayers[authCheck.uid] = {
-    uid: authCheck.uid,
-    displayName,
-    email: authCheck.email,
-    provider: authCheck.provider,
-    updatedAt: Date.now(),
-  };
+  trimLeaderboardScores(MAX_LEADERBOARD_ENTRIES);
 
   await persistStore();
   sendJson(res, 200, entry);
 }
 
 async function handleGetGlobalLeaderboard(res, requestUrl) {
-  const rawLimit = Number(requestUrl.searchParams.get("limit") ?? 25);
+  const rawLimit = Number(requestUrl.searchParams.get("limit") ?? MAX_LEADERBOARD_ENTRIES);
   const limit = Number.isFinite(rawLimit)
-    ? Math.max(1, Math.min(100, Math.floor(rawLimit)))
-    : 25;
+    ? Math.max(1, Math.min(MAX_LEADERBOARD_ENTRIES, Math.floor(rawLimit)))
+    : MAX_LEADERBOARD_ENTRIES;
 
   const entries = Object.values(store.leaderboardScores)
-    .filter((entry) => Number.isFinite(entry?.score))
-    .sort((a, b) => {
-      if (a.score !== b.score) {
-        return a.score - b.score;
-      }
-      return (a.timestamp ?? 0) - (b.timestamp ?? 0);
-    })
+    .filter((entry) => Number.isFinite(entry?.score) && !entry?.isAnonymous)
+    .sort(compareLeaderboardEntries)
     .slice(0, limit)
     .map((entry) => ({
       id: entry.id,
@@ -609,13 +677,19 @@ async function authorizeIdentityRequest(req, options = {}) {
     return { ok: false, reason: firebaseVerification.reason };
   }
   const firebaseClaims = firebaseVerification.claims;
+  if (options.requireNonAnonymous && firebaseClaims.isAnonymous) {
+    return {
+      ok: false,
+      reason: "anonymous_not_allowed",
+    };
+  }
 
   return {
     ok: true,
     uid: firebaseClaims.uid,
     displayName: firebaseClaims.name,
     email: firebaseClaims.email,
-    isAnonymous: false,
+    isAnonymous: firebaseClaims.isAnonymous,
     provider: "firebase",
   };
 }
@@ -756,6 +830,19 @@ async function verifyFirebaseIdToken(idToken) {
         : undefined,
     picture:
       user && typeof user.photoUrl === "string" ? user.photoUrl : undefined,
+    signInProvider:
+      typeof decoded?.firebase?.sign_in_provider === "string"
+        ? decoded.firebase.sign_in_provider
+        : (Array.isArray(user?.providerUserInfo) &&
+            typeof user.providerUserInfo[0]?.providerId === "string"
+          ? user.providerUserInfo[0].providerId
+          : ""),
+    isAnonymous:
+      (typeof decoded?.firebase?.sign_in_provider === "string" &&
+        decoded.firebase.sign_in_provider === "anonymous") ||
+      (Array.isArray(user?.providerUserInfo) &&
+        user.providerUserInfo.length === 0 &&
+        typeof user?.email !== "string"),
     expiresAt,
   };
 
@@ -893,10 +980,7 @@ function parseLeaderboardPayload(body) {
     seed: typeof body.seed === "string" ? body.seed.slice(0, 120) : undefined,
     duration: Number.isFinite(duration) && duration >= 0 ? duration : 0,
     rollCount: Number.isFinite(rollCount) && rollCount >= 0 ? Math.floor(rollCount) : 0,
-    playerName:
-      typeof body.playerName === "string" && body.playerName.trim().length > 0
-        ? body.playerName.trim().slice(0, 80)
-        : undefined,
+    playerName: sanitizeDisplayName(body.playerName) ?? undefined,
     mode: sanitizeLeaderboardMode(body.mode),
   };
 
@@ -924,6 +1008,70 @@ function normalizeIdentifier(rawValue, fallback) {
 
   const normalized = rawValue.trim().replace(/[^a-zA-Z0-9_.:-]/g, "").slice(0, 120);
   return normalized || fallback;
+}
+
+function sanitizeDisplayName(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length < 2 || normalized.length > 24) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function upsertFirebasePlayer(uid, patch) {
+  if (!uid) return;
+  const current = store.firebasePlayers[uid] ?? { uid };
+
+  store.firebasePlayers[uid] = {
+    ...current,
+    ...patch,
+    uid,
+    updatedAt: Date.now(),
+  };
+}
+
+function compareLeaderboardEntries(left, right) {
+  const scoreDelta = Number(left.score ?? 0) - Number(right.score ?? 0);
+  if (scoreDelta !== 0) {
+    return scoreDelta;
+  }
+
+  const durationDelta = Number(left.duration ?? 0) - Number(right.duration ?? 0);
+  if (durationDelta !== 0) {
+    return durationDelta;
+  }
+
+  const rollDelta = Number(left.rollCount ?? 0) - Number(right.rollCount ?? 0);
+  if (rollDelta !== 0) {
+    return rollDelta;
+  }
+
+  const timestampDelta = Number(left.timestamp ?? 0) - Number(right.timestamp ?? 0);
+  if (timestampDelta !== 0) {
+    return timestampDelta;
+  }
+
+  return String(left.id ?? "").localeCompare(String(right.id ?? ""));
+}
+
+function trimLeaderboardScores(maxEntries) {
+  const ids = Object.keys(store.leaderboardScores);
+  if (ids.length <= maxEntries) {
+    return;
+  }
+
+  const sorted = Object.values(store.leaderboardScores).sort(compareLeaderboardEntries);
+  const keep = new Set(sorted.slice(0, maxEntries).map((entry) => entry.id));
+  ids.forEach((id) => {
+    if (!keep.has(id)) {
+      delete store.leaderboardScores[id];
+    }
+  });
 }
 
 function compactLogStore() {
