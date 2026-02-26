@@ -740,6 +740,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - ✅ Added optional bot-traffic assertion mode for API smoke tests (`E2E_ASSERT_BOTS=1`)
 - ✅ Added multiplayer seat population from session participants (humans + bots shown around table)
 - ✅ Added clockwise turn-order planning scaffold from seat assignments (foundation for per-turn roll flow)
+- ✅ Added server-validated turn action protocol (`turn_action` roll/score -> `turn_end`) with active-turn enforcement and invalid-order rejection
 
 ---
 

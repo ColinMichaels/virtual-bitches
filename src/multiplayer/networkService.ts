@@ -76,6 +76,19 @@ export interface MultiplayerTurnEndMessage {
   source?: string;
 }
 
+export type MultiplayerTurnActionType = "roll" | "score";
+
+export interface MultiplayerTurnActionMessage {
+  type: "turn_action";
+  sessionId?: string;
+  playerId?: string;
+  action: MultiplayerTurnActionType;
+  round?: number;
+  turnNumber?: number;
+  timestamp?: number;
+  source?: string;
+}
+
 function isCameraAttackMessage(value: unknown): value is CameraAttackMessage {
   if (!value || typeof value !== "object") return false;
 
@@ -142,6 +155,16 @@ function isMultiplayerTurnEndMessage(value: unknown): value is MultiplayerTurnEn
 
   const msg = value as Partial<MultiplayerTurnEndMessage>;
   return msg.type === "turn_end";
+}
+
+function isMultiplayerTurnActionMessage(value: unknown): value is MultiplayerTurnActionMessage {
+  if (!value || typeof value !== "object") return false;
+
+  const msg = value as Partial<MultiplayerTurnActionMessage>;
+  return (
+    msg.type === "turn_action" &&
+    (msg.action === "roll" || msg.action === "score")
+  );
 }
 
 function isAuthExpiredCloseCode(code: number): boolean {
@@ -234,6 +257,22 @@ export class MultiplayerNetworkService {
         createCustomEvent("multiplayer:turn:end", parsed)
       );
       return;
+    }
+
+    if (isMultiplayerTurnActionMessage(parsed)) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:turn:action", parsed)
+      );
+      return;
+    }
+
+    if (isWsErrorMessage(parsed)) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:error", {
+          code: parsed.code,
+          message: parsed.message ?? parsed.code,
+        })
+      );
     }
 
     if (isWsErrorMessage(parsed) && parsed.code === "session_expired") {
@@ -375,6 +414,26 @@ export class MultiplayerNetworkService {
     );
   };
 
+  private readonly onTurnActionSend = (event: Event) => {
+    const custom = event as CustomEvent<MultiplayerTurnActionMessage>;
+    if (!custom.detail) return;
+    const sent = this.sendTurnAction(custom.detail);
+    if (sent) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:turn:action:sent", {
+          message: custom.detail,
+        })
+      );
+      return;
+    }
+
+    this.eventTarget.dispatchEvent(
+      createCustomEvent("multiplayer:turn:action:sendFailed", {
+        message: custom.detail,
+      })
+    );
+  };
+
   constructor(options: MultiplayerNetworkOptions = {}) {
     const hasExplicitWsUrl = Object.prototype.hasOwnProperty.call(options, "wsUrl");
     this.wsUrl = hasExplicitWsUrl
@@ -411,6 +470,10 @@ export class MultiplayerNetworkService {
       this.onPlayerNotificationSend
     );
     this.eventTarget.addEventListener("multiplayer:turn:end:send", this.onTurnEndSend);
+    this.eventTarget.addEventListener(
+      "multiplayer:turn:action:send",
+      this.onTurnActionSend
+    );
   }
 
   disableEventBridge(): void {
@@ -428,6 +491,10 @@ export class MultiplayerNetworkService {
       this.onPlayerNotificationSend
     );
     this.eventTarget.removeEventListener("multiplayer:turn:end:send", this.onTurnEndSend);
+    this.eventTarget.removeEventListener(
+      "multiplayer:turn:action:send",
+      this.onTurnActionSend
+    );
   }
 
   connect(): boolean {
@@ -481,6 +548,10 @@ export class MultiplayerNetworkService {
   }
 
   sendTurnEnd(message: MultiplayerTurnEndMessage): boolean {
+    return this.sendRaw(message);
+  }
+
+  sendTurnAction(message: MultiplayerTurnActionMessage): boolean {
     return this.sendRaw(message);
   }
 
