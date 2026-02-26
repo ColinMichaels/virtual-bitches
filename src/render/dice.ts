@@ -1002,7 +1002,7 @@ export class DiceRenderer {
     const result = this.detectUpwardFace(mesh);
 
     if (result === null) {
-      log.warn(`[Validation] ${die.def.kind} value ${die.value}: No face detected (possible edge landing)`);
+      log.debug(`[Validation] ${die.def.kind} value ${die.value}: No face detected (possible edge landing)`);
       return;
     }
 
@@ -1010,9 +1010,9 @@ export class DiceRenderer {
     const expectedValue = die.def.kind === 'd10' ? die.value % 10 : die.value;
 
     if (detectedValue !== expectedValue) {
-      log.warn(`[Validation] ${die.def.kind} value ${die.value}: Face mismatch - expected ${expectedValue}, detected ${detectedValue}, stability: ${result.stabilityScore.toFixed(3)}`);
+      log.debug(`[Validation] ${die.def.kind} value ${die.value}: Face mismatch - expected ${expectedValue}, detected ${detectedValue}, stability: ${result.stabilityScore.toFixed(3)}`);
     } else if (result.stabilityScore < STABLE_ROTATION_THRESHOLD) {
-      log.warn(`[Validation] ${die.def.kind} value ${die.value}: Correct face but unstable - stability: ${result.stabilityScore.toFixed(3)} (threshold: ${STABLE_ROTATION_THRESHOLD})`);
+      log.debug(`[Validation] ${die.def.kind} value ${die.value}: Correct face but unstable - stability: ${result.stabilityScore.toFixed(3)} (threshold: ${STABLE_ROTATION_THRESHOLD})`);
     } else {
       log.debug(`[Validation] ${die.def.kind} value ${die.value}: ✓ Correct and stable - stability: ${result.stabilityScore.toFixed(3)}`);
     }

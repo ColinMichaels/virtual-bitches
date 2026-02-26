@@ -238,6 +238,10 @@ export class BackendApiService {
     method: string,
     path: string
   ): Promise<T | null> {
+    if (response.status === 404 && isExpectedNotFound(method, path)) {
+      return null;
+    }
+
     if (!response.ok) {
       log.warn(`API request failed: ${method} ${path} (${response.status})`);
       return null;
@@ -254,6 +258,10 @@ export class BackendApiService {
 
 function normalizeBaseUrl(url: string): string {
   return url.endsWith("/") ? url.slice(0, -1) : url;
+}
+
+function isExpectedNotFound(method: string, path: string): boolean {
+  return method === "GET" && /^\/players\/[^/]+\/profile$/.test(path);
 }
 
 export const backendApiService = new BackendApiService();
