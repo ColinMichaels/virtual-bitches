@@ -6,13 +6,16 @@
 import { Vector3 } from "@babylonjs/core";
 import { particleService } from "../../services/particleService.js";
 import { attackEffects } from "../effects/attackEffects.js";
+import { logger } from "../../utils/logger.js";
+
+const log = logger.create("ChaosEffects");
 
 /**
  * Register all chaos attack particle effects
  */
 export function registerChaosEffects(): void {
   attackEffects.forEach((effect) => particleService.registerEffect(effect));
-  console.log("[ChaosEffects] Registered all chaos attack effects");
+  log.info("Registered all chaos attack effects");
 }
 
 /**

@@ -8,6 +8,9 @@ import { PlayerController } from "./PlayerController.js";
 import type { GameScene } from "../render/scene.js";
 import type { DiceRenderer } from "../render/dice.js";
 import { Color3 } from "@babylonjs/core";
+import { logger } from "../utils/logger.js";
+
+const log = logger.create("PlayerManager");
 
 /**
  * Player Manager - manages all players in the game
@@ -148,7 +151,7 @@ export class PlayerManager {
   setCurrentTurn(playerId: string): void {
     const player = this.players.get(playerId);
     if (!player) {
-      console.error(`Cannot set turn: player ${playerId} not found`);
+      log.error(`Cannot set turn: player ${playerId} not found`);
       return;
     }
 
@@ -269,7 +272,7 @@ export class PlayerManager {
    */
   broadcastAction(playerId: string, action: any): void {
     // Future: Send to WebSocket server
-    console.log(`Broadcast action from player ${playerId}:`, action);
+    log.debug(`Broadcast action from player ${playerId}`, action);
   }
 
   /**
@@ -278,7 +281,7 @@ export class PlayerManager {
   handleNetworkAction(playerId: string, action: any): void {
     const controller = this.playerControllers.get(playerId);
     if (!controller) {
-      console.error(`Cannot handle action: player ${playerId} not found`);
+      log.error(`Cannot handle action: player ${playerId} not found`);
       return;
     }
 

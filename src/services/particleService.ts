@@ -11,6 +11,9 @@ import {
   AbstractMesh,
   Texture,
 } from "@babylonjs/core";
+import { logger } from "../utils/logger.js";
+
+const log = logger.create("ParticleService");
 
 /**
  * Particle effect types
@@ -197,7 +200,7 @@ export class ParticleService {
    */
   registerEffect(effect: ParticleEffect): void {
     this.effectRegistry.set(effect.id, effect);
-    console.log(`[ParticleService] Registered effect: ${effect.id}`);
+    log.debug(`Registered effect: ${effect.id}`);
   }
 
   /**
@@ -225,13 +228,13 @@ export class ParticleService {
     }
 
     if (!this.canEmit()) {
-      console.warn("[ParticleService] Cannot emit - max particles reached");
+      log.warn("Cannot emit - max particles reached");
       return "";
     }
 
     const effect = this.getEffect(event.effectId);
     if (!effect) {
-      console.error(`[ParticleService] Effect not found: ${event.effectId}`);
+      log.error(`Effect not found: ${event.effectId}`);
       return "";
     }
 
@@ -276,9 +279,7 @@ export class ParticleService {
       this.broadcastParticleEvent(event);
     }
 
-    console.log(
-      `[ParticleService] Emitted ${event.effectId} (${instanceId})`
-    );
+    log.debug(`Emitted ${event.effectId} (${instanceId})`);
 
     return instanceId;
   }
@@ -303,9 +304,7 @@ export class ParticleService {
 
     const effectId = eventEffectMap[eventType];
     if (!effectId) {
-      console.warn(
-        `[ParticleService] No effect mapped for event: ${eventType}`
-      );
+      log.warn(`No effect mapped for event: ${eventType}`);
       return "";
     }
 
@@ -347,7 +346,7 @@ export class ParticleService {
   attachToCamera(effectId: string, offset?: Vector3): string {
     const camera = this.scene.activeCamera;
     if (!camera) {
-      console.error("[ParticleService] No active camera");
+      log.error("No active camera");
       return "";
     }
 
@@ -400,9 +399,7 @@ export class ParticleService {
 
     const effectId = attackEffectMap[attackType];
     if (!effectId) {
-      console.warn(
-        `[ParticleService] No effect for attack type: ${attackType}`
-      );
+      log.warn(`No effect for attack type: ${attackType}`);
       return "";
     }
 
@@ -447,7 +444,7 @@ export class ParticleService {
       this.activeParticles.delete(instanceId);
     }, instance.system.maxLifeTime * 1000);
 
-    console.log(`[ParticleService] Stopped ${instanceId}`);
+    log.debug(`Stopped ${instanceId}`);
   }
 
   /**
@@ -593,7 +590,7 @@ export class ParticleService {
    */
   setQuality(quality: ParticleQuality): void {
     this.quality = quality;
-    console.log(`[ParticleService] Quality set to: ${quality}`);
+    log.info(`Quality set to: ${quality}`);
   }
 
   /**
@@ -601,7 +598,7 @@ export class ParticleService {
    */
   setIntensity(intensity: ParticleIntensity): void {
     this.intensity = intensity;
-    console.log(`[ParticleService] Intensity set to: ${intensity}`);
+    log.info(`Intensity set to: ${intensity}`);
   }
 
   /**
@@ -623,9 +620,7 @@ export class ParticleService {
    */
   enableNetworkSync(enabled: boolean): void {
     this.networkSyncEnabled = enabled;
-    console.log(
-      `[ParticleService] Network sync ${enabled ? "enabled" : "disabled"}`
-    );
+    log.info(`Network sync ${enabled ? "enabled" : "disabled"}`);
   }
 
   /**
@@ -651,7 +646,7 @@ export class ParticleService {
     this.particlePool.forEach((system) => system.dispose());
     this.particlePool = [];
     this.effectRegistry.clear();
-    console.log("[ParticleService] Disposed");
+    log.info("Disposed");
   }
 }
 
@@ -665,5 +660,5 @@ export let particleService: ParticleService;
  */
 export function initParticleService(scene: Scene): void {
   particleService = new ParticleService(scene);
-  console.log("[ParticleService] Initialized");
+  log.info("Initialized");
 }

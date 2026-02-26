@@ -40,8 +40,9 @@ npm run firebase:use:prod
 ```
 
 Current aliases are in `.firebaserc`:
-- `prod` -> `biscuits-b427f`
-- `staging` -> `biscuits-b427f-staging` (placeholder until created)
+- `default` -> `biscuits-488600`
+- `prod` -> `biscuits-488600`
+- `dev` -> `biscuits-488600`
 
 ## 4) Local emulator run (optional)
 
@@ -81,6 +82,12 @@ Workflow file:
 Trigger:
 - push to `master` (production deploy)
 - push to `dev` (staging/dev deploy)
+
+Known-good project values:
+- Project ID: `biscuits-488600`
+- Hosting site: `biscuits-488600` (or explicit `biscuit-dice` if intentionally targeting that site)
+- `VITE_API_BASE_URL`: `/api` (recommended with Hosting rewrite)
+- `VITE_WS_URL`: `wss://biscuits-api-njhi4kclea-uc.a.run.app`
 
 Required GitHub secrets:
 
@@ -138,6 +145,26 @@ Branch-specific frontend env secrets:
 - `VITE_FIREBASE_MEASUREMENT_ID_DEV` (optional)
 
 The workflow builds a `.env.production` file at runtime from these secrets; no keys are committed in source.
+
+Required APIs in target project:
+- `run.googleapis.com`
+- `cloudbuild.googleapis.com`
+- `artifactregistry.googleapis.com`
+- `firestore.googleapis.com`
+- `firebaserules.googleapis.com`
+- `firebasehosting.googleapis.com`
+- `storage.googleapis.com`
+
+Required IAM roles for deploy service account (`biscuits-sa@<project>.iam.gserviceaccount.com`):
+- `roles/run.admin`
+- `roles/iam.serviceAccountUser` (on runtime service account, typically `<project-number>-compute@developer.gserviceaccount.com`)
+- `roles/cloudbuild.builds.editor`
+- `roles/artifactregistry.writer`
+- `roles/storage.admin`
+- `roles/serviceusage.serviceUsageConsumer`
+- `roles/firebaserules.admin`
+- `roles/datastore.indexAdmin`
+- `roles/firebasehosting.admin`
 
 ### Troubleshooting
 
