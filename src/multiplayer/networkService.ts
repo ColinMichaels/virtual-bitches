@@ -205,7 +205,10 @@ export class MultiplayerNetworkService {
   };
 
   constructor(options: MultiplayerNetworkOptions = {}) {
-    this.wsUrl = options.wsUrl ?? (environment.features.multiplayer ? environment.wsUrl : undefined);
+    const hasExplicitWsUrl = Object.prototype.hasOwnProperty.call(options, "wsUrl");
+    this.wsUrl = hasExplicitWsUrl
+      ? options.wsUrl
+      : (environment.features.multiplayer ? environment.wsUrl : undefined);
     this.eventTarget = options.eventTarget ?? document;
     this.autoReconnect = options.autoReconnect ?? true;
     this.reconnectDelayMs = options.reconnectDelayMs ?? 3000;
