@@ -107,6 +107,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - ✅ Rules content refreshed with current controls/multiplayer/session-recovery behavior
   - ✅ Extracted bot decision logic to dedicated API bot engine module (`api/bot/engine.mjs`)
   - ✅ Added bot engine contract tests (`api/bot/engine.test.mjs`)
+  - ✅ Added multiplayer session service reliability tests for heartbeat expiry dispatch + auth/session clearing semantics (`src/multiplayer/sessionService.test.ts`)
 - **Files Added**:
   - `src/ui/confirmModal.ts`
   - `src/ui/sessionExpiryModal.ts`
