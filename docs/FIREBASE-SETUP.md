@@ -19,6 +19,7 @@ cp .env.firebase.example .env.local
 Required keys:
 - `VITE_API_BASE_URL`
 - `VITE_WS_URL`
+- `VITE_ASSET_BASE_URL` (optional CDN/storage origin for runtime assets)
 - `VITE_FIREBASE_API_KEY`
 - `VITE_FIREBASE_AUTH_DOMAIN`
 - `VITE_FIREBASE_PROJECT_ID`
@@ -27,6 +28,16 @@ Required keys:
 - `VITE_FIREBASE_APP_ID`
 - `VITE_FIREBASE_MEASUREMENT_ID` (optional but recommended)
 - `VITE_ENABLE_ADMIN_UI` (optional, default `0` in production; set `1` to expose in-app admin monitor UI)
+
+Optional direct asset overrides:
+- `VITE_BRAND_LOGO_URL`
+- `VITE_GAME_MUSIC_URL`
+- `VITE_RULES_URL`
+- `VITE_UPDATES_URL`
+
+For CDN migration steps, see [`docs/CDN-ASSET-MIGRATION.md`](./CDN-ASSET-MIGRATION.md).
+Upload helper script:
+- `FIREBASE_STORAGE_BUCKET=<bucket> npm run cdn:upload:firebase`
 
 ## 2) Authenticate Firebase CLI
 
@@ -113,6 +124,7 @@ Workflow file:
 Trigger:
 - push to `master` (production deploy)
 - push to `dev` (staging/dev deploy)
+- includes a dedicated `deploy-assets` job that optimizes and uploads runtime images to Firebase Storage
 
 Known-good project values:
 - Project ID: `biscuits-488600`
@@ -134,6 +146,7 @@ Recommended setup (GitHub Environments):
   - `FIREBASE_PROJECT_ID` (or fallback `VITE_FIREBASE_PROJECT_ID`)
   - `VITE_API_BASE_URL`
   - `VITE_WS_URL`
+  - `VITE_ASSET_BASE_URL` (optional; defaults to `https://storage.googleapis.com/<VITE_FIREBASE_STORAGE_BUCKET>/` in CI when omitted)
   - `VITE_FIREBASE_API_KEY`
   - `VITE_FIREBASE_AUTH_DOMAIN`
   - `VITE_FIREBASE_PROJECT_ID`
@@ -165,6 +178,8 @@ Branch-specific frontend env secrets:
 - `VITE_API_BASE_URL_DEV`
 - `VITE_WS_URL_PROD`
 - `VITE_WS_URL_DEV`
+- `VITE_ASSET_BASE_URL_PROD` (optional)
+- `VITE_ASSET_BASE_URL_DEV` (optional)
 - `VITE_FIREBASE_API_KEY_PROD`
 - `VITE_FIREBASE_API_KEY_DEV`
 - `VITE_FIREBASE_AUTH_DOMAIN_PROD`

@@ -3,7 +3,7 @@ import { LoadingScreen } from "./ui/loadingScreen.js";
 import { notificationService } from "./ui/notifications.js";
 import { themeManager } from "./services/themeManager.js";
 import { settingsService } from "./services/settings.js";
-import biscuitsLogoUrl from "./assets/logos/Biscuits_logo.png";
+import { getBrandLogoUrl } from "./services/assetUrl.js";
 import { environment } from "@env";
 import { logger } from "./utils/logger.js";
 import type { SplashStartOptions } from "./ui/splash.js";
@@ -177,7 +177,7 @@ async function startGame(startOptions: SplashStartOptions): Promise<boolean> {
 function hydrateBrandAssets(): void {
   const miniLogo = document.getElementById("stats-mini-logo") as HTMLImageElement | null;
   if (miniLogo) {
-    miniLogo.src = biscuitsLogoUrl;
+    miniLogo.src = getBrandLogoUrl();
   }
 }
 
