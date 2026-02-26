@@ -491,4 +491,10 @@ jobs:
       - name: Upload assets to Firebase Storage
         env:
           FIREBASE_STORAGE_BUCKET: ${{ needs.deploy.outputs.fb_storage_bucket }}
-        run: node scripts/upload-assets-to-firebase-storage.mjs --bucket "$FIREBASE_STORAGE_BUCKET"
+          ASSET_CACHE_CONTROL: ${{ vars.CDN_ASSET_CACHE_CONTROL || 'public,max-age=86400' }}
+          CONTENT_CACHE_CONTROL: ${{ vars.CDN_CONTENT_CACHE_CONTROL || 'public,max-age=300,must-revalidate' }}
+        run: |
+          node scripts/upload-assets-to-firebase-storage.mjs \
+            --bucket "$FIREBASE_STORAGE_BUCKET" \
+            --asset-cache-control "$ASSET_CACHE_CONTROL" \
+            --content-cache-control "$CONTENT_CACHE_CONTROL"

@@ -34,7 +34,15 @@ Optimize images first (recommended for deploys):
 ```bash
 npm run copy:assets:sync
 npm run assets:optimize
-node scripts/upload-assets-to-firebase-storage.mjs --bucket <your-bucket>
+node scripts/upload-assets-to-firebase-storage.mjs --bucket <your-bucket> \
+  --asset-cache-control "public,max-age=86400" \
+  --content-cache-control "public,max-age=300,must-revalidate"
+```
+
+Disable cache-control metadata updates (optional):
+
+```bash
+node scripts/upload-assets-to-firebase-storage.mjs --bucket <your-bucket> --no-cache-control
 ```
 
 Dry-run:
@@ -59,7 +67,7 @@ Set these in `.env.local` / GitHub environment vars:
 ```bash
 VITE_ASSET_BASE_URL=https://storage.googleapis.com/<your-bucket>/
 VITE_BRAND_LOGO_URL=https://storage.googleapis.com/<your-bucket>/assets/logos/Biscuits_logo.png
-VITE_BRAND_LOGO_URL=https://storage.googleapis.com/<your-bucket>/assets/music/game%20music.mp3
+VITE_GAME_MUSIC_URL=https://storage.googleapis.com/<your-bucket>/assets/music/game%20music.mp3
 VITE_RULES_URL=https://storage.googleapis.com/<your-bucket>/rules.md
 VITE_UPDATES_URL=https://storage.googleapis.com/<your-bucket>/updates.json
 ```
@@ -81,6 +89,11 @@ The GitHub Actions pipeline now includes a dedicated `deploy-assets` job in
 - uploads optimized assets to Firebase Storage
 
 It runs after the main deploy job and uses the resolved `VITE_FIREBASE_STORAGE_BUCKET` value.
+
+Optional GitHub Environment variables for cache behavior:
+
+- `CDN_ASSET_CACHE_CONTROL` (default: `public,max-age=86400`)
+- `CDN_CONTENT_CACHE_CONTROL` (default: `public,max-age=300,must-revalidate`)
 
 ## Notes
 

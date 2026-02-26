@@ -52,6 +52,9 @@ For upload-size optimization before publishing assets:
 - `npm run copy:assets:sync`
 - `npm run assets:optimize`
 - `FIREBASE_STORAGE_BUCKET=<bucket> node scripts/upload-assets-to-firebase-storage.mjs --bucket <bucket>`
+- Optional cache policy flags:
+  - `--asset-cache-control "public,max-age=86400"`
+  - `--content-cache-control "public,max-age=300,must-revalidate"`
 
 ## Adding New Content
 
