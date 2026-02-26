@@ -12,6 +12,7 @@ Environment variables:
 
 - `PORT` (default: `3000`)
 - `WS_BASE_URL` (default: `ws://localhost:3000`)
+- `FIREBASE_PROJECT_ID` (recommended for Firebase ID token audience validation)
 
 ## Storage
 
@@ -25,9 +26,12 @@ The running server uses JSON-file persistence for now. SQL files define the inte
 
 - `GET /api/health`
 - `POST /api/auth/token/refresh`
+- `GET /api/auth/me`
 - `GET /api/players/:playerId/profile`
 - `PUT /api/players/:playerId/profile`
 - `POST /api/logs/batch`
+- `POST /api/leaderboard/scores`
+- `GET /api/leaderboard/global`
 - `POST /api/multiplayer/sessions`
 - `POST /api/multiplayer/sessions/:sessionId/join`
 - `POST /api/multiplayer/sessions/:sessionId/heartbeat`
@@ -37,6 +41,7 @@ The running server uses JSON-file persistence for now. SQL files define the inte
 ## Notes
 
 - Auth contract is bearer token based with refresh token rotation.
+- Global leaderboard score submissions accept Firebase ID tokens and also support session tokens for local/e2e scaffolding.
 - Session creation/join returns:
   - `playerToken` for WS query auth
   - `auth` bundle (`accessToken`, `refreshToken`, `expiresAt`, `tokenType`)

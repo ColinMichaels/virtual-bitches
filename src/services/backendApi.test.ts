@@ -173,4 +173,69 @@ await test("retries once on 401 after token refresh", async () => {
   );
 });
 
+await test("uses firebase token provider for leaderboard submission", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    jsonResponse({
+      id: "uid-1:score-1",
+      uid: "uid-1",
+      displayName: "Player",
+      score: 12,
+      timestamp: Date.now(),
+      duration: 1000,
+      rollCount: 3,
+    });
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+    firebaseTokenProvider: () => "firebase-id-token",
+  });
+
+  const result = await api.submitLeaderboardScore({
+    scoreId: "score-1",
+    score: 12,
+    timestamp: Date.now(),
+    duration: 1000,
+    rollCount: 3,
+  });
+
+  assert(result !== null, "Expected leaderboard submission response");
+  assertEqual(fetchCalls.length, 1, "Expected one fetch call");
+  const headers = (fetchCalls[0].init?.headers ?? {}) as Record<string, string>;
+  assertEqual(
+    headers.authorization,
+    "Bearer firebase-id-token",
+    "Expected Firebase token on leaderboard request"
+  );
+});
+
+await test("does not attempt session refresh for firebase-auth request", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () => jsonResponse({ error: "unauthorized" }, 401);
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+    firebaseTokenProvider: () => "firebase-id-token",
+  });
+
+  const result = await api.submitLeaderboardScore({
+    scoreId: "score-2",
+    score: 10,
+    timestamp: Date.now(),
+    duration: 900,
+    rollCount: 2,
+  });
+
+  assertEqual(result, null, "Expected null result on unauthorized leaderboard request");
+  assertEqual(fetchCalls.length, 1, "Expected only one request without refresh retry");
+  assert(
+    !fetchCalls[0].url.endsWith("/auth/token/refresh"),
+    "Did not expect refresh token endpoint for firebase request"
+  );
+});
+
 console.log("\nBackendApiService tests passed! ✓");

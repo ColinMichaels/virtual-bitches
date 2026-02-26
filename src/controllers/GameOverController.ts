@@ -6,6 +6,7 @@
 import { audioService } from "../services/audio.js";
 import { hapticsService } from "../services/haptics.js";
 import { scoreHistoryService } from "../services/score-history.js";
+import { leaderboardService } from "../services/leaderboard.js";
 import { notificationService } from "../ui/notifications.js";
 import { generateShareURL } from "../game/state.js";
 import { logger } from "../utils/logger.js";
@@ -50,6 +51,7 @@ export class GameOverController {
       state.rollIndex,
       state.mode
     );
+    void leaderboardService.flushPendingScores();
 
     // Get rank
     const rank = scoreHistoryService.getRank(state.score);

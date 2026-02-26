@@ -73,6 +73,7 @@ npm run cloudrun:deploy:api
 Notes:
 - This command requires Google Cloud SDK (`gcloud`) auth and project selection.
 - WebSocket traffic should connect directly to Cloud Run/domain (`VITE_WS_URL`), not through Hosting rewrites.
+- Set `FIREBASE_PROJECT_ID` on Cloud Run so API-side Firebase ID token validation can enforce token audience.
 
 Optional smoke test against deployed API + WebSocket:
 

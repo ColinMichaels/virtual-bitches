@@ -1906,6 +1906,63 @@ button.danger:hover:not(:disabled) {
   opacity: 0.7;
 }
 
+.global-auth-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.global-auth-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.global-auth-user {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.global-auth-badge {
+  color: #8bbfff;
+  font-size: 12px;
+}
+
+.global-auth-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-global-auth,
+.btn-global-refresh {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-global-auth:hover,
+.btn-global-refresh:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.score-entry.is-current-player {
+  border: 1px solid rgba(123, 220, 140, 0.8);
+}
+
 /* Chaos Upgrade Menu */
 .chaos-upgrade-modal-content {
   max-width: 980px;
@@ -2594,6 +2651,11 @@ button.danger:hover:not(:disabled) {
 
   .score-entry .score-meta {
     flex-wrap: wrap;
+  }
+
+  .global-auth-panel {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 
