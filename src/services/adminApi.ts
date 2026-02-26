@@ -72,6 +72,8 @@ export interface AdminMonitorMetrics {
   connectedSocketCount: number;
   activeTurnTimeoutLoops: number;
   activeBotLoops: number;
+  turnTimeoutAutoAdvanceCount: number;
+  botTurnAutoAdvanceCount: number;
 }
 
 export interface AdminMonitorOverview {

@@ -11,6 +11,10 @@ import { authSessionService } from "../services/authSession.js";
 const log = logger.create("MultiplayerSession");
 
 const HEARTBEAT_INTERVAL_MS = 15000;
+type JoinSessionOptions = {
+  displayName?: string;
+  botCount?: number;
+};
 
 export class MultiplayerSessionService {
   private readonly playerId: string;
@@ -53,10 +57,15 @@ export class MultiplayerSessionService {
     return created;
   }
 
-  async joinSession(sessionId: string, displayName?: string): Promise<MultiplayerSessionRecord | null> {
+  async joinSession(
+    sessionId: string,
+    displayNameOrOptions?: string | JoinSessionOptions
+  ): Promise<MultiplayerSessionRecord | null> {
+    const joinOptions = this.normalizeJoinSessionOptions(displayNameOrOptions);
     const joinResult = await backendApiService.joinMultiplayerSession(sessionId, {
       playerId: this.playerId,
-      displayName,
+      displayName: joinOptions.displayName,
+      botCount: joinOptions.botCount,
     });
     if (!joinResult.session) {
       this.lastJoinFailureReason = joinResult.reason ?? "unknown";
@@ -68,10 +77,15 @@ export class MultiplayerSessionService {
     return joinResult.session;
   }
 
-  async joinRoomByCode(roomCode: string, displayName?: string): Promise<MultiplayerSessionRecord | null> {
+  async joinRoomByCode(
+    roomCode: string,
+    displayNameOrOptions?: string | JoinSessionOptions
+  ): Promise<MultiplayerSessionRecord | null> {
+    const joinOptions = this.normalizeJoinSessionOptions(displayNameOrOptions);
     const joinResult = await backendApiService.joinMultiplayerRoomByCode(roomCode, {
       playerId: this.playerId,
-      displayName,
+      displayName: joinOptions.displayName,
+      botCount: joinOptions.botCount,
     });
     if (!joinResult.session) {
       this.lastJoinFailureReason = joinResult.reason ?? "unknown";
@@ -218,6 +232,27 @@ export class MultiplayerSessionService {
     if (!this.heartbeatHandle) return;
     clearInterval(this.heartbeatHandle);
     this.heartbeatHandle = undefined;
+  }
+
+  private normalizeJoinSessionOptions(
+    displayNameOrOptions?: string | JoinSessionOptions
+  ): JoinSessionOptions {
+    if (typeof displayNameOrOptions === "string") {
+      return {
+        displayName: displayNameOrOptions,
+      };
+    }
+    const options = displayNameOrOptions ?? {};
+    const hasDisplayName =
+      typeof options.displayName === "string" && options.displayName.trim().length > 0;
+    const parsedBotCount =
+      typeof options.botCount === "number" && Number.isFinite(options.botCount)
+        ? Math.max(0, Math.floor(options.botCount))
+        : undefined;
+    return {
+      displayName: hasDisplayName ? options.displayName : undefined,
+      botCount: parsedBotCount,
+    };
   }
 
   private dispatchEvent(type: string, detail: unknown): void {

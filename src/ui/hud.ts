@@ -19,6 +19,7 @@ export class HUD {
   private scoreEl: HTMLElement;
   private elapsedTimeEl: HTMLElement;
   private turnTimerEl: HTMLElement;
+  private turnSyncIndicatorEl: HTMLElement | null;
   private poolListEl: HTMLElement;
   private modeDisplayEl: HTMLElement;
   private modeDropdownEl: HTMLElement;
@@ -36,6 +37,7 @@ export class HUD {
     this.scoreEl = document.getElementById("score")!;
     this.elapsedTimeEl = document.getElementById("elapsed-time")!;
     this.turnTimerEl = document.getElementById("turn-timer")!;
+    this.turnSyncIndicatorEl = document.getElementById("turn-sync-indicator");
     this.poolListEl = document.getElementById("pool-list")!;
     this.modeDisplayEl = document.getElementById("mode-display")!;
     this.modeDropdownEl = document.getElementById("mode-dropdown")!;
@@ -144,6 +146,47 @@ export class HUD {
         ? deadlineAtMs
         : null;
     this.tick();
+  }
+
+  setTurnSyncStatus(
+    status: "ok" | "syncing" | "stale" | "error" | null,
+    message?: string
+  ): void {
+    if (!this.turnSyncIndicatorEl) {
+      return;
+    }
+
+    if (!status) {
+      this.turnSyncIndicatorEl.style.display = "none";
+      this.turnSyncIndicatorEl.textContent = "";
+      this.turnSyncIndicatorEl.classList.remove(
+        "is-sync-ok",
+        "is-sync-syncing",
+        "is-sync-stale",
+        "is-sync-error"
+      );
+      return;
+    }
+
+    const defaultLabels = {
+      ok: "Sync Live",
+      syncing: "Resyncing...",
+      stale: "Sync Stale",
+      error: "Resync Failed",
+    };
+
+    this.turnSyncIndicatorEl.style.display = "inline";
+    this.turnSyncIndicatorEl.classList.remove(
+      "is-sync-ok",
+      "is-sync-syncing",
+      "is-sync-stale",
+      "is-sync-error"
+    );
+    this.turnSyncIndicatorEl.classList.add(`is-sync-${status}`);
+    this.turnSyncIndicatorEl.textContent =
+      typeof message === "string" && message.trim().length > 0
+        ? message.trim().slice(0, 40)
+        : defaultLabels[status];
   }
 
   update(state: GameState) {

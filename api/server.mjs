@@ -146,6 +146,10 @@ const wsSessionClients = new Map();
 const wsClientMeta = new WeakMap();
 const botSessionLoops = new Map();
 const sessionTurnTimeoutLoops = new Map();
+const turnAdvanceMetrics = {
+  timeoutAutoAdvanceCount: 0,
+  botAutoAdvanceCount: 0,
+};
 const botEngine = createBotEngine({
   maxTurnRollDice: MAX_TURN_ROLL_DICE,
   defaultParticipantDiceCount: DEFAULT_PARTICIPANT_DICE_COUNT,
@@ -760,24 +764,6 @@ async function handleCreateSession(req, res) {
     },
   };
 
-  for (let index = 0; index < botCount; index += 1) {
-    const botId = `bot-${sessionId.slice(0, 6)}-${index + 1}`;
-    const botProfile = BOT_PROFILES[index % BOT_PROFILES.length];
-    participants[botId] = {
-      playerId: botId,
-      displayName: BOT_NAMES[index % BOT_NAMES.length],
-      joinedAt: now,
-      lastHeartbeatAt: now,
-      isBot: true,
-      botProfile,
-      isReady: true,
-      score: 0,
-      remainingDice: DEFAULT_PARTICIPANT_DICE_COUNT,
-      isComplete: false,
-      completedAt: null,
-    };
-  }
-
   const session = {
     sessionId,
     roomCode,
@@ -790,6 +776,7 @@ async function handleCreateSession(req, res) {
     participants,
     turnState: null,
   };
+  addBotsToSession(session, botCount, now);
 
   store.multiplayerSessions[sessionId] = session;
   ensureSessionTurnState(session);
@@ -849,6 +836,7 @@ async function handleJoinSessionByTarget(req, res, target) {
     sendJson(res, 400, { error: "playerId is required" });
     return;
   }
+  const requestedBotCount = normalizeBotCount(body?.botCount);
 
   const existingParticipant = session.participants[playerId];
   const isReturningParticipant = Boolean(existingParticipant && !isBotParticipant(existingParticipant));
@@ -868,6 +856,7 @@ async function handleJoinSessionByTarget(req, res, target) {
     isComplete: existingParticipant?.isComplete === true,
     completedAt: normalizeParticipantCompletedAt(existingParticipant?.completedAt),
   };
+  addBotsToSession(session, requestedBotCount, now);
   const sessionId = session.sessionId;
   markSessionActivity(session, playerId, now);
   ensureSessionTurnState(session);
@@ -1478,6 +1467,8 @@ function buildAdminMetricsSnapshot(now = Date.now()) {
     connectedSocketCount,
     activeTurnTimeoutLoops: sessionTurnTimeoutLoops.size,
     activeBotLoops: botSessionLoops.size,
+    turnTimeoutAutoAdvanceCount: turnAdvanceMetrics.timeoutAutoAdvanceCount,
+    botTurnAutoAdvanceCount: turnAdvanceMetrics.botAutoAdvanceCount,
   };
 }
 
@@ -3951,6 +3942,152 @@ function getBotParticipants(session) {
   return Object.values(session.participants).filter((participant) => participant && isBotParticipant(participant));
 }
 
+function hasConnectedHumanParticipant(sessionId, session) {
+  if (!session?.participants) {
+    return false;
+  }
+  return Object.values(session.participants).some(
+    (participant) =>
+      participant &&
+      !isBotParticipant(participant) &&
+      isSessionParticipantConnected(sessionId, participant.playerId)
+  );
+}
+
+function hasLiveHumanParticipant(sessionId, session, now = Date.now()) {
+  if (!session?.participants) {
+    return false;
+  }
+  return Object.values(session.participants).some(
+    (participant) =>
+      participant &&
+      !isBotParticipant(participant) &&
+      isRoomParticipantActive(sessionId, participant, now)
+  );
+}
+
+function buildUniqueSessionBotId(session) {
+  const sessionPrefix =
+    typeof session?.sessionId === "string" && session.sessionId.trim().length > 0
+      ? session.sessionId.trim().slice(0, 6)
+      : randomToken().slice(0, 6);
+
+  let index = 1;
+  while (index <= 2000) {
+    const candidate = `bot-${sessionPrefix}-${index}`;
+    if (!session.participants?.[candidate]) {
+      return candidate;
+    }
+    index += 1;
+  }
+
+  return `bot-${sessionPrefix}-${randomToken().slice(0, 4)}`;
+}
+
+function addBotsToSession(session, requestedBotCount, now = Date.now()) {
+  if (!session || typeof session !== "object") {
+    return 0;
+  }
+  if (!session.participants || typeof session.participants !== "object") {
+    session.participants = {};
+  }
+
+  const targetBotCount = Math.max(
+    0,
+    Math.min(MAX_MULTIPLAYER_BOTS, normalizeBotCount(requestedBotCount))
+  );
+  if (targetBotCount <= 0) {
+    return 0;
+  }
+
+  const existingBots = getBotParticipants(session);
+  const botsToAdd = Math.max(0, targetBotCount - existingBots.length);
+  if (botsToAdd <= 0) {
+    return 0;
+  }
+
+  const joinedAt = Number.isFinite(now) && now > 0 ? Math.floor(now) : Date.now();
+  for (let index = 0; index < botsToAdd; index += 1) {
+    const botId = buildUniqueSessionBotId(session);
+    const botOffset = existingBots.length + index;
+    session.participants[botId] = {
+      playerId: botId,
+      displayName: BOT_NAMES[botOffset % BOT_NAMES.length],
+      joinedAt,
+      lastHeartbeatAt: joinedAt,
+      isBot: true,
+      botProfile: BOT_PROFILES[botOffset % BOT_PROFILES.length],
+      isReady: true,
+      score: 0,
+      remainingDice: DEFAULT_PARTICIPANT_DICE_COUNT,
+      isComplete: false,
+      completedAt: null,
+    };
+  }
+
+  return botsToAdd;
+}
+
+function pruneSessionBots(sessionId, session, options = {}) {
+  if (!session || typeof session !== "object" || !session.participants) {
+    return {
+      changed: false,
+      removedCount: 0,
+      removedCompletedCount: 0,
+      removedNoLiveHumansCount: 0,
+    };
+  }
+
+  const now =
+    Number.isFinite(options?.now) && options.now > 0 ? Math.floor(options.now) : Date.now();
+  const removeAll = options?.removeAll === true;
+  const removeCompleted = options?.removeCompleted === true;
+  const removeWithoutLiveHumans = options?.removeWithoutLiveHumans === true;
+  const hasLiveHumans = removeWithoutLiveHumans
+    ? hasLiveHumanParticipant(sessionId, session, now)
+    : true;
+
+  let changed = false;
+  let removedCount = 0;
+  let removedCompletedCount = 0;
+  let removedNoLiveHumansCount = 0;
+
+  Object.entries(session.participants).forEach(([playerId, participant]) => {
+    if (!participant || !isBotParticipant(participant)) {
+      return;
+    }
+
+    if (removeAll) {
+      delete session.participants[playerId];
+      changed = true;
+      removedCount += 1;
+      return;
+    }
+
+    if (removeWithoutLiveHumans && !hasLiveHumans) {
+      delete session.participants[playerId];
+      changed = true;
+      removedCount += 1;
+      removedNoLiveHumansCount += 1;
+      return;
+    }
+
+    if (removeCompleted && isParticipantComplete(participant)) {
+      delete session.participants[playerId];
+      changed = true;
+      removedCount += 1;
+      removedCompletedCount += 1;
+    }
+  });
+
+  return {
+    changed,
+    removedCount,
+    removedCompletedCount,
+    removedNoLiveHumansCount,
+  };
+}
+
 function reconcileSessionLoops(sessionId) {
   reconcileBotLoop(sessionId);
   reconcileTurnTimeoutLoop(sessionId);
@@ -3968,7 +4105,20 @@ function reconcileBotLoop(sessionId) {
     return;
   }
 
-  ensureSessionTurnState(session);
+  const botPrune = pruneSessionBots(sessionId, session, {
+    removeAll: isSessionCompleteForHumans(session),
+    removeCompleted: true,
+    removeWithoutLiveHumans: true,
+    now: Date.now(),
+  });
+  if (botPrune.changed) {
+    ensureSessionTurnState(session);
+    persistStore().catch((error) => {
+      log.warn("Failed to persist session after bot prune", error);
+    });
+  } else {
+    ensureSessionTurnState(session);
+  }
 
   if (getBotParticipants(session).length === 0) {
     stopBotLoop(sessionId);
@@ -4215,12 +4365,7 @@ function scheduleBotTurnIfNeeded(sessionId) {
     return;
   }
 
-  const hasConnectedHuman = Object.values(session.participants).some(
-    (participant) =>
-      participant &&
-      !isBotParticipant(participant) &&
-      isSessionParticipantConnected(sessionId, participant.playerId)
-  );
+  const hasConnectedHuman = hasConnectedHumanParticipant(sessionId, session);
   if (!hasConnectedHuman) {
     loop.scheduledTurnKey = "";
     return;
@@ -4242,10 +4387,27 @@ function scheduleBotTurnIfNeeded(sessionId) {
     if (!latestSession) {
       return;
     }
+    if (!hasConnectedHumanParticipant(sessionId, latestSession)) {
+      const noLiveHumanPrune = pruneSessionBots(sessionId, latestSession, {
+        removeWithoutLiveHumans: true,
+        now: Date.now(),
+      });
+      if (noLiveHumanPrune.changed) {
+        ensureSessionTurnState(latestSession);
+        broadcastSessionState(latestSession, "bot_prune");
+        persistStore().catch((error) => {
+          log.warn("Failed to persist session after pruning idle bots", error);
+        });
+      }
+      reconcileSessionLoops(sessionId);
+      return;
+    }
+
     const botTurn = executeBotTurn(latestSession, activePlayerId);
     if (!botTurn) {
       return;
     }
+    turnAdvanceMetrics.botAutoAdvanceCount += 1;
 
     if (botTurn.rollAction) {
       broadcastToSession(sessionId, JSON.stringify(botTurn.rollAction), null);
@@ -4257,6 +4419,14 @@ function scheduleBotTurnIfNeeded(sessionId) {
     if (botTurn.turnStart) {
       broadcastToSession(sessionId, JSON.stringify(botTurn.turnStart), null);
     }
+    const completedBotPrune = pruneSessionBots(sessionId, latestSession, {
+      removeCompleted: true,
+      now: Date.now(),
+    });
+    if (completedBotPrune.changed) {
+      ensureSessionTurnState(latestSession);
+    }
+    markSessionActivity(latestSession, undefined, Date.now());
     broadcastSessionState(latestSession, "bot_auto");
     persistStore().catch((error) => {
       log.warn("Failed to persist session after bot turn advance", error);
@@ -4284,12 +4454,7 @@ function reconcileTurnTimeoutLoop(sessionId) {
     return;
   }
 
-  const hasConnectedHuman = Object.values(session.participants).some(
-    (participant) =>
-      participant &&
-      !isBotParticipant(participant) &&
-      isSessionParticipantConnected(sessionId, participant.playerId)
-  );
+  const hasConnectedHuman = hasConnectedHumanParticipant(sessionId, session);
   if (!hasConnectedHuman) {
     stopTurnTimeoutLoop(sessionId);
     return;
@@ -4298,15 +4463,23 @@ function reconcileTurnTimeoutLoop(sessionId) {
   const timeoutMs = normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
   turnState.turnTimeoutMs = timeoutMs;
   const now = Date.now();
-  if (
-    typeof turnState.turnExpiresAt !== "number" ||
-    !Number.isFinite(turnState.turnExpiresAt) ||
-    turnState.turnExpiresAt <= now
-  ) {
+  const turnKey = `${turnState.activeTurnPlayerId}:${turnState.round}:${turnState.turnNumber}`;
+  const hasValidTurnExpiry =
+    typeof turnState.turnExpiresAt === "number" &&
+    Number.isFinite(turnState.turnExpiresAt) &&
+    turnState.turnExpiresAt > 0;
+  if (hasValidTurnExpiry && turnState.turnExpiresAt <= now) {
+    // When reconciliation sees an already-expired turn, process timeout immediately
+    // rather than extending the same turn window.
+    setTimeout(() => {
+      handleTurnTimeoutExpiry(sessionId, turnKey);
+    }, 0);
+    return;
+  }
+  if (!hasValidTurnExpiry) {
     turnState.turnExpiresAt = now + timeoutMs;
   }
 
-  const turnKey = `${turnState.activeTurnPlayerId}:${turnState.round}:${turnState.turnNumber}`;
   const turnExpiresAt = Math.floor(turnState.turnExpiresAt);
   let loop = sessionTurnTimeoutLoops.get(sessionId);
   if (!loop) {
@@ -4428,12 +4601,7 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
     return;
   }
 
-  const hasConnectedHuman = Object.values(session.participants).some(
-    (participant) =>
-      participant &&
-      !isBotParticipant(participant) &&
-      isSessionParticipantConnected(sessionId, participant.playerId)
-  );
+  const hasConnectedHuman = hasConnectedHumanParticipant(sessionId, session);
   if (!hasConnectedHuman) {
     reconcileTurnTimeoutLoop(sessionId);
     return;
@@ -4459,6 +4627,7 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
     reconcileTurnTimeoutLoop(sessionId);
     return;
   }
+  turnAdvanceMetrics.timeoutAutoAdvanceCount += 1;
 
   broadcastToSession(
     sessionId,
@@ -4479,6 +4648,7 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
   if (advanced.turnStart) {
     broadcastToSession(sessionId, JSON.stringify(advanced.turnStart), null);
   }
+  markSessionActivity(session, undefined, Date.now());
   broadcastSessionState(session, "timeout_auto");
   persistStore().catch((error) => {
     log.warn("Failed to persist session after timeout auto-advance", error);
@@ -4694,6 +4864,7 @@ function compactLogStore() {
 
 function cleanupExpiredRecords() {
   const now = Date.now();
+  let sessionsChanged = false;
 
   Object.entries(store.accessTokens).forEach(([hash, record]) => {
     if (!record || record.expiresAt <= now) {
@@ -4708,25 +4879,40 @@ function cleanupExpiredRecords() {
   Object.entries(store.multiplayerSessions).forEach(([sessionId, session]) => {
     if (!session) {
       expireSession(sessionId, "session_expired");
+      sessionsChanged = true;
       return;
+    }
+
+    const botPrune = pruneSessionBots(sessionId, session, {
+      removeAll: isSessionCompleteForHumans(session),
+      removeCompleted: true,
+      removeWithoutLiveHumans: true,
+      now,
+    });
+    if (botPrune.changed) {
+      ensureSessionTurnState(session);
+      reconcileSessionLoops(sessionId);
+      sessionsChanged = true;
     }
 
     const roomKind = getSessionRoomKind(session);
     if (roomKind === ROOM_KINDS.publicDefault) {
       if (!Number.isFinite(session.expiresAt) || session.expiresAt <= now + 5000) {
         session.expiresAt = now + MULTIPLAYER_SESSION_IDLE_TTL_MS;
+        sessionsChanged = true;
       }
       return;
     }
 
     if (!Number.isFinite(session.expiresAt) || session.expiresAt <= now) {
       expireSession(sessionId, "session_expired");
+      sessionsChanged = true;
     }
   });
   const roomInventoryChanged = reconcilePublicRoomInventory(now);
-  if (roomInventoryChanged) {
+  if (roomInventoryChanged || sessionsChanged) {
     persistStore().catch((error) => {
-      log.warn("Failed to persist store after public room reconciliation", error);
+      log.warn("Failed to persist store after cleanup reconciliation", error);
     });
   }
 }
@@ -5135,7 +5321,9 @@ function isSupportedSocketPayload(payload) {
 }
 
 function handleTurnActionMessage(client, session, payload) {
-  session.participants[client.playerId].lastHeartbeatAt = Date.now();
+  const timestamp = Date.now();
+  session.participants[client.playerId].lastHeartbeatAt = timestamp;
+  markSessionActivity(session, client.playerId, timestamp);
   const turnState = ensureSessionTurnState(session);
   if (!turnState?.activeTurnPlayerId) {
     sendSocketError(client, "turn_unavailable", "turn_unavailable");
@@ -5224,10 +5412,13 @@ function handleTurnActionMessage(client, session, payload) {
   persistStore().catch((error) => {
     log.warn("Failed to persist session after turn action", error);
   });
+  reconcileSessionLoops(client.sessionId);
 }
 
 function handleTurnEndMessage(client, session) {
-  session.participants[client.playerId].lastHeartbeatAt = Date.now();
+  const timestamp = Date.now();
+  session.participants[client.playerId].lastHeartbeatAt = timestamp;
+  markSessionActivity(session, client.playerId, timestamp);
   const turnState = ensureSessionTurnState(session);
   log.info(
     `Turn end request: session=${client.sessionId} player=${client.playerId} active=${turnState?.activeTurnPlayerId ?? "n/a"} order=${Array.isArray(turnState?.order) ? turnState.order.join(",") : "n/a"}`

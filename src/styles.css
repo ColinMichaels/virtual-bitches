@@ -323,6 +323,26 @@ h1, h2, h3, h4, h5, h6 {
   color: #ff8f8f;
 }
 
+.turn-sync-indicator {
+  margin-top: 1px;
+}
+
+.turn-sync-indicator.is-sync-ok {
+  color: rgba(159, 255, 202, 0.92);
+}
+
+.turn-sync-indicator.is-sync-syncing {
+  color: rgba(152, 216, 255, 0.95);
+}
+
+.turn-sync-indicator.is-sync-stale {
+  color: rgba(255, 211, 122, 0.96);
+}
+
+.turn-sync-indicator.is-sync-error {
+  color: rgba(255, 149, 149, 0.96);
+}
+
 /* Mode indicator styling */
 #mode-indicator {
   margin-left: auto;
@@ -1541,6 +1561,33 @@ button.danger,
   color: #fff;
   font-size: 14px;
   padding: 8px 12px;
+}
+
+.splash-multiplayer-options input[type="checkbox"] {
+  min-width: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 4px;
+  accent-color: #e94560;
+}
+
+.splash-bot-seed-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.splash-bot-seed-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: none;
+  letter-spacing: 0.04em;
+}
+
+.splash-join-bot-seed-note {
+  margin-top: -2px;
 }
 
 .splash-room-picker {
@@ -4238,6 +4285,10 @@ button.danger,
   .splash-multiplayer-options select,
   .splash-multiplayer-options input {
     width: 100%;
+  }
+
+  .splash-multiplayer-options input[type="checkbox"] {
+    width: 16px;
   }
 
   .splash-room-picker {

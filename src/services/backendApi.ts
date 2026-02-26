@@ -141,6 +141,7 @@ export interface CreateMultiplayerSessionRequest {
 export interface JoinMultiplayerSessionRequest {
   playerId: string;
   displayName?: string;
+  botCount?: number;
 }
 
 export type MultiplayerJoinFailureReason =
