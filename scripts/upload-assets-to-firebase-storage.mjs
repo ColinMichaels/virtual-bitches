@@ -14,11 +14,12 @@ run().catch((error) => {
 async function run() {
   const args = process.argv.slice(2);
   const parsedArgs = parseArgs(args);
-  const bucket = resolveBucketName(parsedArgs.bucket);
+  const rawBucket = resolveBucketName(parsedArgs.bucket);
+  const projectId = resolveProjectId();
 
-  if (!bucket) {
+  if (!rawBucket && !projectId) {
     throw new Error(
-      "Missing bucket. Use --bucket <bucket> or set FIREBASE_STORAGE_BUCKET / VITE_FIREBASE_STORAGE_BUCKET."
+      "Missing bucket. Use --bucket <bucket>, set FIREBASE_STORAGE_BUCKET / VITE_FIREBASE_STORAGE_BUCKET, or provide FIREBASE_PROJECT_ID."
     );
   }
 
@@ -26,9 +27,11 @@ async function run() {
   const shouldApplyCacheControl = !parsedArgs.disableCacheControl;
   const assetCacheControl = resolveAssetCacheControl(parsedArgs.assetCacheControl);
   const contentCacheControl = resolveContentCacheControl(parsedArgs.contentCacheControl);
-  const bucketUri = `gs://${bucket.replace(/^gs:\/\//, "").replace(/\/+$/, "")}`;
 
   await ensureCommandAvailable("gcloud", ["version"]);
+  const bucketCandidates = buildBucketCandidates(rawBucket, projectId);
+  const resolvedBucket = await resolveExistingBucket(bucketCandidates);
+  const bucketUri = `gs://${resolvedBucket}`;
 
   const commands = [
     [
@@ -70,6 +73,11 @@ async function run() {
   console.log(
     `[cdn:upload] Uploading runtime assets to ${bucketUri}${dryRun ? " (dry-run)" : ""}`
   );
+  if (rawBucket && normalizeBucketName(rawBucket) !== resolvedBucket) {
+    console.log(
+      `[cdn:upload] Bucket fallback applied: requested="${normalizeBucketName(rawBucket)}" resolved="${resolvedBucket}"`
+    );
+  }
   if (shouldApplyCacheControl) {
     console.log(
       `[cdn:upload] cache-control assets="${assetCacheControl}" content="${contentCacheControl}"`
@@ -134,6 +142,117 @@ function resolveBucketName(argBucket) {
     }
   }
   return "";
+}
+
+function resolveProjectId() {
+  const candidates = [
+    process.env.FIREBASE_PROJECT_ID,
+    process.env.VITE_FIREBASE_PROJECT_ID,
+  ];
+  for (const candidate of candidates) {
+    const normalized = String(candidate ?? "").trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return "";
+}
+
+function buildBucketCandidates(rawBucket, projectId) {
+  const unique = new Set();
+  const add = (value) => {
+    const normalized = normalizeBucketName(value);
+    if (normalized) {
+      unique.add(normalized);
+    }
+  };
+
+  add(rawBucket);
+  if (rawBucket.includes(".firebasestorage.app")) {
+    add(rawBucket.replace(/\.firebasestorage\.app$/i, ".appspot.com"));
+  }
+  if (rawBucket.includes(".appspot.com")) {
+    add(rawBucket.replace(/\.appspot\.com$/i, ".firebasestorage.app"));
+  }
+
+  if (projectId) {
+    add(`${projectId}.firebasestorage.app`);
+    add(`${projectId}.appspot.com`);
+  }
+
+  return [...unique];
+}
+
+function normalizeBucketName(rawValue) {
+  const value = String(rawValue ?? "").trim();
+  if (!value) {
+    return "";
+  }
+
+  let normalized = value.replace(/^gs:\/\//i, "").replace(/\/+$/, "");
+  if (/^https?:\/\//i.test(normalized)) {
+    try {
+      const parsed = new URL(normalized);
+      const host = parsed.hostname.toLowerCase();
+      const pathParts = parsed.pathname.split("/").filter(Boolean);
+
+      if (host === "storage.googleapis.com" && pathParts.length > 0) {
+        normalized = pathParts[0];
+      } else if (host.endsWith("firebasestorage.googleapis.com")) {
+        const bucketIndex = pathParts.indexOf("b");
+        if (bucketIndex >= 0 && pathParts[bucketIndex + 1]) {
+          normalized = pathParts[bucketIndex + 1];
+        }
+      } else if (host.endsWith(".storage.googleapis.com")) {
+        normalized = host.replace(/\.storage\.googleapis\.com$/, "");
+      } else {
+        normalized = host;
+      }
+    } catch {
+      // Keep best-effort fallback from original value.
+    }
+  }
+
+  normalized = normalized.replace(/^\/+/, "").replace(/\/+$/, "");
+  return normalized;
+}
+
+async function resolveExistingBucket(candidates) {
+  if (candidates.length === 0) {
+    throw new Error(
+      "No valid storage bucket candidates found. Check FIREBASE_STORAGE_BUCKET / FIREBASE_PROJECT_ID values."
+    );
+  }
+
+  const failed = [];
+  for (const candidate of candidates) {
+    const bucketRef = `gs://${candidate}`;
+    const result = await runCommandCapture("gcloud", [
+      "storage",
+      "buckets",
+      "describe",
+      bucketRef,
+      "--format=value(name)",
+    ]);
+    if (result.code === 0) {
+      return candidate;
+    }
+
+    const details = `${result.stdout}\n${result.stderr}`.trim();
+    failed.push(`${bucketRef}: ${details || `exit ${result.code}`}`);
+
+    const lower = details.toLowerCase();
+    if (lower.includes("permission") || lower.includes("forbidden") || lower.includes("403")) {
+      throw new Error(
+        `Permission error while checking ${bucketRef}. Ensure the deploy service account has Storage admin access.`
+      );
+    }
+  }
+
+  const candidateList = candidates.map((candidate) => `gs://${candidate}`).join(", ");
+  throw new Error(
+    `No accessible storage bucket found. Tried: ${candidateList}\nHints:\n- Enable Firebase Storage in this project.\n- Set VITE_FIREBASE_STORAGE_BUCKET to the existing bucket name.\n- For older projects, bucket may be <project-id>.appspot.com.\nDetails:\n${failed.map((entry) => `  - ${entry}`).join("\n")}`
+  );
 }
 
 function resolveAssetCacheControl(argValue) {
@@ -208,6 +327,33 @@ function runCommand(command, commandArgs) {
         return;
       }
       reject(new Error(`Command failed (${code}): ${printable}`));
+    });
+  });
+}
+
+function runCommandCapture(command, commandArgs) {
+  return new Promise((resolve) => {
+    const child = spawn(command, commandArgs, {
+      cwd: projectRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+      shell: false,
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout?.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", (error) => {
+      stderr += error instanceof Error ? error.message : String(error);
+      resolve({ code: 1, stdout, stderr });
+    });
+    child.on("exit", (code) => {
+      resolve({ code: code ?? 1, stdout, stderr });
     });
   });
 }

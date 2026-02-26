@@ -116,3 +116,15 @@ npm run cdn:verify -- \
 
 - Keep local fallback paths for development by leaving `VITE_ASSET_BASE_URL` empty.
 - If you lock down bucket access, ensure your CDN/origin strategy still supports public reads for game assets.
+
+## Troubleshooting
+
+If upload fails with `gs://... not found: 404`:
+
+- Ensure Firebase Storage is enabled for the project.
+- Verify `VITE_FIREBASE_STORAGE_BUCKET` is set to a real bucket name.
+- Common bucket names:
+  - `<project-id>.firebasestorage.app`
+  - `<project-id>.appspot.com`
+
+The upload script now auto-tries both common Firebase bucket formats when `FIREBASE_PROJECT_ID` is available.
