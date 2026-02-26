@@ -38,6 +38,12 @@ const BOT_NAMES = ["Byte Bessie", "Lag Larry", "Packet Patty", "Dicebot Dave"];
 const BOT_CAMERA_EFFECTS = ["shake"];
 const BOT_TURN_ADVANCE_MIN_MS = 1600;
 const BOT_TURN_ADVANCE_MAX_MS = 3200;
+const TURN_TIMEOUT_MS = normalizeTurnTimeoutValue(process.env.TURN_TIMEOUT_MS, 45000);
+const TURN_TIMEOUT_WARNING_MS = normalizeTurnWarningValue(
+  process.env.TURN_TIMEOUT_WARNING_MS,
+  TURN_TIMEOUT_MS,
+  10000
+);
 const MAX_TURN_ROLL_DICE = 64;
 const MAX_TURN_SCORE_SELECTION = 64;
 const TURN_PHASES = {
@@ -66,6 +72,7 @@ const server = createServer((req, res) => {
 const wsSessionClients = new Map();
 const wsClientMeta = new WeakMap();
 const botSessionLoops = new Map();
+const sessionTurnTimeoutLoops = new Map();
 
 await bootstrap();
 
@@ -117,7 +124,7 @@ async function bootstrap() {
   log.info(`Using ${storeAdapter.name} store backend`);
   log.info(`Firebase auth verifier mode: ${FIREBASE_AUTH_MODE}`);
   Object.keys(store.multiplayerSessions).forEach((sessionId) => {
-    reconcileBotLoop(sessionId);
+    reconcileSessionLoops(sessionId);
   });
 }
 
@@ -549,7 +556,7 @@ async function handleCreateSession(req, res) {
 
   store.multiplayerSessions[sessionId] = session;
   ensureSessionTurnState(session);
-  reconcileBotLoop(sessionId);
+  reconcileSessionLoops(sessionId);
   const auth = issueAuthTokenBundle(playerId, sessionId);
   const response = buildSessionResponse(session, playerId, auth);
   await persistStore();
@@ -578,7 +585,7 @@ async function handleJoinSession(req, res, pathname) {
     lastHeartbeatAt: Date.now(),
   };
   ensureSessionTurnState(session);
-  reconcileBotLoop(sessionId);
+  reconcileSessionLoops(sessionId);
 
   const auth = issueAuthTokenBundle(playerId, sessionId);
   const response = buildSessionResponse(session, playerId, auth);
@@ -638,12 +645,11 @@ async function handleLeaveSession(req, res, pathname) {
   if (getHumanParticipantCount(session) === 0) {
     expireSession(sessionId, "session_empty");
   } else {
-    reconcileBotLoop(sessionId);
+    reconcileSessionLoops(sessionId);
     const turnStart = buildTurnStartMessage(session, { source: "reassign" });
     if (turnStart) {
       broadcastToSession(sessionId, JSON.stringify(turnStart), null);
     }
-    scheduleBotTurnIfNeeded(sessionId);
   }
 
   await persistStore();
@@ -1131,6 +1137,13 @@ function serializeTurnState(turnState) {
   }
 
   const activeRoll = serializeTurnRollSnapshot(turnState.lastRollSnapshot);
+  const turnTimeoutMs = normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
+  const turnExpiresAt =
+    typeof turnState.turnExpiresAt === "number" &&
+    Number.isFinite(turnState.turnExpiresAt) &&
+    turnState.turnExpiresAt > 0
+      ? Math.floor(turnState.turnExpiresAt)
+      : null;
   return {
     order: Array.isArray(turnState.order) ? [...turnState.order] : [],
     activeTurnPlayerId:
@@ -1147,6 +1160,8 @@ function serializeTurnState(turnState) {
       typeof activeRoll?.serverRollId === "string"
         ? activeRoll.serverRollId
         : null,
+    turnExpiresAt,
+    turnTimeoutMs,
     updatedAt:
       Number.isFinite(turnState.updatedAt) ? Number(turnState.updatedAt) : Date.now(),
   };
@@ -1565,14 +1580,22 @@ function ensureSessionTurnState(session) {
     currentState.turnNumber > 0
       ? Math.floor(currentState.turnNumber)
       : 1;
+  const turnTimeoutMs = normalizeTurnTimeoutMs(currentState?.turnTimeoutMs);
   let phase = normalizeTurnPhase(currentState?.phase);
   let lastRollSnapshot = normalizeTurnRollSnapshot(currentState?.lastRollSnapshot);
   let lastScoreSummary = normalizeTurnScoreSummary(currentState?.lastScoreSummary);
+  let turnExpiresAt =
+    typeof currentState?.turnExpiresAt === "number" &&
+    Number.isFinite(currentState.turnExpiresAt) &&
+    currentState.turnExpiresAt > now
+      ? Math.floor(currentState.turnExpiresAt)
+      : null;
 
   if (activeTurnRecovered) {
     phase = TURN_PHASES.awaitRoll;
     lastRollSnapshot = null;
     lastScoreSummary = null;
+    turnExpiresAt = now + turnTimeoutMs;
   } else if (phase === TURN_PHASES.awaitRoll) {
     lastRollSnapshot = null;
     lastScoreSummary = null;
@@ -1591,6 +1614,10 @@ function ensureSessionTurnState(session) {
     }
   }
 
+  if (!turnExpiresAt || turnExpiresAt <= now) {
+    turnExpiresAt = now + turnTimeoutMs;
+  }
+
   session.turnState = {
     order: nextOrder,
     activeTurnPlayerId,
@@ -1599,6 +1626,8 @@ function ensureSessionTurnState(session) {
     phase,
     lastRollSnapshot,
     lastScoreSummary,
+    turnTimeoutMs,
+    turnExpiresAt,
     updatedAt: now,
   };
 
@@ -1616,6 +1645,13 @@ function buildTurnStartMessage(session, options = {}) {
   }
 
   const activeRoll = serializeTurnRollSnapshot(turnState.lastRollSnapshot);
+  const turnTimeoutMs = normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
+  const turnExpiresAt =
+    typeof turnState.turnExpiresAt === "number" &&
+    Number.isFinite(turnState.turnExpiresAt) &&
+    turnState.turnExpiresAt > 0
+      ? Math.floor(turnState.turnExpiresAt)
+      : null;
 
   return {
     type: "turn_start",
@@ -1629,6 +1665,8 @@ function buildTurnStartMessage(session, options = {}) {
       typeof activeRoll?.serverRollId === "string"
         ? activeRoll.serverRollId
         : null,
+    turnExpiresAt,
+    turnTimeoutMs,
     timestamp: Date.now(),
     order: [...turnState.order],
     source: options.source ?? "server",
@@ -1701,6 +1739,7 @@ function advanceSessionTurn(session, endedByPlayerId, options = {}) {
 
   const nextIndex = (currentIndex + 1) % turnState.order.length;
   const wrapped = nextIndex === 0;
+  const timeoutMs = normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
   turnState.activeTurnPlayerId = turnState.order[nextIndex];
   turnState.turnNumber = Math.max(1, Math.floor(turnState.turnNumber) + 1);
   if (wrapped) {
@@ -1709,6 +1748,8 @@ function advanceSessionTurn(session, endedByPlayerId, options = {}) {
   turnState.phase = TURN_PHASES.awaitRoll;
   turnState.lastRollSnapshot = null;
   turnState.lastScoreSummary = null;
+  turnState.turnTimeoutMs = timeoutMs;
+  turnState.turnExpiresAt = timestamp + timeoutMs;
   turnState.updatedAt = timestamp;
 
   const turnStart = {
@@ -1718,6 +1759,8 @@ function advanceSessionTurn(session, endedByPlayerId, options = {}) {
     round: turnState.round,
     turnNumber: turnState.turnNumber,
     phase: normalizeTurnPhase(turnState.phase),
+    turnExpiresAt: turnState.turnExpiresAt,
+    turnTimeoutMs: timeoutMs,
     timestamp,
     order: [...turnState.order],
     source: options.source ?? "player",
@@ -1727,6 +1770,28 @@ function advanceSessionTurn(session, endedByPlayerId, options = {}) {
     turnEnd,
     turnStart,
   };
+}
+
+function normalizeTurnTimeoutValue(rawValue, fallback) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.max(5000, Math.floor(parsed));
+}
+
+function normalizeTurnWarningValue(rawValue, timeoutMs, fallback) {
+  const parsed = Number(rawValue);
+  const defaultValue = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+  return Math.max(1000, Math.min(timeoutMs - 500, defaultValue));
+}
+
+function normalizeTurnTimeoutMs(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return TURN_TIMEOUT_MS;
+  }
+  return Math.max(5000, Math.floor(parsed));
 }
 
 function normalizeRoomCode(value) {
@@ -1761,6 +1826,16 @@ function getBotParticipants(session) {
     return [];
   }
   return Object.values(session.participants).filter((participant) => participant && isBotParticipant(participant));
+}
+
+function reconcileSessionLoops(sessionId) {
+  reconcileBotLoop(sessionId);
+  reconcileTurnTimeoutLoop(sessionId);
+}
+
+function stopSessionLoops(sessionId) {
+  stopBotLoop(sessionId);
+  stopTurnTimeoutLoop(sessionId);
 }
 
 function reconcileBotLoop(sessionId) {
@@ -1914,8 +1989,226 @@ function scheduleBotTurnIfNeeded(sessionId) {
     persistStore().catch((error) => {
       log.warn("Failed to persist session after bot turn advance", error);
     });
-    scheduleBotTurnIfNeeded(sessionId);
+    reconcileSessionLoops(sessionId);
   }, delayMs);
+}
+
+function reconcileTurnTimeoutLoop(sessionId) {
+  const session = store.multiplayerSessions[sessionId];
+  if (!session) {
+    stopTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  const turnState = ensureSessionTurnState(session);
+  if (!turnState?.activeTurnPlayerId || turnState.order.length <= 1) {
+    stopTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  const activeParticipant = session.participants[turnState.activeTurnPlayerId];
+  if (!activeParticipant || isBotParticipant(activeParticipant)) {
+    stopTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  const hasConnectedHuman = Object.values(session.participants).some(
+    (participant) =>
+      participant &&
+      !isBotParticipant(participant) &&
+      isSessionParticipantConnected(sessionId, participant.playerId)
+  );
+  if (!hasConnectedHuman) {
+    stopTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  const timeoutMs = normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
+  turnState.turnTimeoutMs = timeoutMs;
+  const now = Date.now();
+  if (
+    typeof turnState.turnExpiresAt !== "number" ||
+    !Number.isFinite(turnState.turnExpiresAt) ||
+    turnState.turnExpiresAt <= now
+  ) {
+    turnState.turnExpiresAt = now + timeoutMs;
+  }
+
+  const turnKey = `${turnState.activeTurnPlayerId}:${turnState.round}:${turnState.turnNumber}`;
+  const turnExpiresAt = Math.floor(turnState.turnExpiresAt);
+  let loop = sessionTurnTimeoutLoops.get(sessionId);
+  if (!loop) {
+    loop = {
+      warningTimer: null,
+      expiryTimer: null,
+      turnKey: "",
+      turnExpiresAt: 0,
+    };
+    sessionTurnTimeoutLoops.set(sessionId, loop);
+  }
+
+  if (loop.turnKey === turnKey && loop.turnExpiresAt === turnExpiresAt) {
+    return;
+  }
+
+  if (loop.warningTimer) {
+    clearTimeout(loop.warningTimer);
+    loop.warningTimer = null;
+  }
+  if (loop.expiryTimer) {
+    clearTimeout(loop.expiryTimer);
+    loop.expiryTimer = null;
+  }
+
+  loop.turnKey = turnKey;
+  loop.turnExpiresAt = turnExpiresAt;
+
+  const warningAt = turnExpiresAt - TURN_TIMEOUT_WARNING_MS;
+  if (warningAt > now) {
+    loop.warningTimer = setTimeout(() => {
+      loop.warningTimer = null;
+      dispatchTurnTimeoutWarning(sessionId, turnKey);
+    }, warningAt - now);
+  }
+
+  loop.expiryTimer = setTimeout(() => {
+    loop.expiryTimer = null;
+    handleTurnTimeoutExpiry(sessionId, turnKey);
+  }, Math.max(0, turnExpiresAt - now));
+}
+
+function stopTurnTimeoutLoop(sessionId) {
+  const loop = sessionTurnTimeoutLoops.get(sessionId);
+  if (!loop) {
+    return;
+  }
+  if (loop.warningTimer) {
+    clearTimeout(loop.warningTimer);
+  }
+  if (loop.expiryTimer) {
+    clearTimeout(loop.expiryTimer);
+  }
+  sessionTurnTimeoutLoops.delete(sessionId);
+}
+
+function dispatchTurnTimeoutWarning(sessionId, expectedTurnKey) {
+  const session = store.multiplayerSessions[sessionId];
+  if (!session) {
+    stopTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  const turnState = ensureSessionTurnState(session);
+  if (!turnState?.activeTurnPlayerId) {
+    stopTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  const turnKey = `${turnState.activeTurnPlayerId}:${turnState.round}:${turnState.turnNumber}`;
+  if (turnKey !== expectedTurnKey) {
+    reconcileTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  const turnExpiresAt =
+    typeof turnState.turnExpiresAt === "number" && Number.isFinite(turnState.turnExpiresAt)
+      ? Math.floor(turnState.turnExpiresAt)
+      : Date.now() + normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
+  const remainingMs = Math.max(0, turnExpiresAt - Date.now());
+  if (remainingMs <= 0) {
+    return;
+  }
+
+  broadcastToSession(
+    sessionId,
+    JSON.stringify({
+      type: "turn_timeout_warning",
+      sessionId,
+      playerId: turnState.activeTurnPlayerId,
+      round: turnState.round,
+      turnNumber: turnState.turnNumber,
+      turnExpiresAt,
+      remainingMs,
+      timeoutMs: normalizeTurnTimeoutMs(turnState.turnTimeoutMs),
+      timestamp: Date.now(),
+      source: "server",
+    }),
+    null
+  );
+}
+
+function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
+  const session = store.multiplayerSessions[sessionId];
+  if (!session) {
+    stopTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  const turnState = ensureSessionTurnState(session);
+  if (!turnState?.activeTurnPlayerId) {
+    stopTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  const turnKey = `${turnState.activeTurnPlayerId}:${turnState.round}:${turnState.turnNumber}`;
+  if (turnKey !== expectedTurnKey) {
+    reconcileTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  const hasConnectedHuman = Object.values(session.participants).some(
+    (participant) =>
+      participant &&
+      !isBotParticipant(participant) &&
+      isSessionParticipantConnected(sessionId, participant.playerId)
+  );
+  if (!hasConnectedHuman) {
+    reconcileTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  const expiresAt =
+    typeof turnState.turnExpiresAt === "number" && Number.isFinite(turnState.turnExpiresAt)
+      ? turnState.turnExpiresAt
+      : 0;
+  if (expiresAt > Date.now()) {
+    reconcileTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  const timedOutPlayerId = turnState.activeTurnPlayerId;
+  const timeoutMs = normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
+  const previousRound = turnState.round;
+  const previousTurnNumber = turnState.turnNumber;
+  const advanced = advanceSessionTurn(session, timedOutPlayerId, {
+    source: "timeout_auto",
+  });
+  if (!advanced) {
+    reconcileTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  broadcastToSession(
+    sessionId,
+    JSON.stringify({
+      type: "turn_auto_advanced",
+      sessionId,
+      playerId: timedOutPlayerId,
+      round: previousRound,
+      turnNumber: previousTurnNumber,
+      timeoutMs,
+      reason: "turn_timeout",
+      timestamp: Date.now(),
+      source: "timeout_auto",
+    }),
+    null
+  );
+  broadcastToSession(sessionId, JSON.stringify(advanced.turnEnd), null);
+  broadcastToSession(sessionId, JSON.stringify(advanced.turnStart), null);
+  persistStore().catch((error) => {
+    log.warn("Failed to persist session after timeout auto-advance", error);
+  });
+  reconcileSessionLoops(sessionId);
 }
 
 function isSessionParticipantConnected(sessionId, playerId) {
@@ -2261,7 +2554,7 @@ function handleSocketConnection(socket, auth) {
     if (turnStart) {
       sendSocketPayload(client, turnStart);
     }
-    scheduleBotTurnIfNeeded(client.sessionId);
+    reconcileSessionLoops(client.sessionId);
   }
 
   const msUntilExpiry = Math.max(0, auth.tokenExpiresAt - Date.now());
@@ -2634,7 +2927,7 @@ function handleTurnEndMessage(client, session) {
   persistStore().catch((error) => {
     log.warn("Failed to persist session after turn advance", error);
   });
-  scheduleBotTurnIfNeeded(client.sessionId);
+  reconcileSessionLoops(client.sessionId);
 }
 
 function registerSocketClient(client, sessionId) {
@@ -2642,6 +2935,7 @@ function registerSocketClient(client, sessionId) {
   clients.add(client);
   wsSessionClients.set(sessionId, clients);
   client.registered = true;
+  reconcileTurnTimeoutLoop(sessionId);
 }
 
 function unregisterSocketClient(client) {
@@ -2661,6 +2955,7 @@ function unregisterSocketClient(client) {
   if (clients.size === 0) {
     wsSessionClients.delete(client.sessionId);
   }
+  reconcileTurnTimeoutLoop(client.sessionId);
 }
 
 function disconnectPlayerSockets(sessionId, playerId, closeCode, reason) {
@@ -2677,7 +2972,7 @@ function disconnectPlayerSockets(sessionId, playerId, closeCode, reason) {
 }
 
 function expireSession(sessionId, reason) {
-  stopBotLoop(sessionId);
+  stopSessionLoops(sessionId);
   if (store.multiplayerSessions[sessionId]) {
     delete store.multiplayerSessions[sessionId];
   }

@@ -745,6 +745,8 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - ✅ Added server-issued roll ids (`roll.serverRollId`) required by score actions to prevent cross-roll/replay submissions
 - ✅ Made multiplayer roll outcomes server-authoritative (client sends roll intent, server returns canonical die values)
 - ✅ Added turn-state recovery snapshots (`turn_start.activeRoll` / `turnState.activeRoll`) for reconnect/mid-turn resync
+- ✅ Added server-enforced multiplayer turn timeout with warning + auto-advance events
+- ✅ Added top-bar game clock with live turn countdown indicator for multiplayer/timed-trial readiness
 - ✅ Added in-game `Main Menu` action in Settings to leave multiplayer sessions and return to lobby
 - ✅ Tuned bot chaos traffic down (lower chaos frequency, shake-only, shorter/safer intensity) to avoid disruptive camera failures
 

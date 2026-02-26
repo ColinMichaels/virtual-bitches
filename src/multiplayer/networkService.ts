@@ -66,6 +66,8 @@ export interface MultiplayerTurnStartMessage {
   phase?: MultiplayerTurnPhase;
   activeRollServerId?: string | null;
   activeRoll?: MultiplayerTurnRollPayload | null;
+  turnExpiresAt?: number | null;
+  turnTimeoutMs?: number;
   timestamp?: number;
   order?: string[];
   source?: string;
@@ -77,6 +79,31 @@ export interface MultiplayerTurnEndMessage {
   playerId?: string;
   round?: number;
   turnNumber?: number;
+  timestamp?: number;
+  source?: string;
+}
+
+export interface MultiplayerTurnTimeoutWarningMessage {
+  type: "turn_timeout_warning";
+  sessionId?: string;
+  playerId?: string;
+  round?: number;
+  turnNumber?: number;
+  turnExpiresAt?: number;
+  remainingMs?: number;
+  timeoutMs?: number;
+  timestamp?: number;
+  source?: string;
+}
+
+export interface MultiplayerTurnAutoAdvancedMessage {
+  type: "turn_auto_advanced";
+  sessionId?: string;
+  playerId?: string;
+  round?: number;
+  turnNumber?: number;
+  timeoutMs?: number;
+  reason?: string;
   timestamp?: number;
   source?: string;
 }
@@ -187,6 +214,24 @@ function isMultiplayerTurnEndMessage(value: unknown): value is MultiplayerTurnEn
   return msg.type === "turn_end";
 }
 
+function isMultiplayerTurnTimeoutWarningMessage(
+  value: unknown
+): value is MultiplayerTurnTimeoutWarningMessage {
+  if (!value || typeof value !== "object") return false;
+
+  const msg = value as Partial<MultiplayerTurnTimeoutWarningMessage>;
+  return msg.type === "turn_timeout_warning";
+}
+
+function isMultiplayerTurnAutoAdvancedMessage(
+  value: unknown
+): value is MultiplayerTurnAutoAdvancedMessage {
+  if (!value || typeof value !== "object") return false;
+
+  const msg = value as Partial<MultiplayerTurnAutoAdvancedMessage>;
+  return msg.type === "turn_auto_advanced";
+}
+
 function isMultiplayerTurnActionMessage(value: unknown): value is MultiplayerTurnActionMessage {
   if (!value || typeof value !== "object") return false;
 
@@ -285,6 +330,20 @@ export class MultiplayerNetworkService {
     if (isMultiplayerTurnEndMessage(parsed)) {
       this.eventTarget.dispatchEvent(
         createCustomEvent("multiplayer:turn:end", parsed)
+      );
+      return;
+    }
+
+    if (isMultiplayerTurnTimeoutWarningMessage(parsed)) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:turn:timeoutWarning", parsed)
+      );
+      return;
+    }
+
+    if (isMultiplayerTurnAutoAdvancedMessage(parsed)) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:turn:autoAdvanced", parsed)
       );
       return;
     }

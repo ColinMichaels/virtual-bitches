@@ -100,6 +100,16 @@ async function run() {
     expectedFirstTurnPlayerId,
     "guest turn sync active player mismatch"
   );
+  assert(
+    typeof guestTurnSync.turnExpiresAt === "number" &&
+      Number.isFinite(guestTurnSync.turnExpiresAt),
+    "turn sync missing turn deadline"
+  );
+  assert(
+    typeof guestTurnSync.turnTimeoutMs === "number" &&
+      Number.isFinite(guestTurnSync.turnTimeoutMs),
+    "turn sync missing turn timeout"
+  );
 
   const expectedSecondTurnPlayerId =
     Array.isArray(joined?.turnState?.order) && joined.turnState.order.length > 1
