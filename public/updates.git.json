@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-02-27T19:45:44.166Z",
+  "generatedAt": "2026-02-27T19:59:58.932Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-7acc14e",
+      "date": "2026-02-27T19:48:13.000Z",
+      "title": "Enhance dice UI styles and interactions",
+      "content": "<p>Enhance dice UI styles and interactions</p><p><strong>Commit:</strong> <code>7acc14e</code></p><p>- Added new visual cues for higher-face dice in the 2D row (`d8`, `d10`, `d12`) with unique tints and box shadows.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "7acc14ec7f6df4c076e87aa93bc076e27b245bfe",
+        "shortHash": "7acc14e",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/7acc14ec7f6df4c076e87aa93bc076e27b245bfe"
+      }
+    },
     {
       "id": "git-e55f6e2",
       "date": "2026-02-27T19:33:24.000Z",
@@ -547,20 +561,6 @@
         "hash": "c377a29e4aecd9c9ff460d30b33fa9c4cff57945",
         "shortHash": "c377a29",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c377a29e4aecd9c9ff460d30b33fa9c4cff57945"
-      }
-    },
-    {
-      "id": "git-5910e97",
-      "date": "2026-02-27T01:16:50.000Z",
-      "title": "Add CORS autoconfiguration for public Firebase buckets",
-      "content": "<p>Add CORS autoconfiguration for public Firebase buckets</p><p><strong>Commit:</strong> <code>5910e97</code></p><p>- Introduced `CDN_AUTOCONFIGURE_CORS` to enable automatic CORS policy setup for Firebase Storage buckets.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "5910e97a26417c2edbf2e0dc55a16cb14c59ecc3",
-        "shortHash": "5910e97",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/5910e97a26417c2edbf2e0dc55a16cb14c59ecc3"
       }
     }
   ]

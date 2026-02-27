@@ -87,15 +87,35 @@
     <aside id="effect-hud" aria-live="polite" aria-label="Active camera effects" data-i18n-aria-label="shell.effects.aria"></aside>
 
     <div id="controls">
-        <button id="action-btn" class="btn btn-primary primary" data-i18n="shell.controls.actionReady">Roll Dice (Space)</button>
-        <button id="deselect-btn" class="btn btn-secondary secondary" style="display: none;" data-i18n="shell.controls.deselectAll">Deselect All</button>
-        <button id="undo-btn" class="btn btn-secondary secondary" style="display: none;" title="Undo last selection" data-i18n-title="shell.controls.undoTitle">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                <path d="M3 7v6h6"/>
-                <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/>
-            </svg>
-            <span data-i18n="shell.controls.undo">Undo</span>
-        </button>
+        <div id="action-btn-wrap">
+            <button id="action-btn" class="btn btn-primary primary" data-i18n="shell.controls.actionReady">Roll Dice (Space)</button>
+            <button
+                id="deselect-btn"
+                class="deselect-badge-btn"
+                style="display: none;"
+                title="Deselect All"
+                data-i18n-title="shell.controls.deselectAll"
+                aria-label="Deselect All"
+            >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true">
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                </svg>
+            </button>
+            <button
+                id="undo-btn"
+                class="undo-badge-btn"
+                style="display: none;"
+                title="Undo last selection"
+                data-i18n-title="shell.controls.undoTitle"
+                aria-label="Undo last selection"
+            >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true">
+                    <path d="M3 7v6h6"/>
+                    <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/>
+                </svg>
+            </button>
+        </div>
     </div>
 
     <!-- Mobile Menu Toggle Button (shown only on mobile) -->

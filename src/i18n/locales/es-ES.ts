@@ -311,6 +311,7 @@ export const esES: TranslationDictionary = {
   "shell.controls.deselectAll": "Deseleccionar todo",
   "shell.controls.undoTitle": "Deshacer ultima seleccion",
   "shell.controls.undo": "Deshacer",
+  "shell.controls.undoBadgeTooltip": "Deshacer disponibles: {{count}}",
   "shell.mobile.menuTitle": "Menu",
   "shell.mobile.cameraView": "Vista de camara",
   "shell.mobile.cameraSlot1Title": "Slot de camara 1",
