@@ -165,6 +165,7 @@ export interface JoinMultiplayerSessionRequest {
   providerId?: string;
   blockedPlayerIds?: string[];
   botCount?: number;
+  gameDifficulty?: MultiplayerGameDifficulty;
 }
 
 export type MultiplayerJoinFailureReason =

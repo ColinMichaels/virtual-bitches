@@ -53,6 +53,7 @@ import { MultiplayerSessionService } from "./multiplayer/sessionService.js";
 import { environment } from "@env";
 import {
   backendApiService,
+  type MultiplayerGameDifficulty,
   type MultiplayerJoinFailureReason,
   type MultiplayerRoomListing,
   type MultiplayerSessionParticipant,
@@ -76,6 +77,7 @@ export interface MultiplayerBootstrapOptions {
   roomCode?: string;
   botCount?: number;
   joinBotCount?: number;
+  gameDifficulty?: MultiplayerGameDifficulty;
   sessionId?: string;
 }
 
@@ -269,12 +271,42 @@ class Game implements GameCallbacks {
   private mobileInviteLinkBtn: HTMLButtonElement | null = null;
   private turnActionBannerEl: HTMLElement | null = null;
 
+  private normalizeMultiplayerDifficulty(
+    value: unknown
+  ): MultiplayerGameDifficulty | undefined {
+    if (value === "easy" || value === "normal" || value === "hard") {
+      return value;
+    }
+    return undefined;
+  }
+
+  private resolveRequestedMultiplayerDifficulty(): MultiplayerGameDifficulty {
+    return (
+      this.normalizeMultiplayerDifficulty(this.multiplayerOptions.gameDifficulty) ??
+      this.normalizeMultiplayerDifficulty(this.state.mode.difficulty) ??
+      "normal"
+    );
+  }
+
+  private applyMultiplayerDifficultyIfPresent(value: unknown): void {
+    const difficulty = this.normalizeMultiplayerDifficulty(value);
+    if (!difficulty) {
+      return;
+    }
+    this.multiplayerOptions.gameDifficulty = difficulty;
+    this.state.mode.difficulty = difficulty;
+    GameFlowController.updateHintMode(this.state, this.diceRow);
+  }
+
   constructor(sessionBootstrap: GameSessionBootstrapOptions) {
     this.playMode = sessionBootstrap.playMode;
     this.multiplayerOptions = sessionBootstrap.multiplayer ?? {};
 
     // Initialize game state from URL or create new game
     this.state = GameFlowController.initializeGameState();
+    if (this.playMode === "multiplayer") {
+      this.state.mode.difficulty = this.resolveRequestedMultiplayerDifficulty();
+    }
 
     // Initialize rendering
     const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
@@ -627,7 +659,14 @@ class Game implements GameCallbacks {
 
     // Listen to settings changes to sync mode and update hint mode
     settingsService.onChange((settings) => {
-      GameFlowController.syncModeWithSettings(this.state);
+      if (this.playMode === "multiplayer") {
+        const sessionDifficulty = this.multiplayerSessionService.getActiveSession()?.gameDifficulty;
+        this.applyMultiplayerDifficultyIfPresent(
+          sessionDifficulty ?? this.multiplayerOptions.gameDifficulty
+        );
+      } else {
+        GameFlowController.syncModeWithSettings(this.state);
+      }
       GameFlowController.updateHintMode(this.state, this.diceRow);
       // Apply visual settings in real-time
       this.scene.updateTableContrast(settings.display.visual.tableContrast);
@@ -643,7 +682,14 @@ class Game implements GameCallbacks {
     tutorialModal.setOnComplete(() => {
       this.queueTutorialCompletionUndo();
       // After tutorial, sync mode and update hint mode based on actual difficulty setting
-      GameFlowController.syncModeWithSettings(this.state);
+      if (this.playMode === "multiplayer") {
+        const sessionDifficulty = this.multiplayerSessionService.getActiveSession()?.gameDifficulty;
+        this.applyMultiplayerDifficultyIfPresent(
+          sessionDifficulty ?? this.multiplayerOptions.gameDifficulty
+        );
+      } else {
+        GameFlowController.syncModeWithSettings(this.state);
+      }
       GameFlowController.updateHintMode(this.state, this.diceRow);
       this.updateUI();
     });
@@ -1080,13 +1126,15 @@ class Game implements GameCallbacks {
     }
 
     const multiplayerIdentity = await this.resolveMultiplayerIdentityPayload();
+    const requestedDifficulty = this.resolveRequestedMultiplayerDifficulty();
+    this.state.mode.difficulty = requestedDifficulty;
     const createdSession = await this.multiplayerSessionService.createSession({
       roomCode: this.multiplayerOptions.roomCode,
       displayName: multiplayerIdentity.displayName,
       avatarUrl: multiplayerIdentity.avatarUrl,
       providerId: multiplayerIdentity.providerId,
       botCount: this.multiplayerOptions.botCount,
-      gameDifficulty: this.state.mode.difficulty,
+      gameDifficulty: requestedDifficulty,
     });
     if (!createdSession) {
       notificationService.show("Failed to create multiplayer session. Continuing in solo mode.", "warning", 2800);
@@ -1167,6 +1215,7 @@ class Game implements GameCallbacks {
       avatarUrl: multiplayerIdentity.avatarUrl,
       providerId: multiplayerIdentity.providerId,
       botCount: this.resolveJoinBotCount(),
+      gameDifficulty: this.resolveRequestedMultiplayerDifficulty(),
     });
     if (!session) {
       if (!options?.suppressFailureNotification) {
@@ -1381,6 +1430,9 @@ class Game implements GameCallbacks {
     this.sessionExpiryPromptActive = false;
     this.lastTurnPlanPreview = "";
     this.applyMultiplayerClockFromServer(session, { force: true });
+    this.applyMultiplayerDifficultyIfPresent(
+      session.gameDifficulty ?? this.multiplayerOptions.gameDifficulty
+    );
     this.applyMultiplayerSeatState(session);
     this.touchMultiplayerTurnSyncActivity();
     this.hud.setTurnSyncStatus("ok", "Sync Ready");
@@ -2083,7 +2135,14 @@ class Game implements GameCallbacks {
   private resetLocalStateForNextMultiplayerGame(options?: { notificationMessage?: string | null }): void {
     this.gameOverController.hide();
     this.state = GameFlowController.createNewGame();
-    GameFlowController.updateHintMode(this.state, this.diceRow);
+    if (this.playMode === "multiplayer") {
+      const sessionDifficulty = this.multiplayerSessionService.getActiveSession()?.gameDifficulty;
+      this.applyMultiplayerDifficultyIfPresent(
+        sessionDifficulty ?? this.multiplayerOptions.gameDifficulty
+      );
+    } else {
+      GameFlowController.updateHintMode(this.state, this.diceRow);
+    }
     this.diceRenderer.clearDice();
     this.scene.returnCameraToDefaultOverview(true);
     this.animating = false;
@@ -2719,6 +2778,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.applyMultiplayerDifficultyIfPresent(syncedSession.gameDifficulty);
     this.touchMultiplayerTurnSyncActivity();
     if (this.shouldResetLocalStateForNextMultiplayerGame(previousSession, syncedSession)) {
       this.resetLocalStateForNextMultiplayerGame();

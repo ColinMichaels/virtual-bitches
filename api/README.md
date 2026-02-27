@@ -112,6 +112,7 @@ Planned (not implemented yet):
   - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `phase`, `activeRollServerId`, optional `activeRoll`, `updatedAt`)
 - `POST /api/multiplayer/sessions` accepts optional `displayName`, `avatarUrl`, `providerId`, and `botCount` (`0..4`) to seed the local participant profile and bot seats.
 - `POST /api/multiplayer/sessions/:sessionId/join` and `POST /api/multiplayer/rooms/:roomCode/join` accept optional `displayName`, `avatarUrl`, `providerId`, and `botCount` (`0..4`) to update joining participant profile data and seed bots into an existing room.
+- Join payloads also accept optional `gameDifficulty` (`easy` | `normal` | `hard`) and apply it only when a legacy room snapshot is missing a valid stored difficulty.
 - Bot turn strategy is isolated in [`api/bot/engine.mjs`](./bot/engine.mjs) behind `createBotEngine()` so implementations can be swapped without rewriting websocket/session orchestration.
 - Admin endpoints include monitoring plus role management scaffolds:
   - In `auto` mode:
