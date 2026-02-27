@@ -1524,6 +1524,27 @@ export class DiceRenderer {
     return true;
   }
 
+  updateSpectatorSelectionPreview(
+    previewKey: string,
+    selectedSourceDiceIds: string[]
+  ): boolean {
+    const key = typeof previewKey === "string" ? previewKey.trim() : "";
+    const preview = this.spectatorPreviews.get(key);
+    if (!key || !preview || !Array.isArray(selectedSourceDiceIds)) {
+      return false;
+    }
+
+    const selectedTempIds = selectedSourceDiceIds
+      .map((sourceId) => preview.rollingSourceToTempId.get(sourceId))
+      .filter((dieId): dieId is string => typeof dieId === "string");
+    const selectedSet = new Set(selectedTempIds);
+
+    preview.rollingTempIds.forEach((tempId) => {
+      this.setSelected(tempId, selectedSet.has(tempId));
+    });
+    return true;
+  }
+
   cancelSpectatorPreview(previewKey: string): void {
     const key = typeof previewKey === "string" ? previewKey.trim() : "";
     if (!key) {

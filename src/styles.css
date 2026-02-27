@@ -525,6 +525,12 @@ h1, h2, h3, h4, h5, h6 {
   color: rgba(255, 149, 149, 0.96);
 }
 
+.wait-status-indicator {
+  color: rgba(255, 228, 126, 0.96);
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
 /* Mode indicator styling */
 #mode-indicator {
   margin-left: auto;

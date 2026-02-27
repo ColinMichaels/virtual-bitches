@@ -117,7 +117,7 @@ export interface MultiplayerTurnAutoAdvancedMessage {
   source?: string;
 }
 
-export type MultiplayerTurnActionType = "roll" | "score";
+export type MultiplayerTurnActionType = "roll" | "score" | "select";
 
 export interface MultiplayerTurnRollDieSnapshot {
   dieId: string;
@@ -138,6 +138,11 @@ export interface MultiplayerTurnScorePayload {
   projectedTotalScore?: number;
 }
 
+export interface MultiplayerTurnSelectPayload {
+  selectedDiceIds: string[];
+  rollServerId?: string;
+}
+
 export interface MultiplayerTurnActionMessage {
   type: "turn_action";
   sessionId?: string;
@@ -145,6 +150,7 @@ export interface MultiplayerTurnActionMessage {
   action: MultiplayerTurnActionType;
   roll?: MultiplayerTurnRollPayload;
   score?: MultiplayerTurnScorePayload;
+  select?: MultiplayerTurnSelectPayload;
   round?: number;
   turnNumber?: number;
   timestamp?: number;
@@ -322,7 +328,7 @@ function isMultiplayerTurnActionMessage(value: unknown): value is MultiplayerTur
   const msg = value as Partial<MultiplayerTurnActionMessage>;
   return (
     msg.type === "turn_action" &&
-    (msg.action === "roll" || msg.action === "score")
+    (msg.action === "roll" || msg.action === "score" || msg.action === "select")
   );
 }
 

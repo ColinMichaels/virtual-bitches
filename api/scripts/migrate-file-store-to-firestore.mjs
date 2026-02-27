@@ -20,6 +20,12 @@ async function main() {
     return;
   }
 
+  if (options.mode === "replace" && !options.allowReplace) {
+    throw new Error(
+      "Refusing destructive Firestore replace migration. Set API_MIGRATION_ALLOW_REPLACE=1 or pass --allow-replace."
+    );
+  }
+
   const sourcePath = path.resolve(repoRoot, options.sourcePath);
   if (!existsSync(sourcePath)) {
     throw new Error(`Source store file not found: ${sourcePath}`);
@@ -82,6 +88,7 @@ function parseArgs(args) {
       process.env.GCLOUD_PROJECT ??
       "",
     mode: "merge",
+    allowReplace: process.env.API_MIGRATION_ALLOW_REPLACE === "1",
     pruneExpired: true,
     verifyOnly: false,
     help: false,
@@ -116,6 +123,10 @@ function parseArgs(args) {
     }
     if (arg === "--mode") {
       options.mode = normalizeMode(args[++i]);
+      continue;
+    }
+    if (arg === "--allow-replace") {
+      options.allowReplace = true;
       continue;
     }
     if (arg.startsWith("--project=")) {
@@ -264,6 +275,7 @@ Usage:
 Options:
   --source <path>          Source JSON store file (default: api/data/store.json)
   --mode <merge|replace>   merge (safe default) or replace Firestore state
+  --allow-replace          Required when using --mode replace (or set API_MIGRATION_ALLOW_REPLACE=1)
   --project <id>           Firebase project id (defaults from env)
   --prefix <value>         Firestore collection prefix (default: api_v1)
   --no-prune-expired       Keep expired tokens/sessions from source file
