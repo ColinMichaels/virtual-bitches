@@ -40,6 +40,18 @@ const PLAY_SPOT_INNER_ANGLE_RATIO = 0.4;
 const SCORE_SPOT_INNER_ANGLE_RATIO = 0.36;
 const DICE_SPOT_INNER_ANGLE_RATIO = 0.33;
 const ACTIVE_PLAYER_SPOT_INNER_ANGLE_RATIO = 0.28;
+const CAMERA_MIN_RADIUS = 7;
+const CAMERA_MAX_RADIUS = 85;
+const CAMERA_MAX_BETA = Math.PI / 1.95;
+const DIE_FOCUS_CAMERA_RADIUS = 8.8;
+const DIE_FOCUS_CAMERA_BETA = 0.16;
+const DIE_FOCUS_TARGET_Y_OFFSET = 0.2;
+const DIE_FOCUS_CAMERA_TRANSITION_SECONDS = 0.38;
+const PLAYER_FOCUS_CAMERA_RADIUS = 21.5;
+const PLAYER_FOCUS_CAMERA_BETA = 0.6;
+const PLAYER_FOCUS_TARGET_Y_OFFSET = 0.4;
+const PLAYER_FOCUS_CAMERA_TRANSITION_SECONDS = 0.48;
+const CAMERA_RETURN_TRANSITION_SECONDS = 0.52;
 
 type GameplayLightingScenario = "default" | "suspense" | "special_move" | "victory";
 
@@ -101,10 +113,10 @@ export class GameScene {
       this.scene
     );
     this.camera.attachControl(canvas, true);
-    this.camera.lowerRadiusLimit = 25;
-    this.camera.upperRadiusLimit = 60;
+    this.camera.lowerRadiusLimit = CAMERA_MIN_RADIUS;
+    this.camera.upperRadiusLimit = CAMERA_MAX_RADIUS;
     this.camera.lowerBetaLimit = 0.1;
-    this.camera.upperBetaLimit = Math.PI / 2.2;
+    this.camera.upperBetaLimit = CAMERA_MAX_BETA;
 
     // Save default camera state
     this.defaultCameraState = {
@@ -782,6 +794,158 @@ export class GameScene {
         this.camera.target = new Vector3(0, 0, 0);
         break;
     }
+  }
+
+  /**
+   * Focus camera on a specific world point using a close top-down angle for reading die values.
+   */
+  focusCameraOnWorldPointTopDown(target: Vector3, animate: boolean = true): void {
+    if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.y) || !Number.isFinite(target.z)) {
+      return;
+    }
+
+    const clampedLowerRadius =
+      typeof this.camera.lowerRadiusLimit === "number" && Number.isFinite(this.camera.lowerRadiusLimit)
+        ? this.camera.lowerRadiusLimit
+        : CAMERA_MIN_RADIUS;
+    const targetRadius = Math.max(clampedLowerRadius, DIE_FOCUS_CAMERA_RADIUS);
+    const targetBeta = Math.max(this.camera.lowerBetaLimit ?? 0.1, DIE_FOCUS_CAMERA_BETA);
+    const focusTarget = target.clone();
+    focusTarget.y += DIE_FOCUS_TARGET_Y_OFFSET;
+
+    const focusPosition: CameraPosition = {
+      id: "runtime-focus",
+      name: "Runtime Focus",
+      alpha: -Math.PI / 2,
+      beta: targetBeta,
+      radius: targetRadius,
+      target: {
+        x: focusTarget.x,
+        y: focusTarget.y,
+        z: focusTarget.z,
+      },
+      createdAt: Date.now(),
+      isFavorite: false,
+    };
+
+    if (!animate) {
+      this.camera.alpha = focusPosition.alpha;
+      this.camera.beta = focusPosition.beta;
+      this.camera.radius = focusPosition.radius;
+      this.camera.target = new Vector3(
+        focusPosition.target.x,
+        focusPosition.target.y,
+        focusPosition.target.z
+      );
+      return;
+    }
+
+    // Always animate die-focus camera moves so panning/zooming feels intentional,
+    // even when saved-camera smooth transitions are disabled in settings.
+    this.animateCameraTo(focusPosition, DIE_FOCUS_CAMERA_TRANSITION_SECONDS);
+  }
+
+  /**
+   * Focus camera on a player seat with a wider, less top-down view.
+   */
+  focusCameraOnPlayerSeat(target: Vector3, animate: boolean = true): void {
+    if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.y) || !Number.isFinite(target.z)) {
+      return;
+    }
+
+    const lowerRadius =
+      typeof this.camera.lowerRadiusLimit === "number" && Number.isFinite(this.camera.lowerRadiusLimit)
+        ? this.camera.lowerRadiusLimit
+        : CAMERA_MIN_RADIUS;
+    const upperRadius =
+      typeof this.camera.upperRadiusLimit === "number" && Number.isFinite(this.camera.upperRadiusLimit)
+        ? this.camera.upperRadiusLimit
+        : CAMERA_MAX_RADIUS;
+    const lowerBeta =
+      typeof this.camera.lowerBetaLimit === "number" && Number.isFinite(this.camera.lowerBetaLimit)
+        ? this.camera.lowerBetaLimit
+        : 0.1;
+    const upperBeta =
+      typeof this.camera.upperBetaLimit === "number" && Number.isFinite(this.camera.upperBetaLimit)
+        ? this.camera.upperBetaLimit
+        : CAMERA_MAX_BETA;
+
+    const targetRadius = Math.min(upperRadius, Math.max(lowerRadius, PLAYER_FOCUS_CAMERA_RADIUS));
+    const targetBeta = Math.min(upperBeta, Math.max(lowerBeta, PLAYER_FOCUS_CAMERA_BETA));
+    const focusTarget = target.clone();
+    focusTarget.y += PLAYER_FOCUS_TARGET_Y_OFFSET;
+
+    // Position the camera outside the seat ring so the table remains in-frame.
+    const radial = new Vector3(focusTarget.x, 0, focusTarget.z);
+    let alpha = this.camera.alpha;
+    if (radial.lengthSquared() > 0.0001) {
+      radial.normalize();
+      alpha = Math.atan2(radial.z, radial.x);
+    }
+
+    const focusPosition: CameraPosition = {
+      id: "runtime-seat-focus",
+      name: "Runtime Seat Focus",
+      alpha,
+      beta: targetBeta,
+      radius: targetRadius,
+      target: {
+        x: focusTarget.x,
+        y: focusTarget.y,
+        z: focusTarget.z,
+      },
+      createdAt: Date.now(),
+      isFavorite: false,
+    };
+
+    if (!animate) {
+      this.camera.alpha = focusPosition.alpha;
+      this.camera.beta = focusPosition.beta;
+      this.camera.radius = focusPosition.radius;
+      this.camera.target = new Vector3(
+        focusPosition.target.x,
+        focusPosition.target.y,
+        focusPosition.target.z
+      );
+      return;
+    }
+
+    this.animateCameraTo(focusPosition, PLAYER_FOCUS_CAMERA_TRANSITION_SECONDS);
+  }
+
+  /**
+   * Return camera to the gameplay default overview position.
+   */
+  returnCameraToDefaultOverview(animate: boolean = true): void {
+    const defaultPosition: CameraPosition = {
+      id: "runtime-default-overview",
+      name: "Runtime Default Overview",
+      alpha: this.defaultCameraState.alpha,
+      beta: this.defaultCameraState.beta,
+      radius: this.defaultCameraState.radius,
+      target: {
+        x: 0,
+        y: 0,
+        z: 0,
+      },
+      createdAt: Date.now(),
+      isFavorite: false,
+    };
+
+    if (!animate) {
+      this.camera.alpha = defaultPosition.alpha;
+      this.camera.beta = defaultPosition.beta;
+      this.camera.radius = defaultPosition.radius;
+      this.camera.target = new Vector3(
+        defaultPosition.target.x,
+        defaultPosition.target.y,
+        defaultPosition.target.z
+      );
+      return;
+    }
+
+    // Use dedicated easing even when saved-camera smooth transitions are disabled.
+    this.animateCameraTo(defaultPosition, CAMERA_RETURN_TRANSITION_SECONDS);
   }
 
   /**
