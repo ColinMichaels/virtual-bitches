@@ -257,6 +257,7 @@ class Game implements GameCallbacks {
   private actionBtn: HTMLButtonElement;
   private deselectBtn: HTMLButtonElement;
   private undoBtn: HTMLButtonElement;
+  private newGameBtn: HTMLButtonElement | null = null;
   private inviteLinkBtn: HTMLButtonElement | null = null;
   private mobileInviteLinkBtn: HTMLButtonElement | null = null;
   private turnActionBannerEl: HTMLElement | null = null;
@@ -473,6 +474,7 @@ class Game implements GameCallbacks {
     this.actionBtn = document.getElementById("action-btn") as HTMLButtonElement;
     this.deselectBtn = document.getElementById("deselect-btn") as HTMLButtonElement;
     this.undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
+    this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement | null;
     this.inviteLinkBtn = document.getElementById("invite-link-btn") as HTMLButtonElement | null;
     this.mobileInviteLinkBtn = document.getElementById("mobile-invite-link-btn") as HTMLButtonElement | null;
     this.turnActionBannerEl = this.ensureTurnActionBanner();
@@ -3351,6 +3353,13 @@ class Game implements GameCallbacks {
     return this.paused;
   }
 
+  canManualNewGame(): boolean {
+    if (this.playMode !== "multiplayer") {
+      return true;
+    }
+    return !this.multiplayerSessionService.getActiveSession();
+  }
+
   getSelectedDieIndex(): number {
     return this.selectedDieIndex;
   }
@@ -3498,8 +3507,11 @@ class Game implements GameCallbacks {
       // Show notification about keyboard controls on first use
       const hasSeenKeyboardHint = sessionStorage.getItem("keyboardHintShown");
       if (!hasSeenKeyboardHint) {
+        const keyboardHint = this.canManualNewGame()
+          ? "← → or +/- to cycle focus, Enter to select die, X to deselect | N=New Game, D=Debug"
+          : "← → or +/- to cycle focus, Enter to select die, X to deselect | D=Debug";
         notificationService.show(
-          "← → or +/- to cycle focus, Enter to select die, X to deselect | N=New Game, D=Debug",
+          keyboardHint,
           "info"
         );
         sessionStorage.setItem("keyboardHintShown", "true");
@@ -3508,6 +3520,16 @@ class Game implements GameCallbacks {
   }
 
   private async handleModeChange(difficulty: GameDifficulty): Promise<void> {
+    if (!this.canManualNewGame()) {
+      notificationService.show(
+        "Difficulty changes are disabled while in a multiplayer room.",
+        "warning",
+        2400
+      );
+      this.updateUI();
+      return;
+    }
+
     const isInProgress = GameFlowController.isGameInProgress(this.state);
     let allowGameReset = true;
     if (isInProgress) {
@@ -3888,6 +3910,14 @@ class Game implements GameCallbacks {
   }
 
   handleNewGame(): void {
+    if (!this.canManualNewGame()) {
+      notificationService.show(
+        "Multiplayer game starts are server-controlled.",
+        "warning",
+        2200
+      );
+      return;
+    }
     this.gameOverController.hide();
     this.state = GameFlowController.createNewGame();
     GameFlowController.resetForNewGame(this.diceRenderer);
@@ -3903,6 +3933,15 @@ class Game implements GameCallbacks {
   }
 
   startNewGame(): void {
+    if (!this.canManualNewGame()) {
+      notificationService.show(
+        "Multiplayer game starts are server-controlled.",
+        "warning",
+        2200
+      );
+      return;
+    }
+
     // Unpause if paused
     if (this.paused) {
       this.paused = false;
@@ -4037,6 +4076,13 @@ class Game implements GameCallbacks {
     const isTurnLocked =
       this.isMultiplayerTurnEnforced() &&
       (!this.activeTurnPlayerId || !this.isLocalPlayersTurn());
+    const manualNewGameEnabled = this.canManualNewGame();
+    if (this.newGameBtn) {
+      this.newGameBtn.disabled = !manualNewGameEnabled;
+      this.newGameBtn.title = manualNewGameEnabled
+        ? "Start a new game"
+        : "Multiplayer game starts are server-controlled";
+    }
 
     // Update multipurpose action button
     if (this.state.status === "READY") {

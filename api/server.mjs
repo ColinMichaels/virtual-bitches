@@ -5071,6 +5071,24 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
   }
 
   const timedOutPlayerId = turnState.activeTurnPlayerId;
+  const timedOutParticipant = session.participants?.[timedOutPlayerId];
+  if (
+    timedOutParticipant &&
+    !isBotParticipant(timedOutParticipant)
+  ) {
+    const removal = removeParticipantFromSession(sessionId, timedOutPlayerId, {
+      source: "turn_timeout_forfeit",
+      socketReason: "turn_timeout_forfeit",
+    });
+    if (removal.ok) {
+      turnAdvanceMetrics.timeoutAutoAdvanceCount += 1;
+      persistStore().catch((error) => {
+        log.warn("Failed to persist session after timeout forfeit removal", error);
+      });
+      return;
+    }
+  }
+
   const timeoutMs = normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
   const previousRound = turnState.round;
   const previousTurnNumber = turnState.turnNumber;
