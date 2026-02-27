@@ -336,4 +336,149 @@ await test("joins by room code and tracks room_not_found failures", async () => 
   }
 });
 
+await test("queueForNextGame syncs updated session state", async () => {
+  const service = new MultiplayerSessionService("player-alpha");
+  const originalJoin = backendApiService.joinMultiplayerSession.bind(backendApiService);
+  const originalQueue = backendApiService.queueMultiplayerForNextGame.bind(backendApiService);
+
+  (backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession })
+    .joinMultiplayerSession = async () => ({
+      session: createSession({
+        sessionId: "session-queue",
+        roomCode: "ROOM1",
+        participants: [
+          {
+            playerId: "player-alpha",
+            displayName: "Alpha",
+            score: 0,
+            remainingDice: 6,
+            isComplete: false,
+            isReady: true,
+            queuedForNextGame: false,
+            joinedAt: Date.now(),
+            lastHeartbeatAt: Date.now(),
+          },
+        ],
+        standings: [],
+        sessionComplete: true,
+      }),
+    });
+  (
+    backendApiService as {
+      queueMultiplayerForNextGame: typeof backendApiService.queueMultiplayerForNextGame;
+    }
+  ).queueMultiplayerForNextGame = async () => ({
+    ok: true,
+    queuedForNextGame: true,
+    session: {
+      sessionId: "session-queue",
+      roomCode: "ROOM2",
+      createdAt: Date.now(),
+      participants: [
+        {
+          playerId: "player-alpha",
+          displayName: "Alpha",
+          score: 0,
+          remainingDice: 6,
+          isComplete: false,
+          isReady: true,
+          queuedForNextGame: true,
+          joinedAt: Date.now(),
+          lastHeartbeatAt: Date.now(),
+        },
+      ],
+      standings: [],
+      sessionComplete: true,
+      completedAt: Date.now(),
+      gameStartedAt: Date.now(),
+      expiresAt: Date.now() + 120000,
+      serverNow: Date.now(),
+    },
+  });
+
+  try {
+    const joined = await service.joinSession("session-queue");
+    assert(joined !== null, "Expected joined session before queue-for-next");
+
+    const queued = await service.queueForNextGame();
+    assert(queued !== null, "Expected queued session");
+    assertEqual(queued?.roomCode, "ROOM2", "Expected queued state room code update");
+    assertEqual(
+      queued?.participants?.[0]?.queuedForNextGame,
+      true,
+      "Expected local participant queued-for-next flag"
+    );
+  } finally {
+    service.dispose();
+    (
+      backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession }
+    ).joinMultiplayerSession = originalJoin;
+    (
+      backendApiService as {
+        queueMultiplayerForNextGame: typeof backendApiService.queueMultiplayerForNextGame;
+      }
+    ).queueMultiplayerForNextGame = originalQueue;
+  }
+});
+
+await test("queueForNextGame expires active session when API reports session_expired", async () => {
+  const documentShim = installDocumentShim();
+  const service = new MultiplayerSessionService("player-alpha");
+  const originalJoin = backendApiService.joinMultiplayerSession.bind(backendApiService);
+  const originalQueue = backendApiService.queueMultiplayerForNextGame.bind(backendApiService);
+  const originalAuthClear = authSessionService.clear.bind(authSessionService);
+
+  const capturedEvents: Array<{ reason?: string; sessionId?: string }> = [];
+  const clearedReasons: string[] = [];
+  documentShim.target.addEventListener("multiplayer:sessionExpired", (event: Event) => {
+    const detail = (event as CustomEvent<{ reason?: string; sessionId?: string }>).detail;
+    capturedEvents.push(detail ?? {});
+  });
+  (authSessionService as { clear: typeof authSessionService.clear }).clear = (reason?: string) => {
+    clearedReasons.push(reason ?? "");
+  };
+
+  (backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession })
+    .joinMultiplayerSession = async () => ({
+      session: createSession({
+        sessionId: "session-queue-expired",
+        roomCode: "ROOMX",
+      }),
+    });
+  (
+    backendApiService as {
+      queueMultiplayerForNextGame: typeof backendApiService.queueMultiplayerForNextGame;
+    }
+  ).queueMultiplayerForNextGame = async () => ({
+    ok: false,
+    queuedForNextGame: false,
+    reason: "session_expired",
+  });
+
+  try {
+    const joined = await service.joinSession("session-queue-expired");
+    assert(joined !== null, "Expected joined session before queue-for-next");
+
+    const queued = await service.queueForNextGame();
+    assertEqual(queued, null, "Expected null queue result on session expiry");
+    assertEqual(capturedEvents.length, 1, "Expected one expiry dispatch");
+    assertEqual(capturedEvents[0].reason, "session_expired", "Expected session_expired reason");
+    assertEqual(capturedEvents[0].sessionId, "session-queue-expired", "Expected expired session id");
+    assertEqual(clearedReasons[0], "multiplayer_session_expired", "Expected auth clear reason");
+    assertEqual(service.getActiveSession(), null, "Expected active session cleared");
+  } finally {
+    service.dispose();
+    (
+      backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession }
+    ).joinMultiplayerSession = originalJoin;
+    (
+      backendApiService as {
+        queueMultiplayerForNextGame: typeof backendApiService.queueMultiplayerForNextGame;
+      }
+    ).queueMultiplayerForNextGame = originalQueue;
+    (authSessionService as { clear: typeof authSessionService.clear }).clear = originalAuthClear;
+    documentShim.restore();
+  }
+});
+
 console.log("\nMultiplayerSessionService tests passed! ✓");

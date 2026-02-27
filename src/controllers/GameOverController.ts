@@ -16,10 +16,16 @@ import type { GameScene } from "../render/scene.js";
 
 const log = logger.create('GameOver');
 
+interface GameOverViewOptions {
+  showWaitForNextGame?: boolean;
+}
+
 export class GameOverController {
   private gameOverEl: HTMLElement;
   private finalScoreEl: HTMLElement;
   private shareLinkEl: HTMLElement;
+  private newGameBtn: HTMLButtonElement | null;
+  private waitNextGameBtn: HTMLButtonElement | null;
   private scene: GameScene;
 
   constructor(scene: GameScene) {
@@ -27,12 +33,14 @@ export class GameOverController {
     this.gameOverEl = document.getElementById("game-over")!;
     this.finalScoreEl = document.getElementById("final-score")!;
     this.shareLinkEl = document.getElementById("share-link")!;
+    this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement | null;
+    this.waitNextGameBtn = document.getElementById("wait-next-game-btn") as HTMLButtonElement | null;
   }
 
   /**
    * Show game over screen with final score and stats
    */
-  showGameOver(state: GameState, gameStartTime: number): void {
+  showGameOver(state: GameState, gameStartTime: number, options: GameOverViewOptions = {}): void {
     // Play game over sound and haptic feedback
     audioService.playSfx("gameOver");
     hapticsService.gameComplete();
@@ -79,6 +87,7 @@ export class GameOverController {
 
     // Setup seed action buttons
     this.setupSeedActions(shareURL, state.score);
+    this.configureActionButtons(options);
 
     // Show game over modal
     this.gameOverEl.classList.add("show");
@@ -167,5 +176,18 @@ export class GameOverController {
    */
   hide(): void {
     this.gameOverEl.classList.remove("show");
+    this.configureActionButtons({});
+  }
+
+  private configureActionButtons(options: GameOverViewOptions): void {
+    const showWaitForNextGame = options.showWaitForNextGame === true;
+    if (this.waitNextGameBtn) {
+      this.waitNextGameBtn.style.display = showWaitForNextGame ? "inline-flex" : "none";
+      this.waitNextGameBtn.disabled = false;
+    }
+    if (this.newGameBtn) {
+      this.newGameBtn.style.display = showWaitForNextGame ? "none" : "inline-flex";
+      this.newGameBtn.disabled = false;
+    }
   }
 }

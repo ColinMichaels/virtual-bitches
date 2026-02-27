@@ -39,6 +39,13 @@ export interface MultiplayerHeartbeatResponse {
   reason?: "session_expired" | "unknown_player" | "unknown_session";
 }
 
+export interface MultiplayerQueueNextGameResponse {
+  ok: boolean;
+  queuedForNextGame: boolean;
+  reason?: "session_expired" | "unknown_player" | "round_in_progress" | "unauthorized" | "unknown_session";
+  session?: MultiplayerSessionRecord;
+}
+
 export interface MultiplayerSessionAuth extends AuthTokenBundle {}
 
 export interface MultiplayerSessionParticipant {
@@ -388,6 +395,19 @@ export class BackendApiService {
   ): Promise<MultiplayerHeartbeatResponse | null> {
     return this.request<MultiplayerHeartbeatResponse>(
       `/multiplayer/sessions/${encodeURIComponent(sessionId)}/heartbeat`,
+      {
+        method: "POST",
+        body: { playerId },
+      }
+    );
+  }
+
+  async queueMultiplayerForNextGame(
+    sessionId: string,
+    playerId: string
+  ): Promise<MultiplayerQueueNextGameResponse | null> {
+    return this.request<MultiplayerQueueNextGameResponse>(
+      `/multiplayer/sessions/${encodeURIComponent(sessionId)}/queue-next`,
       {
         method: "POST",
         body: { playerId },

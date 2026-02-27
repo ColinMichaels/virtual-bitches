@@ -22,6 +22,12 @@ const serverProcess = spawn("node", ["api/server.mjs"], {
     MULTIPLAYER_SESSION_IDLE_TTL_MS:
       process.env.MULTIPLAYER_SESSION_IDLE_TTL_MS ??
       (shortTtlModeEnabled ? "12000" : undefined),
+    MULTIPLAYER_NEXT_GAME_DELAY_MS:
+      process.env.MULTIPLAYER_NEXT_GAME_DELAY_MS ??
+      (shortTtlModeEnabled ? "5000" : undefined),
+    MULTIPLAYER_POST_GAME_INACTIVITY_TIMEOUT_MS:
+      process.env.MULTIPLAYER_POST_GAME_INACTIVITY_TIMEOUT_MS ??
+      (shortTtlModeEnabled ? "15000" : undefined),
     PUBLIC_ROOM_OVERFLOW_EMPTY_TTL_MS:
       process.env.PUBLIC_ROOM_OVERFLOW_EMPTY_TTL_MS ??
       (shortTtlModeEnabled ? "5000" : undefined),
@@ -93,6 +99,7 @@ function runSmoke(baseUrl) {
         E2E_API_BASE_URL: baseUrl,
         E2E_ASSERT_ROOM_EXPIRY: process.env.E2E_ASSERT_ROOM_EXPIRY ?? "1",
         E2E_ROOM_EXPIRY_WAIT_MS: process.env.E2E_ROOM_EXPIRY_WAIT_MS ?? "9000",
+        E2E_QUEUE_LIFECYCLE_WAIT_MS: process.env.E2E_QUEUE_LIFECYCLE_WAIT_MS ?? "12000",
         E2E_ADMIN_TOKEN: adminToken,
         E2E_ASSERT_ADMIN_MONITOR: process.env.E2E_ASSERT_ADMIN_MONITOR ?? "1",
       },

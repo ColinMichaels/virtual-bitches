@@ -25,6 +25,7 @@ export interface GameCallbacks {
   handleUndo: () => void;
   handleCopyInviteLink: () => void;
   handleNewGame: () => void;
+  handleWaitForNextGame: () => void;
   handleReturnToMainMenu: () => void;
   startNewGame: () => void;
   canManualNewGame: () => boolean;
@@ -59,6 +60,7 @@ export class InputController {
   private deselectBtn: HTMLButtonElement;
   private undoBtn: HTMLButtonElement;
   private newGameBtn: HTMLButtonElement;
+  private waitNextGameBtn: HTMLButtonElement | null;
   private returnMainMenuBtn: HTMLButtonElement | null;
   private viewLeaderboardBtn: HTMLButtonElement;
   private settingsGearBtn: HTMLButtonElement;
@@ -94,6 +96,7 @@ export class InputController {
     this.deselectBtn = document.getElementById("deselect-btn") as HTMLButtonElement;
     this.undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
     this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement;
+    this.waitNextGameBtn = document.getElementById("wait-next-game-btn") as HTMLButtonElement | null;
     this.returnMainMenuBtn = document.getElementById("return-main-menu-btn") as HTMLButtonElement | null;
     this.viewLeaderboardBtn = document.getElementById("view-leaderboard-btn") as HTMLButtonElement;
     this.settingsGearBtn = document.getElementById("settings-gear-btn") as HTMLButtonElement;
@@ -147,6 +150,12 @@ export class InputController {
       audioService.playSfx("click");
       hapticsService.buttonPress();
       this.callbacks.handleNewGame();
+    });
+
+    this.waitNextGameBtn?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      hapticsService.buttonPress();
+      this.callbacks.handleWaitForNextGame();
     });
 
     // Return to main menu button (game complete modal)
