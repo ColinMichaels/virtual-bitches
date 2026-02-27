@@ -448,6 +448,7 @@ export class BackendApiService {
     return this.request<AuthenticatedUserProfile>("/auth/me", {
       method: "GET",
       authMode: "firebase",
+      suppressMissingFirebaseTokenWarning: true,
     });
   }
 
@@ -463,7 +464,12 @@ export class BackendApiService {
 
   private async request<T>(
     path: string,
-    options: { method: string; body?: unknown; authMode?: RequestAuthMode }
+    options: {
+      method: string;
+      body?: unknown;
+      authMode?: RequestAuthMode;
+      suppressMissingFirebaseTokenWarning?: boolean;
+    }
   ): Promise<T | null> {
     const authMode = options.authMode ?? "session";
     const firstResponse = await this.executeRequest(path, options, authMode);
@@ -501,7 +507,12 @@ export class BackendApiService {
 
   private async executeRequest(
     path: string,
-    options: { method: string; body?: unknown; authMode?: RequestAuthMode },
+    options: {
+      method: string;
+      body?: unknown;
+      authMode?: RequestAuthMode;
+      suppressMissingFirebaseTokenWarning?: boolean;
+    },
     authMode: RequestAuthMode
   ): Promise<Response | null> {
     const controller = new AbortController();
@@ -523,7 +534,9 @@ export class BackendApiService {
         if (firebaseToken) {
           headers.authorization = `Bearer ${firebaseToken}`;
         } else if (authMode === "firebase") {
-          log.warn(`Missing Firebase auth token for ${options.method} ${path}`);
+          if (!options.suppressMissingFirebaseTokenWarning) {
+            log.warn(`Missing Firebase auth token for ${options.method} ${path}`);
+          }
           return null;
         }
       }

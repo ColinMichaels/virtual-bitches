@@ -15,7 +15,9 @@ const API_PREFIX = "/api";
 const DATA_DIR = resolveDataDir(process.env.API_DATA_DIR);
 const DATA_FILE = resolveDataFile(process.env.API_DATA_FILE, DATA_DIR);
 const WS_BASE_URL = process.env.WS_BASE_URL ?? "ws://localhost:3000";
-const STORE_BACKEND = (process.env.API_STORE_BACKEND ?? "file").trim().toLowerCase();
+const NODE_ENV = (process.env.NODE_ENV ?? "development").trim().toLowerCase();
+const STORE_BACKEND = resolveStoreBackend(process.env.API_STORE_BACKEND, NODE_ENV);
+const ALLOW_FILE_STORE_IN_PRODUCTION = process.env.API_ALLOW_FILE_STORE_IN_PRODUCTION === "1";
 const FIRESTORE_COLLECTION_PREFIX = (process.env.API_FIRESTORE_PREFIX ?? "api_v1").trim();
 const FIREBASE_PROJECT_ID =
   (process.env.FIREBASE_PROJECT_ID ??
@@ -24,7 +26,6 @@ const FIREBASE_PROJECT_ID =
     "").trim();
 const FIREBASE_WEB_API_KEY = (process.env.FIREBASE_WEB_API_KEY ?? "").trim();
 const FIREBASE_AUTH_MODE = (process.env.FIREBASE_AUTH_MODE ?? "auto").trim().toLowerCase();
-const NODE_ENV = (process.env.NODE_ENV ?? "development").trim().toLowerCase();
 const ADMIN_ACCESS_MODE = normalizeAdminAccessMode(process.env.API_ADMIN_ACCESS_MODE);
 const ADMIN_TOKEN = (process.env.API_ADMIN_TOKEN ?? "").trim();
 const ADMIN_OWNER_UID_ALLOWLIST = parseDelimitedEnvSet(process.env.API_ADMIN_OWNER_UIDS, (value) =>
@@ -219,9 +220,14 @@ async function bootstrap() {
     log.info(`Firestore collection prefix: ${prefix}`);
   }
   if (NODE_ENV === "production" && storeAdapter.name !== "firestore") {
-    log.warn(
-      "Production API is not using Firestore persistence (set API_STORE_BACKEND=firestore)."
-    );
+    const warning =
+      "Production API is not using Firestore persistence. Set API_STORE_BACKEND=firestore for durable cross-instance leaderboard/session storage.";
+    if (ALLOW_FILE_STORE_IN_PRODUCTION) {
+      log.warn(`${warning} (override: API_ALLOW_FILE_STORE_IN_PRODUCTION=1)`);
+    } else {
+      log.error(warning);
+      throw new Error(warning);
+    }
   }
   log.info(`Firebase auth verifier mode: ${FIREBASE_AUTH_MODE}`);
   log.info(`Admin API access mode: ${resolveAdminAccessMode()}`);
@@ -3782,6 +3788,14 @@ function normalizePublicRoomCodePrefix(rawValue, fallback = "LBY") {
     return fallback;
   }
   return normalized.slice(0, 4);
+}
+
+function resolveStoreBackend(rawValue, nodeEnv) {
+  const normalized = String(rawValue ?? "").trim().toLowerCase();
+  if (normalized === "firestore" || normalized === "file") {
+    return normalized;
+  }
+  return nodeEnv === "production" ? "firestore" : "file";
 }
 
 function parseDelimitedEnvSet(rawValue, normalizer = (value) => value) {

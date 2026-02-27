@@ -12,7 +12,8 @@ Environment variables:
 
 - `PORT` (default: `3000`)
 - `WS_BASE_URL` (default: `ws://localhost:3000`)
-- `API_STORE_BACKEND` (`file` or `firestore`, default: `file`)
+- `API_STORE_BACKEND` (`file` or `firestore`, default: `firestore` in production, `file` otherwise)
+- `API_ALLOW_FILE_STORE_IN_PRODUCTION` (`1` to override safety check; default: disabled)
 - `API_FIRESTORE_PREFIX` (Firestore collection prefix, default: `api_v1`)
 - `TURN_TIMEOUT_MS` (active turn timeout window, default: `45000`)
 - `TURN_TIMEOUT_WARNING_MS` (pre-timeout warning lead, default: `10000`)
@@ -33,7 +34,7 @@ Environment variables:
 
 Storage backends:
 
-- `file` backend (`API_STORE_BACKEND=file`): JSON file persistence at `api/data/store.json`
+- `file` backend (`API_STORE_BACKEND=file`): JSON file persistence at `api/data/store.json` (not recommended for production)
 - `firestore` backend (`API_STORE_BACKEND=firestore`): Firestore collections with prefix `API_FIRESTORE_PREFIX`
 
 SQL files define the intended longer-term relational schema.
