@@ -307,6 +307,8 @@ jobs:
           FB_SENDER_ID: ${{ steps.target.outputs.fb_messaging_sender_id }}
           FB_APP_ID: ${{ steps.target.outputs.fb_app_id }}
           FB_MEASUREMENT_ID: ${{ steps.target.outputs.fb_measurement_id }}
+          OG_IMAGE_URL: ${{ vars.VITE_OG_IMAGE_URL }}
+          FACEBOOK_APP_ID: ${{ vars.VITE_FACEBOOK_APP_ID }}
         run: |
           cat > .env.production <<EOF
           VITE_API_BASE_URL=$API_BASE_URL
@@ -320,6 +322,8 @@ jobs:
           VITE_FIREBASE_APP_ID=$FB_APP_ID
           VITE_FIREBASE_MEASUREMENT_ID=$FB_MEASUREMENT_ID
           VITE_ENABLE_ADMIN_UI=${{ vars.VITE_ENABLE_ADMIN_UI || '0' }}
+          VITE_OG_IMAGE_URL=$OG_IMAGE_URL
+          VITE_FACEBOOK_APP_ID=$FACEBOOK_APP_ID
           EOF
 
       - name: Build frontend
@@ -602,15 +606,33 @@ jobs:
       - name: Smoke Test CDN Assets
         env:
           ASSET_BASE_URL_FALLBACK: ${{ steps.target-assets.outputs.asset_base_url }}
-          CDN_VERIFY_RETRIES: ${{ vars.CDN_VERIFY_RETRIES || '3' }}
-          CDN_VERIFY_DELAY_MS: ${{ vars.CDN_VERIFY_DELAY_MS || '2000' }}
+          CDN_VERIFY_RETRIES: ${{ vars.CDN_VERIFY_RETRIES || '8' }}
+          CDN_VERIFY_DELAY_MS: ${{ vars.CDN_VERIFY_DELAY_MS || '3000' }}
           CDN_VERIFY_TIMEOUT_MS: ${{ vars.CDN_VERIFY_TIMEOUT_MS || '15000' }}
+          CDN_REQUIRE_PUBLIC_READ: ${{ vars.CDN_REQUIRE_PUBLIC_READ || '1' }}
+          CDN_AUTOCONFIGURE_PUBLIC_READ: ${{ vars.CDN_AUTOCONFIGURE_PUBLIC_READ || '1' }}
         run: |
           set -euo pipefail
           ASSET_BASE_URL="${CDN_RESOLVED_ASSET_BASE_URL:-${ASSET_BASE_URL_FALLBACK:-}}"
           if [ -z "${ASSET_BASE_URL:-}" ]; then
             echo "Missing ASSET_BASE_URL for CDN smoke verification."
             exit 1
+          fi
+          BUCKET_NAME="${CDN_RESOLVED_BUCKET:-}"
+          if [ -z "${BUCKET_NAME:-}" ]; then
+            # Best-effort parse from storage.googleapis.com/<bucket>/...
+            BUCKET_NAME="$(printf '%s' "$ASSET_BASE_URL" | sed -E 's#^https?://storage.googleapis.com/([^/]+)/.*#\1#')"
+          fi
+          if [ "${CDN_REQUIRE_PUBLIC_READ}" = "1" ] && [ "${CDN_AUTOCONFIGURE_PUBLIC_READ}" = "1" ]; then
+            if [ -z "${BUCKET_NAME:-}" ]; then
+              echo "Unable to determine bucket name for public IAM configuration."
+              exit 1
+            fi
+            echo "Ensuring public object read IAM on gs://${BUCKET_NAME}"
+            gcloud storage buckets add-iam-policy-binding "gs://${BUCKET_NAME}" \
+              --member="allUsers" \
+              --role="roles/storage.objectViewer" \
+              --quiet
           fi
           if [ "${ASSET_BASE_URL%/}" = "$ASSET_BASE_URL" ]; then
             ASSET_BASE_URL="${ASSET_BASE_URL}/"

@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Multiplayer UX iteration + admin console split + mobile camera quick slots + iOS responsive hardening + Firestore cutover CI checks)
+**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-27 (CDN deploy hardening + social share metadata alignment pass)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -452,6 +452,16 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 ## 🟢 Low Priority / Backlog
 
 ### Future Features (See FUTURE-FEATURES.md)
+
+#### Social Share Metadata Completion
+- **Status**: 🟡 In progress
+- **Completed**:
+  - ✅ Facebook/Open Graph/Twitter share template now points at BISCUITS production URL + CDN ad image
+  - ✅ Runtime social share defaults aligned with production URLs
+- **Next Steps**:
+  - [ ] Create Facebook App and set `VITE_FACEBOOK_APP_ID` in GitHub Environment vars (`dev` + `prod`)
+  - [ ] Validate final OG previews with Facebook Sharing Debugger and X/Twitter Card Validator
+  - [ ] Reconfirm canonical URL if/when custom domain replaces `biscuits-488600.web.app`
 
 #### Camera Attack Integration System 💥📷
 - **Status**: 🟡 PHASE 4 CLIENT INTEGRATION IN PROGRESS (2026-02-25)
