@@ -294,6 +294,7 @@ export class BackendApiService {
     const encoded = encodeURIComponent(playerId);
     return this.request<PlayerProfileRecord>(`/players/${encoded}/profile`, {
       method: "GET",
+      authMode: "none",
     });
   }
 
@@ -301,6 +302,7 @@ export class BackendApiService {
     return this.request<PlayerProfileRecord>(`/players/${encodeURIComponent(profile.playerId)}/profile`, {
       method: "PUT",
       body: profile,
+      authMode: "none",
     });
   }
 
@@ -319,6 +321,7 @@ export class BackendApiService {
         body: {
           scores,
         },
+        authMode: "none",
       }
     );
   }
@@ -345,6 +348,7 @@ export class BackendApiService {
     return this.request<GameLogBatchResponse>("/logs/batch", {
       method: "POST",
       body: { logs },
+      authMode: "none",
     });
   }
 

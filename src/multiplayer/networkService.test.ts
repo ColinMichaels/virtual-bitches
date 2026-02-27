@@ -345,6 +345,36 @@ await test("attempts auth recovery on auth-expired close code", async () => {
   assertEqual(createdUrls[1], "ws://refreshed.local", "Expected refreshed ws url");
 });
 
+await test("attempts auth recovery on pre-open tokenized handshake failure", async () => {
+  const eventTarget = new EventTarget();
+  const createdUrls: string[] = [];
+  let socket: MockWebSocket | null = null;
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local?session=session-1&playerId=player-1&token=expired-token",
+    eventTarget,
+    autoReconnect: false,
+    onAuthExpired: () => "ws://refreshed.local?session=session-1&playerId=player-1&token=new-token",
+    webSocketFactory: (url) => {
+      createdUrls.push(url);
+      socket = new MockWebSocket();
+      return socket;
+    },
+  });
+
+  network.connect();
+  socket!.emitClose(1006, "");
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assertEqual(createdUrls.length, 2, "Expected auth recovery reconnect after pre-open close");
+  assertEqual(
+    createdUrls[1],
+    "ws://refreshed.local?session=session-1&playerId=player-1&token=new-token",
+    "Expected refreshed tokenized ws url"
+  );
+});
+
 await test("auto-reconnects after transient websocket close", async () => {
   const eventTarget = new EventTarget();
   const sockets: MockWebSocket[] = [];
