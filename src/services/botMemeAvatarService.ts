@@ -1,3 +1,4 @@
+import { environment } from "@env";
 import { logger } from "../utils/logger.js";
 import { resolveAssetUrl } from "./assetUrl.js";
 
@@ -8,6 +9,7 @@ const DEFAULT_MEME_API_URLS = ["https://api.humorapi.com/memes/random", "https:/
 const API_FAILURE_COOLDOWN_MS = 60_000;
 const AUTH_FAILURE_COOLDOWN_MS = 5 * 60_000;
 const HUMOR_API_KEY_QUERY_PARAM = "api-key";
+const BOT_MEME_IMAGE_PROXY_PATH = "/media/image-proxy";
 
 type MemeApiProvider = "apileague" | "humorapi" | "generic";
 
@@ -89,6 +91,8 @@ class BotMemeAvatarService {
   private readonly apiKeyHeader: string;
   private readonly requestTimeoutMs: number;
   private readonly rotationIntervalMs: number;
+  private readonly imageProxyEnabled: boolean;
+  private readonly imageProxyUrl: string | null;
   private readonly fallbackImageUrls: string[];
   private readonly recentUrls: string[] = [];
   private readonly maxRecentUrls = 20;
@@ -108,6 +112,8 @@ class BotMemeAvatarService {
     this.enabled = parseBooleanFlag(env.VITE_BOT_MEME_AVATARS_ENABLED, true);
     this.requestTimeoutMs = parsePositiveInt(env.VITE_BOT_MEME_FETCH_TIMEOUT_MS, 5000, 1200, 15000);
     this.rotationIntervalMs = parsePositiveInt(env.VITE_BOT_MEME_ROTATION_MS, 38000, 10000, 120000);
+    this.imageProxyEnabled = parseBooleanFlag(env.VITE_BOT_MEME_IMAGE_PROXY_ENABLED, true);
+    this.imageProxyUrl = this.resolveImageProxyUrl();
     this.fallbackImageUrls = dedupe(
       [
         resolveAssetUrl("assets/ads/betahelp_ad.png"),
@@ -125,6 +131,33 @@ class BotMemeAvatarService {
 
   getRotationIntervalMs(): number {
     return this.rotationIntervalMs;
+  }
+
+  getRenderableAvatarUrl(avatarUrl: string | undefined): string | undefined {
+    const normalized = normalizeImageUrl(avatarUrl);
+    if (!normalized) {
+      return undefined;
+    }
+
+    if (!this.imageProxyEnabled || !this.imageProxyUrl) {
+      return normalized;
+    }
+
+    try {
+      const runtimeOrigin = typeof window !== "undefined" ? window.location.origin : "https://localhost";
+      const sourceUrl = new URL(normalized, runtimeOrigin);
+      const proxyUrl = new URL(this.imageProxyUrl, runtimeOrigin);
+      if (sourceUrl.origin === proxyUrl.origin && sourceUrl.pathname === proxyUrl.pathname) {
+        return normalized;
+      }
+      if (sourceUrl.origin === runtimeOrigin) {
+        return normalized;
+      }
+    } catch {
+      return normalized;
+    }
+
+    return `${this.imageProxyUrl}?url=${encodeURIComponent(normalized)}`;
   }
 
   async getMemeAvatarUrl(options: BotMemeAvatarRequestOptions = {}): Promise<string | undefined> {
@@ -324,6 +357,25 @@ class BotMemeAvatarService {
     } catch {
       return apiUrl;
     }
+  }
+
+  private resolveImageProxyUrl(): string | null {
+    const base = this.normalizeApiBaseUrl(environment.apiBaseUrl);
+    if (!base) {
+      return null;
+    }
+    return `${base}${BOT_MEME_IMAGE_PROXY_PATH}`;
+  }
+
+  private normalizeApiBaseUrl(value: unknown): string {
+    if (typeof value !== "string") {
+      return "";
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return "";
+    }
+    return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
   }
 
   private selectUrl(candidates: string[], excludedUrls: Set<string>): string | undefined {

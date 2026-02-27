@@ -1394,7 +1394,8 @@ class Game implements GameCallbacks {
     if (!isBot || !botMemeAvatarService.isEnabled()) {
       return avatarUrl;
     }
-    return this.botMemeAvatarByPlayerId.get(playerId) ?? avatarUrl;
+    const resolved = this.botMemeAvatarByPlayerId.get(playerId) ?? avatarUrl;
+    return botMemeAvatarService.getRenderableAvatarUrl(resolved);
   }
 
   private ensureBotMemeAvatarRotation(): void {

@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { randomBytes, randomInt, randomUUID, createHash } from "node:crypto";
+import { isIP } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "./logger.mjs";
@@ -81,6 +82,8 @@ const MAX_PLAYER_SCORE_ENTRIES_PER_PLAYER = 500;
 const MAX_PLAYER_SCORE_LIST_LIMIT = 500;
 const MAX_STORED_GAME_LOGS = 10000;
 const MAX_WS_MESSAGE_BYTES = 16 * 1024;
+const IMAGE_PROXY_MAX_BYTES = 6 * 1024 * 1024;
+const IMAGE_PROXY_TIMEOUT_MS = 7000;
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const MAX_MULTIPLAYER_BOTS = 4;
 const BOT_TICK_MIN_MS = 4500;
@@ -263,6 +266,11 @@ async function handleRequest(req, res) {
         leaderboardEntries: Object.keys(store.leaderboardScores).length,
         storage: buildStoreDiagnostics(),
       });
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/api/media/image-proxy") {
+      await handleImageProxy(req, res, url);
       return;
     }
 
@@ -5917,6 +5925,201 @@ function safeCloseSocket(client, closeCode, closeReason) {
     log.warn("Failed to close WebSocket cleanly", error);
     client.socket.destroy();
   }
+}
+
+async function handleImageProxy(_req, res, url) {
+  const target = normalizeImageProxyUrl(url.searchParams.get("url"));
+  if (!target) {
+    sendJson(res, 400, {
+      error: "A valid public image URL is required in the `url` query parameter.",
+    });
+    return;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), IMAGE_PROXY_TIMEOUT_MS);
+  try {
+    const upstream = await fetch(target, {
+      method: "GET",
+      redirect: "follow",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        accept: "image/*,*/*;q=0.8",
+      },
+    });
+
+    if (!upstream.ok) {
+      sendJson(res, 502, {
+        error: "Failed to fetch upstream image.",
+        status: upstream.status,
+      });
+      return;
+    }
+
+    const finalUrl = normalizeImageProxyUrl(upstream.url);
+    if (!finalUrl) {
+      sendJson(res, 502, {
+        error: "Upstream redirect target is not allowed.",
+      });
+      return;
+    }
+
+    const contentType = String(upstream.headers.get("content-type") ?? "").toLowerCase();
+    if (!contentType.startsWith("image/")) {
+      sendJson(res, 415, {
+        error: "Upstream resource is not an image.",
+      });
+      return;
+    }
+
+    const contentLengthHeader = upstream.headers.get("content-length");
+    const contentLength = contentLengthHeader ? Number.parseInt(contentLengthHeader, 10) : NaN;
+    if (Number.isFinite(contentLength) && contentLength > IMAGE_PROXY_MAX_BYTES) {
+      sendJson(res, 413, {
+        error: "Upstream image exceeds maximum allowed size.",
+      });
+      return;
+    }
+
+    const body = Buffer.from(await upstream.arrayBuffer());
+    if (body.length <= 0) {
+      sendJson(res, 502, {
+        error: "Upstream image response was empty.",
+      });
+      return;
+    }
+    if (body.length > IMAGE_PROXY_MAX_BYTES) {
+      sendJson(res, 413, {
+        error: "Upstream image exceeds maximum allowed size.",
+      });
+      return;
+    }
+
+    const headers = {
+      "content-type": contentType,
+      "content-length": String(body.length),
+      "cache-control":
+        normalizeHeaderValue(upstream.headers.get("cache-control")) ?? "public, max-age=3600",
+    };
+    const etag = normalizeHeaderValue(upstream.headers.get("etag"));
+    if (etag) {
+      headers.etag = etag;
+    }
+    const lastModified = normalizeHeaderValue(upstream.headers.get("last-modified"));
+    if (lastModified) {
+      headers["last-modified"] = lastModified;
+    }
+
+    res.writeHead(200, headers);
+    res.end(body);
+  } catch (error) {
+    const aborted =
+      typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
+    sendJson(res, aborted ? 504 : 502, {
+      error: aborted ? "Image fetch timed out." : "Image proxy request failed.",
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeHeaderValue(value) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeImageProxyUrl(value) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2048) {
+    return undefined;
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return undefined;
+  }
+
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    return undefined;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (!hostname || isBlockedProxyHostname(hostname)) {
+    return undefined;
+  }
+
+  return parsed.toString();
+}
+
+function isBlockedProxyHostname(hostname) {
+  if (
+    hostname === "localhost" ||
+    hostname === "0.0.0.0" ||
+    hostname === "::1" ||
+    hostname === "::" ||
+    hostname.endsWith(".localhost") ||
+    hostname.endsWith(".local")
+  ) {
+    return true;
+  }
+
+  const version = isIP(hostname);
+  if (version === 4) {
+    return isPrivateOrReservedIpv4(hostname);
+  }
+  if (version === 6) {
+    return isPrivateOrReservedIpv6(hostname);
+  }
+
+  return false;
+}
+
+function isPrivateOrReservedIpv4(hostname) {
+  const parts = hostname.split(".").map((part) => Number.parseInt(part, 10));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return true;
+  }
+
+  const [a, b] = parts;
+
+  if (a === 0 || a === 10 || a === 127 || a === 255) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  if (a === 198 && (b === 18 || b === 19)) return true;
+  if (a >= 224) return true;
+
+  return false;
+}
+
+function isPrivateOrReservedIpv6(hostname) {
+  const normalized = hostname.toLowerCase();
+  if (normalized === "::1" || normalized === "::") {
+    return true;
+  }
+  if (normalized.startsWith("fe80:")) {
+    return true;
+  }
+  if (normalized.startsWith("fc") || normalized.startsWith("fd")) {
+    return true;
+  }
+  if (normalized.startsWith("::ffff:")) {
+    const embeddedIpv4 = normalized.slice("::ffff:".length);
+    if (isIP(embeddedIpv4) === 4) {
+      return isPrivateOrReservedIpv4(embeddedIpv4);
+    }
+  }
+  return false;
 }
 
 async function parseJsonBody(req) {
