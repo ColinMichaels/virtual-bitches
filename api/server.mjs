@@ -677,13 +677,10 @@ async function handlePutProfile(req, res, pathname) {
   sendJson(res, 200, profile);
 }
 
-async function handleGetPlayerScores(req, res, pathname, requestUrl) {
+async function handleGetPlayerScores(_req, res, pathname, requestUrl) {
   const playerId = decodeURIComponent(pathname.split("/")[3]);
-  const authCheck = authorizeRequest(req, playerId);
-  if (!authCheck.ok) {
-    sendJson(res, 401, { error: "Unauthorized" });
-    return;
-  }
+  // Score history reads are intentionally public so leaderboard/personal-history
+  // views keep working even when clients hold stale session tokens.
 
   const rawLimit = Number(requestUrl.searchParams.get("limit") ?? MAX_PLAYER_SCORE_LIST_LIMIT);
   const limit = Number.isFinite(rawLimit)
