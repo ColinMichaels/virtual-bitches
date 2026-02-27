@@ -150,6 +150,17 @@ function normalizeParticipantScore(value: unknown): number {
   return Math.floor(value);
 }
 
+function resolveScoreFeedbackTone(points: number): "success" | "warning" | "error" {
+  const normalizedPoints = Number.isFinite(points) ? Math.max(0, Math.floor(points)) : 0;
+  if (normalizedPoints === 0) {
+    return "success";
+  }
+  if (normalizedPoints <= 4) {
+    return "warning";
+  }
+  return "error";
+}
+
 function normalizeRemainingDice(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     return 0;
@@ -2441,14 +2452,18 @@ class Game implements GameCallbacks {
     }
 
     const actionLabel = message.action === "score" ? "Scored" : "Rolled";
-    const scoreSuffix =
+    const scoredPoints =
       message.action === "score" &&
       typeof message.score?.points === "number" &&
       Number.isFinite(message.score.points)
-        ? ` (+${Math.max(0, Math.floor(message.score.points))})`
-        : "";
+        ? Math.max(0, Math.floor(message.score.points))
+        : null;
+    const scoreSuffix = scoredPoints !== null ? ` (+${scoredPoints})` : "";
     this.showSeatBubbleForPlayer(message.playerId, `${actionLabel}${scoreSuffix}`, {
-      tone: message.action === "score" ? "success" : "info",
+      tone:
+        message.action === "score"
+          ? resolveScoreFeedbackTone(scoredPoints ?? 0)
+          : "info",
       durationMs: 1400,
     });
   }
@@ -3609,7 +3624,7 @@ class Game implements GameCallbacks {
         // Celebrate perfect roll with particles
         this.scene.celebrateSuccess("perfect");
       } else {
-        notificationService.show(`+${points}`, "success");
+        notificationService.show(`+${points}`, resolveScoreFeedbackTone(points));
       }
     }, localSeatScoreZone
       ? new Vector3(localSeatScoreZone.x, localSeatScoreZone.y, localSeatScoreZone.z)
