@@ -1066,6 +1066,35 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 6. **Theme Polish Follow-up**: Finish remaining UV/lighting consistency checks across all die types.
 7. **iOS Device QA Pass**: Execute physical-device validation for new mobile menu and safe-area responsive behavior.
 
+### Multiplayer Sit/Stand Model (`isSeated` + `isReady`) — Post-Deployment Plan
+- **Status**: 🟡 Design captured, implementation deferred until deployment/runtime stability issues are resolved
+- **Goal**: A player can be in a room without being auto-queued into active multiplayer gameplay.
+- **State model**:
+  - `isSeated=false, isReady=false`: in room/lobby observer only (not in turn order, can still view chat/room events)
+  - `isSeated=true, isReady=false`: seated but not ready (visible at table, excluded from round start if start requires ready)
+  - `isSeated=true, isReady=true`: seated and ready for multiplayer round participation
+  - `isSeated=false, isReady=true`: invalid state (server normalizes back to `isReady=false`)
+- **Server/API next steps**:
+  - Add participant field `isSeated` to session participant record + serialization.
+  - Add participant action endpoint (or websocket action) to toggle `sit`, `stand`, and `ready`.
+  - Build turn order from seated/ready participants only; observers stay connected but out of turn flow.
+  - Emit room-channel system notifications for key transitions:
+    - player joined room (observer)
+    - player sat down
+    - player ready/unready
+    - player stood up
+  - Preserve backward compatibility by defaulting missing `isSeated` based on current participation behavior during rollout.
+- **Client/UI next steps**:
+  - Add lobby controls: `Sit Down` / `Stand Up` / `Ready`.
+  - Disable `Join Game`/multiplayer start until local player is seated (and ready if required by rule).
+  - Show room status feed notifications when another player sits/stands/gets ready.
+  - Keep solo-style practice available for lone players without forcing multiplayer round state.
+- **Acceptance criteria**:
+  - Lone player can enter room and practice without auto-starting a multiplayer round.
+  - New joiners are explicitly notified when another player sits and is ready.
+  - Turn order and win/lifecycle logic never include unseated observers.
+  - Existing room/session flows remain stable during mixed-version rollout.
+
 ---
 
 ## Notes
