@@ -52,11 +52,13 @@ export default defineConfig(({ mode }) => {
     publicDir: "public",
     build: {
       target: "es2022",
+      // Keep JS/CSS aggressively minified for deploy builds.
+      minify: "esbuild",
+      cssMinify: "esbuild",
       // Keep Babylon truly lazy: avoid injecting preload graph for dynamic chunks.
       modulePreload: false,
-      // Generate source maps for production debugging
-      // 'hidden' doesn't include source map reference in bundle but generates .map files
-      sourcemap: isProduction ? "hidden" : true,
+      // Keep source maps out of production bundles to reduce payload/artifact size.
+      sourcemap: isProduction ? false : true,
       // Babylon core is intentionally large; set a threshold above known baseline noise.
       chunkSizeWarningLimit: 6000,
       rollupOptions: {

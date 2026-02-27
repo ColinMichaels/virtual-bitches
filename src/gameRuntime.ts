@@ -218,6 +218,9 @@ class Game implements GameCallbacks {
 
     // Initialize particle system
     initParticleService(this.scene.scene);
+    particleService.setPlayerPositionResolver((playerId) =>
+      this.resolveParticleAnchorPosition(playerId)
+    );
     registerGameEffects();
     registerChaosEffects();
     this.cameraEffects = new CameraEffectsService(this.scene);
@@ -1673,6 +1676,35 @@ class Game implements GameCallbacks {
       y: center.y,
       z: center.z,
     };
+  }
+
+  private resolveParticleAnchorPosition(playerId: string): Vector3 | null {
+    const normalizedPlayerId =
+      typeof playerId === "string" ? playerId.trim() : "";
+    if (!normalizedPlayerId) {
+      return null;
+    }
+
+    let seatIndex = this.participantSeatById.get(normalizedPlayerId);
+    if (typeof seatIndex !== "number" && normalizedPlayerId === this.localPlayerId) {
+      seatIndex = this.scene.currentPlayerSeat;
+    }
+    if (typeof seatIndex !== "number") {
+      return null;
+    }
+
+    const avatarHeadAnchor = this.scene.playerSeatRenderer.getSeatHeadAnchorPosition(seatIndex);
+    if (avatarHeadAnchor) {
+      return avatarHeadAnchor.clone();
+    }
+
+    const scoreZone = this.scene.playerSeatRenderer.getSeatScoreZonePosition(seatIndex);
+    if (scoreZone) {
+      return scoreZone.clone();
+    }
+
+    const seat = this.scene.playerSeats[seatIndex];
+    return seat?.position?.clone() ?? null;
   }
 
   private buildSpectatorPreviewKey(playerId: string): string {

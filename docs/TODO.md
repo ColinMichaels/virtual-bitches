@@ -305,7 +305,9 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - 🔒 Phase 5: Settings UI dropdown for particle intensity control
 - **Stability Policy (2026-02-26)**:
   - ✅ Reduced ParticleService runtime log noise (throttled repeated warnings/errors, removed per-instance emit/stop logs)
+  - ✅ Resolved `emitAtPlayer(...)` placeholder by wiring playerId -> multiplayer seat world-position resolver from game runtime
   - ✅ Particle polish/fx expansion is now intentionally deferred until multiplayer and core gameplay mechanics are stabilized
+  - ✅ Upgrade particle anchors from seat score-zone center to avatar/head mesh anchors for multiplayer participant callouts/effects
   - [ ] Re-open particle flair work only after multiplayer sync/gameplay mechanics stabilization milestone is marked complete
 - **Result**: Balanced, configurable particle system with 60% less visual noise by default! 🎉
 
