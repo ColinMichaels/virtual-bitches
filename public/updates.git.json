@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-02-27T18:53:28.571Z",
+  "generatedAt": "2026-02-27T19:22:13.070Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-66352fe",
+      "date": "2026-02-27T18:56:29.000Z",
+      "title": "Add feedback link and configuration",
+      "content": "<p>Add feedback link and configuration</p><p><strong>Commit:</strong> <code>66352fe</code></p><p>- Added &quot;Feedback&quot; button to the splash screen with localization support (`splash.button.feedback`).</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "66352feaebf39723c6e9e0f4864d602d10342f85",
+        "shortHash": "66352fe",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/66352feaebf39723c6e9e0f4864d602d10342f85"
+      }
+    },
     {
       "id": "git-61abdb1",
       "date": "2026-02-27T18:44:54.000Z",
@@ -547,20 +561,6 @@
         "hash": "6ef2940c49345696271eeef62711ca3301fa1f9a",
         "shortHash": "6ef2940",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/6ef2940c49345696271eeef62711ca3301fa1f9a"
-      }
-    },
-    {
-      "id": "git-7cb17b9",
-      "date": "2026-02-27T00:17:53.000Z",
-      "title": "Update Firebase deployment workflow and asset upload logic",
-      "content": "<p>Update Firebase deployment workflow and asset upload logic</p><p><strong>Commit:</strong> <code>7cb17b9</code></p><p>- Added fallback bucket URL resolution for CDN smoke verification to avoid false negatives.</p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "7cb17b9b0af199c779d947166758d714ba676d96",
-        "shortHash": "7cb17b9",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/7cb17b9b0af199c779d947166758d714ba676d96"
       }
     }
   ]

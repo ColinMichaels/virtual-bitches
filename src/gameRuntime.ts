@@ -3901,7 +3901,7 @@ class Game implements GameCallbacks {
     if (!this.paused) {
       this.paused = true;
     }
-    this.settingsModal.show();
+    this.settingsModal.show({ preserveOpenModalIds: ["tutorial-modal"] });
     this.settingsModal.showTab(tab);
     this.updateUI();
   }
@@ -3911,8 +3911,11 @@ class Game implements GameCallbacks {
 
     if (this.paused) {
       notificationService.show("Paused", "info");
-      this.settingsModal.show();
-      if (tutorialModal.isActive()) {
+      const tutorialActive = tutorialModal.isActive();
+      this.settingsModal.show({
+        preserveOpenModalIds: tutorialActive ? ["tutorial-modal"] : undefined,
+      });
+      if (tutorialActive) {
         tutorialModal.onPlayerAction("openSettings");
         const preferredSettingsTab = tutorialModal.getPreferredSettingsTab();
         if (preferredSettingsTab) {

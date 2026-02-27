@@ -314,9 +314,13 @@ async function replayTutorialFromRulesModal(): Promise<void> {
 
 async function getSettingsModal(): Promise<SettingsModal> {
   if (!settingsModalPromise) {
-    settingsModalPromise = import("./ui/settings.js").then(
-      ({ SettingsModal }) => new SettingsModal()
-    );
+    settingsModalPromise = import("./ui/settings.js").then(({ SettingsModal }) => {
+      const modal = new SettingsModal();
+      modal.setOnHowToPlay(() => {
+        void showRules();
+      });
+      return modal;
+    });
   }
 
   return settingsModalPromise;

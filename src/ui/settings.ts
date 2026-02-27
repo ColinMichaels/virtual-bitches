@@ -40,6 +40,9 @@ const ADMIN_MONITOR_REFRESH_MS = 5000;
 
 type SettingsTab = "game" | "graphics" | "audio" | "account";
 type SyncIndicatorTone = "ok" | "syncing" | "pending" | "offline" | "error";
+type SettingsModalShowOptions = {
+  preserveOpenModalIds?: string[];
+};
 
 export class SettingsModal {
   private container: HTMLElement;
@@ -80,19 +83,31 @@ export class SettingsModal {
     // Create modal
     this.container = document.createElement("div");
     this.container.id = "settings-modal";
+    this.container.className = "modal";
     this.container.innerHTML = `
-      <div class="settings-backdrop"></div>
-      <div class="settings-content">
-        <h2>${t("settings.title")}</h2>
+      <div class="modal-backdrop"></div>
+      <div class="modal-content settings-content">
+        <div class="settings-header">
+          <div class="modal-header">
+            <h2>${t("settings.title")}</h2>
+            <button
+              class="modal-close"
+              type="button"
+              aria-label="${t("settings.buttons.close")}"
+              title="${t("settings.buttons.close")}"
+            >&times;</button>
+          </div>
 
-        <div class="settings-tabs" role="tablist" aria-label="${t("settings.tabs.aria")}">
-          <button class="settings-tab-btn active" type="button" data-tab="game">${t("settings.tabs.game")}</button>
-          <button class="settings-tab-btn" type="button" data-tab="graphics">${t("settings.tabs.graphics")}</button>
-          <button class="settings-tab-btn" type="button" data-tab="audio">${t("settings.tabs.audio")}</button>
-          <button class="settings-tab-btn" type="button" data-tab="account">${t("settings.tabs.account")}</button>
+          <div class="settings-tabs" role="tablist" aria-label="${t("settings.tabs.aria")}">
+            <button class="settings-tab-btn active" type="button" data-tab="game">${t("settings.tabs.game")}</button>
+            <button class="settings-tab-btn" type="button" data-tab="graphics">${t("settings.tabs.graphics")}</button>
+            <button class="settings-tab-btn" type="button" data-tab="audio">${t("settings.tabs.audio")}</button>
+            <button class="settings-tab-btn" type="button" data-tab="account">${t("settings.tabs.account")}</button>
+          </div>
         </div>
 
-        <div class="settings-tab-panel is-active" data-tab-panel="game">
+        <div class="settings-body">
+          <div class="settings-tab-panel is-active" data-tab-panel="game">
           <div class="settings-section">
             <h3>${t("settings.section.accessibility.title")}</h3>
             <p class="setting-description">${t("settings.section.accessibility.description")}</p>
@@ -203,100 +218,101 @@ export class SettingsModal {
               </label>
             </div>
           </div>
-        </div>
+          </div>
 
-        <div class="settings-tab-panel" data-tab-panel="graphics">
-          <div class="settings-section">
-            <h3>${t("settings.section.display.title")}</h3>
+          <div class="settings-tab-panel" data-tab-panel="graphics">
+            <div class="settings-section">
+              <h3>${t("settings.section.display.title")}</h3>
 
-            <div class="setting-row">
-              <label for="graphics-quality">${t("settings.controls.graphicsQuality.label")}</label>
-              <select id="graphics-quality">
-                <option value="low" ${this.settings.display.graphicsQuality === "low" ? "selected" : ""}>${t("settings.controls.graphicsQuality.low")}</option>
-                <option value="medium" ${this.settings.display.graphicsQuality === "medium" ? "selected" : ""}>${t("settings.controls.graphicsQuality.medium")}</option>
-                <option value="high" ${this.settings.display.graphicsQuality === "high" ? "selected" : ""}>${t("settings.controls.graphicsQuality.high")}</option>
-              </select>
+              <div class="setting-row">
+                <label for="graphics-quality">${t("settings.controls.graphicsQuality.label")}</label>
+                <select id="graphics-quality">
+                  <option value="low" ${this.settings.display.graphicsQuality === "low" ? "selected" : ""}>${t("settings.controls.graphicsQuality.low")}</option>
+                  <option value="medium" ${this.settings.display.graphicsQuality === "medium" ? "selected" : ""}>${t("settings.controls.graphicsQuality.medium")}</option>
+                  <option value="high" ${this.settings.display.graphicsQuality === "high" ? "selected" : ""}>${t("settings.controls.graphicsQuality.high")}</option>
+                </select>
+              </div>
+
+              <div class="setting-row">
+                <label>
+                  <input type="checkbox" id="shadows-enabled" ${this.settings.display.shadowsEnabled ? "checked" : ""}>
+                  ${t("settings.controls.shadowsEnabled")}
+                </label>
+              </div>
             </div>
 
-            <div class="setting-row">
-              <label>
-                <input type="checkbox" id="shadows-enabled" ${this.settings.display.shadowsEnabled ? "checked" : ""}>
-                ${t("settings.controls.shadowsEnabled")}
-              </label>
+            <div class="settings-section">
+              <h3>${t("settings.section.visual.title")}</h3>
+              <p class="setting-description">${t("settings.section.visual.description")}</p>
+
+              <div class="setting-row">
+                <label for="table-contrast">${t("settings.controls.tableContrast.label")}</label>
+                <select id="table-contrast">
+                  <option value="low" ${this.settings.display.visual.tableContrast === "low" ? "selected" : ""}>${t("settings.controls.tableContrast.low")}</option>
+                  <option value="normal" ${this.settings.display.visual.tableContrast === "normal" ? "selected" : ""}>${t("settings.controls.tableContrast.normal")}</option>
+                  <option value="high" ${this.settings.display.visual.tableContrast === "high" ? "selected" : ""}>${t("settings.controls.tableContrast.high")}</option>
+                  <option value="maximum" ${this.settings.display.visual.tableContrast === "maximum" ? "selected" : ""}>${t("settings.controls.tableContrast.maximum")}</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="settings-section" id="theme-switcher-container"></div>
+          </div>
+
+          <div class="settings-tab-panel" data-tab-panel="audio">
+            <div class="settings-section">
+              <h3>${t("settings.section.audio.title")}</h3>
+
+              <div class="setting-row">
+                <label for="master-volume">${t("settings.controls.masterVolume")}</label>
+                <input type="range" id="master-volume" min="0" max="100" value="${this.settings.audio.masterVolume * 100}">
+                <span id="master-volume-value">${Math.round(this.settings.audio.masterVolume * 100)}%</span>
+              </div>
+
+              <div class="setting-row" id="audio-sfx-volume-row">
+                <label for="sfx-volume">${t("settings.controls.soundEffects")}</label>
+                <input type="range" id="sfx-volume" min="0" max="100" value="${this.settings.audio.sfxVolume * 100}">
+                <span id="sfx-volume-value">${Math.round(this.settings.audio.sfxVolume * 100)}%</span>
+              </div>
+
+              <div class="setting-row" id="audio-music-volume-row">
+                <label for="music-volume">${t("settings.controls.music")}</label>
+                <input type="range" id="music-volume" min="0" max="100" value="${this.settings.audio.musicVolume * 100}">
+                <span id="music-volume-value">${Math.round(this.settings.audio.musicVolume * 100)}%</span>
+              </div>
+
+              <div class="setting-row" id="audio-sfx-toggle-row">
+                <label>
+                  <input type="checkbox" id="sfx-enabled" ${this.settings.audio.sfxEnabled ? "checked" : ""}>
+                  ${t("settings.controls.enableSoundEffects")}
+                </label>
+              </div>
+
+              <div class="setting-row" id="audio-music-toggle-row">
+                <label>
+                  <input type="checkbox" id="music-enabled" ${this.settings.audio.musicEnabled ? "checked" : ""}>
+                  ${t("settings.controls.enableMusic")}
+                </label>
+              </div>
+
+              <div class="setting-row" ${hapticsService.isSupported() ? "" : 'style="display:none;"'}>
+                <label>
+                  <input type="checkbox" id="haptics-enabled" ${this.settings.haptics !== false ? "checked" : ""}>
+                  ${t("settings.controls.enableHaptics")}
+                </label>
+              </div>
             </div>
           </div>
 
-          <div class="settings-section">
-            <h3>${t("settings.section.visual.title")}</h3>
-            <p class="setting-description">${t("settings.section.visual.description")}</p>
-
-            <div class="setting-row">
-              <label for="table-contrast">${t("settings.controls.tableContrast.label")}</label>
-              <select id="table-contrast">
-                <option value="low" ${this.settings.display.visual.tableContrast === "low" ? "selected" : ""}>${t("settings.controls.tableContrast.low")}</option>
-                <option value="normal" ${this.settings.display.visual.tableContrast === "normal" ? "selected" : ""}>${t("settings.controls.tableContrast.normal")}</option>
-                <option value="high" ${this.settings.display.visual.tableContrast === "high" ? "selected" : ""}>${t("settings.controls.tableContrast.high")}</option>
-                <option value="maximum" ${this.settings.display.visual.tableContrast === "maximum" ? "selected" : ""}>${t("settings.controls.tableContrast.maximum")}</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="settings-section" id="theme-switcher-container"></div>
-        </div>
-
-        <div class="settings-tab-panel" data-tab-panel="audio">
-          <div class="settings-section">
-            <h3>${t("settings.section.audio.title")}</h3>
-
-            <div class="setting-row">
-              <label for="master-volume">${t("settings.controls.masterVolume")}</label>
-              <input type="range" id="master-volume" min="0" max="100" value="${this.settings.audio.masterVolume * 100}">
-              <span id="master-volume-value">${Math.round(this.settings.audio.masterVolume * 100)}%</span>
-            </div>
-
-            <div class="setting-row" id="audio-sfx-volume-row">
-              <label for="sfx-volume">${t("settings.controls.soundEffects")}</label>
-              <input type="range" id="sfx-volume" min="0" max="100" value="${this.settings.audio.sfxVolume * 100}">
-              <span id="sfx-volume-value">${Math.round(this.settings.audio.sfxVolume * 100)}%</span>
-            </div>
-
-            <div class="setting-row" id="audio-music-volume-row">
-              <label for="music-volume">${t("settings.controls.music")}</label>
-              <input type="range" id="music-volume" min="0" max="100" value="${this.settings.audio.musicVolume * 100}">
-              <span id="music-volume-value">${Math.round(this.settings.audio.musicVolume * 100)}%</span>
-            </div>
-
-            <div class="setting-row" id="audio-sfx-toggle-row">
-              <label>
-                <input type="checkbox" id="sfx-enabled" ${this.settings.audio.sfxEnabled ? "checked" : ""}>
-                ${t("settings.controls.enableSoundEffects")}
-              </label>
-            </div>
-
-            <div class="setting-row" id="audio-music-toggle-row">
-              <label>
-                <input type="checkbox" id="music-enabled" ${this.settings.audio.musicEnabled ? "checked" : ""}>
-                ${t("settings.controls.enableMusic")}
-              </label>
-            </div>
-
-            <div class="setting-row" ${hapticsService.isSupported() ? "" : 'style="display:none;"'}>
-              <label>
-                <input type="checkbox" id="haptics-enabled" ${this.settings.haptics !== false ? "checked" : ""}>
-                ${t("settings.controls.enableHaptics")}
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-tab-panel" data-tab-panel="account">
-          <div class="settings-section">
-            <h3>${t("settings.section.account.title")}</h3>
-            <p class="setting-description">
-              ${t("settings.section.account.description")}
-            </p>
-            <div id="settings-account-panel" class="settings-account-panel">
-              <p class="settings-account-loading">${t("settings.account.loading")}</p>
+          <div class="settings-tab-panel" data-tab-panel="account">
+            <div class="settings-section">
+              <h3>${t("settings.section.account.title")}</h3>
+              <p class="setting-description">
+                ${t("settings.section.account.description")}
+              </p>
+              <div id="settings-account-panel" class="settings-account-panel">
+                <p class="settings-account-loading">${t("settings.account.loading")}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -304,7 +320,6 @@ export class SettingsModal {
         <div class="settings-buttons">
           <button id="settings-return-lobby" class="btn btn-secondary">${t("settings.buttons.mainMenu")}</button>
           <button id="settings-how-to-play" class="btn btn-outline">${t("settings.buttons.howToPlay")}</button>
-          <button id="settings-close" class="btn btn-primary primary">${t("settings.buttons.close")}</button>
           <button id="settings-new-game" class="btn btn-danger danger">${t("settings.buttons.newGame")}</button>
           <button id="settings-reset" class="btn btn-secondary">${t("settings.buttons.resetDefaults")}</button>
         </div>
@@ -681,7 +696,7 @@ export class SettingsModal {
     });
 
     // Close button
-    document.getElementById("settings-close")?.addEventListener("click", () => {
+    this.container.querySelector(".modal-close")?.addEventListener("click", () => {
       audioService.playSfx("click");
       this.hide();
     });
@@ -723,7 +738,7 @@ export class SettingsModal {
     });
 
     // Close on backdrop click
-    this.container.querySelector(".settings-backdrop")?.addEventListener("click", () => {
+    this.container.querySelector(".modal-backdrop")?.addEventListener("click", () => {
       this.hide();
     });
 
@@ -2219,8 +2234,10 @@ export class SettingsModal {
   /**
    * Show settings modal
    */
-  show(): void {
-    modalManager.requestOpen("settings-modal");
+  show(options?: SettingsModalShowOptions): void {
+    modalManager.requestOpen("settings-modal", {
+      preserveOpenIds: options?.preserveOpenModalIds,
+    });
     this.refresh();
     this.container.style.display = "flex";
     if (this.activeTab === "account") {
