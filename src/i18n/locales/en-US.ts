@@ -24,6 +24,7 @@ export const enUS = {
   "splash.playModeAria": "Choose play mode",
   "splash.button.startGame": "Start Game",
   "splash.button.howToPlay": "How to Play",
+  "splash.button.feedback": "Feedback",
   "splash.button.leaderboard": "Leaderboard",
   "splash.button.settings": "Settings",
   "splash.multiplayer.createRoomBots": "Bots when creating room",

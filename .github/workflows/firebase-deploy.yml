@@ -523,11 +523,17 @@ jobs:
           FB_MEASUREMENT_ID: ${{ steps.target.outputs.fb_measurement_id }}
           OG_IMAGE_URL: ${{ vars.VITE_OG_IMAGE_URL }}
           FACEBOOK_APP_ID: ${{ vars.VITE_FACEBOOK_APP_ID }}
+          FEEDBACK_FORM_URL_SECRET: ${{ secrets.FEEDBACK_FORM_URL }}
+          FEEDBACK_FORM_URL_VAR: ${{ vars.FEEDBACK_FORM_URL }}
+          VITE_FEEDBACK_FORM_URL_SECRET: ${{ secrets.VITE_FEEDBACK_FORM_URL }}
+          VITE_FEEDBACK_FORM_URL_VAR: ${{ vars.VITE_FEEDBACK_FORM_URL }}
         run: |
+          FEEDBACK_FORM_URL="${FEEDBACK_FORM_URL_SECRET:-${FEEDBACK_FORM_URL_VAR:-${VITE_FEEDBACK_FORM_URL_SECRET:-${VITE_FEEDBACK_FORM_URL_VAR:-/feedback}}}}"
           cat > .env.production <<EOF
           VITE_API_BASE_URL=$API_BASE_URL
           VITE_WS_URL=$WS_URL
           VITE_ASSET_BASE_URL=$ASSET_BASE_URL
+          VITE_FEEDBACK_FORM_URL=$FEEDBACK_FORM_URL
           VITE_FIREBASE_API_KEY=$FB_API_KEY
           VITE_FIREBASE_AUTH_DOMAIN=$FB_AUTH_DOMAIN
           VITE_FIREBASE_PROJECT_ID=$FB_PROJECT_ID
@@ -548,16 +554,39 @@ jobs:
           PROJECT_ID: ${{ steps.target.outputs.project_id }}
           FIREBASE_HOSTING_SITE_SECRET: ${{ secrets.FIREBASE_HOSTING_SITE }}
           FIREBASE_HOSTING_SITE_VAR: ${{ vars.FIREBASE_HOSTING_SITE }}
+          FEEDBACK_FORM_URL_SECRET: ${{ secrets.FEEDBACK_FORM_URL }}
+          FEEDBACK_FORM_URL_VAR: ${{ vars.FEEDBACK_FORM_URL }}
+          VITE_FEEDBACK_FORM_URL_SECRET: ${{ secrets.VITE_FEEDBACK_FORM_URL }}
+          VITE_FEEDBACK_FORM_URL_VAR: ${{ vars.VITE_FEEDBACK_FORM_URL }}
         run: |
           set -euo pipefail
           SITE_ID="${FIREBASE_HOSTING_SITE_SECRET:-${FIREBASE_HOSTING_SITE_VAR:-$PROJECT_ID}}"
+          FEEDBACK_FORM_URL="${FEEDBACK_FORM_URL_SECRET:-${FEEDBACK_FORM_URL_VAR:-${VITE_FEEDBACK_FORM_URL_SECRET:-${VITE_FEEDBACK_FORM_URL_VAR:-https://docs.google.com/forms/d/e/1FAIpQLSeB0EGnrvQ5G3sbyOoW9rtcA1BNPbZo_NCFRejntquZ-z1o6w/viewform}}}}"
 
           echo "Deploy project: $PROJECT_ID"
           echo "Hosting site target: $SITE_ID"
+          echo "Feedback redirect destination resolved."
+
+          FEEDBACK_FORM_URL="$FEEDBACK_FORM_URL" node <<'EOF'
+          const fs = require("node:fs");
+          const sourceConfigPath = "firebase.json";
+          const deployConfigPath = "firebase.deploy.json";
+          const feedbackDestination = process.env.FEEDBACK_FORM_URL;
+
+          const config = JSON.parse(fs.readFileSync(sourceConfigPath, "utf8"));
+          const hosting = (config.hosting ??= {});
+          const redirects = Array.isArray(hosting.redirects) ? hosting.redirects : [];
+          hosting.redirects = [
+            { source: "/feedback", destination: feedbackDestination, type: 302 },
+            ...redirects.filter((entry) => entry?.source !== "/feedback"),
+          ];
+
+          fs.writeFileSync(deployConfigPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+          EOF
 
           # Ensure a deterministic hosting target for this project in CI.
           npx firebase-tools@15.8.0 target:apply hosting app "$SITE_ID" --project "$PROJECT_ID" --non-interactive
-          npx firebase-tools@15.8.0 deploy --project "$PROJECT_ID" --only firestore,hosting:app --non-interactive
+          npx firebase-tools@15.8.0 deploy --config firebase.deploy.json --project "$PROJECT_ID" --only firestore,hosting:app --non-interactive
 
   deploy-assets:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy_assets }}

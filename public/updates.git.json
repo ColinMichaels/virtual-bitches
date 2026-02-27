@@ -1,8 +1,78 @@
 {
-  "generatedAt": "2026-02-27T17:58:54.615Z",
+  "generatedAt": "2026-02-27T18:53:28.571Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-61abdb1",
+      "date": "2026-02-27T18:44:54.000Z",
+      "title": "Simplify Firebase deployment workflow by replacing `needs` references with reusable steps and direct outputs",
+      "content": "<p>Simplify Firebase deployment workflow by replacing `needs` references with reusable steps and direct outputs</p><p><strong>Commit:</strong> <code>61abdb1</code></p><p>- Added reusable anchor for `Resolve Deployment Target` to streamline workflow.</p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "61abdb1458b09301e34e20c6cd8e8367af1828ab",
+        "shortHash": "61abdb1",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/61abdb1458b09301e34e20c6cd8e8367af1828ab"
+      }
+    },
+    {
+      "id": "git-69f9fd5",
+      "date": "2026-02-27T18:40:42.000Z",
+      "title": "Fix typo in Firebase deployment workflow job references",
+      "content": "<p>Fix typo in Firebase deployment workflow job references</p><p><strong>Commit:</strong> <code>69f9fd5</code></p><p>- Renamed `resolve-target` to `resolve_target` across `.github/workflows/firebase-deploy.yml`.</p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "69f9fd508047af497eb6c1a738b07d421ae14e84",
+        "shortHash": "69f9fd5",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/69f9fd508047af497eb6c1a738b07d421ae14e84"
+      }
+    },
+    {
+      "id": "git-bdcb2f7",
+      "date": "2026-02-27T18:19:01.000Z",
+      "title": "Refactor Firebase deployment workflows for modularity and selective deployment",
+      "content": "<p>Refactor Firebase deployment workflows for modularity and selective deployment</p><p><strong>Commit:</strong> <code>bdcb2f7</code></p><p>- Added workflow inputs for API, web, and CDN asset deployments.</p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "bdcb2f731c357cc72c5f27c8922bcf543efd9d5f",
+        "shortHash": "bdcb2f7",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/bdcb2f731c357cc72c5f27c8922bcf543efd9d5f"
+      }
+    },
+    {
+      "id": "git-fc9ad10",
+      "date": "2026-02-27T18:04:34.000Z",
+      "title": "Refresh participant liveness on `/auth/refresh` and add periodic heartbeat pings during queue lifecycle tests",
+      "content": "<p>Refresh participant liveness on `/auth/refresh` and add periodic heartbeat pings during queue lifecycle tests</p><p><strong>Commit:</strong> <code>fc9ad10</code></p><p>- Updated `/auth/refresh` to update participant liveness and session activity to prevent stale-heartbeat pruning.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "fc9ad1064630cf9a4f837dedd623cda0279e36f0",
+        "shortHash": "fc9ad10",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/fc9ad1064630cf9a4f837dedd623cda0279e36f0"
+      }
+    },
+    {
+      "id": "git-890be5d",
+      "date": "2026-02-27T17:59:50.000Z",
+      "title": "Refine splash actions and add language selector",
+      "content": "<p>Refine splash actions and add language selector</p><p><strong>Commit:</strong> <code>890be5d</code></p><p>- Removed splash screen &quot;Replay Tutorial&quot; button; tutorial replay is now accessible from the &quot;How to Play&quot; modal.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "890be5db47871adbec40c76aecd8e677ec397b83",
+        "shortHash": "890be5d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/890be5db47871adbec40c76aecd8e677ec397b83"
+      }
+    },
     {
       "id": "git-bb73068",
       "date": "2026-02-27T17:47:57.000Z",
@@ -491,76 +561,6 @@
         "hash": "7cb17b9b0af199c779d947166758d714ba676d96",
         "shortHash": "7cb17b9",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/7cb17b9b0af199c779d947166758d714ba676d96"
-      }
-    },
-    {
-      "id": "git-29fe62a",
-      "date": "2026-02-26T23:59:10.000Z",
-      "title": "Add Firestore cutover checks and CI enhancements",
-      "content": "<p>Add Firestore cutover checks and CI enhancements</p><p><strong>Commit:</strong> <code>29fe62a</code></p><p>- Introduced storage cutover verification in CI workflows (`E2E_ASSERT_STORAGE_CUTOVER`) to validate Firestore backend/prefix and section count schema.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "29fe62a96133511cb4710648e63cb690b760c6da",
-        "shortHash": "29fe62a",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/29fe62a96133511cb4710648e63cb690b760c6da"
-      }
-    },
-    {
-      "id": "git-b790710",
-      "date": "2026-02-26T23:43:42.000Z",
-      "title": "Update Firebase asset upload with project-based bucket resolution",
-      "content": "<p>Update Firebase asset upload with project-based bucket resolution</p><p><strong>Commit:</strong> <code>b790710</code></p><p>- Added `FIREBASE_PROJECT_ID` support to `upload-assets-to-firebase-storage.mjs`.</p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "b790710c9a08f96aadacfff3cc0808027ea8e916",
-        "shortHash": "b790710",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/b790710c9a08f96aadacfff3cc0808027ea8e916"
-      }
-    },
-    {
-      "id": "git-5714e7d",
-      "date": "2026-02-26T23:36:15.000Z",
-      "title": "Add CDN asset verification and related workflow updates",
-      "content": "<p>Add CDN asset verification and related workflow updates</p><p><strong>Commit:</strong> <code>5714e7d</code></p><p>- Introduced `cdn:verify` script for validating uploaded Firebase Storage assets.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "5714e7d61c8ec81a53e2be379b693dbd2ec80a28",
-        "shortHash": "5714e7d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/5714e7d61c8ec81a53e2be379b693dbd2ec80a28"
-      }
-    },
-    {
-      "id": "git-5336964",
-      "date": "2026-02-26T23:27:02.000Z",
-      "title": "Add cache control support for Firebase asset uploads",
-      "content": "<p>Add cache control support for Firebase asset uploads</p><p><strong>Commit:</strong> <code>5336964</code></p><p>- Added optional `--asset-cache-control` and `--content-cache-control` flags to `upload-assets-to-firebase-storage.mjs`.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "53369648f0d382aabd7d996cabfd1fecb94714f4",
-        "shortHash": "5336964",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/53369648f0d382aabd7d996cabfd1fecb94714f4"
-      }
-    },
-    {
-      "id": "git-d60fa79",
-      "date": "2026-02-26T23:18:16.000Z",
-      "title": "Update asset management and CDN integration",
-      "content": "<p>Update asset management and CDN integration</p><p><strong>Commit:</strong> <code>d60fa79</code></p><p>- Added support for optional CDN asset serving via `VITE_ASSET_BASE_URL`.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "d60fa79e13fb5feae83a92f3de115bc1aa2da1aa",
-        "shortHash": "d60fa79",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d60fa79e13fb5feae83a92f3de115bc1aa2da1aa"
       }
     }
   ]

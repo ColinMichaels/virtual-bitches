@@ -7,6 +7,13 @@
       "**/.*",
       "**/node_modules/**"
     ],
+    "redirects": [
+      {
+        "source": "/feedback",
+        "destination": "https://docs.google.com/forms/d/e/1FAIpQLSeB0EGnrvQ5G3sbyOoW9rtcA1BNPbZo_NCFRejntquZ-z1o6w/viewform",
+        "type": 302
+      }
+    ],
     "rewrites": [
       {
         "source": "/api/**",
