@@ -78,6 +78,7 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID_ENV_VAR: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID_ENV_VAR: ${{ vars.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_MEASUREMENT_ID_ENV_VAR: ${{ vars.VITE_FIREBASE_MEASUREMENT_ID }}
+          CDN_REQUIRE_PUBLIC_READ_ENV_VAR: ${{ vars.CDN_REQUIRE_PUBLIC_READ }}
           FIREBASE_PROJECT_ID_PROD_VAR: ${{ vars.FIREBASE_PROJECT_ID_PROD }}
           FIREBASE_PROJECT_ID_DEV_VAR: ${{ vars.FIREBASE_PROJECT_ID_DEV }}
           VITE_API_BASE_URL_PROD_VAR: ${{ vars.VITE_API_BASE_URL_PROD }}
@@ -194,12 +195,18 @@ jobs:
             exit 1
           fi
 
+          CDN_REQUIRE_PUBLIC_READ="$(printf '%s' "${CDN_REQUIRE_PUBLIC_READ_ENV_VAR:-0}" | tr '[:upper:]' '[:lower:]')"
           if [ -z "${ASSET_BASE_URL:-}" ]; then
-            NORMALIZED_BUCKET="${FB_STORAGE_BUCKET#gs://}"
-            NORMALIZED_BUCKET="${NORMALIZED_BUCKET%/}"
-            ASSET_BASE_URL="https://storage.googleapis.com/${NORMALIZED_BUCKET}/"
+            if [ "$CDN_REQUIRE_PUBLIC_READ" = "1" ] || [ "$CDN_REQUIRE_PUBLIC_READ" = "true" ] || [ "$CDN_REQUIRE_PUBLIC_READ" = "yes" ] || [ "$CDN_REQUIRE_PUBLIC_READ" = "on" ]; then
+              NORMALIZED_BUCKET="${FB_STORAGE_BUCKET#gs://}"
+              NORMALIZED_BUCKET="${NORMALIZED_BUCKET%/}"
+              ASSET_BASE_URL="https://storage.googleapis.com/${NORMALIZED_BUCKET}/"
+            else
+              ASSET_BASE_URL=""
+              echo "No VITE_ASSET_BASE_URL configured; defaulting frontend to Hosting-local assets (private CDN mode)."
+            fi
           fi
-          if [ "${ASSET_BASE_URL%/}" = "$ASSET_BASE_URL" ]; then
+          if [ -n "${ASSET_BASE_URL:-}" ] && [ "${ASSET_BASE_URL%/}" = "$ASSET_BASE_URL" ]; then
             ASSET_BASE_URL="${ASSET_BASE_URL}/"
           fi
 
@@ -609,8 +616,8 @@ jobs:
           CDN_VERIFY_RETRIES: ${{ vars.CDN_VERIFY_RETRIES || '8' }}
           CDN_VERIFY_DELAY_MS: ${{ vars.CDN_VERIFY_DELAY_MS || '3000' }}
           CDN_VERIFY_TIMEOUT_MS: ${{ vars.CDN_VERIFY_TIMEOUT_MS || '15000' }}
-          CDN_REQUIRE_PUBLIC_READ: ${{ vars.CDN_REQUIRE_PUBLIC_READ || '1' }}
-          CDN_AUTOCONFIGURE_PUBLIC_READ: ${{ vars.CDN_AUTOCONFIGURE_PUBLIC_READ || '1' }}
+          CDN_REQUIRE_PUBLIC_READ: ${{ vars.CDN_REQUIRE_PUBLIC_READ || '0' }}
+          CDN_AUTOCONFIGURE_PUBLIC_READ: ${{ vars.CDN_AUTOCONFIGURE_PUBLIC_READ || '0' }}
         run: |
           set -euo pipefail
           ASSET_BASE_URL="${CDN_RESOLVED_ASSET_BASE_URL:-${ASSET_BASE_URL_FALLBACK:-}}"
@@ -618,12 +625,18 @@ jobs:
             echo "Missing ASSET_BASE_URL for CDN smoke verification."
             exit 1
           fi
+          normalize_flag() {
+            printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'
+          }
+          CDN_REQUIRE_PUBLIC_READ_NORM="$(normalize_flag "${CDN_REQUIRE_PUBLIC_READ:-0}")"
+          CDN_AUTOCONFIGURE_PUBLIC_READ_NORM="$(normalize_flag "${CDN_AUTOCONFIGURE_PUBLIC_READ:-0}")"
+          echo "CDN smoke flags: require_public_read='${CDN_REQUIRE_PUBLIC_READ:-}' (norm=${CDN_REQUIRE_PUBLIC_READ_NORM}), autoconfigure_public_read='${CDN_AUTOCONFIGURE_PUBLIC_READ:-}' (norm=${CDN_AUTOCONFIGURE_PUBLIC_READ_NORM})"
           BUCKET_NAME="${CDN_RESOLVED_BUCKET:-}"
           if [ -z "${BUCKET_NAME:-}" ]; then
             # Best-effort parse from storage.googleapis.com/<bucket>/...
             BUCKET_NAME="$(printf '%s' "$ASSET_BASE_URL" | sed -E 's#^https?://storage.googleapis.com/([^/]+)/.*#\1#')"
           fi
-          if [ "${CDN_REQUIRE_PUBLIC_READ}" = "1" ] && [ "${CDN_AUTOCONFIGURE_PUBLIC_READ}" = "1" ]; then
+          if [ "${CDN_REQUIRE_PUBLIC_READ_NORM}" = "1" ] && [ "${CDN_AUTOCONFIGURE_PUBLIC_READ_NORM}" = "1" ]; then
             if [ -z "${BUCKET_NAME:-}" ]; then
               echo "Unable to determine bucket name for public IAM configuration."
               exit 1
@@ -637,13 +650,59 @@ jobs:
           if [ "${ASSET_BASE_URL%/}" = "$ASSET_BASE_URL" ]; then
             ASSET_BASE_URL="${ASSET_BASE_URL}/"
           fi
-          echo "CDN smoke verification base URL: ${ASSET_BASE_URL}"
-          node scripts/check-cdn-assets.mjs \
-            --retries "$CDN_VERIFY_RETRIES" \
-            --delay-ms "$CDN_VERIFY_DELAY_MS" \
-            --timeout-ms "$CDN_VERIFY_TIMEOUT_MS" \
-            --url "${ASSET_BASE_URL}assets/themes/default/theme.config.json" \
-            --url "${ASSET_BASE_URL}assets/logos/Biscuits_logo.png" \
-            --url "${ASSET_BASE_URL}assets/music/game%20music.mp3" \
-            --url "${ASSET_BASE_URL}rules.md" \
-            --url "${ASSET_BASE_URL}updates.json"
+          if [ "${CDN_REQUIRE_PUBLIC_READ_NORM}" = "1" ]; then
+            echo "CDN smoke verification mode: public-http"
+            echo "CDN smoke verification base URL: ${ASSET_BASE_URL}"
+            node scripts/check-cdn-assets.mjs \
+              --retries "$CDN_VERIFY_RETRIES" \
+              --delay-ms "$CDN_VERIFY_DELAY_MS" \
+              --timeout-ms "$CDN_VERIFY_TIMEOUT_MS" \
+              --url "${ASSET_BASE_URL}assets/themes/default/theme.config.json" \
+              --url "${ASSET_BASE_URL}assets/logos/Biscuits_logo.png" \
+              --url "${ASSET_BASE_URL}assets/music/game%20music.mp3" \
+              --url "${ASSET_BASE_URL}rules.md" \
+              --url "${ASSET_BASE_URL}updates.json"
+          else
+            echo "CDN smoke verification mode: private-bucket"
+            if [ -z "${BUCKET_NAME:-}" ]; then
+              echo "Missing bucket name for private CDN smoke verification."
+              exit 1
+            fi
+            OBJECTS=(
+              "assets/themes/default/theme.config.json"
+              "assets/logos/Biscuits_logo.png"
+              "assets/music/game music.mp3"
+              "rules.md"
+              "updates.json"
+            )
+            for object_path in "${OBJECTS[@]}"; do
+              echo "Checking object exists: gs://${BUCKET_NAME}/${object_path}"
+              gcloud storage objects describe "gs://${BUCKET_NAME}/${object_path}" \
+                --format='value(name,size,contentType)' >/dev/null
+            done
+            echo "Private CDN verification passed."
+          fi
+
+      - name: CDN Access Diagnostics (on failure)
+        if: ${{ failure() }}
+        env:
+          BUCKET_FALLBACK: ${{ steps.target-assets.outputs.fb_storage_bucket }}
+        run: |
+          set +e
+          BUCKET_NAME="${CDN_RESOLVED_BUCKET:-${BUCKET_FALLBACK:-}}"
+          echo "CDN diagnostics bucket: ${BUCKET_NAME:-<missing>}"
+          if [ -z "${BUCKET_NAME:-}" ]; then
+            echo "No bucket name available for diagnostics."
+            exit 0
+          fi
+          echo "Bucket description:"
+          gcloud storage buckets describe "gs://${BUCKET_NAME}" \
+            --format='yaml(name,location,iamConfiguration.uniformBucketLevelAccess,iamConfiguration.publicAccessPrevention)'
+          echo "Bucket IAM policy bindings:"
+          gcloud storage buckets get-iam-policy "gs://${BUCKET_NAME}" \
+            --format='yaml(bindings)'
+          echo "Sample object metadata:"
+          gcloud storage objects describe "gs://${BUCKET_NAME}/assets/themes/default/theme.config.json" \
+            --format='yaml(name,size,contentType,cacheControl,metadata)'
+          echo "HTTP HEAD probe:"
+          curl -I "https://storage.googleapis.com/${BUCKET_NAME}/assets/themes/default/theme.config.json" || true

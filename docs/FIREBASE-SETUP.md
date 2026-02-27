@@ -159,7 +159,7 @@ Recommended setup (GitHub Environments):
   - `FIREBASE_PROJECT_ID` (or fallback `VITE_FIREBASE_PROJECT_ID`)
   - `VITE_API_BASE_URL`
   - `VITE_WS_URL`
-  - `VITE_ASSET_BASE_URL` (optional; defaults to `https://storage.googleapis.com/<VITE_FIREBASE_STORAGE_BUCKET>/` in CI when omitted)
+  - `VITE_ASSET_BASE_URL` (optional; when omitted CI defaults to Hosting-local assets in private mode, or `https://storage.googleapis.com/<VITE_FIREBASE_STORAGE_BUCKET>/` in public-CDN mode)
   - `VITE_FIREBASE_API_KEY`
   - `VITE_FIREBASE_AUTH_DOMAIN`
   - `VITE_FIREBASE_PROJECT_ID`
@@ -173,8 +173,8 @@ Recommended setup (GitHub Environments):
   - `CDN_VERIFY_RETRIES` (optional; default `8`)
   - `CDN_VERIFY_DELAY_MS` (optional; default `3000`)
   - `CDN_VERIFY_TIMEOUT_MS` (optional; default `15000`)
-  - `CDN_REQUIRE_PUBLIC_READ` (optional; default `1`)
-  - `CDN_AUTOCONFIGURE_PUBLIC_READ` (optional; default `1`)
+  - `CDN_REQUIRE_PUBLIC_READ` (optional; default `0`)
+  - `CDN_AUTOCONFIGURE_PUBLIC_READ` (optional; default `0`, only used for public mode)
   - `API_STORE_BACKEND` (recommended: `firestore`)
   - `API_FIRESTORE_PREFIX` (optional; default `api_v1`)
   - `FIREBASE_AUTH_MODE` (recommended: `admin` for production)
