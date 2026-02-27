@@ -110,6 +110,8 @@ export interface ParticleNetworkEvent {
   timestamp: number;
 }
 
+type PlayerPositionResolver = (playerId: string) => Vector3 | null;
+
 /**
  * ParticleService - Manages all particle effects in the game
  */
@@ -130,6 +132,7 @@ export class ParticleService {
   private networkSyncEnabled = false;
   private instanceCounter = 0;
   private throttledLogs: Map<string, ThrottledLogEntry> = new Map();
+  private playerPositionResolver: PlayerPositionResolver | null = null;
 
   // Quality multipliers
   private qualityMultipliers = {
@@ -339,9 +342,7 @@ export class ParticleService {
     effectId: string,
     offset?: Vector3
   ): string {
-    // TODO: Get player position from PlayerManager
-    // For now, use placeholder position
-    const playerPosition = new Vector3(0, 0, 0);
+    const playerPosition = this.resolvePlayerPosition(playerId);
     const position = offset
       ? playerPosition.add(offset)
       : playerPosition;
@@ -354,6 +355,14 @@ export class ParticleService {
         networkSync: true,
       },
     });
+  }
+
+  /**
+   * Inject resolver used to map logical player IDs to world positions.
+   * Runtime can swap this when multiplayer seat mappings change.
+   */
+  setPlayerPositionResolver(resolver: PlayerPositionResolver | null): void {
+    this.playerPositionResolver = resolver;
   }
 
   /**
@@ -648,6 +657,18 @@ export class ParticleService {
       return;
     }
     this.networkSyncEnabled = enabled;
+  }
+
+  private resolvePlayerPosition(playerId: string): Vector3 {
+    const normalizedPlayerId =
+      typeof playerId === "string" ? playerId.trim() : "";
+    if (normalizedPlayerId && this.playerPositionResolver) {
+      const resolved = this.playerPositionResolver(normalizedPlayerId);
+      if (resolved) {
+        return resolved.clone();
+      }
+    }
+    return new Vector3(0, 0, 0);
   }
 
   /**

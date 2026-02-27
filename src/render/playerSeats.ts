@@ -50,6 +50,8 @@ export interface SeatState {
 export class PlayerSeatRenderer {
   private scene: Scene;
   private seatMeshes: Map<number, Mesh> = new Map();
+  private seatAvatarMeshes: Map<number, Mesh> = new Map();
+  private seatHeadMeshes: Map<number, Mesh> = new Map();
   private namePlateMeshes: Map<number, Mesh> = new Map();
   private scoreBadgeMeshes: Map<number, Mesh> = new Map();
   private chatBubbleMeshes: Map<number, Mesh> = new Map();
@@ -146,6 +148,8 @@ export class PlayerSeatRenderer {
 
     pedestal.rotation.y = seat.angle + Math.PI;
     this.seatMeshes.set(seat.index, pedestal);
+    this.seatAvatarMeshes.set(seat.index, avatar);
+    this.seatHeadMeshes.set(seat.index, head);
     this.seatAvatarTextures.set(seat.index, { url: undefined, texture: null });
   }
 
@@ -316,6 +320,19 @@ export class PlayerSeatRenderer {
       return null;
     }
     return zone.getAbsolutePosition().clone();
+  }
+
+  /**
+   * Get avatar head anchor for this seat.
+   * Used by particles and callouts that should originate from player avatars.
+   */
+  getSeatHeadAnchorPosition(seatIndex: number): Vector3 | null {
+    const head = this.seatHeadMeshes.get(seatIndex);
+    if (!head) {
+      return null;
+    }
+    const headPosition = head.getAbsolutePosition();
+    return new Vector3(headPosition.x, headPosition.y + 0.42, headPosition.z);
   }
 
   /**
@@ -505,9 +522,8 @@ export class PlayerSeatRenderer {
       return;
     }
 
-    const childMeshes = pedestal.getChildMeshes();
-    const avatarMesh = childMeshes[0] as Mesh | undefined;
-    const headMesh = childMeshes[1] as Mesh | undefined;
+    const avatarMesh = this.seatAvatarMeshes.get(seatIndex);
+    const headMesh = this.seatHeadMeshes.get(seatIndex);
     if (!avatarMesh || !headMesh) {
       return;
     }
@@ -1057,6 +1073,8 @@ export class PlayerSeatRenderer {
       entry.texture?.dispose();
     });
     this.seatMeshes.clear();
+    this.seatAvatarMeshes.clear();
+    this.seatHeadMeshes.clear();
     this.namePlateMeshes.clear();
     this.scoreBadgeMeshes.clear();
     this.chatBubbleMeshes.clear();
