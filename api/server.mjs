@@ -103,6 +103,10 @@ const BOT_TURN_ADVANCE_DELAY_BY_PROFILE = {
 const DEFAULT_PARTICIPANT_DICE_COUNT = 15;
 const BOT_ROLL_DICE_SIDES = [8, 12, 10, 6, 6, 6, 20, 6, 4, 6, 6, 6, 10, 6, 6];
 const TURN_TIMEOUT_MS = normalizeTurnTimeoutValue(process.env.TURN_TIMEOUT_MS, 45000);
+const MULTIPLAYER_PARTICIPANT_STALE_MS = normalizeTurnTimeoutValue(
+  process.env.MULTIPLAYER_PARTICIPANT_STALE_MS,
+  45000
+);
 const TURN_TIMEOUT_WARNING_MS = normalizeTurnWarningValue(
   process.env.TURN_TIMEOUT_WARNING_MS,
   TURN_TIMEOUT_MS,
@@ -973,7 +977,7 @@ async function handleJoinSessionByTarget(req, res, target) {
       normalizeProviderId(body?.providerId) ?? normalizeProviderId(existingParticipant?.providerId),
     joinedAt: existingParticipant?.joinedAt ?? now,
     lastHeartbeatAt: now,
-    isReady: false,
+    isReady: isReturningParticipant ? existingParticipant?.isReady === true : false,
     score: normalizeParticipantScore(existingParticipant?.score),
     remainingDice: normalizeParticipantRemainingDice(existingParticipant?.remainingDice),
     queuedForNextGame,
@@ -1095,11 +1099,14 @@ function removeParticipantFromSession(
       broadcastSessionState(session, options.source ?? "leave");
     }
   } else {
+    const forfeited = maybeForfeitSessionForSingleHumanRemaining(session, now);
     markSessionActivity(session, undefined, now);
     reconcileSessionLoops(sessionId);
-    const turnStart = buildTurnStartMessage(session, { source: "reassign" });
-    if (turnStart) {
-      broadcastToSession(sessionId, JSON.stringify(turnStart), null);
+    if (!forfeited) {
+      const turnStart = buildTurnStartMessage(session, { source: "reassign" });
+      if (turnStart) {
+        broadcastToSession(sessionId, JSON.stringify(turnStart), null);
+      }
     }
     broadcastSessionState(session, options.source ?? "leave");
   }
@@ -4221,17 +4228,118 @@ function getHumanParticipantCount(session) {
     .length;
 }
 
-function areAllHumansReady(session) {
+function getActiveHumanParticipants(session) {
   if (!session?.participants) {
-    return false;
+    return [];
   }
 
-  const humans = Object.values(session.participants).filter(
+  return Object.values(session.participants).filter(
     (participant) =>
       participant &&
       !isBotParticipant(participant) &&
       !isParticipantQueuedForNextGame(participant)
   );
+}
+
+function maybeForfeitSessionForSingleHumanRemaining(session, now = Date.now()) {
+  if (!session?.participants) {
+    return false;
+  }
+
+  const activeHumans = getActiveHumanParticipants(session);
+  if (activeHumans.length !== 1) {
+    return false;
+  }
+  if (hasQueuedParticipantsForNextGame(session)) {
+    return resetSessionForNextGame(session, now);
+  }
+
+  const activeParticipants = Object.values(session.participants).filter(
+    (participant) =>
+      participant && !isParticipantQueuedForNextGame(participant)
+  );
+  if (activeParticipants.length === 0) {
+    return false;
+  }
+
+  const completedAt =
+    Number.isFinite(now) && now > 0 ? Math.floor(now) : Date.now();
+  let changed = false;
+  activeParticipants.forEach((participant) => {
+    if (!participant || typeof participant !== "object") {
+      return;
+    }
+    if (participant.isComplete !== true) {
+      participant.isComplete = true;
+      changed = true;
+    }
+    const existingCompletedAt = normalizeParticipantCompletedAt(participant.completedAt);
+    if (existingCompletedAt === null) {
+      participant.completedAt = completedAt;
+      changed = true;
+    }
+  });
+
+  if (!changed) {
+    return false;
+  }
+
+  session.turnState = null;
+  ensureSessionTurnState(session);
+  return true;
+}
+
+function pruneInactiveSessionParticipants(sessionId, session, now = Date.now()) {
+  if (!session || typeof session !== "object" || !session.participants) {
+    return { changed: false, removedCount: 0 };
+  }
+
+  const stalePlayerIds = [];
+  Object.entries(session.participants).forEach(([playerId, participant]) => {
+    if (!participant || isBotParticipant(participant)) {
+      return;
+    }
+    if (isSessionParticipantConnected(sessionId, playerId)) {
+      return;
+    }
+
+    const lastHeartbeatAt =
+      Number.isFinite(participant.lastHeartbeatAt) && participant.lastHeartbeatAt > 0
+        ? Math.floor(participant.lastHeartbeatAt)
+        : 0;
+    if (lastHeartbeatAt > 0 && now - lastHeartbeatAt <= MULTIPLAYER_PARTICIPANT_STALE_MS) {
+      return;
+    }
+    stalePlayerIds.push(playerId);
+  });
+
+  if (stalePlayerIds.length === 0) {
+    return { changed: false, removedCount: 0 };
+  }
+
+  let removedCount = 0;
+  stalePlayerIds.forEach((playerId) => {
+    const removal = removeParticipantFromSession(sessionId, playerId, {
+      source: "heartbeat_timeout",
+      socketReason: "heartbeat_timeout",
+    });
+    if (removal.ok) {
+      removedCount += 1;
+    }
+  });
+
+  return {
+    changed: removedCount > 0,
+    removedCount,
+  };
+}
+
+function areAllHumansReady(session) {
+  if (!session?.participants) {
+    return false;
+  }
+
+  const humans = getActiveHumanParticipants(session);
   const activeHumans = humans.filter((participant) => !isParticipantComplete(participant));
   if (activeHumans.length <= 1) {
     return true;
@@ -4255,6 +4363,7 @@ function hasConnectedHumanParticipant(sessionId, session) {
     (participant) =>
       participant &&
       !isBotParticipant(participant) &&
+      !isParticipantQueuedForNextGame(participant) &&
       isSessionParticipantConnected(sessionId, participant.playerId)
   );
 }
@@ -4267,6 +4376,7 @@ function hasLiveHumanParticipant(sessionId, session, now = Date.now()) {
     (participant) =>
       participant &&
       !isBotParticipant(participant) &&
+      !isParticipantQueuedForNextGame(participant) &&
       isRoomParticipantActive(sessionId, participant, now)
   );
 }
@@ -5369,28 +5479,39 @@ function cleanupExpiredRecords() {
       return;
     }
 
-    const botPrune = pruneSessionBots(sessionId, session, {
-      removeAll: isSessionCompleteForHumans(session),
+    const stalePrune = pruneInactiveSessionParticipants(sessionId, session, now);
+    if (stalePrune.changed) {
+      sessionsChanged = true;
+    }
+
+    const latestSession = store.multiplayerSessions[sessionId];
+    if (!latestSession) {
+      sessionsChanged = true;
+      return;
+    }
+
+    const botPrune = pruneSessionBots(sessionId, latestSession, {
+      removeAll: isSessionCompleteForHumans(latestSession),
       removeCompleted: true,
       removeWithoutLiveHumans: true,
       now,
     });
     if (botPrune.changed) {
-      ensureSessionTurnState(session);
+      ensureSessionTurnState(latestSession);
       reconcileSessionLoops(sessionId);
       sessionsChanged = true;
     }
 
-    const roomKind = getSessionRoomKind(session);
+    const roomKind = getSessionRoomKind(latestSession);
     if (roomKind === ROOM_KINDS.publicDefault) {
-      if (!Number.isFinite(session.expiresAt) || session.expiresAt <= now + 5000) {
-        session.expiresAt = now + MULTIPLAYER_SESSION_IDLE_TTL_MS;
+      if (!Number.isFinite(latestSession.expiresAt) || latestSession.expiresAt <= now + 5000) {
+        latestSession.expiresAt = now + MULTIPLAYER_SESSION_IDLE_TTL_MS;
         sessionsChanged = true;
       }
       return;
     }
 
-    if (!Number.isFinite(session.expiresAt) || session.expiresAt <= now) {
+    if (!Number.isFinite(latestSession.expiresAt) || latestSession.expiresAt <= now) {
       expireSession(sessionId, "session_expired");
       sessionsChanged = true;
     }
@@ -5995,14 +6116,13 @@ function unregisterSocketClient(client) {
 
   const session = store.multiplayerSessions[client.sessionId];
   const participant = session?.participants?.[client.playerId];
-  if (participant && !isBotParticipant(participant) && participant.isReady === true) {
-    participant.isReady = false;
-    participant.lastHeartbeatAt = Date.now();
-    ensureSessionTurnState(session);
-    broadcastSessionState(session, "unready");
-    persistStore().catch((error) => {
-      log.warn("Failed to persist session after readiness clear", error);
-    });
+  if (participant && !isBotParticipant(participant)) {
+    // Keep readiness state during short disconnects so browser refresh reconnects do not
+    // deadlock turn sync. Stale participants are removed by heartbeat pruning.
+    participant.lastHeartbeatAt =
+      Number.isFinite(participant.lastHeartbeatAt) && participant.lastHeartbeatAt > 0
+        ? participant.lastHeartbeatAt
+        : Date.now();
   }
 
   reconcileTurnTimeoutLoop(client.sessionId);

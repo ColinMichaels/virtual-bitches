@@ -120,6 +120,7 @@ async function initializeShellUi(): Promise<void> {
     log.warn("Shell initialization encountered an error", error);
   } finally {
     await completeBootLoading();
+    void maybeAutoStartFromMultiplayerInvite();
   }
 }
 
@@ -171,6 +172,66 @@ async function startGame(startOptions: SplashStartOptions): Promise<boolean> {
     log.error("Failed to load game runtime:", error);
     notificationService.show("Failed to load game engine. Please refresh and try again.", "error", 3200);
     return false;
+  }
+}
+
+function normalizeInviteRoomCode(rawValue: string | null | undefined): string {
+  if (typeof rawValue !== "string") {
+    return "";
+  }
+  return rawValue.replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, 8);
+}
+
+function resolveInviteAutostartOptions():
+  | {
+      sessionId?: string;
+      roomCode?: string;
+    }
+  | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const query = new URLSearchParams(window.location.search);
+  const sessionId = query.get("session")?.trim() ?? "";
+  const roomCode = normalizeInviteRoomCode(query.get("room"));
+  if (!sessionId && !roomCode) {
+    return null;
+  }
+
+  return {
+    sessionId: sessionId || undefined,
+    roomCode: roomCode || undefined,
+  };
+}
+
+async function maybeAutoStartFromMultiplayerInvite(): Promise<void> {
+  if (gameStarted) {
+    return;
+  }
+
+  const invite = resolveInviteAutostartOptions();
+  if (!invite) {
+    return;
+  }
+
+  const inviteLabel = invite.roomCode ?? invite.sessionId ?? "multiplayer room";
+  notificationService.show(`Rejoining ${inviteLabel}...`, "info", 2200);
+  const { firebaseAuthService } = await getAuthServices();
+  await firebaseAuthService.initialize();
+  if (!firebaseAuthService.isAuthenticated()) {
+    setGuestModeEnabled(false);
+  }
+  const started = await startGame({
+    playMode: "multiplayer",
+    multiplayer: {
+      botCount: 0,
+      sessionId: invite.sessionId,
+      roomCode: invite.roomCode,
+    },
+  });
+  if (started) {
+    splash.hide();
   }
 }
 
