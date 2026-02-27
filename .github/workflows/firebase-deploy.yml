@@ -7,29 +7,47 @@ on:
       - master
       - dev
   workflow_dispatch:
+    inputs:
+      deploy_api:
+        description: Deploy Cloud Run API
+        type: boolean
+        default: true
+      deploy_web:
+        description: Build and deploy Firebase Hosting + Firestore
+        type: boolean
+        default: true
+      deploy_assets:
+        description: Deploy CDN assets to Firebase Storage
+        type: boolean
+        default: true
+      run_api_smoke:
+        description: Run API/WebSocket smoke test after API deploy
+        type: boolean
+        default: true
 
 concurrency:
   group: deploy-${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  resolve-target:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy_api || inputs.deploy_web }}
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'dev' && 'dev' || 'prod' }}
-    permissions:
-      contents: read
-      id-token: write
+    outputs:
+      project_id: ${{ steps.target.outputs.project_id }}
+      api_base_url: ${{ steps.target.outputs.api_base_url }}
+      ws_url: ${{ steps.target.outputs.ws_url }}
+      asset_base_url: ${{ steps.target.outputs.asset_base_url }}
+      fb_api_key: ${{ steps.target.outputs.fb_api_key }}
+      fb_auth_domain: ${{ steps.target.outputs.fb_auth_domain }}
+      fb_project_id: ${{ steps.target.outputs.fb_project_id }}
+      fb_storage_bucket: ${{ steps.target.outputs.fb_storage_bucket }}
+      fb_messaging_sender_id: ${{ steps.target.outputs.fb_messaging_sender_id }}
+      fb_app_id: ${{ steps.target.outputs.fb_app_id }}
+      fb_measurement_id: ${{ steps.target.outputs.fb_measurement_id }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
       - name: Resolve Deployment Target
         id: target
         env:
@@ -223,17 +241,36 @@ jobs:
           echo "fb_app_id=$FB_APP_ID" >> "$GITHUB_OUTPUT"
           echo "fb_measurement_id=$FB_MEASUREMENT_ID" >> "$GITHUB_OUTPUT"
 
+  deploy-api:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy_api }}
+    needs: resolve-target
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'dev' && 'dev' || 'prod' }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
       - name: Validate required secrets
         env:
-          PROJECT_ID: ${{ steps.target.outputs.project_id }}
-          API_BASE_URL: ${{ steps.target.outputs.api_base_url }}
-          WS_URL: ${{ steps.target.outputs.ws_url }}
-          FB_API_KEY: ${{ steps.target.outputs.fb_api_key }}
-          FB_AUTH_DOMAIN: ${{ steps.target.outputs.fb_auth_domain }}
-          FB_PROJECT_ID: ${{ steps.target.outputs.fb_project_id }}
-          FB_STORAGE_BUCKET: ${{ steps.target.outputs.fb_storage_bucket }}
-          FB_SENDER_ID: ${{ steps.target.outputs.fb_messaging_sender_id }}
-          FB_APP_ID: ${{ steps.target.outputs.fb_app_id }}
+          PROJECT_ID: ${{ needs.resolve-target.outputs.project_id }}
+          API_BASE_URL: ${{ needs.resolve-target.outputs.api_base_url }}
+          WS_URL: ${{ needs.resolve-target.outputs.ws_url }}
+          FB_API_KEY: ${{ needs.resolve-target.outputs.fb_api_key }}
+          FB_AUTH_DOMAIN: ${{ needs.resolve-target.outputs.fb_auth_domain }}
+          FB_PROJECT_ID: ${{ needs.resolve-target.outputs.fb_project_id }}
+          FB_STORAGE_BUCKET: ${{ needs.resolve-target.outputs.fb_storage_bucket }}
+          FB_SENDER_ID: ${{ needs.resolve-target.outputs.fb_messaging_sender_id }}
+          FB_APP_ID: ${{ needs.resolve-target.outputs.fb_app_id }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           GCP_SA_KEY_B64: ${{ secrets.GCP_SA_KEY_B64 }}
         run: |
@@ -293,49 +330,12 @@ jobs:
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ steps.gcp-creds.outputs.credentials_json }}
-          project_id: ${{ steps.target.outputs.project_id }}
+          project_id: ${{ needs.resolve-target.outputs.project_id }}
 
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ steps.target.outputs.project_id }}
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate build env
-        env:
-          API_BASE_URL: ${{ steps.target.outputs.api_base_url }}
-          WS_URL: ${{ steps.target.outputs.ws_url }}
-          ASSET_BASE_URL: ${{ steps.target.outputs.asset_base_url }}
-          FB_API_KEY: ${{ steps.target.outputs.fb_api_key }}
-          FB_AUTH_DOMAIN: ${{ steps.target.outputs.fb_auth_domain }}
-          FB_PROJECT_ID: ${{ steps.target.outputs.fb_project_id }}
-          FB_STORAGE_BUCKET: ${{ steps.target.outputs.fb_storage_bucket }}
-          FB_SENDER_ID: ${{ steps.target.outputs.fb_messaging_sender_id }}
-          FB_APP_ID: ${{ steps.target.outputs.fb_app_id }}
-          FB_MEASUREMENT_ID: ${{ steps.target.outputs.fb_measurement_id }}
-          OG_IMAGE_URL: ${{ vars.VITE_OG_IMAGE_URL }}
-          FACEBOOK_APP_ID: ${{ vars.VITE_FACEBOOK_APP_ID }}
-        run: |
-          cat > .env.production <<EOF
-          VITE_API_BASE_URL=$API_BASE_URL
-          VITE_WS_URL=$WS_URL
-          VITE_ASSET_BASE_URL=$ASSET_BASE_URL
-          VITE_FIREBASE_API_KEY=$FB_API_KEY
-          VITE_FIREBASE_AUTH_DOMAIN=$FB_AUTH_DOMAIN
-          VITE_FIREBASE_PROJECT_ID=$FB_PROJECT_ID
-          VITE_FIREBASE_STORAGE_BUCKET=$FB_STORAGE_BUCKET
-          VITE_FIREBASE_MESSAGING_SENDER_ID=$FB_SENDER_ID
-          VITE_FIREBASE_APP_ID=$FB_APP_ID
-          VITE_FIREBASE_MEASUREMENT_ID=$FB_MEASUREMENT_ID
-          VITE_ENABLE_ADMIN_UI=${{ vars.VITE_ENABLE_ADMIN_UI || '0' }}
-          VITE_OG_IMAGE_URL=$OG_IMAGE_URL
-          VITE_FACEBOOK_APP_ID=$FACEBOOK_APP_ID
-          EOF
-
-      - name: Build frontend
-        run: npm run build:prod
+          project_id: ${{ needs.resolve-target.outputs.project_id }}
 
       - name: Deploy API to Cloud Run
         id: deploy-api
@@ -347,9 +347,9 @@ jobs:
           flags: --allow-unauthenticated --max-instances=${{ vars.API_MAX_INSTANCES || '1' }}
           env_vars: |
             NODE_ENV=production
-            WS_BASE_URL=${{ steps.target.outputs.ws_url }}
-            FIREBASE_PROJECT_ID=${{ steps.target.outputs.fb_project_id }}
-            FIREBASE_WEB_API_KEY=${{ steps.target.outputs.fb_api_key }}
+            WS_BASE_URL=${{ needs.resolve-target.outputs.ws_url }}
+            FIREBASE_PROJECT_ID=${{ needs.resolve-target.outputs.fb_project_id }}
+            FIREBASE_WEB_API_KEY=${{ needs.resolve-target.outputs.fb_api_key }}
             API_STORE_BACKEND=${{ vars.API_STORE_BACKEND || 'firestore' }}
             API_FIRESTORE_PREFIX=${{ vars.API_FIRESTORE_PREFIX || 'api_v1' }}
             FIREBASE_AUTH_MODE=${{ vars.FIREBASE_AUTH_MODE || 'auto' }}
@@ -386,6 +386,7 @@ jobs:
           fi
 
       - name: Smoke Test Cloud Run API + WebSocket
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_api_smoke }}
         env:
           E2E_API_BASE_URL: ${{ steps.deploy-api.outputs.url }}
           E2E_FIREBASE_ID_TOKEN: ${{ secrets.E2E_FIREBASE_ID_TOKEN }}
@@ -406,9 +407,142 @@ jobs:
           fi
           node api/e2e/smoke.mjs
 
+  deploy-web:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy_web }}
+    needs: resolve-target
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'dev' && 'dev' || 'prod' }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate required secrets
+        env:
+          PROJECT_ID: ${{ needs.resolve-target.outputs.project_id }}
+          API_BASE_URL: ${{ needs.resolve-target.outputs.api_base_url }}
+          WS_URL: ${{ needs.resolve-target.outputs.ws_url }}
+          FB_API_KEY: ${{ needs.resolve-target.outputs.fb_api_key }}
+          FB_AUTH_DOMAIN: ${{ needs.resolve-target.outputs.fb_auth_domain }}
+          FB_PROJECT_ID: ${{ needs.resolve-target.outputs.fb_project_id }}
+          FB_STORAGE_BUCKET: ${{ needs.resolve-target.outputs.fb_storage_bucket }}
+          FB_SENDER_ID: ${{ needs.resolve-target.outputs.fb_messaging_sender_id }}
+          FB_APP_ID: ${{ needs.resolve-target.outputs.fb_app_id }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_SA_KEY_B64: ${{ secrets.GCP_SA_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          for key in PROJECT_ID API_BASE_URL WS_URL FB_API_KEY FB_AUTH_DOMAIN FB_PROJECT_ID FB_STORAGE_BUCKET FB_SENDER_ID FB_APP_ID; do
+            value="${!key:-}"
+            if [ -z "$value" ]; then
+              echo "Missing required secret/output: $key"
+              exit 1
+            fi
+          done
+          if [ -z "${GCP_SA_KEY:-}" ] && [ -z "${GCP_SA_KEY_B64:-}" ]; then
+            echo "Missing required secret: GCP_SA_KEY (raw JSON) or GCP_SA_KEY_B64 (base64 JSON)"
+            exit 1
+          fi
+
+      - name: Normalize Google credentials
+        id: gcp-creds
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_SA_KEY_B64: ${{ secrets.GCP_SA_KEY_B64 }}
+        run: |
+          set -euo pipefail
+
+          RAW="${GCP_SA_KEY:-}"
+          if [ -z "$RAW" ] && [ -n "${GCP_SA_KEY_B64:-}" ]; then
+            RAW="$GCP_SA_KEY_B64"
+          fi
+
+          if printf '%s' "$RAW" | jq -e . >/dev/null 2>&1; then
+            CREDENTIALS_JSON="$RAW"
+          else
+            DECODED="$(printf '%s' "$RAW" | base64 --decode 2>/dev/null || true)"
+            if [ -z "$DECODED" ]; then
+              DECODED="$(printf '%s' "$RAW" | base64 -d 2>/dev/null || true)"
+            fi
+            if [ -z "$DECODED" ] || ! printf '%s' "$DECODED" | jq -e . >/dev/null 2>&1; then
+              echo "Service account key is not valid JSON."
+              echo "Set GCP_SA_KEY to raw JSON or GCP_SA_KEY_B64 to base64(JSON)."
+              exit 1
+            fi
+            CREDENTIALS_JSON="$DECODED"
+          fi
+
+          if ! printf '%s' "$CREDENTIALS_JSON" | jq -e '.type == "service_account" and (.client_email|type=="string") and (.private_key|type=="string")' >/dev/null 2>&1; then
+            echo "Credentials JSON is missing required service account fields."
+            exit 1
+          fi
+
+          {
+            echo "credentials_json<<EOF"
+            printf '%s\n' "$CREDENTIALS_JSON"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ steps.gcp-creds.outputs.credentials_json }}
+          project_id: ${{ needs.resolve-target.outputs.project_id }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ needs.resolve-target.outputs.project_id }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate build env
+        env:
+          API_BASE_URL: ${{ needs.resolve-target.outputs.api_base_url }}
+          WS_URL: ${{ needs.resolve-target.outputs.ws_url }}
+          ASSET_BASE_URL: ${{ needs.resolve-target.outputs.asset_base_url }}
+          FB_API_KEY: ${{ needs.resolve-target.outputs.fb_api_key }}
+          FB_AUTH_DOMAIN: ${{ needs.resolve-target.outputs.fb_auth_domain }}
+          FB_PROJECT_ID: ${{ needs.resolve-target.outputs.fb_project_id }}
+          FB_STORAGE_BUCKET: ${{ needs.resolve-target.outputs.fb_storage_bucket }}
+          FB_SENDER_ID: ${{ needs.resolve-target.outputs.fb_messaging_sender_id }}
+          FB_APP_ID: ${{ needs.resolve-target.outputs.fb_app_id }}
+          FB_MEASUREMENT_ID: ${{ needs.resolve-target.outputs.fb_measurement_id }}
+          OG_IMAGE_URL: ${{ vars.VITE_OG_IMAGE_URL }}
+          FACEBOOK_APP_ID: ${{ vars.VITE_FACEBOOK_APP_ID }}
+        run: |
+          cat > .env.production <<EOF
+          VITE_API_BASE_URL=$API_BASE_URL
+          VITE_WS_URL=$WS_URL
+          VITE_ASSET_BASE_URL=$ASSET_BASE_URL
+          VITE_FIREBASE_API_KEY=$FB_API_KEY
+          VITE_FIREBASE_AUTH_DOMAIN=$FB_AUTH_DOMAIN
+          VITE_FIREBASE_PROJECT_ID=$FB_PROJECT_ID
+          VITE_FIREBASE_STORAGE_BUCKET=$FB_STORAGE_BUCKET
+          VITE_FIREBASE_MESSAGING_SENDER_ID=$FB_SENDER_ID
+          VITE_FIREBASE_APP_ID=$FB_APP_ID
+          VITE_FIREBASE_MEASUREMENT_ID=$FB_MEASUREMENT_ID
+          VITE_ENABLE_ADMIN_UI=${{ vars.VITE_ENABLE_ADMIN_UI || '0' }}
+          VITE_OG_IMAGE_URL=$OG_IMAGE_URL
+          VITE_FACEBOOK_APP_ID=$FACEBOOK_APP_ID
+          EOF
+
+      - name: Build frontend
+        run: npm run build:prod
+
       - name: Deploy Firebase Hosting + Firestore
         env:
-          PROJECT_ID: ${{ steps.target.outputs.project_id }}
+          PROJECT_ID: ${{ needs.resolve-target.outputs.project_id }}
           FIREBASE_HOSTING_SITE_SECRET: ${{ secrets.FIREBASE_HOSTING_SITE }}
           FIREBASE_HOSTING_SITE_VAR: ${{ vars.FIREBASE_HOSTING_SITE }}
         run: |
@@ -423,7 +557,7 @@ jobs:
           npx firebase-tools@15.8.0 deploy --project "$PROJECT_ID" --only firestore,hosting:app --non-interactive
 
   deploy-assets:
-    needs: deploy
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy_assets }}
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'dev' && 'dev' || 'prod' }}
     permissions:
