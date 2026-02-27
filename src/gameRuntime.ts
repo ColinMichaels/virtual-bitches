@@ -1132,10 +1132,21 @@ class Game implements GameCallbacks {
         return;
       }
 
-      if (fromInviteLink && roomCodeFromUrl) {
-        const joinedByRoomCode = await this.joinMultiplayerRoomByCode(roomCodeFromUrl, true, {
-          suppressFailureNotification: true,
-        });
+      const initialJoinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason();
+      const roomCodeRetryTarget = fromInviteLink ? roomCodeFromUrl : targetRoomCode;
+      const shouldRetryByRoomCode =
+        roomCodeRetryTarget.length > 0 &&
+        (fromInviteLink ||
+          initialJoinFailureReason === "session_expired" ||
+          initialJoinFailureReason === "room_not_found");
+      if (shouldRetryByRoomCode) {
+        const joinedByRoomCode = await this.joinMultiplayerRoomByCode(
+          roomCodeRetryTarget,
+          fromInviteLink || fromRoomCodeInviteLink,
+          {
+            suppressFailureNotification: true,
+          }
+        );
         if (joinedByRoomCode) {
           return;
         }
@@ -1145,7 +1156,8 @@ class Game implements GameCallbacks {
         return;
       }
 
-      const joinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason();
+      const joinFailureReason =
+        this.multiplayerSessionService.getLastJoinFailureReason() ?? initialJoinFailureReason;
       const fallbackJoined = await this.tryJoinAlternativeRoom(targetSessionId, joinFailureReason);
       if (fallbackJoined) {
         return;

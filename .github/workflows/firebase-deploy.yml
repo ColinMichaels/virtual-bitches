@@ -357,6 +357,8 @@ jobs:
             FIREBASE_AUTH_MODE=${{ vars.FIREBASE_AUTH_MODE || 'auto' }}
             API_ADMIN_ACCESS_MODE=${{ vars.API_ADMIN_ACCESS_MODE || 'hybrid' }}
             API_ADMIN_TOKEN=${{ secrets.API_ADMIN_TOKEN }}
+            ALLOW_SHORT_SESSION_TTLS=0
+            MULTIPLAYER_SESSION_IDLE_TTL_MS=${{ vars.MULTIPLAYER_SESSION_IDLE_TTL_MS || '1800000' }}
 
       - name: Cloud Run deploy diagnostics (on failure)
         if: ${{ failure() && steps.deploy-api.outcome == 'failure' }}

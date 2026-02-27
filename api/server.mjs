@@ -221,6 +221,11 @@ server.on("upgrade", async (req, socket) => {
     cleanupExpiredRecords();
     const auth = await authenticateSocketUpgrade(requestUrl);
     if (!auth.ok) {
+      const rejectedSessionId = requestUrl.searchParams.get("session")?.trim() ?? "unknown";
+      const rejectedPlayerId = requestUrl.searchParams.get("playerId")?.trim() ?? "unknown";
+      log.warn(
+        `Rejected WebSocket upgrade (${auth.status} ${auth.reason}) session=${rejectedSessionId} player=${rejectedPlayerId}`
+      );
       rejectUpgrade(socket, auth.status, auth.reason);
       return;
     }
