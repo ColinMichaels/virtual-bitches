@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getStoreSections } from "../storage/defaultStore.mjs";
 
 const REQUEST_TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 10000);
 const WS_TIMEOUT_MS = Number(process.env.E2E_WS_TIMEOUT_MS ?? 10000);
@@ -6,8 +7,15 @@ const firebaseIdToken = process.env.E2E_FIREBASE_ID_TOKEN?.trim() ?? "";
 const assertBotTraffic = process.env.E2E_ASSERT_BOTS === "1";
 const assertRoomExpiry = process.env.E2E_ASSERT_ROOM_EXPIRY === "1";
 const assertAdminMonitor = process.env.E2E_ASSERT_ADMIN_MONITOR === "1";
+const assertStorageCutover = process.env.E2E_ASSERT_STORAGE_CUTOVER === "1";
 const adminToken = process.env.E2E_ADMIN_TOKEN?.trim() ?? "";
 const roomExpiryWaitMs = Number(process.env.E2E_ROOM_EXPIRY_WAIT_MS ?? 9000);
+const expectedStorageBackend = normalizeOptionalString(process.env.E2E_EXPECT_STORAGE_BACKEND).toLowerCase();
+const expectedFirestorePrefix = normalizeOptionalString(process.env.E2E_EXPECT_FIRESTORE_PREFIX);
+const expectedStoreSections = getStoreSections();
+const expectedStorageSectionMinCounts = parseStorageSectionMinCountSpec(
+  process.env.E2E_EXPECT_STORAGE_SECTION_MIN_COUNTS
+);
 
 const baseInput = (process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:3000").trim();
 const wsOverride = process.env.E2E_WS_URL?.trim();
@@ -26,8 +34,21 @@ async function run() {
   log(`WS base URL:  ${targets.wsBaseUrl}`);
 
   await apiRequest("/health", { method: "GET" });
+
+  const shouldRunAdminStorageChecks = assertStorageCutover || assertAdminMonitor;
+  let storageSnapshot = null;
+  if (shouldRunAdminStorageChecks) {
+    assert(
+      adminToken || firebaseIdToken,
+      "admin storage checks require E2E_ADMIN_TOKEN or E2E_FIREBASE_ID_TOKEN"
+    );
+    storageSnapshot = await runStorageCutoverChecks();
+  } else {
+    log("Skipping storage cutover checks (set E2E_ASSERT_STORAGE_CUTOVER=1 to enable).");
+  }
+
   if (assertAdminMonitor) {
-    await runAdminMonitorChecks();
+    await runAdminMonitorChecks(storageSnapshot);
   } else {
     log("Skipping admin monitor checks (set E2E_ASSERT_ADMIN_MONITOR=1 to enable).");
   }
@@ -586,13 +607,13 @@ async function runRoomLifecycleChecks(runSuffix) {
   log("Room lifecycle checks passed.");
 }
 
-async function runAdminMonitorChecks() {
+async function runAdminMonitorChecks(cachedStorage = null) {
   log("Running admin monitor checks...");
-  const adminHeaders = adminToken ? { "x-admin-token": adminToken } : undefined;
+  const adminAuthOptions = buildAdminAuthRequestOptions();
 
   const overview = await apiRequest("/admin/overview?limit=5", {
     method: "GET",
-    headers: adminHeaders,
+    ...adminAuthOptions,
   });
   assert(typeof overview?.timestamp === "number", "admin overview missing timestamp");
   assert(overview?.metrics && typeof overview.metrics === "object", "admin overview missing metrics");
@@ -600,14 +621,14 @@ async function runAdminMonitorChecks() {
 
   const rooms = await apiRequest("/admin/rooms?limit=5", {
     method: "GET",
-    headers: adminHeaders,
+    ...adminAuthOptions,
   });
   assert(typeof rooms?.timestamp === "number", "admin rooms missing timestamp");
   assert(Array.isArray(rooms?.rooms), "admin rooms missing rooms[]");
 
   const metrics = await apiRequest("/admin/metrics", {
     method: "GET",
-    headers: adminHeaders,
+    ...adminAuthOptions,
   });
   assert(typeof metrics?.timestamp === "number", "admin metrics missing timestamp");
   assert(metrics?.metrics && typeof metrics.metrics === "object", "admin metrics missing metrics object");
@@ -616,35 +637,29 @@ async function runAdminMonitorChecks() {
     "admin metrics missing activeSessionCount"
   );
 
-  const storage = await apiRequest("/admin/storage", {
-    method: "GET",
-    headers: adminHeaders,
-  });
-  assert(typeof storage?.timestamp === "number", "admin storage missing timestamp");
-  assert(storage?.storage && typeof storage.storage === "object", "admin storage missing storage object");
-  assert(
-    typeof storage.storage.backend === "string" && storage.storage.backend.length > 0,
-    "admin storage missing backend"
-  );
-  assert(Array.isArray(storage?.sections), "admin storage missing sections[]");
+  if (cachedStorage) {
+    assertAdminStorageResponse(cachedStorage);
+  } else {
+    await runStorageCutoverChecks();
+  }
 
   const auditBefore = await apiRequest("/admin/audit?limit=5", {
     method: "GET",
-    headers: adminHeaders,
+    ...adminAuthOptions,
   });
   assert(typeof auditBefore?.timestamp === "number", "admin audit missing timestamp");
   assert(Array.isArray(auditBefore?.entries), "admin audit missing entries[]");
 
   const rolesBefore = await apiRequest("/admin/roles?limit=10", {
     method: "GET",
-    headers: adminHeaders,
+    ...adminAuthOptions,
   });
   assert(Array.isArray(rolesBefore?.roles), "admin roles missing roles[]");
 
   const roleProbeUid = `e2e-role-${randomUUID().slice(0, 8)}`;
   const roleUpsert = await apiRequest(`/admin/roles/${encodeURIComponent(roleProbeUid)}`, {
     method: "PUT",
-    headers: adminHeaders,
+    ...adminAuthOptions,
     body: {
       role: "viewer",
     },
@@ -686,7 +701,7 @@ async function runAdminMonitorChecks() {
     `/admin/sessions/${encodeURIComponent(adminSession.sessionId)}/participants/${encodeURIComponent(adminGuestId)}/remove`,
     {
       method: "POST",
-      headers: adminHeaders,
+      ...adminAuthOptions,
     }
   );
   assert(removePlayerResult?.ok === true, "admin participant remove did not report success");
@@ -699,7 +714,7 @@ async function runAdminMonitorChecks() {
     `/admin/sessions/${encodeURIComponent(adminSession.sessionId)}/expire`,
     {
       method: "POST",
-      headers: adminHeaders,
+      ...adminAuthOptions,
     }
   );
   assert(expireRoomResult?.ok === true, "admin room expire did not report success");
@@ -710,7 +725,7 @@ async function runAdminMonitorChecks() {
 
   const auditAfter = await apiRequest("/admin/audit?limit=40", {
     method: "GET",
-    headers: adminHeaders,
+    ...adminAuthOptions,
   });
   assert(Array.isArray(auditAfter?.entries), "admin audit entries missing after mutations");
   const roleAudit = auditAfter.entries.find(
@@ -729,6 +744,132 @@ async function runAdminMonitorChecks() {
   );
   assert(expireAudit, "admin audit missing session_expire event");
   log("Admin monitor checks passed.");
+}
+
+async function runStorageCutoverChecks() {
+  log("Running storage cutover checks...");
+  const storage = await apiRequest("/admin/storage", {
+    method: "GET",
+    ...buildAdminAuthRequestOptions(),
+  });
+  assertAdminStorageResponse(storage);
+  log("Storage cutover checks passed.");
+  return storage;
+}
+
+function assertAdminStorageResponse(storage) {
+  assert(typeof storage?.timestamp === "number", "admin storage missing timestamp");
+  assert(storage?.storage && typeof storage.storage === "object", "admin storage missing storage object");
+  assert(
+    typeof storage.storage.backend === "string" && storage.storage.backend.length > 0,
+    "admin storage missing backend"
+  );
+  assert(Array.isArray(storage?.sections), "admin storage missing sections[]");
+
+  const actualStorageBackend = normalizeOptionalString(storage?.storage?.backend).toLowerCase();
+  if (expectedStorageBackend) {
+    assertEqual(
+      actualStorageBackend,
+      expectedStorageBackend,
+      "admin storage backend mismatch"
+    );
+  }
+  if (expectedFirestorePrefix) {
+    const actualFirestorePrefix = normalizeOptionalString(storage?.storage?.firestorePrefix);
+    assert(actualFirestorePrefix.length > 0, "admin storage missing firestorePrefix");
+    assertEqual(
+      actualFirestorePrefix,
+      expectedFirestorePrefix,
+      "admin storage firestorePrefix mismatch"
+    );
+  }
+
+  const sectionCounts = mapStorageSectionCounts(storage?.sections);
+  for (const sectionName of expectedStoreSections) {
+    assert(
+      Object.prototype.hasOwnProperty.call(sectionCounts, sectionName),
+      `admin storage missing section "${sectionName}"`
+    );
+    assert(
+      Number.isFinite(sectionCounts[sectionName]) && sectionCounts[sectionName] >= 0,
+      `admin storage section "${sectionName}" returned invalid count`
+    );
+  }
+
+  for (const [sectionName, minCount] of Object.entries(expectedStorageSectionMinCounts)) {
+    assert(
+      Object.prototype.hasOwnProperty.call(sectionCounts, sectionName),
+      `admin storage missing expected section "${sectionName}"`
+    );
+    assert(
+      sectionCounts[sectionName] >= minCount,
+      `admin storage section "${sectionName}" count below expected minimum (expected >= ${minCount}, actual: ${sectionCounts[sectionName]})`
+    );
+  }
+}
+
+function buildAdminAuthRequestOptions() {
+  if (adminToken) {
+    return {
+      headers: {
+        "x-admin-token": adminToken,
+      },
+    };
+  }
+  if (firebaseIdToken) {
+    return {
+      accessToken: firebaseIdToken,
+    };
+  }
+  return {};
+}
+
+function mapStorageSectionCounts(sections) {
+  const counts = {};
+  for (const entry of Array.isArray(sections) ? sections : []) {
+    const sectionName = normalizeOptionalString(entry?.section);
+    if (!sectionName) {
+      continue;
+    }
+    counts[sectionName] = Number(entry?.count);
+  }
+  return counts;
+}
+
+function parseStorageSectionMinCountSpec(rawValue) {
+  const source = normalizeOptionalString(rawValue);
+  if (!source) {
+    return {};
+  }
+
+  const result = {};
+  for (const token of source.split(",")) {
+    const entry = token.trim();
+    if (!entry) {
+      continue;
+    }
+    const separator = entry.includes(":") ? ":" : entry.includes("=") ? "=" : "";
+    if (!separator) {
+      throw new Error(
+        `Invalid E2E_EXPECT_STORAGE_SECTION_MIN_COUNTS entry "${entry}" (expected section:minCount)`
+      );
+    }
+    const [sectionNameRaw, minCountRaw] = entry.split(separator);
+    const sectionName = normalizeOptionalString(sectionNameRaw);
+    const minCount = Number(normalizeOptionalString(minCountRaw));
+    if (!sectionName || !Number.isFinite(minCount) || minCount < 0) {
+      throw new Error(
+        `Invalid E2E_EXPECT_STORAGE_SECTION_MIN_COUNTS entry "${entry}" (expected section:minCount with non-negative minCount)`
+      );
+    }
+    result[sectionName] = minCount;
+  }
+
+  return result;
+}
+
+function normalizeOptionalString(value) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 run()

@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Multiplayer UX iteration + admin console split + mobile camera quick slots + iOS responsive hardening + docs sync)
+**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-26 (Multiplayer UX iteration + admin console split + mobile camera quick slots + iOS responsive hardening + Firestore cutover CI checks)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -895,7 +895,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 
 ## 🎯 Next Sprint Goals
 
-1. **Firestore Deploy Cutover Verification**: ✅ Workflow default now deploys API with `API_STORE_BACKEND=firestore`; next validate env-specific prefixes and post-deploy section counts via `GET /api/admin/storage`.
+1. **Firestore Deploy Cutover Verification**: ✅ Added CI storage cutover assertions (`E2E_ASSERT_STORAGE_CUTOVER`) to verify backend/prefix + section count schema (and optional minimums) via `GET /api/admin/storage`.
 2. **Auth Hardening Finalization**: Run production with `FIREBASE_AUTH_MODE=admin` and remove legacy lookup fallback after cutover validation.
 3. **Multiplayer Consistency Guardrail**: Keep Cloud Run `API_MAX_INSTANCES=1` until shared-state coordination is implemented for multi-instance websocket rooms.
 4. **Multiplayer Rollout (Server Authoritative)**: ✅ Room/lobby lifecycle, ready states, and canonical game-state messaging shipped (turn-sync hardening and expiry recovery included).

@@ -98,6 +98,17 @@ Optional smoke test against deployed API + WebSocket:
 E2E_API_BASE_URL="https://<cloud-run-service-url>" npm run test:e2e:api
 ```
 
+Admin storage cutover assertion (backend/prefix + section schema):
+
+```bash
+E2E_API_BASE_URL="https://<cloud-run-service-url>" \
+E2E_ASSERT_STORAGE_CUTOVER=1 \
+E2E_ADMIN_TOKEN="<api-admin-token>" \
+E2E_EXPECT_STORAGE_BACKEND="firestore" \
+E2E_EXPECT_FIRESTORE_PREFIX="api_v1" \
+npm run test:e2e:api
+```
+
 ### 6.5) Migrate existing JSON store data to Firestore (Sprint 1.5)
 
 ```bash
@@ -163,7 +174,14 @@ Recommended setup (GitHub Environments):
   - `API_STORE_BACKEND` (recommended: `firestore`)
   - `API_FIRESTORE_PREFIX` (optional; default `api_v1`)
   - `FIREBASE_AUTH_MODE` (recommended: `admin` for production)
+  - `API_ADMIN_ACCESS_MODE` (recommended: `hybrid` for role + token fallback)
+  - `API_ADMIN_OWNER_UIDS` / `API_ADMIN_OWNER_EMAILS` (recommended for role bootstrap)
   - `API_MAX_INSTANCES` (recommended current gameplay architecture: `1`)
+  - `E2E_EXPECT_STORAGE_SECTION_MIN_COUNTS` (optional; comma-delimited `section:minCount` checks used by CI smoke)
+
+Recommended GitHub secrets (for admin cutover verification in CI):
+- `API_ADMIN_TOKEN` (used by deploy + smoke check for `/api/admin/storage`)
+- `E2E_FIREBASE_ID_TOKEN` (optional alternate for role-mode admin checks when token auth is not used)
 
 Alternate setup (repo-level branch-suffixed keys):
 - `FIREBASE_PROJECT_ID_PROD`

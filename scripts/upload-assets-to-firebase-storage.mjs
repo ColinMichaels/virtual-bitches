@@ -30,7 +30,8 @@ async function run() {
 
   await ensureCommandAvailable("gcloud", ["version"]);
   const bucketCandidates = buildBucketCandidates(rawBucket, projectId);
-  const resolvedBucket = await resolveExistingBucket(bucketCandidates);
+  const resolution = await resolveExistingBucket(bucketCandidates, projectId);
+  const resolvedBucket = resolution.bucket;
   const bucketUri = `gs://${resolvedBucket}`;
 
   const commands = [
@@ -76,6 +77,11 @@ async function run() {
   if (rawBucket && normalizeBucketName(rawBucket) !== resolvedBucket) {
     console.log(
       `[cdn:upload] Bucket fallback applied: requested="${normalizeBucketName(rawBucket)}" resolved="${resolvedBucket}"`
+    );
+  }
+  if (resolution.source === "project_discovery") {
+    console.log(
+      `[cdn:upload] Bucket resolved from project bucket discovery: "${resolvedBucket}"`
     );
   }
   if (shouldApplyCacheControl) {
@@ -168,6 +174,11 @@ function buildBucketCandidates(rawBucket, projectId) {
   };
 
   add(rawBucket);
+  const normalizedRawBucket = normalizeBucketName(rawBucket);
+  if (normalizedRawBucket && !normalizedRawBucket.includes(".")) {
+    add(`${normalizedRawBucket}.firebasestorage.app`);
+    add(`${normalizedRawBucket}.appspot.com`);
+  }
   if (rawBucket.includes(".firebasestorage.app")) {
     add(rawBucket.replace(/\.firebasestorage\.app$/i, ".appspot.com"));
   }
@@ -217,7 +228,7 @@ function normalizeBucketName(rawValue) {
   return normalized;
 }
 
-async function resolveExistingBucket(candidates) {
+async function resolveExistingBucket(candidates, projectId) {
   if (candidates.length === 0) {
     throw new Error(
       "No valid storage bucket candidates found. Check FIREBASE_STORAGE_BUCKET / FIREBASE_PROJECT_ID values."
@@ -235,7 +246,7 @@ async function resolveExistingBucket(candidates) {
       "--format=value(name)",
     ]);
     if (result.code === 0) {
-      return candidate;
+      return { bucket: candidate, source: "candidate" };
     }
 
     const details = `${result.stdout}\n${result.stderr}`.trim();
@@ -249,10 +260,97 @@ async function resolveExistingBucket(candidates) {
     }
   }
 
+  let discoveredBuckets = [];
+  if (projectId) {
+    const discovered = await listProjectBuckets(projectId);
+    discoveredBuckets = discovered.buckets;
+    const fallbackBucket = chooseDiscoveredBucket(discoveredBuckets, projectId);
+    if (fallbackBucket) {
+      return { bucket: fallbackBucket, source: "project_discovery" };
+    }
+  }
+
   const candidateList = candidates.map((candidate) => `gs://${candidate}`).join(", ");
+  const discoveredList =
+    discoveredBuckets.length > 0 ? `\nDiscovered project buckets:\n${discoveredBuckets.map((name) => `  - gs://${name}`).join("\n")}` : "";
   throw new Error(
-    `No accessible storage bucket found. Tried: ${candidateList}\nHints:\n- Enable Firebase Storage in this project.\n- Set VITE_FIREBASE_STORAGE_BUCKET to the existing bucket name.\n- For older projects, bucket may be <project-id>.appspot.com.\nDetails:\n${failed.map((entry) => `  - ${entry}`).join("\n")}`
+    `No accessible storage bucket found. Tried: ${candidateList}\nHints:\n- Enable Firebase Storage in this project.\n- Set VITE_FIREBASE_STORAGE_BUCKET to the existing bucket name.\n- Typical defaults: <project-id>.firebasestorage.app or <project-id>.appspot.com.\nDetails:\n${failed.map((entry) => `  - ${entry}`).join("\n")}${discoveredList}`
   );
+}
+
+async function listProjectBuckets(projectId) {
+  const result = await runCommandCapture("gcloud", [
+    "storage",
+    "buckets",
+    "list",
+    "--project",
+    projectId,
+    "--format=value(name)",
+  ]);
+  if (result.code !== 0) {
+    const details = `${result.stdout}\n${result.stderr}`.trim().toLowerCase();
+    if (details.includes("permission") || details.includes("forbidden") || details.includes("403")) {
+      throw new Error(
+        "Permission error while listing project storage buckets. Ensure the deploy service account has Storage admin access."
+      );
+    }
+    return { buckets: [] };
+  }
+
+  const buckets = result.stdout
+    .split(/\r?\n/)
+    .map((entry) => normalizeBucketName(entry))
+    .filter(Boolean);
+
+  return { buckets: [...new Set(buckets)] };
+}
+
+function chooseDiscoveredBucket(discoveredBuckets, projectId) {
+  if (!Array.isArray(discoveredBuckets) || discoveredBuckets.length === 0) {
+    return "";
+  }
+
+  const normalizedProjectId = String(projectId ?? "").trim().toLowerCase();
+  const findFirst = (matcher) => discoveredBuckets.find((name) => matcher(name.toLowerCase())) ?? "";
+
+  if (normalizedProjectId) {
+    const exactFirebaseStorage = findFirst(
+      (name) => name === `${normalizedProjectId}.firebasestorage.app`
+    );
+    if (exactFirebaseStorage) {
+      return exactFirebaseStorage;
+    }
+
+    const exactAppspot = findFirst((name) => name === `${normalizedProjectId}.appspot.com`);
+    if (exactAppspot) {
+      return exactAppspot;
+    }
+
+    const prefixedFirebaseStorage = findFirst(
+      (name) => name.startsWith(`${normalizedProjectId}`) && name.endsWith(".firebasestorage.app")
+    );
+    if (prefixedFirebaseStorage) {
+      return prefixedFirebaseStorage;
+    }
+
+    const prefixedAppspot = findFirst(
+      (name) => name.startsWith(`${normalizedProjectId}`) && name.endsWith(".appspot.com")
+    );
+    if (prefixedAppspot) {
+      return prefixedAppspot;
+    }
+
+    const containsProjectId = findFirst((name) => name.includes(normalizedProjectId));
+    if (containsProjectId) {
+      return containsProjectId;
+    }
+  }
+
+  if (discoveredBuckets.length === 1) {
+    return discoveredBuckets[0];
+  }
+
+  return "";
 }
 
 function resolveAssetCacheControl(argValue) {
