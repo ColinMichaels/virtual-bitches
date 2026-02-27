@@ -889,6 +889,7 @@ async function handleCreateSession(req, res) {
     wsUrl: WS_BASE_URL,
     roomKind: ROOM_KINDS.private,
     createdAt: now,
+    gameStartedAt: now,
     lastActivityAt: now,
     expiresAt,
     participants,
@@ -2499,6 +2500,7 @@ function hashToken(value) {
 
 function buildSessionResponse(session, playerId, auth) {
   const snapshot = buildSessionSnapshot(session);
+  const now = Date.now();
   return {
     sessionId: snapshot.sessionId,
     roomCode: snapshot.roomCode,
@@ -2516,8 +2518,10 @@ function buildSessionResponse(session, playerId, auth) {
     sessionComplete: snapshot.sessionComplete,
     completedAt: snapshot.completedAt,
     createdAt: snapshot.createdAt,
+    gameStartedAt: snapshot.gameStartedAt,
     lastActivityAt: snapshot.lastActivityAt,
     expiresAt: snapshot.expiresAt,
+    serverNow: now,
   };
 }
 
@@ -2547,6 +2551,7 @@ function buildSessionSnapshot(session) {
     sessionComplete,
     completedAt: sessionComplete ? resolveSessionCompletedAt(standings) : null,
     createdAt: session.createdAt,
+    gameStartedAt: resolveSessionGameStartedAt(session),
     lastActivityAt: resolveSessionLastActivityAt(session),
     expiresAt: session.expiresAt,
   };
@@ -2556,11 +2561,13 @@ function buildSessionStateMessage(session, options = {}) {
   if (!session) {
     return null;
   }
+  const now = Date.now();
 
   return {
     type: "session_state",
     ...buildSessionSnapshot(session),
-    timestamp: Date.now(),
+    timestamp: now,
+    serverNow: now,
     source: options.source ?? "server",
   };
 }
@@ -2707,6 +2714,7 @@ function createPublicRoom(roomKind, now = Date.now(), slot = null) {
     wsUrl: WS_BASE_URL,
     roomKind: normalizedKind,
     createdAt: now,
+    gameStartedAt: now,
     lastActivityAt: now,
     expiresAt:
       normalizedKind === ROOM_KINDS.publicDefault
@@ -2734,6 +2742,7 @@ function resetPublicRoomForIdle(session, now = Date.now()) {
   session.participants = {};
   session.turnState = null;
   session.gameDifficulty = "normal";
+  session.gameStartedAt = now;
   session.lastActivityAt = now;
   session.expiresAt =
     roomKind === ROOM_KINDS.publicDefault
@@ -2905,6 +2914,29 @@ function resolveSessionGameDifficulty(session) {
     return "normal";
   }
   return normalizeGameDifficulty(session.gameDifficulty);
+}
+
+function resolveSessionGameStartedAt(session, fallback = Date.now()) {
+  if (!session || typeof session !== "object") {
+    return Number.isFinite(fallback) && fallback > 0 ? Math.floor(fallback) : Date.now();
+  }
+
+  const createdAt =
+    Number.isFinite(session.createdAt) && session.createdAt > 0
+      ? Math.floor(session.createdAt)
+      : Number.isFinite(fallback) && fallback > 0
+        ? Math.floor(fallback)
+        : Date.now();
+  const gameStartedAt =
+    Number.isFinite(session.gameStartedAt) && session.gameStartedAt > 0
+      ? Math.floor(session.gameStartedAt)
+      : createdAt;
+
+  if (session.gameStartedAt !== gameStartedAt) {
+    session.gameStartedAt = gameStartedAt;
+  }
+
+  return gameStartedAt;
 }
 
 function isRoomParticipantActive(sessionId, participant, now = Date.now()) {
@@ -3621,6 +3653,7 @@ function buildTurnStartMessage(session, options = {}) {
   if (!turnState?.activeTurnPlayerId) {
     return null;
   }
+  const now = Date.now();
 
   const activeRoll = serializeTurnRollSnapshot(turnState.lastRollSnapshot);
   const turnTimeoutMs = normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
@@ -3643,9 +3676,10 @@ function buildTurnStartMessage(session, options = {}) {
       typeof activeRoll?.serverRollId === "string"
         ? activeRoll.serverRollId
         : null,
+    gameStartedAt: resolveSessionGameStartedAt(session, now),
     turnExpiresAt,
     turnTimeoutMs,
-    timestamp: Date.now(),
+    timestamp: now,
     order: [...turnState.order],
     source: options.source ?? "server",
   };
@@ -3763,6 +3797,7 @@ function advanceSessionTurn(session, endedByPlayerId, options = {}) {
           round: turnState.round,
           turnNumber: turnState.turnNumber,
           phase: normalizeTurnPhase(turnState.phase),
+          gameStartedAt: resolveSessionGameStartedAt(session, timestamp),
           turnExpiresAt: turnState.turnExpiresAt,
           turnTimeoutMs: timeoutMs,
           timestamp,
@@ -4169,6 +4204,7 @@ function resetSessionForNextGame(session, timestamp = Date.now()) {
     return false;
   }
 
+  session.gameStartedAt = now;
   session.turnState = null;
   ensureSessionTurnState(session);
   markSessionActivity(session, "", now);

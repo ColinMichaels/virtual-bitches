@@ -143,7 +143,9 @@ export class MultiplayerSessionService {
     turnState?: MultiplayerSessionRecord["turnState"];
     sessionComplete?: boolean;
     completedAt?: number | null;
+    gameStartedAt?: number;
     expiresAt?: number;
+    serverNow?: number;
     gameDifficulty?: MultiplayerGameDifficulty;
   }): MultiplayerSessionRecord | null {
     const current = this.activeSession;
@@ -182,8 +184,14 @@ export class MultiplayerSessionService {
           ? Math.floor(update.completedAt)
           : null;
     }
+    if (typeof update.gameStartedAt === "number" && Number.isFinite(update.gameStartedAt)) {
+      nextSession.gameStartedAt = Math.floor(update.gameStartedAt);
+    }
     if (typeof update.expiresAt === "number" && Number.isFinite(update.expiresAt)) {
       nextSession.expiresAt = Math.floor(update.expiresAt);
+    }
+    if (typeof update.serverNow === "number" && Number.isFinite(update.serverNow)) {
+      nextSession.serverNow = Math.floor(update.serverNow);
     }
     if (typeof update.gameDifficulty === "string") {
       nextSession.gameDifficulty = update.gameDifficulty;
