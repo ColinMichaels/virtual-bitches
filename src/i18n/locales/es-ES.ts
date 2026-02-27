@@ -45,6 +45,7 @@ export const esES: TranslationDictionary = {
   "splash.multiplayer.joinBotSeedNote":
     "Solo se usa al ingresar un codigo que cree una sala privada nueva.",
   "splash.multiplayer.joinExistingRoom": "Unirse a una sala existente",
+  "splash.multiplayer.createRoomSection": "Crear una sala privada",
   "splash.multiplayer.roomsLoading": "Cargando salas activas...",
   "splash.multiplayer.roomsEmpty": "No hay salas publicas ahora. Inicia una sala privada.",
   "splash.multiplayer.roomsNoMatch": "Ninguna sala coincide con estos filtros.",

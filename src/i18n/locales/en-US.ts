@@ -43,6 +43,7 @@ export const enUS = {
   "splash.multiplayer.joinBotSeedNote":
     "Only used when entering a room code that creates a new private room.",
   "splash.multiplayer.joinExistingRoom": "Join an existing room",
+  "splash.multiplayer.createRoomSection": "Create a private room",
   "splash.multiplayer.roomsLoading": "Loading active rooms...",
   "splash.multiplayer.roomsEmpty": "No public rooms right now. Start a private room instead.",
   "splash.multiplayer.roomsNoMatch": "No rooms match these filters.",

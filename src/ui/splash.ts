@@ -145,187 +145,195 @@ export class SplashScreen {
               </button>
             </div>
 
-            <div class="splash-multiplayer-section">
-              <div class="splash-multiplayer-section-head">
-                <h3>${t("splash.multiplayer.joinExistingRoom")}</h3>
-                <button
-                  type="button"
-                  id="splash-room-refresh"
-                  class="splash-multiplayer-icon-btn"
-                  title="${t("splash.multiplayer.refreshRooms")}"
-                  aria-label="${t("splash.multiplayer.refreshRooms")}"
-                >
-                  ${renderRefreshIconSvg(18)}
-                </button>
-              </div>
-              <div class="splash-room-filters">
-                <div class="splash-room-filter">
-                  <label for="splash-room-filter-search">${t("splash.multiplayer.filters.searchLabel")}</label>
-                  <input
-                    id="splash-room-filter-search"
-                    type="text"
-                    autocomplete="off"
-                    spellcheck="false"
-                    maxlength="24"
-                    placeholder="${t("splash.multiplayer.filters.searchPlaceholder")}"
-                  />
-                </div>
-                <div class="splash-room-filter">
-                  <label for="splash-room-filter-type">${t("splash.multiplayer.filters.roomTypeLabel")}</label>
-                  <select id="splash-room-filter-type">
-                    <option value="all">${t("splash.multiplayer.filters.any")}</option>
-                    <option value="public_default">${t("splash.multiplayer.roomFlavor.lobby")}</option>
-                    <option value="public_overflow">${t("splash.multiplayer.roomFlavor.overflow")}</option>
-                    <option value="custom">${t("splash.multiplayer.roomFlavor.custom")}</option>
-                  </select>
-                </div>
-                <div class="splash-room-filter">
-                  <label for="splash-room-filter-difficulty">${t("splash.multiplayer.filters.difficultyLabel")}</label>
-                  <select id="splash-room-filter-difficulty">
-                    <option value="all">${t("splash.multiplayer.filters.any")}</option>
-                    <option value="easy">${t("difficulty.easy")}</option>
-                    <option value="normal">${t("difficulty.normal")}</option>
-                    <option value="hard">${t("difficulty.hard")}</option>
-                  </select>
-                </div>
-                <div class="splash-room-filter">
-                  <label for="splash-room-filter-players">${t("splash.multiplayer.filters.playersLabel")}</label>
-                  <select id="splash-room-filter-players">
-                    <option value="0">${t("splash.multiplayer.filters.any")}</option>
-                    <option value="1">${t("splash.multiplayer.filters.playersMin", { count: 1 })}</option>
-                    <option value="2">${t("splash.multiplayer.filters.playersMin", { count: 2 })}</option>
-                    <option value="3">${t("splash.multiplayer.filters.playersMin", { count: 3 })}</option>
-                    <option value="4">${t("splash.multiplayer.filters.playersMin", { count: 4 })}</option>
-                    <option value="5">${t("splash.multiplayer.filters.playersMin", { count: 5 })}</option>
-                    <option value="6">${t("splash.multiplayer.filters.playersMin", { count: 6 })}</option>
-                    <option value="7">${t("splash.multiplayer.filters.playersMin", { count: 7 })}</option>
-                    <option value="8">${t("splash.multiplayer.filters.playersMin", { count: 8 })}</option>
-                  </select>
-                </div>
-              </div>
-              <div id="splash-room-grid" class="splash-room-grid">
-                <div class="splash-room-card splash-room-card-empty">
-                  <p>${t("splash.multiplayer.roomsLoading")}</p>
-                </div>
-              </div>
-              <div class="splash-room-pagination">
-                <p id="splash-room-pagination-count" class="splash-room-pagination-count"></p>
-                <div class="splash-room-pagination-controls">
-                  <label for="splash-room-page-size">${t("splash.multiplayer.filters.pageSizeLabel")}</label>
-                  <select id="splash-room-page-size">
-                    <option value="4">4</option>
-                    <option value="6" selected>6</option>
-                    <option value="9">9</option>
-                    <option value="12">12</option>
-                  </select>
-                  <button type="button" id="splash-room-page-prev" class="btn btn-secondary btn-sm">
-                    ${t("splash.multiplayer.filters.prevPage")}
-                  </button>
-                  <span id="splash-room-page-indicator" class="splash-room-page-indicator"></span>
-                  <button type="button" id="splash-room-page-next" class="btn btn-secondary btn-sm">
-                    ${t("splash.multiplayer.filters.nextPage")}
+            <div class="splash-multiplayer-scroll">
+              <div class="splash-multiplayer-section">
+                <div class="splash-multiplayer-section-head">
+                  <h3>${t("splash.multiplayer.joinExistingRoom")}</h3>
+                  <button
+                    type="button"
+                    id="splash-room-refresh"
+                    class="splash-multiplayer-icon-btn"
+                    title="${t("splash.multiplayer.refreshRooms")}"
+                    aria-label="${t("splash.multiplayer.refreshRooms")}"
+                  >
+                    ${renderRefreshIconSvg(18)}
                   </button>
                 </div>
-              </div>
-            </div>
-
-            <div class="splash-multiplayer-section splash-multiplayer-section-difficulty">
-              <label>${t("splash.multiplayer.difficultyLabel")}</label>
-              <div class="splash-difficulty-picker" role="group" aria-label="${t("splash.multiplayer.difficultyLabel")}">
-                <button type="button" class="splash-difficulty-btn" data-multiplayer-difficulty="easy">
-                  ${t("difficulty.easy")}
-                </button>
-                <button type="button" class="splash-difficulty-btn is-active" data-multiplayer-difficulty="normal">
-                  ${t("difficulty.normal")}
-                </button>
-                <button type="button" class="splash-difficulty-btn" data-multiplayer-difficulty="hard">
-                  ${t("difficulty.hard")}
-                </button>
-              </div>
-            </div>
-
-            <div class="splash-multiplayer-section">
-              <div class="splash-private-toggle">
-                <label for="splash-private-room-toggle">
-                  <input id="splash-private-room-toggle" type="checkbox" />
-                  ${t("splash.multiplayer.privateToggle")}
-                </label>
-              </div>
-              <div id="splash-private-room-settings" class="splash-private-room-settings" hidden>
-                <div class="splash-private-config-grid">
-                  <div>
-                    <label for="splash-private-room-name">${t("splash.multiplayer.privateRoomName")}</label>
+                <div class="splash-room-filters">
+                  <div class="splash-room-filter">
+                    <label for="splash-room-filter-search">${t("splash.multiplayer.filters.searchLabel")}</label>
                     <input
-                      id="splash-private-room-name"
+                      id="splash-room-filter-search"
                       type="text"
                       autocomplete="off"
                       spellcheck="false"
                       maxlength="24"
-                      placeholder="${t("splash.multiplayer.privateRoomNamePlaceholder")}"
+                      placeholder="${t("splash.multiplayer.filters.searchPlaceholder")}"
                     />
                   </div>
-                  <div>
-                    <label for="splash-private-room-player-limit">${t("splash.multiplayer.privatePlayerLimit")}</label>
-                    <select id="splash-private-room-player-limit">
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="4">4</option>
-                      <option value="5">5</option>
-                      <option value="6">6</option>
-                      <option value="7">7</option>
-                      <option value="8" selected>8</option>
+                  <div class="splash-room-filter">
+                    <label for="splash-room-filter-type">${t("splash.multiplayer.filters.roomTypeLabel")}</label>
+                    <select id="splash-room-filter-type">
+                      <option value="all">${t("splash.multiplayer.filters.any")}</option>
+                      <option value="public_default">${t("splash.multiplayer.roomFlavor.lobby")}</option>
+                      <option value="public_overflow">${t("splash.multiplayer.roomFlavor.overflow")}</option>
+                      <option value="custom">${t("splash.multiplayer.roomFlavor.custom")}</option>
+                    </select>
+                  </div>
+                  <div class="splash-room-filter">
+                    <label for="splash-room-filter-difficulty">${t("splash.multiplayer.filters.difficultyLabel")}</label>
+                    <select id="splash-room-filter-difficulty">
+                      <option value="all">${t("splash.multiplayer.filters.any")}</option>
+                      <option value="easy">${t("difficulty.easy")}</option>
+                      <option value="normal">${t("difficulty.normal")}</option>
+                      <option value="hard">${t("difficulty.hard")}</option>
+                    </select>
+                  </div>
+                  <div class="splash-room-filter">
+                    <label for="splash-room-filter-players">${t("splash.multiplayer.filters.playersLabel")}</label>
+                    <select id="splash-room-filter-players">
+                      <option value="0">${t("splash.multiplayer.filters.any")}</option>
+                      <option value="1">${t("splash.multiplayer.filters.playersMin", { count: 1 })}</option>
+                      <option value="2">${t("splash.multiplayer.filters.playersMin", { count: 2 })}</option>
+                      <option value="3">${t("splash.multiplayer.filters.playersMin", { count: 3 })}</option>
+                      <option value="4">${t("splash.multiplayer.filters.playersMin", { count: 4 })}</option>
+                      <option value="5">${t("splash.multiplayer.filters.playersMin", { count: 5 })}</option>
+                      <option value="6">${t("splash.multiplayer.filters.playersMin", { count: 6 })}</option>
+                      <option value="7">${t("splash.multiplayer.filters.playersMin", { count: 7 })}</option>
+                      <option value="8">${t("splash.multiplayer.filters.playersMin", { count: 8 })}</option>
                     </select>
                   </div>
                 </div>
-                <p class="splash-private-room-limit-note">${t("splash.multiplayer.privatePlayerLimitNote")}</p>
-                <label for="splash-room-code">${t("splash.multiplayer.joinByInviteCode")}</label>
-                <div class="splash-room-code-actions">
-                  <input
-                    id="splash-room-code"
-                    type="text"
-                    inputmode="text"
-                    autocapitalize="characters"
-                    autocomplete="off"
-                    spellcheck="false"
-                    placeholder="${t("splash.multiplayer.roomCodePlaceholder")}"
-                    maxlength="8"
-                    aria-describedby="splash-room-code-error"
-                  />
-                  <button type="button" id="splash-room-code-join" class="btn btn-primary primary">
-                    ${t("splash.multiplayer.joinCode")}
+                <div id="splash-room-grid" class="splash-room-grid">
+                  <div class="splash-room-card splash-room-card-empty">
+                    <p>${t("splash.multiplayer.roomsLoading")}</p>
+                  </div>
+                </div>
+                <div class="splash-room-pagination">
+                  <p id="splash-room-pagination-count" class="splash-room-pagination-count"></p>
+                  <div class="splash-room-pagination-controls">
+                    <label for="splash-room-page-size">${t("splash.multiplayer.filters.pageSizeLabel")}</label>
+                    <select id="splash-room-page-size">
+                      <option value="4">4</option>
+                      <option value="6" selected>6</option>
+                      <option value="9">9</option>
+                      <option value="12">12</option>
+                    </select>
+                    <button type="button" id="splash-room-page-prev" class="btn btn-secondary btn-sm">
+                      ${t("splash.multiplayer.filters.prevPage")}
+                    </button>
+                    <span id="splash-room-page-indicator" class="splash-room-page-indicator"></span>
+                    <button type="button" id="splash-room-page-next" class="btn btn-secondary btn-sm">
+                      ${t("splash.multiplayer.filters.nextPage")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="splash-multiplayer-section splash-multiplayer-section-difficulty">
+                <label>${t("splash.multiplayer.difficultyLabel")}</label>
+                <div class="splash-difficulty-picker" role="group" aria-label="${t("splash.multiplayer.difficultyLabel")}">
+                  <button type="button" class="splash-difficulty-btn" data-multiplayer-difficulty="easy">
+                    ${t("difficulty.easy")}
+                  </button>
+                  <button type="button" class="splash-difficulty-btn is-active" data-multiplayer-difficulty="normal">
+                    ${t("difficulty.normal")}
+                  </button>
+                  <button type="button" class="splash-difficulty-btn" data-multiplayer-difficulty="hard">
+                    ${t("difficulty.hard")}
                   </button>
                 </div>
-                <p id="splash-room-code-error" class="splash-room-code-error" style="display: none;"></p>
+              </div>
+
+              <div class="splash-multiplayer-section">
+                <div class="splash-multiplayer-section-head">
+                  <h3>${t("splash.multiplayer.createRoomSection")}</h3>
+                </div>
+                <div class="splash-private-toggle">
+                  <label for="splash-private-room-toggle">
+                    <input id="splash-private-room-toggle" type="checkbox" />
+                    ${t("splash.multiplayer.privateToggle")}
+                  </label>
+                </div>
+                <div id="splash-private-room-settings" class="splash-private-room-settings" hidden>
+                  <div class="splash-private-config-grid">
+                    <div>
+                      <label for="splash-private-room-name">${t("splash.multiplayer.privateRoomName")}</label>
+                      <input
+                        id="splash-private-room-name"
+                        type="text"
+                        autocomplete="off"
+                        spellcheck="false"
+                        maxlength="24"
+                        placeholder="${t("splash.multiplayer.privateRoomNamePlaceholder")}"
+                      />
+                    </div>
+                    <div>
+                      <label for="splash-private-room-player-limit">${t("splash.multiplayer.privatePlayerLimit")}</label>
+                      <select id="splash-private-room-player-limit">
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8" selected>8</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p class="splash-private-room-limit-note">${t("splash.multiplayer.privatePlayerLimitNote")}</p>
+                  <label for="splash-room-code">${t("splash.multiplayer.joinByInviteCode")}</label>
+                  <div class="splash-room-code-actions">
+                    <input
+                      id="splash-room-code"
+                      type="text"
+                      inputmode="text"
+                      autocapitalize="characters"
+                      autocomplete="off"
+                      spellcheck="false"
+                      placeholder="${t("splash.multiplayer.roomCodePlaceholder")}"
+                      maxlength="8"
+                      aria-describedby="splash-room-code-error"
+                    />
+                    <button type="button" id="splash-room-code-join" class="btn btn-primary primary">
+                      ${t("splash.multiplayer.joinCode")}
+                    </button>
+                  </div>
+                  <p id="splash-room-code-error" class="splash-room-code-error" style="display: none;"></p>
+                </div>
+              </div>
+
+              <div class="splash-multiplayer-section splash-multiplayer-section-seed">
+                <div class="splash-bot-seed-toggle">
+                  <label for="splash-seed-join-bots">
+                    <input id="splash-seed-join-bots" type="checkbox" />
+                    ${t("splash.multiplayer.seedBotsOnJoin")}
+                  </label>
+                </div>
+                <label for="splash-join-bot-count">${t("splash.multiplayer.joinBotSeedCount")}</label>
+                <select id="splash-join-bot-count" disabled>
+                  <option value="1" selected>${t("splash.multiplayer.botOption.1")}</option>
+                  <option value="2">${t("splash.multiplayer.botOption.2")}</option>
+                  <option value="3">${t("splash.multiplayer.botOption.3")}</option>
+                  <option value="4">${t("splash.multiplayer.botOption.4")}</option>
+                </select>
+                <p class="splash-join-bot-seed-note">${t("splash.multiplayer.joinBotSeedNote")}</p>
               </div>
             </div>
 
-            <div class="splash-multiplayer-section splash-multiplayer-section-seed">
-              <div class="splash-bot-seed-toggle">
-                <label for="splash-seed-join-bots">
-                  <input id="splash-seed-join-bots" type="checkbox" />
-                  ${t("splash.multiplayer.seedBotsOnJoin")}
-                </label>
+            <div class="splash-multiplayer-footer">
+              <p id="splash-room-status">${t("splash.multiplayer.status.noActivePublicRooms")}</p>
+              <div class="splash-multiplayer-actions">
+                <span class="splash-multiplayer-join-tooltip" title="${t("splash.multiplayer.pickLobbyHint")}">
+                  <button
+                    type="button"
+                    id="splash-multiplayer-join"
+                    class="btn btn-primary primary"
+                  >
+                    ${t("splash.button.joinGame")}
+                  </button>
+                </span>
               </div>
-              <label for="splash-join-bot-count">${t("splash.multiplayer.joinBotSeedCount")}</label>
-              <select id="splash-join-bot-count" disabled>
-                <option value="1" selected>${t("splash.multiplayer.botOption.1")}</option>
-                <option value="2">${t("splash.multiplayer.botOption.2")}</option>
-                <option value="3">${t("splash.multiplayer.botOption.3")}</option>
-                <option value="4">${t("splash.multiplayer.botOption.4")}</option>
-              </select>
-              <p class="splash-join-bot-seed-note">${t("splash.multiplayer.joinBotSeedNote")}</p>
-            </div>
-
-            <p id="splash-room-status">${t("splash.multiplayer.status.noActivePublicRooms")}</p>
-            <p class="splash-multiplayer-hint">${t("splash.multiplayer.pickLobbyHint")}</p>
-            <div class="splash-multiplayer-actions">
-              <button
-                type="button"
-                id="splash-multiplayer-join"
-                class="btn btn-primary primary"
-              >
-                ${t("splash.button.joinGame")}
-              </button>
             </div>
           </section>
         </div>
@@ -828,17 +836,24 @@ export class SplashScreen {
     const startButton = this.container.querySelector<HTMLButtonElement>("#start-game-btn");
     const multiplayerJoinButton =
       this.container.querySelector<HTMLButtonElement>("#splash-multiplayer-join");
+    const multiplayerJoinTooltip =
+      this.container.querySelector<HTMLElement>(".splash-multiplayer-join-tooltip");
     const joinMode = this.playMode === "multiplayer";
     const label = joinMode ? t("splash.button.joinGame") : t("splash.button.startGame");
     const multiplayerJoinReady = this.canJoinSelectedMultiplayerRoom();
+    const joinHint = t("splash.multiplayer.pickLobbyHint");
 
     if (startButton) {
       startButton.textContent = label;
       startButton.disabled = joinMode ? !multiplayerJoinReady : false;
     }
+    if (multiplayerJoinTooltip) {
+      multiplayerJoinTooltip.title = joinHint;
+    }
     if (multiplayerJoinButton) {
       multiplayerJoinButton.textContent = t("splash.button.joinGame");
       multiplayerJoinButton.disabled = !multiplayerJoinReady;
+      multiplayerJoinButton.title = joinHint;
     }
   }
 
@@ -972,13 +987,19 @@ export class SplashScreen {
     filteredRooms: MultiplayerRoomListing[],
     totalRooms: number
   ): void {
+    const paginationEl = this.container.querySelector<HTMLElement>(".splash-room-pagination");
     const countEl = this.container.querySelector<HTMLElement>("#splash-room-pagination-count");
     const pageIndicatorEl = this.container.querySelector<HTMLElement>("#splash-room-page-indicator");
     const prevButton = this.container.querySelector<HTMLButtonElement>("#splash-room-page-prev");
     const nextButton = this.container.querySelector<HTMLButtonElement>("#splash-room-page-next");
 
+    const safePageSize = Math.max(1, Math.floor(this.roomPageSize));
     const pageCount = this.getFilteredRoomPageCount(filteredRooms.length);
     const currentPage = Math.max(1, Math.min(pageCount, this.roomPageIndex + 1));
+    const shouldShowPagination = filteredRooms.length > safePageSize;
+    if (paginationEl) {
+      paginationEl.hidden = !shouldShowPagination;
+    }
     if (countEl) {
       countEl.textContent = t("splash.multiplayer.filters.resultsCount", {
         shown: filteredRooms.length,
