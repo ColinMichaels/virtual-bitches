@@ -368,24 +368,27 @@ jobs:
           echo "Cloud Run service status:"
           gcloud run services describe "$SERVICE_NAME" \
             --region "$REGION" \
-            --format='yaml(status.conditions,status.latestCreatedRevisionName,status.latestReadyRevisionName)'
+            --format='yaml(status.conditions,status.latestCreatedRevisionName,status.latestReadyRevisionName)' || true
 
           REVISION_NAME="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.latestCreatedRevisionName)')"
           if [ -n "$REVISION_NAME" ]; then
             echo "Cloud Run revision status for $REVISION_NAME:"
             gcloud run revisions describe "$REVISION_NAME" \
               --region "$REGION" \
-              --format='yaml(status.conditions)'
+              --format='yaml(status.conditions)' || true
 
             echo "Recent logs for $REVISION_NAME:"
-            gcloud logs read \
+            gcloud logging read \
               "resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE_NAME AND resource.labels.revision_name=$REVISION_NAME" \
               --limit=200 \
-              --format='value(textPayload)'
+              --format='table(timestamp,severity,textPayload,jsonPayload.message)' || true
           else
             echo "No created revision found; dumping recent service logs."
-            gcloud run services logs read "$SERVICE_NAME" --region "$REGION" --limit=200
+            gcloud run services logs read "$SERVICE_NAME" --region "$REGION" --limit=200 || true
           fi
+
+          # Never fail this diagnostics helper step; preserve original deploy outcome.
+          exit 0
 
       - name: Smoke Test Cloud Run API + WebSocket
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_api_smoke }}
