@@ -24,17 +24,21 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - [x] Add Wave A i18n coverage for settings shell + tutorial shell with a new in-settings language selector
   - [x] Complete Wave A i18n migration for remaining shell/menu/modal surfaces (index HUD labels/buttons, account/admin status copy)
   - [x] Complete Wave A splash multiplayer localization key coverage and validation (`npx tsc --noEmit`, `test:i18n`, `build:dev`)
-  - [ ] Diagnose active deployment error first (blocking next feature wave); capture build/deploy logs and root cause.
+  - [x] Diagnose active deployment error first (blocking next feature wave); capture build/deploy logs and root cause.
   - [ ] Begin Wave B i18n migration for gameplay runtime status/notification messaging (`gameRuntime.ts`, turn banners, scoring/action prompts) after deployment issue is resolved.
 
 ### Deployment Error Diagnostics (2026-02-27)
-- **Status**: 🔴 Blocking
+- **Status**: 🟡 Mitigation Applied, Pending CI Verification
 - **Context**: Prioritize deployment stability before continuing Wave B gameplay messaging migration.
+- **Progress (2026-02-27)**:
+  - Winner-queue smoke failure reproduced from CI logs: `queue lifecycle did not auto-start a fresh round within expected wait window`.
+  - Root cause identified: smoke timeout window (`12s`) was shorter than production post-round auto-start delay (`60s`).
+  - Mitigation applied: increased queue lifecycle wait budget in `api/e2e/smoke.mjs` and set workflow env override in `.github/workflows/firebase-deploy.yml`.
 - **Tasks**:
-  - [ ] Reproduce deployment failure locally using the same build/deploy command path as CI/hosting.
-  - [ ] Capture exact failing step and error output (build, asset copy, hosting rewrite/proxy, or backend endpoint mismatch).
-  - [ ] Identify whether failure is frontend artifact, server runtime, environment variable, or dependency/version mismatch.
-  - [ ] Implement fix and re-run local verification (`npx tsc --noEmit`, `npm run -s build:dev`, deployment command smoke pass).
+  - [x] Capture exact failing step and error output (build, asset copy, hosting rewrite/proxy, or backend endpoint mismatch).
+  - [x] Identify whether failure is frontend artifact, server runtime, environment variable, or dependency/version mismatch.
+  - [x] Implement fix for observed queue-lifecycle wait-window mismatch.
+  - [ ] Re-run GitHub Actions deploy smoke to confirm mitigation in CI.
   - [ ] Document root cause + mitigation in `docs/AUDIT-2026-02-25.md` follow-up section or a new deployment incident note.
 
 ### Camera System & Machinima Tools (Phase 1 COMPLETE, Phase 2 PARTIAL) 📷
