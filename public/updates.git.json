@@ -1,8 +1,34 @@
 {
-  "generatedAt": "2026-02-27T03:36:04.519Z",
+  "generatedAt": "2026-02-27T03:55:58.595Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-ca0aa72",
+      "date": "2026-02-27T03:48:23.000Z",
+      "title": "Refactor color variables and gradients for enhanced styling consistency across themes.",
+      "content": "<p>Refactor color variables and gradients for enhanced styling consistency across themes.</p><p><strong>Commit:</strong> <code>ca0aa72</code></p><p>Ticket: feature/api-testing</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "ca0aa726aa9ddbc479f9605675a56dd5aadd74b8",
+        "shortHash": "ca0aa72"
+      }
+    },
+    {
+      "id": "git-c62534d",
+      "date": "2026-02-27T03:37:50.000Z",
+      "title": "Add `updates:generate` script and integrate it into build and development workflows",
+      "content": "<p>Add `updates:generate` script and integrate it into build and development workflows</p><p><strong>Commit:</strong> <code>c62534d</code></p><p>- Introduced `scripts/generate-updates-from-git.mjs` to generate JSON data from commit history.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "c62534de4a46d3cf634a31c454e4d58650e8e19e",
+        "shortHash": "c62534d"
+      }
+    },
     {
       "id": "git-bf2b6eb",
       "date": "2026-02-27T03:19:32.000Z",
@@ -495,32 +521,6 @@
       "commit": {
         "hash": "44719803d690d00d4a0abc6a8648c47f9681194f",
         "shortHash": "4471980"
-      }
-    },
-    {
-      "id": "git-9acca46",
-      "date": "2026-02-26T11:19:02.000Z",
-      "title": "Add session expiry outcome resolution and tests",
-      "content": "<p>Add session expiry outcome resolution and tests</p><p><strong>Commit:</strong> <code>9acca46</code></p><p>- Added `resolveSessionExpiryOutcome` utility to standardize session expiry handling (`recovered`, `lobby`, `solo`).</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "9acca463b08846b7dd0bc63f44c2c924d5a97375",
-        "shortHash": "9acca46"
-      }
-    },
-    {
-      "id": "git-86e77ec",
-      "date": "2026-02-26T11:15:45.000Z",
-      "title": "Add multiplayer session service reliability tests",
-      "content": "<p>Add multiplayer session service reliability tests</p><p><strong>Commit:</strong> <code>86e77ec</code></p><p>- Added tests for heartbeat expiry dispatch, session clearing, and recovery scenarios in `MultiplayerSessionService`.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "86e77ecebbf7fe51a2bf5501ef6024f7b1aeb0ab",
-        "shortHash": "86e77ec"
       }
     }
   ]

@@ -88,6 +88,16 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - `src/render/dice.ts` - Implemented per-die texture override logic in createDie()
 - **Result**: d6 pips now display correctly with proper UV scaling!
 
+#### Review Follow-up Queue (2026-02-27)
+- **Status**: 🟡 New
+- **Scope**: Splash-theme consistency + updates/release-note pipeline hardening.
+- **Tasks**:
+  - [ ] Splash dice: reload geometry templates when theme changes if `meshFile` differs from currently loaded mesh source (`src/render/splashDice.ts`).
+  - [ ] Splash dice: add texture load timeout/error fallback so failed texture fetch does not leave `createMaterial()` waiting indefinitely (`src/render/splashDice.ts`).
+  - [ ] Release-notes generator: gracefully handle environments without `.git` history (fallback to empty updates file and warning) so `build/dev` do not hard fail (`scripts/generate-updates-from-git.mjs`).
+  - [ ] Release-notes quality: optional commit message filtering/grouping for tester-facing notes (exclude chore-only/internal infra commits by default).
+  - [ ] Cleanup: refresh stale inline comment in splash theme-change path ("fresh random cross-theme assignment") to match current behavior (`src/render/splashDice.ts`).
+
 ### Multiplayer Room Lifecycle, Recovery UX, and Tutorial Quality Pass (2026-02-26)
 - **Status**: ✅ Foundation COMPLETE, follow-up polish tasks queued
 - **Scope**: Reliability and usability upgrades for multiplayer sessions, fallback behavior, and onboarding flow
