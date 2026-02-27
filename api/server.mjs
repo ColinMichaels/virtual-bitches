@@ -145,6 +145,10 @@ const STORE_REHYDRATE_COOLDOWN_MS = normalizeTurnTimeoutValue(
   process.env.STORE_REHYDRATE_COOLDOWN_MS,
   750
 );
+const WS_SESSION_UPGRADE_GRACE_MS = normalizeTurnTimeoutValue(
+  process.env.WS_SESSION_UPGRADE_GRACE_MS,
+  30 * 1000
+);
 const NEXT_GAME_COUNTDOWN_SECONDS = 10;
 const MAX_TURN_ROLL_DICE = 64;
 const MAX_TURN_SCORE_SELECTION = 64;
@@ -218,7 +222,6 @@ server.on("upgrade", async (req, socket) => {
       return;
     }
 
-    cleanupExpiredRecords();
     const auth = await authenticateSocketUpgrade(requestUrl);
     if (!auth.ok) {
       const rejectedSessionId = requestUrl.searchParams.get("session")?.trim() ?? "unknown";
@@ -6627,15 +6630,28 @@ async function authenticateSocketUpgrade(requestUrl) {
 
   let session = store.multiplayerSessions[sessionId];
   if (!session || session.expiresAt <= Date.now()) {
-    await rehydrateStoreFromAdapter(`ws_upgrade_session:${sessionId}`);
+    await rehydrateStoreFromAdapter(`ws_upgrade_session:${sessionId}`, { force: true });
     session = store.multiplayerSessions[sessionId];
   }
-  if (!session || session.expiresAt <= Date.now()) {
+  if (!session) {
+    return { ok: false, status: 410, reason: "Gone" };
+  }
+
+  const now = Date.now();
+  const sessionExpiresAt =
+    typeof session.expiresAt === "number" && Number.isFinite(session.expiresAt)
+      ? Math.floor(session.expiresAt)
+      : 0;
+  const sessionExpired = sessionExpiresAt <= now;
+  const sessionExpiredBeyondGrace =
+    sessionExpired &&
+    (sessionExpiresAt <= 0 || now - sessionExpiresAt > WS_SESSION_UPGRADE_GRACE_MS);
+  if (sessionExpiredBeyondGrace) {
     return { ok: false, status: 410, reason: "Gone" };
   }
 
   if (!session.participants[playerId]) {
-    await rehydrateStoreFromAdapter(`ws_upgrade_participant:${sessionId}:${playerId}`);
+    await rehydrateStoreFromAdapter(`ws_upgrade_participant:${sessionId}:${playerId}`, { force: true });
     session = store.multiplayerSessions[sessionId];
   }
   if (!session || !session.participants[playerId]) {
@@ -6644,7 +6660,7 @@ async function authenticateSocketUpgrade(requestUrl) {
 
   let accessRecord = verifyAccessToken(token);
   if (!accessRecord) {
-    await rehydrateStoreFromAdapter(`ws_upgrade_token:${sessionId}:${playerId}`);
+    await rehydrateStoreFromAdapter(`ws_upgrade_token:${sessionId}:${playerId}`, { force: true });
     accessRecord = verifyAccessToken(token);
   }
   if (!accessRecord) {
@@ -6653,6 +6669,17 @@ async function authenticateSocketUpgrade(requestUrl) {
 
   if (accessRecord.playerId !== playerId || accessRecord.sessionId !== sessionId) {
     return { ok: false, status: 403, reason: "Forbidden" };
+  }
+
+  if (sessionExpired) {
+    const participant = session.participants[playerId];
+    if (participant && !isBotParticipant(participant)) {
+      participant.lastHeartbeatAt = now;
+    }
+    markSessionActivity(session, playerId, now, { countAsPlayerAction: false });
+    persistStore().catch((error) => {
+      log.warn("Failed to persist revived session during WebSocket upgrade", error);
+    });
   }
 
   return {
