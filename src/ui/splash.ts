@@ -639,6 +639,10 @@ export class SplashScreen {
         return;
       }
       const privateModeEnabled = this.isPrivateRoomModeEnabled();
+      const selectedRoom =
+        !privateModeEnabled && this.selectedRoomSessionId
+          ? this.roomList.find((room) => room.sessionId === this.selectedRoomSessionId) ?? null
+          : null;
       const roomCodeValidationError =
         this.playMode === "multiplayer" && privateModeEnabled
           ? this.getRoomCodeValidationError(this.privateRoomCode)
@@ -657,8 +661,11 @@ export class SplashScreen {
               botCount: this.botCount,
               joinBotCount: this.getJoinBotSeedCount(),
               gameDifficulty: this.multiplayerDifficulty,
-              sessionId: privateModeEnabled ? undefined : this.selectedRoomSessionId ?? undefined,
-              roomCode: privateModeEnabled ? this.privateRoomCode || undefined : undefined,
+              sessionId:
+                privateModeEnabled ? undefined : this.selectedRoomSessionId ?? undefined,
+              roomCode: privateModeEnabled
+                ? this.privateRoomCode || undefined
+                : selectedRoom?.roomCode,
             }
           : undefined,
       });

@@ -141,6 +141,10 @@ const NEXT_GAME_AUTO_START_DELAY_MS = normalizeTurnTimeoutValue(
   process.env.MULTIPLAYER_NEXT_GAME_DELAY_MS,
   60 * 1000
 );
+const STORE_REHYDRATE_COOLDOWN_MS = normalizeTurnTimeoutValue(
+  process.env.STORE_REHYDRATE_COOLDOWN_MS,
+  750
+);
 const NEXT_GAME_COUNTDOWN_SECONDS = 10;
 const MAX_TURN_ROLL_DICE = 64;
 const MAX_TURN_SCORE_SELECTION = 64;
@@ -178,6 +182,8 @@ let store = structuredClone(DEFAULT_STORE);
 const firebaseTokenCache = new Map();
 let storeAdapter = null;
 let firebaseAdminAuthClientPromise = null;
+let storeRehydratePromise = null;
+let lastStoreRehydrateAt = 0;
 
 const server = createServer((req, res) => {
   void handleRequest(req, res);
@@ -204,7 +210,7 @@ const botEngine = createBotEngine({
 
 await bootstrap();
 
-server.on("upgrade", (req, socket) => {
+server.on("upgrade", async (req, socket) => {
   try {
     const requestUrl = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
     if (requestUrl.pathname !== "/") {
@@ -213,7 +219,7 @@ server.on("upgrade", (req, socket) => {
     }
 
     cleanupExpiredRecords();
-    const auth = authenticateSocketUpgrade(requestUrl);
+    const auth = await authenticateSocketUpgrade(requestUrl);
     if (!auth.ok) {
       rejectUpgrade(socket, auth.status, auth.reason);
       return;
@@ -998,7 +1004,11 @@ async function handleJoinSessionByTarget(req, res, target) {
   let session = null;
   if (typeof target?.sessionId === "string" && target.sessionId.trim().length > 0) {
     const sessionId = target.sessionId.trim();
-    const sessionById = store.multiplayerSessions[sessionId];
+    let sessionById = store.multiplayerSessions[sessionId];
+    if (!sessionById || sessionById.expiresAt <= now) {
+      await rehydrateStoreFromAdapter(`join_session:${sessionId}`);
+      sessionById = store.multiplayerSessions[sessionId];
+    }
     if (!sessionById || sessionById.expiresAt <= now) {
       sendJson(res, 410, { error: "Session expired", reason: "session_expired" });
       return;
@@ -1010,7 +1020,11 @@ async function handleJoinSessionByTarget(req, res, target) {
       sendJson(res, 404, { error: "Room code not found", reason: "room_not_found" });
       return;
     }
-    const sessionByRoomCode = findJoinableSessionByRoomCode(normalizedRoomCode, now);
+    let sessionByRoomCode = findJoinableSessionByRoomCode(normalizedRoomCode, now);
+    if (!sessionByRoomCode) {
+      await rehydrateStoreFromAdapter(`join_room_code:${normalizedRoomCode}`);
+      sessionByRoomCode = findJoinableSessionByRoomCode(normalizedRoomCode, now);
+    }
     if (!sessionByRoomCode) {
       sendJson(res, 404, { error: "Room code not found", reason: "room_not_found" });
       return;
@@ -1095,7 +1109,11 @@ async function handleJoinSessionByTarget(req, res, target) {
 
 async function handleSessionHeartbeat(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
-  const session = store.multiplayerSessions[sessionId];
+  let session = store.multiplayerSessions[sessionId];
+  if (!session || session.expiresAt <= Date.now()) {
+    await rehydrateStoreFromAdapter(`heartbeat_session:${sessionId}`);
+    session = store.multiplayerSessions[sessionId];
+  }
   if (!session || session.expiresAt <= Date.now()) {
     sendJson(res, 200, { ok: false, reason: "session_expired" });
     return;
@@ -1104,11 +1122,19 @@ async function handleSessionHeartbeat(req, res, pathname) {
   const body = await parseJsonBody(req);
   const playerId = typeof body?.playerId === "string" ? body.playerId : "";
   if (!playerId || !session.participants[playerId]) {
+    await rehydrateStoreFromAdapter(`heartbeat_participant:${sessionId}:${playerId || "unknown"}`);
+    session = store.multiplayerSessions[sessionId];
+  }
+  if (!session || !playerId || !session.participants[playerId]) {
     sendJson(res, 200, { ok: false, reason: "unknown_player" });
     return;
   }
 
-  const authCheck = authorizeRequest(req, playerId, sessionId);
+  let authCheck = authorizeRequest(req, playerId, sessionId);
+  if (!authCheck.ok) {
+    await rehydrateStoreFromAdapter(`heartbeat_auth:${sessionId}:${playerId}`);
+    authCheck = authorizeRequest(req, playerId, sessionId);
+  }
   if (!authCheck.ok) {
     sendJson(res, 401, { error: "Unauthorized" });
     return;
@@ -1123,7 +1149,11 @@ async function handleSessionHeartbeat(req, res, pathname) {
 
 async function handleQueueParticipantForNextGame(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
-  const session = store.multiplayerSessions[sessionId];
+  let session = store.multiplayerSessions[sessionId];
+  if (!session || session.expiresAt <= Date.now()) {
+    await rehydrateStoreFromAdapter(`queue_next_session:${sessionId}`);
+    session = store.multiplayerSessions[sessionId];
+  }
   if (!session || session.expiresAt <= Date.now()) {
     sendJson(res, 200, {
       ok: false,
@@ -1135,8 +1165,13 @@ async function handleQueueParticipantForNextGame(req, res, pathname) {
 
   const body = await parseJsonBody(req);
   const playerId = typeof body?.playerId === "string" ? body.playerId : "";
-  const participant = playerId ? session.participants[playerId] : null;
+  let participant = playerId ? session.participants[playerId] : null;
   if (!playerId || !participant || isBotParticipant(participant)) {
+    await rehydrateStoreFromAdapter(`queue_next_participant:${sessionId}:${playerId || "unknown"}`);
+    session = store.multiplayerSessions[sessionId];
+    participant = playerId && session ? session.participants[playerId] : null;
+  }
+  if (!session || !playerId || !participant || isBotParticipant(participant)) {
     sendJson(res, 200, {
       ok: false,
       queuedForNextGame: false,
@@ -1145,7 +1180,11 @@ async function handleQueueParticipantForNextGame(req, res, pathname) {
     return;
   }
 
-  const authCheck = authorizeRequest(req, playerId, sessionId);
+  let authCheck = authorizeRequest(req, playerId, sessionId);
+  if (!authCheck.ok) {
+    await rehydrateStoreFromAdapter(`queue_next_auth:${sessionId}:${playerId}`);
+    authCheck = authorizeRequest(req, playerId, sessionId);
+  }
   if (!authCheck.ok) {
     sendJson(res, 200, {
       ok: false,
@@ -1194,10 +1233,17 @@ async function handleLeaveSession(req, res, pathname) {
     sendJson(res, 400, { error: "playerId is required" });
     return;
   }
-  const removal = removeParticipantFromSession(sessionId, playerId, {
+  let removal = removeParticipantFromSession(sessionId, playerId, {
     source: "leave",
     socketReason: "left_session",
   });
+  if (!removal.ok && (removal.reason === "unknown_session" || removal.reason === "unknown_player")) {
+    await rehydrateStoreFromAdapter(`leave_session:${sessionId}:${playerId}`);
+    removal = removeParticipantFromSession(sessionId, playerId, {
+      source: "leave",
+      socketReason: "left_session",
+    });
+  }
   if (!removal.ok && removal.reason === "unknown_session") {
     sendJson(res, 200, { ok: true });
     return;
@@ -1275,7 +1321,11 @@ function removeParticipantFromSession(
 
 async function handleRefreshSessionAuth(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
-  const session = store.multiplayerSessions[sessionId];
+  let session = store.multiplayerSessions[sessionId];
+  if (!session || session.expiresAt <= Date.now()) {
+    await rehydrateStoreFromAdapter(`refresh_auth_session:${sessionId}`);
+    session = store.multiplayerSessions[sessionId];
+  }
   if (!session || session.expiresAt <= Date.now()) {
     sendJson(res, 410, { error: "Session expired" });
     return;
@@ -1284,6 +1334,10 @@ async function handleRefreshSessionAuth(req, res, pathname) {
   const body = await parseJsonBody(req);
   const playerId = typeof body?.playerId === "string" ? body.playerId : "";
   if (!playerId || !session.participants[playerId]) {
+    await rehydrateStoreFromAdapter(`refresh_auth_participant:${sessionId}:${playerId || "unknown"}`);
+    session = store.multiplayerSessions[sessionId];
+  }
+  if (!session || !playerId || !session.participants[playerId]) {
     sendJson(res, 404, { error: "Player not in session" });
     return;
   }
@@ -6557,7 +6611,7 @@ function completeSocketHandshake(socket, acceptValue) {
   );
 }
 
-function authenticateSocketUpgrade(requestUrl) {
+async function authenticateSocketUpgrade(requestUrl) {
   const sessionId = requestUrl.searchParams.get("session")?.trim() ?? "";
   const playerId = requestUrl.searchParams.get("playerId")?.trim() ?? "";
   const token = requestUrl.searchParams.get("token")?.trim() ?? "";
@@ -6566,16 +6620,28 @@ function authenticateSocketUpgrade(requestUrl) {
     return { ok: false, status: 401, reason: "Unauthorized" };
   }
 
-  const session = store.multiplayerSessions[sessionId];
+  let session = store.multiplayerSessions[sessionId];
+  if (!session || session.expiresAt <= Date.now()) {
+    await rehydrateStoreFromAdapter(`ws_upgrade_session:${sessionId}`);
+    session = store.multiplayerSessions[sessionId];
+  }
   if (!session || session.expiresAt <= Date.now()) {
     return { ok: false, status: 410, reason: "Gone" };
   }
 
   if (!session.participants[playerId]) {
+    await rehydrateStoreFromAdapter(`ws_upgrade_participant:${sessionId}:${playerId}`);
+    session = store.multiplayerSessions[sessionId];
+  }
+  if (!session || !session.participants[playerId]) {
     return { ok: false, status: 403, reason: "Forbidden" };
   }
 
-  const accessRecord = verifyAccessToken(token);
+  let accessRecord = verifyAccessToken(token);
+  if (!accessRecord) {
+    await rehydrateStoreFromAdapter(`ws_upgrade_token:${sessionId}:${playerId}`);
+    accessRecord = verifyAccessToken(token);
+  }
   if (!accessRecord) {
     return { ok: false, status: 401, reason: "Unauthorized" };
   }
@@ -7665,4 +7731,45 @@ async function persistStore() {
     return;
   }
   await storeAdapter.save(store);
+}
+
+async function rehydrateStoreFromAdapter(reason, options = {}) {
+  if (!storeAdapter || typeof storeAdapter.load !== "function") {
+    return false;
+  }
+
+  if (storeRehydratePromise) {
+    return storeRehydratePromise;
+  }
+
+  const now = Date.now();
+  if (
+    options.force !== true &&
+    lastStoreRehydrateAt > 0 &&
+    now - lastStoreRehydrateAt < STORE_REHYDRATE_COOLDOWN_MS
+  ) {
+    return false;
+  }
+
+  storeRehydratePromise = (async () => {
+    try {
+      const loaded = await storeAdapter.load();
+      if (!loaded || typeof loaded !== "object") {
+        return false;
+      }
+      store = loaded;
+      lastStoreRehydrateAt = Date.now();
+      log.debug(`Store rehydrated from adapter (${reason})`);
+      return true;
+    } catch (error) {
+      log.warn(`Failed to rehydrate store (${reason})`, error);
+      return false;
+    }
+  })();
+
+  try {
+    return await storeRehydratePromise;
+  } finally {
+    storeRehydratePromise = null;
+  }
 }

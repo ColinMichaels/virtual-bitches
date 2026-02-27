@@ -1,8 +1,36 @@
 {
-  "generatedAt": "2026-02-27T22:31:39.775Z",
+  "generatedAt": "2026-02-27T22:58:36.344Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-951c31c",
+      "date": "2026-02-27T22:44:51.000Z",
+      "title": "Add auth recovery for tokenized handshake failures and refine API auth modes",
+      "content": "<p>Add auth recovery for tokenized handshake failures and refine API auth modes</p><p><strong>Commit:</strong> <code>951c31c</code></p><p>- Implemented logic for handling pre-open WebSocket token auth failures with retry and cooldowns.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "951c31c77e91b964bbcd20f321591b597a3e3f26",
+        "shortHash": "951c31c",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/951c31c77e91b964bbcd20f321591b597a3e3f26"
+      }
+    },
+    {
+      "id": "git-c306b55",
+      "date": "2026-02-27T22:33:12.000Z",
+      "title": "Add timing controls for multiplayer rounds",
+      "content": "<p>Add timing controls for multiplayer rounds</p><p><strong>Commit:</strong> <code>c306b55</code></p><p>- Added `nextGameStartsAt` and `nextGameAutoStartDelayMs` fields to multiplayer session state and API responses.</p>",
+      "version": "1.0.0",
+      "type": "alert",
+      "source": "commit",
+      "commit": {
+        "hash": "c306b5589be539e24eb74b099159ac65472b221a",
+        "shortHash": "c306b55",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c306b5589be539e24eb74b099159ac65472b221a"
+      }
+    },
     {
       "id": "git-01fe1f4",
       "date": "2026-02-27T22:05:26.000Z",
@@ -533,34 +561,6 @@
         "hash": "2864348c91f81208c9c06924ea56ddad0297bb00",
         "shortHash": "2864348",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/2864348c91f81208c9c06924ea56ddad0297bb00"
-      }
-    },
-    {
-      "id": "git-da062cc",
-      "date": "2026-02-27T04:26:22.000Z",
-      "title": "Add camera assist feature and improve keyboard focus navigation",
-      "content": "<p>Add camera assist feature and improve keyboard focus navigation</p><p><strong>Commit:</strong> <code>da062cc</code></p><p>- Introduced camera assist toggle for Easy mode with automated camera movements after scoring.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "da062cc1fcefe4ed27b5182fe2a19a40508e3968",
-        "shortHash": "da062cc",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/da062cc1fcefe4ed27b5182fe2a19a40508e3968"
-      }
-    },
-    {
-      "id": "git-7f9c563",
-      "date": "2026-02-27T04:07:48.000Z",
-      "title": "Apply UI variable definitions for consistent theming and interchangeable styles",
-      "content": "<p>Apply UI variable definitions for consistent theming and interchangeable styles</p><p><strong>Commit:</strong> <code>7f9c563</code></p><p>- Introduced global CSS variables for colors, borders, gradients, and surfaces.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "7f9c563b1aad48bdd1737c4b4129560eb0138108",
-        "shortHash": "7f9c563",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/7f9c563b1aad48bdd1737c4b4129560eb0138108"
       }
     }
   ]
