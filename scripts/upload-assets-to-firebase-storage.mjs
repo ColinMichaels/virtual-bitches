@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { appendFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,7 +33,9 @@ async function run() {
   const bucketCandidates = buildBucketCandidates(rawBucket, projectId);
   const resolution = await resolveExistingBucket(bucketCandidates, projectId);
   const resolvedBucket = resolution.bucket;
+  const resolvedAssetBaseUrl = buildAssetBaseUrl(resolvedBucket);
   const bucketUri = `gs://${resolvedBucket}`;
+  await writeCiResolvedAssetMetadata(resolvedBucket, resolvedAssetBaseUrl);
 
   const commands = [
     [
@@ -95,6 +98,38 @@ async function run() {
   }
 
   console.log("[cdn:upload] Upload completed.");
+}
+
+function buildAssetBaseUrl(bucketName) {
+  const normalizedBucket = normalizeBucketName(bucketName);
+  return `https://storage.googleapis.com/${normalizedBucket}/`;
+}
+
+async function writeCiResolvedAssetMetadata(resolvedBucket, resolvedAssetBaseUrl) {
+  const safeBucket = sanitizeCiMetadataValue(resolvedBucket);
+  const safeBaseUrl = sanitizeCiMetadataValue(resolvedAssetBaseUrl);
+
+  const outputPath = String(process.env.GITHUB_OUTPUT ?? "").trim();
+  if (outputPath) {
+    await appendFile(
+      outputPath,
+      `resolved_bucket=${safeBucket}\nresolved_asset_base_url=${safeBaseUrl}\n`,
+      "utf8"
+    );
+  }
+
+  const envPath = String(process.env.GITHUB_ENV ?? "").trim();
+  if (envPath) {
+    await appendFile(
+      envPath,
+      `CDN_RESOLVED_BUCKET=${safeBucket}\nCDN_RESOLVED_ASSET_BASE_URL=${safeBaseUrl}\n`,
+      "utf8"
+    );
+  }
+}
+
+function sanitizeCiMetadataValue(rawValue) {
+  return String(rawValue ?? "").replace(/[\r\n]+/g, "").trim();
 }
 
 function parseArgs(rawArgs) {
