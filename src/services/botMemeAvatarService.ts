@@ -4,9 +4,12 @@ import { resolveAssetUrl } from "./assetUrl.js";
 const log = logger.create("BotMemeAvatar");
 
 const env = (import.meta as ImportMeta & { env?: Record<string, string> }).env ?? {};
-const DEFAULT_MEME_API_URL = "https://meme-api.com/gimme";
+const DEFAULT_MEME_API_URLS = ["https://api.humorapi.com/memes/random", "https://meme-api.com/gimme"];
 const API_FAILURE_COOLDOWN_MS = 60_000;
 const AUTH_FAILURE_COOLDOWN_MS = 5 * 60_000;
+const HUMOR_API_KEY_QUERY_PARAM = "api-key";
+
+type MemeApiProvider = "apileague" | "humorapi" | "generic";
 
 function parseBooleanFlag(rawValue: string | undefined, fallback: boolean): boolean {
   if (typeof rawValue !== "string") {
@@ -90,14 +93,15 @@ class BotMemeAvatarService {
   private readonly recentUrls: string[] = [];
   private readonly maxRecentUrls = 20;
   private apiDisabledUntil = 0;
-  private missingApiKeyLogged = false;
+  private missingApiKeyLoggedProviders = new Set<MemeApiProvider>();
 
   constructor() {
     const configuredApiUrl = normalizeImageUrl(env.VITE_BOT_MEME_API_URL);
     this.apiUrlCandidates = dedupe(
-      [configuredApiUrl, normalizeImageUrl(DEFAULT_MEME_API_URL)].filter(
-        (value): value is string => typeof value === "string"
-      )
+      [
+        configuredApiUrl,
+        ...DEFAULT_MEME_API_URLS.map((url) => normalizeImageUrl(url)),
+      ].filter((value): value is string => typeof value === "string")
     );
     this.apiKey = typeof env.VITE_BOT_MEME_API_KEY === "string" ? env.VITE_BOT_MEME_API_KEY.trim() : "";
     this.apiKeyHeader = normalizeApiKeyHeader(env.VITE_BOT_MEME_API_KEY_HEADER);
@@ -177,16 +181,24 @@ class BotMemeAvatarService {
   }
 
   private canCallApiUrl(apiUrl: string): boolean {
-    if (!/apileague\.com/i.test(apiUrl)) {
+    const provider = this.detectProvider(apiUrl);
+    if (provider === "generic") {
       return true;
     }
-    if (this.apiKey) {
+
+    if (this.apiKey || this.apiUrlHasInlineApiKey(apiUrl)) {
       return true;
     }
-    if (!this.missingApiKeyLogged) {
-      this.missingApiKeyLogged = true;
-      log.info("Skipping APILayer meme endpoint because no API key is configured.");
+
+    if (!this.missingApiKeyLoggedProviders.has(provider)) {
+      this.missingApiKeyLoggedProviders.add(provider);
+      if (provider === "humorapi") {
+        log.info("Skipping HumorAPI meme endpoint because no API key is configured.");
+      } else {
+        log.info("Skipping APILayer meme endpoint because no API key is configured.");
+      }
     }
+
     return false;
   }
 
@@ -194,6 +206,7 @@ class BotMemeAvatarService {
     apiUrl: string,
     excludedUrls: Set<string>
   ): Promise<string | undefined> {
+    const requestUrl = this.buildRequestUrl(apiUrl);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     try {
@@ -204,7 +217,7 @@ class BotMemeAvatarService {
         headers[this.apiKeyHeader] = this.apiKey;
       }
 
-      const response = await fetch(apiUrl, {
+      const response = await fetch(requestUrl, {
         method: "GET",
         cache: "no-store",
         headers,
@@ -270,6 +283,47 @@ class BotMemeAvatarService {
     }
 
     return dedupe(candidates);
+  }
+
+  private detectProvider(apiUrl: string): MemeApiProvider {
+    if (/apileague\.com/i.test(apiUrl)) {
+      return "apileague";
+    }
+    if (/humorapi\.com/i.test(apiUrl)) {
+      return "humorapi";
+    }
+    return "generic";
+  }
+
+  private apiUrlHasInlineApiKey(apiUrl: string): boolean {
+    try {
+      const parsed = new URL(apiUrl);
+      const key =
+        parsed.searchParams.get(HUMOR_API_KEY_QUERY_PARAM) ??
+        parsed.searchParams.get("apikey") ??
+        parsed.searchParams.get("api_key") ??
+        parsed.searchParams.get("x-api-key");
+      return typeof key === "string" && key.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  private buildRequestUrl(apiUrl: string): string {
+    const provider = this.detectProvider(apiUrl);
+    if (provider !== "humorapi" || !this.apiKey) {
+      return apiUrl;
+    }
+
+    try {
+      const parsed = new URL(apiUrl);
+      if (!parsed.searchParams.has(HUMOR_API_KEY_QUERY_PARAM)) {
+        parsed.searchParams.set(HUMOR_API_KEY_QUERY_PARAM, this.apiKey);
+      }
+      return parsed.toString();
+    } catch {
+      return apiUrl;
+    }
   }
 
   private selectUrl(candidates: string[], excludedUrls: Set<string>): string | undefined {
