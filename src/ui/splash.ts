@@ -643,6 +643,11 @@ export class SplashScreen {
         !privateModeEnabled && this.selectedRoomSessionId
           ? this.roomList.find((room) => room.sessionId === this.selectedRoomSessionId) ?? null
           : null;
+      const selectedRoomCode = !privateModeEnabled ? selectedRoom?.roomCode?.trim() ?? "" : "";
+      const selectedRoomSessionIdFallback =
+        !privateModeEnabled && !selectedRoomCode
+          ? this.selectedRoomSessionId ?? undefined
+          : undefined;
       const roomCodeValidationError =
         this.playMode === "multiplayer" && privateModeEnabled
           ? this.getRoomCodeValidationError(this.privateRoomCode)
@@ -661,11 +666,10 @@ export class SplashScreen {
               botCount: this.botCount,
               joinBotCount: this.getJoinBotSeedCount(),
               gameDifficulty: this.multiplayerDifficulty,
-              sessionId:
-                privateModeEnabled ? undefined : this.selectedRoomSessionId ?? undefined,
+              sessionId: privateModeEnabled ? undefined : selectedRoomSessionIdFallback,
               roomCode: privateModeEnabled
                 ? this.privateRoomCode || undefined
-                : selectedRoom?.roomCode,
+                : selectedRoomCode || undefined,
             }
           : undefined,
       });
@@ -833,10 +837,16 @@ export class SplashScreen {
       const roomCodeValidationError = this.getRoomCodeValidationError(this.privateRoomCode);
       return !roomCodeValidationError;
     }
-    return (
-      typeof this.selectedRoomSessionId === "string" &&
-      this.selectedRoomSessionId.trim().length > 0
+    if (typeof this.selectedRoomSessionId !== "string" || this.selectedRoomSessionId.trim().length === 0) {
+      return false;
+    }
+    const selectedRoom = this.roomList.find(
+      (room) => room.sessionId === this.selectedRoomSessionId
     );
+    if (!selectedRoom) {
+      return false;
+    }
+    return typeof selectedRoom.roomCode === "string" && selectedRoom.roomCode.trim().length > 0;
   }
 
   private updateStartActionsUi(): void {
