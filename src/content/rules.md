@@ -89,6 +89,8 @@ Lower total score wins.
 | Pause / Settings | <kbd>Esc</kbd> |
 | Start new game | <kbd>N</kbd> |
 | Camera controls panel | <kbd>C</kbd> |
+| Room chat (multiplayer) | <kbd>M</kbd> |
+| Whisper chat (multiplayer) | <kbd>W</kbd> |
 | Chaos upgrades menu | <kbd>U</kbd> |
 | Debug view | <kbd>D</kbd> |
 

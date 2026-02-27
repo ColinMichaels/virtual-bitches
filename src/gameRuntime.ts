@@ -40,6 +40,7 @@ import {
   MultiplayerNetworkService,
   type MultiplayerGameUpdateMessage,
   type MultiplayerPlayerNotificationMessage,
+  type MultiplayerRoomChannelMessage,
   type MultiplayerSessionStateMessage,
   type MultiplayerTurnAutoAdvancedMessage,
   type MultiplayerTurnActionMessage,
@@ -386,6 +387,11 @@ class Game implements GameCallbacks {
       const detail = (event as CustomEvent<MultiplayerPlayerNotificationMessage>).detail;
       if (!detail) return;
       this.handleMultiplayerRealtimeNotification(detail);
+    }) as EventListener);
+    document.addEventListener("multiplayer:channel:received", ((event: Event) => {
+      const detail = (event as CustomEvent<MultiplayerRoomChannelMessage>).detail;
+      if (!detail) return;
+      this.handleMultiplayerRoomChannelMessage(detail);
     }) as EventListener);
 
     document.addEventListener("chaos:cameraAttack:sent", ((event: Event) => {
@@ -2226,6 +2232,23 @@ class Game implements GameCallbacks {
     return `Player ${playerId.slice(0, 4)}`;
   }
 
+  private getParticipantBroadcastLabel(playerId: string): string {
+    const participants = this.multiplayerSessionService.getActiveSession()?.participants ?? [];
+    const participant = participants.find((entry) => entry?.playerId === playerId);
+    const displayName =
+      typeof participant?.displayName === "string" ? participant.displayName.trim() : "";
+    if (displayName) {
+      return displayName.slice(0, 20);
+    }
+
+    const label = this.participantLabelById.get(playerId);
+    if (label && label.toUpperCase() !== "YOU") {
+      return label;
+    }
+
+    return this.buildDefaultParticipantName(playerId, participant?.isBot === true);
+  }
+
   private isBotParticipant(playerId: string): boolean {
     const participants = this.multiplayerSessionService.getActiveSession()?.participants ?? [];
     return participants.some(
@@ -2233,6 +2256,121 @@ class Game implements GameCallbacks {
         participant?.playerId === playerId &&
         participant.isBot === true
     );
+  }
+
+  private canComposeRoomChannelMessage(): boolean {
+    if (this.playMode !== "multiplayer" || !environment.features.multiplayer) {
+      notificationService.show("Room chat is available in multiplayer only.", "info", 1800);
+      return false;
+    }
+    if (!this.multiplayerSessionService.getActiveSession()) {
+      notificationService.show("Join a multiplayer room to chat.", "warning", 2000);
+      return false;
+    }
+    if (!this.multiplayerNetwork?.isConnected()) {
+      notificationService.show("Reconnect to room chat before sending.", "warning", 2000);
+      return false;
+    }
+    return true;
+  }
+
+  private normalizeComposedRoomChannelMessage(value: string | null): string | null {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const normalized = value.trim().replace(/\s+/g, " ").slice(0, 320);
+    return normalized || null;
+  }
+
+  private getWhisperTargets(): Array<{ playerId: string; label: string }> {
+    const participants = this.multiplayerSessionService.getActiveSession()?.participants ?? [];
+    return participants
+      .filter(
+        (participant) =>
+          participant &&
+          participant.playerId !== this.localPlayerId &&
+          participant.isBot !== true &&
+          participant.queuedForNextGame !== true
+      )
+      .map((participant) => ({
+        playerId: participant.playerId,
+        label: this.getParticipantBroadcastLabel(participant.playerId),
+      }));
+  }
+
+  private resolveWhisperTargetPlayerId(rawTarget: string): string | null {
+    const whisperTargets = this.getWhisperTargets();
+    if (whisperTargets.length === 0) {
+      return null;
+    }
+    const allowedPlayerIds = new Set(whisperTargets.map((target) => target.playerId));
+    const trimmedTarget = rawTarget.trim();
+    if (!trimmedTarget) {
+      return null;
+    }
+
+    const byExactId = whisperTargets.find((target) => target.playerId === trimmedTarget);
+    if (byExactId) {
+      return byExactId.playerId;
+    }
+
+    const parsedIndex = Number.parseInt(trimmedTarget, 10);
+    if (
+      Number.isFinite(parsedIndex) &&
+      parsedIndex >= 1 &&
+      parsedIndex <= whisperTargets.length &&
+      /^\d+$/.test(trimmedTarget)
+    ) {
+      return whisperTargets[parsedIndex - 1].playerId;
+    }
+
+    const byToken = this.resolvePlayerIdByParticipantToken(trimmedTarget);
+    if (byToken && allowedPlayerIds.has(byToken)) {
+      return byToken;
+    }
+
+    return null;
+  }
+
+  private sendPlayerRoomChannelMessage(
+    options: {
+      idPrefix: string;
+      channel: "public" | "direct";
+      topic?: string;
+      title?: string;
+      message: string;
+      severity?: "info" | "success" | "warning" | "error";
+      targetPlayerId?: string;
+    },
+    timestamp: number = Date.now()
+  ): boolean {
+    const normalizedMessage = this.normalizeComposedRoomChannelMessage(options.message);
+    if (!normalizedMessage) {
+      return false;
+    }
+    const payload: MultiplayerRoomChannelMessage = {
+      type: "room_channel",
+      id: `${options.idPrefix}-${this.localPlayerId}-${timestamp}`,
+      channel: options.channel,
+      ...(typeof options.topic === "string" && options.topic.trim().length > 0
+        ? { topic: options.topic.trim().toLowerCase().slice(0, 32) }
+        : {}),
+      playerId: this.localPlayerId,
+      sourcePlayerId: this.localPlayerId,
+      sourceRole: "player",
+      ...(typeof options.title === "string" && options.title.trim().length > 0
+        ? { title: options.title.trim().replace(/\s+/g, " ").slice(0, 80) }
+        : {}),
+      message: normalizedMessage,
+      severity: options.severity ?? "info",
+      ...(options.channel === "direct" &&
+      typeof options.targetPlayerId === "string" &&
+      options.targetPlayerId.trim().length > 0
+        ? { targetPlayerId: options.targetPlayerId.trim() }
+        : {}),
+      timestamp,
+    };
+    return this.multiplayerNetwork?.sendRoomChannelMessage(payload) ?? false;
   }
 
   private triggerTurnNudge(targetPlayerId: string): void {
@@ -2253,17 +2391,16 @@ class Game implements GameCallbacks {
     }
 
     const targetLabel = this.getParticipantLabel(targetPlayerId);
-    const sent = this.multiplayerNetwork?.sendPlayerNotification({
-      type: "player_notification",
-      id: `nudge-${targetPlayerId}-${now}`,
-      playerId: this.localPlayerId,
-      sourcePlayerId: this.localPlayerId,
-      title: "Nudge",
+    const sourceLabel = this.getParticipantBroadcastLabel(this.localPlayerId);
+    const sent = this.sendPlayerRoomChannelMessage({
+      idPrefix: `nudge-${targetPlayerId}`,
+      channel: "direct",
+      topic: "nudge",
+      title: `Nudge from ${sourceLabel}`,
       message: "Your turn is up. Take your turn!",
-      severity: "info",
+      severity: "warning",
       targetPlayerId,
-      timestamp: now,
-    }) ?? false;
+    }, now);
 
     this.nudgeCooldownByPlayerId.set(targetPlayerId, now);
     this.showSeatBubbleForPlayer(targetPlayerId, "Nudged!", {
@@ -2351,7 +2488,10 @@ class Game implements GameCallbacks {
   }
 
   private resolveRealtimeSourcePlayerId(
-    payload: MultiplayerGameUpdateMessage | MultiplayerPlayerNotificationMessage
+    payload:
+      | MultiplayerGameUpdateMessage
+      | MultiplayerPlayerNotificationMessage
+      | MultiplayerRoomChannelMessage
   ): string | null {
     const sourcePlayerId =
       typeof payload.sourcePlayerId === "string" ? payload.sourcePlayerId.trim() : "";
@@ -2421,15 +2561,57 @@ class Game implements GameCallbacks {
         durationMs: 3200,
         isBot: payload.bot === true,
       });
-      if (bubbled) {
+      if (bubbled && payload.targetPlayerId !== this.localPlayerId) {
         return;
       }
     }
 
-    if (tone === "warning" || tone === "error") {
-      const title = payload.title?.trim() || "Multiplayer";
+    if (
+      tone === "warning" ||
+      tone === "error" ||
+      payload.targetPlayerId === this.localPlayerId
+    ) {
+      const title = payload.title?.trim() || (payload.targetPlayerId === this.localPlayerId ? "Direct" : "Multiplayer");
       notificationService.show(`${title}: ${message}`, tone, 3200);
     }
+  }
+
+  private handleMultiplayerRoomChannelMessage(payload: MultiplayerRoomChannelMessage): void {
+    if (this.playMode !== "multiplayer") {
+      return;
+    }
+    const channel = payload.channel === "direct" ? "direct" : "public";
+    const targetPlayerId =
+      typeof payload.targetPlayerId === "string" ? payload.targetPlayerId.trim() : "";
+    if (channel === "direct" && targetPlayerId !== this.localPlayerId) {
+      return;
+    }
+
+    const message = typeof payload.message === "string" ? payload.message.trim() : "";
+    if (!message) {
+      return;
+    }
+    const sourcePlayerId = this.resolveRealtimeSourcePlayerId(payload);
+    const tone =
+      payload.severity === "success" ||
+      payload.severity === "warning" ||
+      payload.severity === "error"
+        ? payload.severity
+        : "info";
+
+    if (sourcePlayerId && sourcePlayerId !== this.localPlayerId) {
+      this.showSeatBubbleForPlayer(sourcePlayerId, message, {
+        tone,
+        durationMs: channel === "direct" ? 3600 : 2600,
+        isBot: payload.bot === true,
+      });
+    }
+
+    const fallbackTitle = channel === "direct" ? "Direct" : "Room";
+    const title = typeof payload.title === "string" && payload.title.trim()
+      ? payload.title.trim()
+      : fallbackTitle;
+    notificationService.show(`${title}: ${message}`, tone, channel === "direct" ? 3600 : 2600);
   }
 
   private handleMultiplayerSessionState(message: MultiplayerSessionStateMessage): void {
@@ -2747,6 +2929,26 @@ class Game implements GameCallbacks {
 
   private handleMultiplayerProtocolError(code: string, message?: string): void {
     if (!this.isMultiplayerTurnEnforced()) {
+      return;
+    }
+
+    if (code === "room_channel_sender_restricted") {
+      notificationService.show("Room chat is restricted for this player.", "warning", 2200);
+      return;
+    }
+
+    if (code === "room_channel_message_blocked") {
+      notificationService.show("Message blocked by room moderation.", "warning", 2200);
+      return;
+    }
+
+    if (code === "room_channel_blocked") {
+      notificationService.show("Message blocked by player privacy settings.", "warning", 2200);
+      return;
+    }
+
+    if (code === "room_channel_invalid_message") {
+      notificationService.show("Message is empty or invalid.", "warning", 1800);
       return;
     }
 
@@ -3495,6 +3697,85 @@ class Game implements GameCallbacks {
     const seatIndex = seatIndices[nextCursor];
     this.selectedSeatFocusIndex = seatIndex;
     this.focusCameraOnSeat(seatIndex);
+  }
+
+  openMultiplayerPublicMessageComposer(): void {
+    if (!this.canComposeRoomChannelMessage()) {
+      return;
+    }
+    const message = this.normalizeComposedRoomChannelMessage(
+      window.prompt("Send a room message:", "")
+    );
+    if (!message) {
+      return;
+    }
+
+    const sourceLabel = this.getParticipantBroadcastLabel(this.localPlayerId);
+    const sent = this.sendPlayerRoomChannelMessage({
+      idPrefix: "chat-public",
+      channel: "public",
+      topic: "chat",
+      title: sourceLabel,
+      message,
+      severity: "info",
+    });
+
+    if (!sent) {
+      notificationService.show("Unable to send room message.", "warning", 1800);
+      return;
+    }
+    notificationService.show("Room message sent.", "success", 1200);
+  }
+
+  openMultiplayerWhisperComposer(): void {
+    if (!this.canComposeRoomChannelMessage()) {
+      return;
+    }
+    const whisperTargets = this.getWhisperTargets();
+    if (whisperTargets.length === 0) {
+      notificationService.show("No player available to whisper.", "info", 1800);
+      return;
+    }
+
+    const targetPrompt = whisperTargets
+      .map((target, index) => `${index + 1}. ${target.label}`)
+      .join("\n");
+    const targetInput = window.prompt(
+      `Whisper target:\n${targetPrompt}\nType number, player name, or player id.`,
+      ""
+    );
+    if (typeof targetInput !== "string") {
+      return;
+    }
+    const targetPlayerId = this.resolveWhisperTargetPlayerId(targetInput);
+    if (!targetPlayerId) {
+      notificationService.show("Whisper target not recognized.", "warning", 2000);
+      return;
+    }
+    const targetLabel = this.getParticipantBroadcastLabel(targetPlayerId);
+    const message = this.normalizeComposedRoomChannelMessage(
+      window.prompt(`Whisper to ${targetLabel}:`, "")
+    );
+    if (!message) {
+      return;
+    }
+
+    const sourceLabel = this.getParticipantBroadcastLabel(this.localPlayerId);
+    const sent = this.sendPlayerRoomChannelMessage({
+      idPrefix: `chat-whisper-${targetPlayerId}`,
+      channel: "direct",
+      topic: "whisper",
+      title: `Whisper from ${sourceLabel}`,
+      message,
+      severity: "info",
+      targetPlayerId,
+    });
+
+    if (!sent) {
+      notificationService.show("Unable to send whisper.", "warning", 1800);
+      return;
+    }
+    notificationService.show(`Whisper sent to ${targetLabel}.`, "success", 1400);
   }
 
   private focusCameraOnSeat(seatIndex: number): void {

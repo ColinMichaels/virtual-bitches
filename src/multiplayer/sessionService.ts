@@ -15,6 +15,7 @@ type JoinSessionOptions = {
   displayName?: string;
   avatarUrl?: string;
   providerId?: string;
+  blockedPlayerIds?: string[];
   botCount?: number;
 };
 
@@ -46,6 +47,7 @@ export class MultiplayerSessionService {
       displayName?: string;
       avatarUrl?: string;
       providerId?: string;
+      blockedPlayerIds?: string[];
       botCount?: number;
       gameDifficulty?: MultiplayerGameDifficulty;
     } = {}
@@ -56,6 +58,7 @@ export class MultiplayerSessionService {
       displayName: options.displayName,
       avatarUrl: options.avatarUrl,
       providerId: options.providerId,
+      blockedPlayerIds: options.blockedPlayerIds,
       botCount: options.botCount,
       gameDifficulty: options.gameDifficulty,
     });
@@ -75,6 +78,7 @@ export class MultiplayerSessionService {
       displayName: joinOptions.displayName,
       avatarUrl: joinOptions.avatarUrl,
       providerId: joinOptions.providerId,
+      blockedPlayerIds: joinOptions.blockedPlayerIds,
       botCount: joinOptions.botCount,
     });
     if (!joinResult.session) {
@@ -97,6 +101,7 @@ export class MultiplayerSessionService {
       displayName: joinOptions.displayName,
       avatarUrl: joinOptions.avatarUrl,
       providerId: joinOptions.providerId,
+      blockedPlayerIds: joinOptions.blockedPlayerIds,
       botCount: joinOptions.botCount,
     });
     if (!joinResult.session) {
@@ -269,14 +274,22 @@ export class MultiplayerSessionService {
       typeof options.avatarUrl === "string" && options.avatarUrl.trim().length > 0;
     const hasProviderId =
       typeof options.providerId === "string" && options.providerId.trim().length > 0;
+    const hasBlockedPlayerIds = Array.isArray(options.blockedPlayerIds);
     const parsedBotCount =
       typeof options.botCount === "number" && Number.isFinite(options.botCount)
         ? Math.max(0, Math.floor(options.botCount))
         : undefined;
+    const blockedPlayerIds = hasBlockedPlayerIds
+      ? options.blockedPlayerIds
+          ?.filter((value): value is string => typeof value === "string")
+          .map((value) => value.trim())
+          .filter((value, index, values) => value.length > 0 && values.indexOf(value) === index)
+      : undefined;
     return {
       displayName: hasDisplayName ? options.displayName : undefined,
       avatarUrl: hasAvatarUrl ? options.avatarUrl : undefined,
       providerId: hasProviderId ? options.providerId : undefined,
+      blockedPlayerIds,
       botCount: parsedBotCount,
     };
   }

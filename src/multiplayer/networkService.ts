@@ -62,6 +62,24 @@ export interface MultiplayerPlayerNotificationMessage {
   bot?: boolean;
 }
 
+export type MultiplayerRoomChannelType = "public" | "direct";
+
+export interface MultiplayerRoomChannelMessage {
+  type: "room_channel";
+  id?: string;
+  channel: MultiplayerRoomChannelType;
+  topic?: string;
+  playerId?: string;
+  sourcePlayerId?: string;
+  sourceRole?: "player" | "admin" | "service" | "system" | "bot";
+  title?: string;
+  message: string;
+  severity?: "info" | "success" | "warning" | "error";
+  targetPlayerId?: string;
+  timestamp?: number;
+  bot?: boolean;
+}
+
 export type MultiplayerTurnPhase = "await_roll" | "await_score" | "ready_to_end";
 export type MultiplayerGameDifficulty = "easy" | "normal" | "hard";
 
@@ -290,6 +308,19 @@ function isMultiplayerPlayerNotificationMessage(
   return msg.type === "player_notification" && typeof msg.message === "string";
 }
 
+function isMultiplayerRoomChannelMessage(
+  value: unknown
+): value is MultiplayerRoomChannelMessage {
+  if (!value || typeof value !== "object") return false;
+
+  const msg = value as Partial<MultiplayerRoomChannelMessage>;
+  return (
+    msg.type === "room_channel" &&
+    (msg.channel === "public" || msg.channel === "direct") &&
+    typeof msg.message === "string"
+  );
+}
+
 function isMultiplayerTurnStartMessage(value: unknown): value is MultiplayerTurnStartMessage {
   if (!value || typeof value !== "object") return false;
 
@@ -420,6 +451,13 @@ export class MultiplayerNetworkService {
     if (isMultiplayerPlayerNotificationMessage(parsed)) {
       this.eventTarget.dispatchEvent(
         createCustomEvent("multiplayer:notification:received", parsed)
+      );
+      return;
+    }
+
+    if (isMultiplayerRoomChannelMessage(parsed)) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:channel:received", parsed)
       );
       return;
     }
@@ -594,6 +632,26 @@ export class MultiplayerNetworkService {
     );
   };
 
+  private readonly onRoomChannelSend = (event: Event) => {
+    const custom = event as CustomEvent<MultiplayerRoomChannelMessage>;
+    if (!custom.detail) return;
+    const sent = this.sendRoomChannelMessage(custom.detail);
+    if (sent) {
+      this.eventTarget.dispatchEvent(
+        createCustomEvent("multiplayer:channel:sent", {
+          message: custom.detail,
+        })
+      );
+      return;
+    }
+
+    this.eventTarget.dispatchEvent(
+      createCustomEvent("multiplayer:channel:sendFailed", {
+        message: custom.detail,
+      })
+    );
+  };
+
   private readonly onTurnEndSend = (event: Event) => {
     const custom = event as CustomEvent<MultiplayerTurnEndMessage>;
     if (!custom.detail) return;
@@ -669,6 +727,10 @@ export class MultiplayerNetworkService {
       "multiplayer:notification:send",
       this.onPlayerNotificationSend
     );
+    this.eventTarget.addEventListener(
+      "multiplayer:channel:send",
+      this.onRoomChannelSend
+    );
     this.eventTarget.addEventListener("multiplayer:turn:end:send", this.onTurnEndSend);
     this.eventTarget.addEventListener(
       "multiplayer:turn:action:send",
@@ -689,6 +751,10 @@ export class MultiplayerNetworkService {
     this.eventTarget.removeEventListener(
       "multiplayer:notification:send",
       this.onPlayerNotificationSend
+    );
+    this.eventTarget.removeEventListener(
+      "multiplayer:channel:send",
+      this.onRoomChannelSend
     );
     this.eventTarget.removeEventListener("multiplayer:turn:end:send", this.onTurnEndSend);
     this.eventTarget.removeEventListener(
@@ -744,6 +810,10 @@ export class MultiplayerNetworkService {
   }
 
   sendPlayerNotification(message: MultiplayerPlayerNotificationMessage): boolean {
+    return this.sendRaw(message);
+  }
+
+  sendRoomChannelMessage(message: MultiplayerRoomChannelMessage): boolean {
     return this.sendRaw(message);
   }
 

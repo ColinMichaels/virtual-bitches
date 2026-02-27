@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-27 (camera assist + updates commit-link pass)
+**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-27 (camera assist + updates commit-link + multiplayer room channels)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -113,6 +113,24 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - [ ] Create first-pass Player Emote System TODO spec (replace temporary seat text usage with structured emote/vo line system).
   - [ ] Run focused device QA pass (iPhone + Android + iPad) for settings, updates panel links, and camera focus flows.
 
+#### Multiplayer Room Channel Messaging (2026-02-27)
+- **Status**: 🟡 Core transport complete; UX and block-management UI follow-up pending
+- **Completed**:
+  - ✅ Added websocket `room_channel` messaging contract for `public` and `direct` channels.
+  - ✅ Routed turn nudge actions through direct room-channel delivery.
+  - ✅ Added player send shortcuts:
+    - `M` for public room messages
+    - `W` for direct whispers
+  - ✅ Added server-side moderation/privacy checks:
+    - deny-list senders via `MULTIPLAYER_ROOM_CHANNEL_BAD_PLAYER_IDS`
+    - deny-list content via `MULTIPLAYER_ROOM_CHANNEL_BAD_TERMS`
+    - enforce per-player block-list rules on both direct and public message delivery
+  - ✅ Added `blockedPlayerIds` support to player profile/session ingestion paths.
+- **Follow-up**:
+  - [ ] Replace temporary `window.prompt(...)` compose flow with in-game chat/whisper modal UI.
+  - [ ] Add block/unblock controls in Profile/Settings and sync with `blockedPlayerIds`.
+  - [ ] Add API/WebSocket integration test coverage for moderation rejection codes (`room_channel_*`).
+
 ### Multiplayer Room Lifecycle, Recovery UX, and Tutorial Quality Pass (2026-02-26)
 - **Status**: ✅ Foundation COMPLETE, follow-up polish tasks queued
 - **Scope**: Reliability and usability upgrades for multiplayer sessions, fallback behavior, and onboarding flow
@@ -150,7 +168,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
     - Hard mode keeps tighter conservative scoring + faster decision tempo
   - [ ] Next bot pass: add dynamic playstyle shifts by match phase (opening/midgame/endgame) and player trend adaptation
   - ✅ Added optional replay-tutorial entry point from splash screen (pre-game)
-  - [ ] Add regression test ensuring no browser `confirm/prompt` remains in gameplay paths
+  - [ ] Add regression test ensuring no browser `confirm(...)` remains in gameplay paths and migrate temporary chat `prompt(...)` compose flow to in-game modal UI
 
 ### Mobile Menu + iOS Responsive + Admin Console UX Pass (2026-02-26)
 - **Status**: ✅ Complete

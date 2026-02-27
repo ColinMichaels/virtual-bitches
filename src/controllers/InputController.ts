@@ -39,6 +39,8 @@ export interface GameCallbacks {
   focusCameraOnDie: (dieId: string) => void;
   canCyclePlayerFocus: () => boolean;
   cyclePlayerFocus: (direction: 1 | -1) => void;
+  openMultiplayerPublicMessageComposer: () => void;
+  openMultiplayerWhisperComposer: () => void;
 }
 
 export class InputController {
@@ -630,6 +632,20 @@ export class InputController {
       audioService.playSfx("click");
       hapticsService.buttonPress();
       this.chaosUpgradeMenu.toggle();
+      return;
+    }
+
+    // 'M' key - multiplayer room message
+    if (code === "KeyM" && !animating && !paused) {
+      e.preventDefault();
+      this.callbacks.openMultiplayerPublicMessageComposer();
+      return;
+    }
+
+    // 'W' key - multiplayer whisper
+    if (code === "KeyW" && !animating && !paused) {
+      e.preventDefault();
+      this.callbacks.openMultiplayerWhisperComposer();
       return;
     }
   }
