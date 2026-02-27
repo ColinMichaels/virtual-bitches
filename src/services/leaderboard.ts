@@ -3,6 +3,7 @@ import {
   type AuthenticatedUserProfile,
   type GlobalLeaderboardEntry,
 } from "./backendApi.js";
+import { environment } from "@env";
 import { scoreHistoryService, type GameScore } from "./score-history.js";
 import { logger } from "../utils/logger.js";
 import { firebaseAuthService } from "./firebaseAuth.js";
@@ -149,9 +150,12 @@ export class LeaderboardService {
 
     const entries = await backendApiService.getGlobalLeaderboard(limit);
     if (!entries) {
+      const boundedLimit = Math.max(1, Math.min(200, Math.floor(limit)));
       log.error("Failed to load global leaderboard from API", {
         limit,
         online: isNavigatorOnline(),
+        apiBaseUrl: environment.apiBaseUrl,
+        endpoint: `${normalizeApiBaseUrl(environment.apiBaseUrl)}/leaderboard/global?limit=${boundedLimit}`,
       });
       this.syncStatus.state = isNavigatorOnline() ? "error" : "offline";
       this.syncStatus.lastErrorAt = Date.now();
@@ -270,4 +274,11 @@ function isNavigatorOnline(): boolean {
     return true;
   }
   return navigator.onLine;
+}
+
+function normalizeApiBaseUrl(baseUrl: string): string {
+  if (!baseUrl) {
+    return "/api";
+  }
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 }

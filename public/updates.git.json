@@ -1,8 +1,50 @@
 {
-  "generatedAt": "2026-02-27T05:09:00.404Z",
+  "generatedAt": "2026-02-27T12:37:27.598Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-094c065",
+      "date": "2026-02-27T05:23:32.000Z",
+      "title": "Update bot avatar selection and improve randomness logic",
+      "content": "<p>Update bot avatar selection and improve randomness logic</p><p><strong>Commit:</strong> <code>094c065</code></p><p>- Adjusted bot avatar rotation to ensure unique assignment using retries (`BOT_MEME_UNIQUE_ATTEMPTS`).</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "094c065fb25258e352a0de702c0abd4da6a73048",
+        "shortHash": "094c065",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/094c065fb25258e352a0de702c0abd4da6a73048"
+      }
+    },
+    {
+      "id": "git-03a1316",
+      "date": "2026-02-27T05:16:40.000Z",
+      "title": "Make `/api/players/:playerId/scores` endpoint public",
+      "content": "<p>Make `/api/players/:playerId/scores` endpoint public</p><p><strong>Commit:</strong> <code>03a1316</code></p><p>- Removed auth requirement for score history reads to ensure leaderboard and personal history views remain accessible for guests and clients with stale session tokens.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "03a131609aeb257f269f8caa2259948badec15fc",
+        "shortHash": "03a1316",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/03a131609aeb257f269f8caa2259948badec15fc"
+      }
+    },
+    {
+      "id": "git-87614b3",
+      "date": "2026-02-27T05:09:53.000Z",
+      "title": "Add image proxy support for bot meme avatars and backend fetch handling",
+      "content": "<p>Add image proxy support for bot meme avatars and backend fetch handling</p><p><strong>Commit:</strong> <code>87614b3</code></p><p>- Implemented `/api/media/image-proxy` endpoint for secure image fetching and CORS mitigation.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "87614b31ad67a3efd79d83255fc4253345621a83",
+        "shortHash": "87614b3",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/87614b31ad67a3efd79d83255fc4253345621a83"
+      }
+    },
     {
       "id": "git-9fe47e9",
       "date": "2026-02-27T04:59:34.000Z",
@@ -519,48 +561,6 @@
         "hash": "849d39de934907a34f79d7eee90ece54b16f5549",
         "shortHash": "849d39d",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/849d39de934907a34f79d7eee90ece54b16f5549"
-      }
-    },
-    {
-      "id": "git-9702b1e",
-      "date": "2026-02-26T15:32:03.000Z",
-      "title": "Enhance bot decision-making and UI for game difficulty, multiplayer, and turn nudges",
-      "content": "<p>Enhance bot decision-making and UI for game difficulty, multiplayer, and turn nudges</p><p><strong>Commit:</strong> <code>9702b1e</code></p><p>- Integrated risk-aware candidate prioritization for &quot;easy&quot; bot difficulty in `bot/engine.mjs` with injected high-risk scoring mistakes.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "9702b1ea34bfecdd2f528e6179c153f7c2259034",
-        "shortHash": "9702b1e",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9702b1ea34bfecdd2f528e6179c153f7c2259034"
-      }
-    },
-    {
-      "id": "git-a27150c",
-      "date": "2026-02-26T15:16:49.000Z",
-      "title": "Throttle ParticleService logs to reduce noise",
-      "content": "<p>Throttle ParticleService logs to reduce noise</p><p><strong>Commit:</strong> <code>a27150c</code></p><p>- Introduced throttling for repetitive warnings and errors in `ParticleService` to minimize log spam.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "a27150c88b2ad883706c67549280fe647432a6c2",
-        "shortHash": "a27150c",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a27150c88b2ad883706c67549280fe647432a6c2"
-      }
-    },
-    {
-      "id": "git-c4f2fe9",
-      "date": "2026-02-26T14:37:28.000Z",
-      "title": "Enhance seat rendering and multiplayer notifications",
-      "content": "<p>Enhance seat rendering and multiplayer notifications</p><p><strong>Commit:</strong> <code>c4f2fe9</code></p><p>- Added chat bubble rendering for player seats, including customizable tone, duration, and visibility logic.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "c4f2fe9c1b543679fa1bcb5a677087bf7a551d75",
-        "shortHash": "c4f2fe9",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c4f2fe9c1b543679fa1bcb5a677087bf7a551d75"
       }
     }
   ]

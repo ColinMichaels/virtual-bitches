@@ -32,6 +32,19 @@ function jsonResponse(payload: unknown, status: number = 200): Response {
   });
 }
 
+function textResponse(
+  payload: string,
+  status: number = 200,
+  contentType: string = "text/plain"
+): Response {
+  return new Response(payload, {
+    status,
+    headers: {
+      "content-type": contentType,
+    },
+  });
+}
+
 interface FetchCall {
   url: string;
   init?: RequestInit;
@@ -434,6 +447,76 @@ await test("uses firebase token provider for leaderboard submission", async () =
     "Bearer firebase-id-token",
     "Expected Firebase token on leaderboard request"
   );
+});
+
+await test("supports legacy array payload for global leaderboard fetch", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    jsonResponse([
+      {
+        id: "entry-1",
+        uid: "uid-1",
+        displayName: "Player One",
+        score: 42,
+        timestamp: Date.now(),
+        duration: 1234,
+        rollCount: 5,
+      },
+    ]);
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.getGlobalLeaderboard(50);
+
+  if (!result) {
+    throw new Error("Expected leaderboard array response");
+  }
+  assertEqual(result.length, 1, "Expected one leaderboard entry");
+  assertEqual(fetchCalls.length, 1, "Expected one fetch call");
+  assertEqual(
+    fetchCalls[0].url,
+    "https://api.example.com/api/leaderboard/global?limit=50",
+    "Expected bounded global leaderboard endpoint"
+  );
+});
+
+await test("parses leaderboard payload when content-type is text/plain", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    textResponse(
+      JSON.stringify({
+        entries: [
+          {
+            id: "entry-plain-1",
+            uid: "uid-plain-1",
+            displayName: "Plain Text Header",
+            score: 21,
+            timestamp: Date.now(),
+            duration: 900,
+            rollCount: 4,
+          },
+        ],
+      }),
+      200,
+      "text/plain"
+    );
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.getGlobalLeaderboard(25);
+
+  if (!result) {
+    throw new Error("Expected leaderboard payload parsed from text/plain");
+  }
+  assertEqual(result.length, 1, "Expected one parsed leaderboard entry");
 });
 
 await test("does not attempt session refresh for firebase-auth request", async () => {
