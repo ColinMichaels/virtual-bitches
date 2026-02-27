@@ -12,6 +12,7 @@ import { getBrandLogoUrl } from "../services/assetUrl.js";
 import { gameBrand } from "../config/brand.js";
 import { getLocale, setLocale, t, type LocaleCode } from "../i18n/index.js";
 import { confirmAction } from "./confirmModal.js";
+import { environment } from "@env";
 
 const log = logger.create("SplashScreen");
 
@@ -147,6 +148,7 @@ export class SplashScreen {
         <div class="splash-buttons">
           <button id="start-game-btn" class="btn btn-primary primary splash-btn">${t("splash.button.startGame")}</button>
           <button id="splash-rules-btn" class="btn btn-secondary splash-btn">${t("splash.button.howToPlay")}</button>
+          <button id="splash-feedback-btn" class="btn btn-secondary splash-btn">${t("splash.button.feedback")}</button>
           <button id="splash-leaderboard-btn" class="btn btn-secondary splash-btn">${t("splash.button.leaderboard")}</button>
           <button id="splash-settings-btn" class="btn btn-secondary splash-btn">${t("splash.button.settings")}</button>
         </div>
@@ -299,6 +301,15 @@ export class SplashScreen {
     document.getElementById("splash-rules-btn")?.addEventListener("click", () => {
       audioService.playSfx("click");
       onRules();
+    });
+
+    document.getElementById("splash-feedback-btn")?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      const feedbackUrl = environment.feedbackFormUrl?.trim() || "/feedback";
+      const opened = window.open(feedbackUrl, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        window.location.assign(feedbackUrl);
+      }
     });
 
     document.getElementById("splash-leaderboard-btn")?.addEventListener("click", () => {

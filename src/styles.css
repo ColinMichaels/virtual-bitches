@@ -1681,6 +1681,13 @@ input[type="range"] {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding:
+    max(10px, env(safe-area-inset-top))
+    max(10px, env(safe-area-inset-right))
+    max(10px, env(safe-area-inset-bottom))
+    max(10px, env(safe-area-inset-left));
+  box-sizing: border-box;
+  overflow-y: auto;
   opacity: 1;
   transition: opacity 0.5s ease-out;
 }
@@ -1735,7 +1742,12 @@ body.splash-active :is(
     0 46px 112px rgba(0, 0, 0, 0.72),
     0 0 130px rgba(20, 54, 112, 0.34),
     inset 0 -34px 62px rgba(0, 0, 0, 0.28);
-  overflow: visible;
+  max-width: min(980px, 100%);
+  max-height: calc(
+    100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px
+  );
+  overflow-y: auto;
+  overflow-x: visible;
   animation: slideUp 0.8s ease-out;
 }
 
@@ -2016,10 +2028,11 @@ body.splash-active :is(
 .splash-buttons {
   display: flex;
   gap: 16px;
+  row-gap: 12px;
   flex-wrap: wrap;
   justify-content: center;
   max-width: 860px;
-  margin: 0 auto;
+  margin: 8px auto 0;
 }
 
 .splash-btn {
@@ -4857,8 +4870,13 @@ body.splash-active :is(
   }
 
   /* Splash Screen */
+  #splash-screen {
+    align-items: flex-start;
+  }
+
   .splash-content {
     padding: 40px 30px;
+    margin: 0 auto;
   }
 
   .splash-logo {
@@ -4921,11 +4939,14 @@ body.splash-active :is(
   .splash-buttons {
     flex-direction: column;
     width: 100%;
+    gap: 10px;
   }
 
   .splash-btn {
     width: 100%;
     min-width: unset;
+    font-size: 15px;
+    padding: 11px 18px;
   }
 
   /* Leaderboard */

@@ -21,6 +21,10 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const isProduction = mode === "production";
   const apiProxyTarget = env.VITE_API_PROXY_TARGET?.trim() || "http://localhost:3000";
+  const feedbackFormUrl =
+    env.FEEDBACK_FORM_URL?.trim() ||
+    env.VITE_FEEDBACK_FORM_URL?.trim() ||
+    "https://docs.google.com/forms/d/e/1FAIpQLSeB0EGnrvQ5G3sbyOoW9rtcA1BNPbZo_NCFRejntquZ-z1o6w/viewform";
   const facebookShareMetaTemplate = readFileSync(
     resolve(__dirname, "src/social/share/facebook-share-meta.template.html"),
     "utf8"
@@ -50,6 +54,33 @@ export default defineConfig(({ mode }) => {
   return {
     base: "./",
     plugins: [
+      {
+        name: "feedback-redirect",
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            const pathname = req.url?.split("?")[0] ?? "";
+            if (pathname !== "/feedback") {
+              next();
+              return;
+            }
+            res.statusCode = 302;
+            res.setHeader("Location", feedbackFormUrl);
+            res.end();
+          });
+        },
+        configurePreviewServer(server) {
+          server.middlewares.use((req, res, next) => {
+            const pathname = req.url?.split("?")[0] ?? "";
+            if (pathname !== "/feedback") {
+              next();
+              return;
+            }
+            res.statusCode = 302;
+            res.setHeader("Location", feedbackFormUrl);
+            res.end();
+          });
+        },
+      },
       {
         name: "inject-facebook-share-meta-template",
         transformIndexHtml(html) {

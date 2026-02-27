@@ -26,6 +26,7 @@ export const esES: TranslationDictionary = {
   "splash.playModeAria": "Selecciona modo de juego",
   "splash.button.startGame": "Iniciar juego",
   "splash.button.howToPlay": "Como jugar",
+  "splash.button.feedback": "Comentarios",
   "splash.button.leaderboard": "Clasificacion",
   "splash.button.settings": "Configuracion",
   "splash.multiplayer.createRoomBots": "Bots al crear sala",
