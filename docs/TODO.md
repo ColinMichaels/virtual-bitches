@@ -8,6 +8,17 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 
 ## 🔴 High Priority
 
+### Branding + I18N Overhaul (2026-02-27)
+- **Status**: 🟡 Planned
+- **Plan Doc**: `docs/BRAND-I18N-ROLL-OUT-PLAN.md`
+- **Summary**:
+  - Centralize game branding into typed config (`productName`, logo/meta fields, age gate metadata)
+  - Add safe, case-preserving brand replacement tooling with protected infra/deploy allowlists
+  - Implement typed localization system and migrate UI text in waves (shell first, gameplay messaging second)
+- **Immediate Next Step**:
+  - [x] Execute Phase 0 (safety tooling + dry-run audit) before any mass replacement writes
+  - [ ] Continue Phase 1 integration (brand config wiring for remaining shell/meta/splash surfaces)
+
 ### Camera System & Machinima Tools (Phase 1 COMPLETE, Phase 2 PARTIAL) 📷
 - **Status**: ✅ Phase 1 COMPLETE (2026-02-24) • 🟡 Phase 2 PARTIAL (2026-02-25 foundation work)
 - **Complexity**: Medium (Phase 1), Very High (Full System)

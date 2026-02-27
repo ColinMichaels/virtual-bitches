@@ -6,6 +6,7 @@ import { settingsService } from "./services/settings.js";
 import { getBrandLogoUrl } from "./services/assetUrl.js";
 import { environment } from "@env";
 import { logger } from "./utils/logger.js";
+import { applyBrandMetadataToDocument } from "./config/brand.js";
 import type { SplashStartOptions } from "./ui/splash.js";
 import { initializeFacebookShareMeta } from "./social/share/facebookShareMeta.js";
 
@@ -54,6 +55,7 @@ let lastFirebaseReauthPromptAt = 0;
 
 registerAuthSessionHandlers();
 hydrateBrandAssets();
+applyBrandMetadataToDocument();
 initializeFacebookShareMeta();
 applyMobileDiceLayoutPreference(settingsService.getSettings().controls.mobileDiceLayout);
 settingsService.onChange((settings) => {

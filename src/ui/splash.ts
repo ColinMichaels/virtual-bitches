@@ -4,12 +4,12 @@
  */
 
 import { audioService } from "../services/audio.js";
-import { environment } from "../environments/environment.js";
 import { logger } from "../utils/logger.js";
 import type { MultiplayerRoomListing } from "../services/backendApi.js";
 import type { SplashBackground3D } from "./splashBackground3d.js";
 import { getLocalPlayerId } from "../services/playerIdentity.js";
 import { getBrandLogoUrl } from "../services/assetUrl.js";
+import { gameBrand } from "../config/brand.js";
 
 const log = logger.create("SplashScreen");
 
@@ -47,7 +47,7 @@ export class SplashScreen {
       }
     | null = null;
   private roomListLoading = false;
-  gameTitle = environment.gameTitle;
+  gameTitle = gameBrand.productName;
 
   constructor(
     onStart: (options: SplashStartOptions) => boolean | Promise<boolean>,

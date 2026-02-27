@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "brand:audit": "node scripts/brand-audit.mjs",
+    "brand:rewrite": "node scripts/brand-rewrite.mjs",
+    "test:brand-rewrite": "node scripts/brand-rewrite.test.mjs",
     "updates:generate": "node scripts/generate-updates-from-git.mjs",
     "copy:assets": "node scripts/copy-assets.mjs",
     "copy:assets:sync": "node scripts/copy-assets.mjs --sync-themes",

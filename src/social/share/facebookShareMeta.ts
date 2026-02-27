@@ -1,9 +1,11 @@
+import { gameBrand } from "../../config/brand.js";
+
 const DEFAULT_CANONICAL_URL = "https://biscuits-488600.web.app/";
 const DEFAULT_OG_IMAGE =
   "https://storage.googleapis.com/biscuits-488600.firebasestorage.app/assets/ads/betahelp_ad.png";
-const DEFAULT_TITLE = "BISCUITS - Push Your Luck Dice Game";
-const DEFAULT_DESCRIPTION = "Roll low, score lower, and challenge friends in BISCUITS.";
-const DEFAULT_IMAGE_ALT = "BISCUITS alpha tester callout artwork.";
+const DEFAULT_TITLE = gameBrand.ogTitle;
+const DEFAULT_DESCRIPTION = gameBrand.ogDescription;
+const DEFAULT_IMAGE_ALT = `${gameBrand.productName} share artwork.`;
 const DEFAULT_FB_APP_ID = "";
 
 const SHARE_QUERY_PARAM_ALLOWLIST = new Set(["seed", "score", "log", "difficulty", "variant"]);
@@ -41,7 +43,9 @@ export function initializeFacebookShareMeta(): void {
   const score = hasScore ? Math.max(0, Math.floor(rawScore)) : null;
 
   const challengeTitle =
-    seededChallenge && score !== null ? `BISCUITS Challenge - Beat ${score}` : DEFAULT_TITLE;
+    seededChallenge && score !== null
+      ? `${gameBrand.productName} Challenge - Beat ${score}`
+      : DEFAULT_TITLE;
   const challengeDescription =
     seededChallenge && score !== null
       ? `Try seed ${seededChallenge} and beat score ${score}.`

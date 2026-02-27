@@ -4,6 +4,8 @@
  * Separate from splash screen - shows transient loading state
  */
 
+import { gameBrand } from "../config/brand.js";
+
 export interface LoadingTask {
   name: string;
   weight: number; // Relative weight for progress calculation (0-1)
@@ -28,7 +30,7 @@ export class LoadingScreen {
         <div class="loading-spinner">
           <div class="dice-icon">🎲</div>
         </div>
-        <h2 class="loading-title">Loading BISCUITS</h2>
+        <h2 class="loading-title">Loading ${gameBrand.productName}</h2>
         <div class="loading-status">Initializing...</div>
         <div class="loading-progress-container">
           <div class="loading-progress-bar"></div>

@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-02-27T16:47:52.617Z",
+  "generatedAt": "2026-02-27T17:05:46.741Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-9beabb4",
+      "date": "2026-02-27T16:55:23.000Z",
+      "title": "Add post-game lifecycle and next-game queuing logic",
+      "content": "<p>Add post-game lifecycle and next-game queuing logic</p><p><strong>Commit:</strong> <code>9beabb4</code></p><p>- Implemented lifecycle management for post-game sessions with inactivity handling and countdowns.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "9beabb472f11c1c5f5496e279a99a23a208f7c78",
+        "shortHash": "9beabb4",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9beabb472f11c1c5f5496e279a99a23a208f7c78"
+      }
+    },
     {
       "id": "git-3224403",
       "date": "2026-02-27T16:28:39.000Z",
@@ -547,20 +561,6 @@
         "hash": "a2be08b3692a76880391929ce60dcdec0f73e47a",
         "shortHash": "a2be08b",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a2be08b3692a76880391929ce60dcdec0f73e47a"
-      }
-    },
-    {
-      "id": "git-dc3197d",
-      "date": "2026-02-26T21:49:44.000Z",
-      "title": "Add player score syncing and retrieval features",
-      "content": "<p>Add player score syncing and retrieval features</p><p><strong>Commit:</strong> <code>dc3197d</code></p><p>- Implemented backend API endpoints for handling player scores:</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "dc3197d3d813021f6be90476389e2a23b0eb53cb",
-        "shortHash": "dc3197d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/dc3197d3d813021f6be90476389e2a23b0eb53cb"
       }
     }
   ]

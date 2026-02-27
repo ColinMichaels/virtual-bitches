@@ -25,6 +25,20 @@ export default defineConfig(({ mode }) => {
     resolve(__dirname, "src/social/share/facebook-share-meta.template.html"),
     "utf8"
   );
+  const brandProductName = env.VITE_BRAND_PRODUCT_NAME?.trim() || "BISCUITS";
+  const brandOgTitle = env.VITE_BRAND_OG_TITLE?.trim() || `${brandProductName} - Push Your Luck Dice Game`;
+  const brandOgDescription =
+    env.VITE_BRAND_OG_DESCRIPTION?.trim() ||
+    `Roll low, score lower, and challenge friends in ${brandProductName}.`;
+  const brandOgImageAlt = env.VITE_BRAND_OG_IMAGE_ALT?.trim() || `${brandProductName} share artwork.`;
+
+  const applyBrandTokens = (value: string): string =>
+    value
+      .replaceAll("__BRAND_PRODUCT_NAME__", brandProductName)
+      .replaceAll("__BRAND_OG_TITLE__", brandOgTitle)
+      .replaceAll("__BRAND_OG_DESCRIPTION__", brandOgDescription)
+      .replaceAll("__BRAND_OG_IMAGE_ALT__", brandOgImageAlt);
+  const brandedFacebookShareMetaTemplate = applyBrandTokens(facebookShareMetaTemplate);
 
   // Determine which environment file to use
   const envFile = isProduction
@@ -39,7 +53,10 @@ export default defineConfig(({ mode }) => {
       {
         name: "inject-facebook-share-meta-template",
         transformIndexHtml(html) {
-          return html.replace("<!-- FACEBOOK_SHARE_META_TEMPLATE -->", facebookShareMetaTemplate);
+          return applyBrandTokens(html).replace(
+            "<!-- FACEBOOK_SHARE_META_TEMPLATE -->",
+            brandedFacebookShareMetaTemplate
+          );
         },
       },
       viteStaticCopy({

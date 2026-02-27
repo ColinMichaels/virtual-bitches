@@ -1,4 +1,5 @@
 import { logger } from "../utils/logger.js";
+import { gameBrand } from "../config/brand.js";
 
 const log = logger.create('PWA');
 
@@ -155,7 +156,7 @@ class PWAService {
     banner.innerHTML = `
       <div class="pwa-banner-content">
         <div class="pwa-banner-text">
-          <strong>Install BISCUITS</strong>
+          <strong>Install ${gameBrand.productName}</strong>
           <p>Add to home screen for quick access and offline play</p>
         </div>
         <div class="pwa-banner-actions">
@@ -197,7 +198,7 @@ class PWAService {
     notification.innerHTML = `
       <div class="pwa-update-content">
         <strong>Update Available</strong>
-        <p>A new version of BISCUITS is ready</p>
+        <p>A new version of ${gameBrand.productName} is ready</p>
         <button id="pwa-update-btn" class="btn btn-primary primary">Reload</button>
       </div>
     `;
