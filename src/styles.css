@@ -1665,7 +1665,6 @@ button.danger,
 :where(
   .setting-row select,
   .splash-multiplayer-options select,
-  .splash-room-picker select,
   .splash-multiplayer-options input:not([type="checkbox"]),
   .settings-account-name-inputs input,
   .global-name-row input,
@@ -1686,7 +1685,6 @@ button.danger,
 :where(
   .setting-row select,
   .splash-multiplayer-options select,
-  .splash-room-picker select,
   .splash-multiplayer-options input:not([type="checkbox"]),
   .settings-account-name-inputs input,
   .global-name-row input,
@@ -1703,7 +1701,6 @@ button.danger,
 :where(
   .setting-row select,
   .splash-multiplayer-options select,
-  .splash-room-picker select,
   .splash-multiplayer-options input:not([type="checkbox"]),
   .settings-account-name-inputs input,
   .global-name-row input,
@@ -2081,16 +2078,198 @@ body.splash-active :is(
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
+.splash-multiplayer-launch {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 18px;
+}
+
+.splash-multiplayer-open-btn {
+  min-width: 240px;
+  padding: 10px 18px;
+}
+
+.splash-multiplayer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1015;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding:
+    max(10px, env(safe-area-inset-top))
+    max(10px, env(safe-area-inset-right))
+    max(10px, env(safe-area-inset-bottom))
+    max(10px, env(safe-area-inset-left));
+  box-sizing: border-box;
+}
+
+.splash-multiplayer-overlay.is-open {
+  display: flex;
+}
+
+.splash-multiplayer-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(2, 6, 16, 0.72);
+  backdrop-filter: blur(6px);
+  cursor: default;
+}
+
 .splash-multiplayer-options {
+  position: relative;
+  z-index: 1;
+  width: min(960px, 100%);
+  max-height: calc(
+    100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px
+  );
+  overflow-y: auto;
+  margin: 0;
+  padding: 20px 22px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background:
+    radial-gradient(116% 102% at 50% -10%, rgba(54, 84, 136, 0.42), rgba(12, 24, 46, 0.94) 52%, rgba(4, 10, 22, 0.98) 100%);
+  box-shadow:
+    0 24px 56px rgba(0, 0, 0, 0.56),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 12px;
+  text-align: left;
+}
+
+.splash-multiplayer-header {
+  display: flex;
   align-items: center;
-  margin-bottom: 18px;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.splash-multiplayer-header h2 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #f5f8ff;
+}
+
+.splash-multiplayer-close-btn {
+  color: var(--ui-text-dim);
+  align-self: flex-end;
+}
+
+.splash-multiplayer-close-btn:hover {
+  color: var(--ui-text-primary);
+}
+
+.splash-multiplayer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(120, 164, 255, 0.2);
+  background: rgba(4, 13, 28, 0.46);
+}
+
+.splash-multiplayer-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.splash-multiplayer-section-head h3 {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ui-text-secondary);
+}
+
+.splash-multiplayer-icon-btn {
+  background: var(--ui-surface-card);
+  border: 1px solid var(--ui-border-soft);
+  color: var(--ui-text-dim);
+  cursor: pointer;
+  padding: 5px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.splash-multiplayer-icon-btn:hover:not(:disabled) {
+  color: var(--ui-text-primary);
+  border-color: rgba(var(--color-primary-rgb), 0.55);
+  background: rgba(var(--color-primary-rgb), 0.14);
+}
+
+.splash-multiplayer-icon-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.splash-room-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.splash-room-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.splash-difficulty-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.splash-difficulty-btn {
+  border: 1px solid rgba(131, 175, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(15, 32, 62, 0.84);
+  color: #d9e5ff;
+  padding: 9px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.splash-difficulty-btn:hover {
+  border-color: rgba(var(--color-primary-rgb), 0.62);
+  transform: translateY(-1px);
+}
+
+.splash-difficulty-btn:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.splash-difficulty-btn.is-active {
+  border-color: rgba(var(--color-primary-rgb), 0.95);
+  background: linear-gradient(180deg, rgba(66, 116, 210, 0.92) 0%, rgba(32, 73, 158, 0.96) 100%);
+  color: #f6faff;
+  box-shadow:
+    0 0 0 1px rgba(var(--color-primary-rgb), 0.35),
+    0 8px 16px rgba(7, 17, 38, 0.42);
 }
 
 .splash-multiplayer-options label {
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ui-text-secondary);
@@ -2098,7 +2277,7 @@ body.splash-active :is(
 
 .splash-multiplayer-options select,
 .splash-multiplayer-options input {
-  min-width: 180px;
+  width: 100%;
   border-radius: var(--control-radius);
   color: var(--control-text-color);
   font-size: 14px;
@@ -2106,18 +2285,223 @@ body.splash-active :is(
 }
 
 .splash-multiplayer-options input[type="checkbox"] {
-  min-width: 0;
   width: 16px;
   height: 16px;
+  margin: 0;
   padding: 0;
   border-radius: 4px;
   accent-color: var(--color-primary);
 }
 
-.splash-bot-seed-toggle {
-  width: 100%;
+.splash-room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.splash-room-pagination {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.splash-room-pagination-count {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
+.splash-room-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.splash-room-pagination-controls label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ui-text-secondary);
+}
+
+.splash-room-pagination-controls select {
+  width: auto;
+  min-width: 72px;
+}
+
+.splash-room-page-indicator {
+  min-width: 88px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
+.splash-room-card {
+  border: 1px solid rgba(120, 164, 255, 0.24);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(18, 34, 66, 0.88) 0%, rgba(8, 17, 36, 0.92) 100%);
+  color: #edf2ff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 146px;
+  text-align: left;
+  padding: 11px 12px;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.splash-room-card:hover {
+  border-color: rgba(var(--color-primary-rgb), 0.62);
+  box-shadow: 0 10px 16px rgba(0, 0, 0, 0.26);
+  transform: translateY(-1px);
+}
+
+.splash-room-card.is-selected {
+  border-color: rgba(var(--color-primary-rgb), 0.9);
+  box-shadow:
+    0 0 0 1px rgba(var(--color-primary-rgb), 0.3),
+    0 14px 24px rgba(0, 0, 0, 0.28);
+}
+
+.splash-room-card.is-full {
+  opacity: 0.72;
+}
+
+.splash-room-card-empty {
   justify-content: center;
+  align-items: flex-start;
+  border-style: dashed;
+  cursor: default;
+  background: rgba(8, 18, 36, 0.58);
+}
+
+.splash-room-card-empty p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ui-text-dim);
+}
+
+.splash-room-card-placeholder {
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.splash-room-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.splash-room-card-head strong {
+  font-size: 16px;
+  letter-spacing: 0.06em;
+}
+
+.splash-room-card-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.splash-room-card-difficulty {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-weight: 800;
+  color: #f6fbff;
+  border: 1px solid transparent;
+}
+
+.splash-room-card-difficulty.is-easy {
+  background: rgba(var(--status-success-rgb), 0.24);
+  border-color: rgba(var(--status-success-rgb), 0.78);
+  color: rgba(var(--status-success-rgb), 0.98);
+}
+
+.splash-room-card-difficulty.is-normal {
+  background: rgba(var(--status-warning-rgb), 0.24);
+  border-color: rgba(var(--status-warning-rgb), 0.82);
+  color: rgba(var(--status-warning-rgb), 0.98);
+}
+
+.splash-room-card-difficulty.is-hard {
+  background: rgba(var(--status-error-rgb), 0.24);
+  border-color: rgba(var(--status-error-rgb), 0.8);
+  color: rgba(var(--status-error-rgb), 0.98);
+}
+
+.splash-room-card-flavor {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(219, 229, 255, 0.84);
+  border: 1px solid rgba(136, 171, 233, 0.28);
+  border-radius: 999px;
+  padding: 3px 7px;
+}
+
+.splash-room-card-stat {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(232, 238, 255, 0.92);
+}
+
+.splash-room-card-footer {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(202, 216, 252, 0.95);
+}
+
+.splash-private-toggle {
+  display: flex;
+}
+
+.splash-private-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: none;
+  letter-spacing: 0.04em;
+}
+
+.splash-private-room-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.splash-private-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.splash-private-room-limit-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
+.splash-bot-seed-toggle {
+  display: flex;
 }
 
 .splash-bot-seed-toggle label {
@@ -2126,24 +2510,6 @@ body.splash-active :is(
   gap: 8px;
   text-transform: none;
   letter-spacing: 0.04em;
-}
-
-.splash-join-bot-seed-note {
-  margin-top: -2px;
-}
-
-.splash-room-picker {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.splash-room-picker select {
-  min-width: 260px;
-}
-
-.splash-multiplayer-options input#splash-room-code {
-  min-width: 260px;
 }
 
 .splash-room-code-actions {
@@ -2177,12 +2543,6 @@ body.splash-active :is(
 .splash-multiplayer-options input[aria-invalid="true"] {
   border-color: rgba(var(--status-error-rgb), 0.9);
   box-shadow: 0 0 0 1px rgba(var(--status-error-rgb), 0.35);
-}
-
-.splash-room-picker button {
-  min-width: 92px;
-  padding: 9px 12px;
-  font-size: 13px;
 }
 
 .splash-multiplayer-options p {
@@ -5090,26 +5450,75 @@ body.splash-active :is(
     width: 100%;
   }
 
+  .splash-multiplayer-open-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .splash-multiplayer-overlay {
+    padding:
+      max(8px, env(safe-area-inset-top))
+      max(8px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
+  }
+
+  .splash-multiplayer-options {
+    width: 100%;
+    max-height: calc(
+      100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px
+    );
+    padding: 14px;
+  }
+
+  .splash-multiplayer-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .splash-multiplayer-section-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .splash-multiplayer-options input[type="checkbox"] {
     width: 16px;
   }
 
-  .splash-room-picker {
-    width: 100%;
+  .splash-room-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .splash-room-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .splash-difficulty-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .splash-room-pagination {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .splash-room-pagination-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .splash-room-pagination-controls label {
+    width: 100%;
+  }
+
+  .splash-private-config-grid {
+    grid-template-columns: 1fr;
   }
 
   .splash-room-code-actions {
     width: 100%;
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .splash-room-picker select,
-  .splash-room-picker button {
-    width: 100%;
-    min-width: 0;
   }
 
   .splash-room-code-actions input,

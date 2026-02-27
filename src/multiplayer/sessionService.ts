@@ -17,7 +17,15 @@ type JoinSessionOptions = {
   providerId?: string;
   blockedPlayerIds?: string[];
   botCount?: number;
+  gameDifficulty?: MultiplayerGameDifficulty;
 };
+
+function normalizeMultiplayerDifficulty(value: unknown): MultiplayerGameDifficulty | undefined {
+  if (value === "easy" || value === "normal" || value === "hard") {
+    return value;
+  }
+  return undefined;
+}
 
 export class MultiplayerSessionService {
   private readonly playerId: string;
@@ -103,6 +111,7 @@ export class MultiplayerSessionService {
       providerId: joinOptions.providerId,
       blockedPlayerIds: joinOptions.blockedPlayerIds,
       botCount: joinOptions.botCount,
+      gameDifficulty: joinOptions.gameDifficulty,
     });
     if (!joinResult.session) {
       this.lastJoinFailureReason = joinResult.reason ?? "unknown";
@@ -239,8 +248,11 @@ export class MultiplayerSessionService {
     if (typeof update.serverNow === "number" && Number.isFinite(update.serverNow)) {
       nextSession.serverNow = Math.floor(update.serverNow);
     }
-    if (typeof update.gameDifficulty === "string") {
-      nextSession.gameDifficulty = update.gameDifficulty;
+    if (Object.prototype.hasOwnProperty.call(update, "gameDifficulty")) {
+      const normalizedDifficulty = normalizeMultiplayerDifficulty(update.gameDifficulty);
+      if (normalizedDifficulty) {
+        nextSession.gameDifficulty = normalizedDifficulty;
+      }
     }
 
     this.activeSession = nextSession;
@@ -253,7 +265,16 @@ export class MultiplayerSessionService {
   }
 
   private setActiveSession(session: MultiplayerSessionRecord): void {
-    this.activeSession = session;
+    const { gameDifficulty: _ignoredDifficulty, ...sessionWithoutDifficulty } = session;
+    const normalizedDifficulty = normalizeMultiplayerDifficulty(session.gameDifficulty);
+    this.activeSession = normalizedDifficulty
+      ? {
+          ...sessionWithoutDifficulty,
+          gameDifficulty: normalizedDifficulty,
+        }
+      : {
+          ...sessionWithoutDifficulty,
+        };
     this.lastJoinFailureReason = null;
     if (session.auth?.accessToken) {
       authSessionService.setTokens(session.auth);
@@ -326,12 +347,14 @@ export class MultiplayerSessionService {
           .map((value) => value.trim())
           .filter((value, index, values) => value.length > 0 && values.indexOf(value) === index)
       : undefined;
+    const parsedGameDifficulty = normalizeMultiplayerDifficulty(options.gameDifficulty);
     return {
       displayName: hasDisplayName ? options.displayName : undefined,
       avatarUrl: hasAvatarUrl ? options.avatarUrl : undefined,
       providerId: hasProviderId ? options.providerId : undefined,
       blockedPlayerIds,
       botCount: parsedBotCount,
+      gameDifficulty: parsedGameDifficulty,
     };
   }
 

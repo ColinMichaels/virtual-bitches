@@ -347,6 +347,7 @@ await test("joins multiplayer room by room code endpoint", async () => {
 
   const result = await api.joinMultiplayerRoomByCode("ab12cd", {
     playerId: "player-1",
+    gameDifficulty: "hard",
   });
   assert(result.session !== null, "Expected joined session from room code");
   assertEqual(fetchCalls.length, 1, "Expected one fetch call");
@@ -355,6 +356,11 @@ await test("joins multiplayer room by room code endpoint", async () => {
     "https://api.example.com/api/multiplayer/rooms/AB12CD/join",
     "Expected room-code join endpoint"
   );
+  assert(typeof fetchCalls[0].init?.body === "string", "Expected room-code join request body");
+  const parsedBody = JSON.parse(String(fetchCalls[0].init?.body ?? "{}")) as {
+    gameDifficulty?: string;
+  };
+  assertEqual(parsedBody.gameDifficulty, "hard", "Expected gameDifficulty in room-code join payload");
 });
 
 await test("returns typed room_not_found reason when room code join is rejected", async () => {

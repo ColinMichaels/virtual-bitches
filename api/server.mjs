@@ -1007,6 +1007,12 @@ async function handleJoinSessionByTarget(req, res, target) {
     return;
   }
   const requestedBotCount = normalizeBotCount(body?.botCount);
+  const hasSessionDifficulty =
+    typeof session.gameDifficulty === "string" &&
+    GAME_DIFFICULTIES.has(session.gameDifficulty.trim().toLowerCase());
+  if (!hasSessionDifficulty) {
+    session.gameDifficulty = normalizeGameDifficulty(body?.gameDifficulty);
+  }
 
   const existingParticipant = session.participants[playerId];
   const isReturningParticipant = Boolean(existingParticipant && !isBotParticipant(existingParticipant));

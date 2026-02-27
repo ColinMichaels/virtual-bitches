@@ -290,13 +290,18 @@ await test("passes botCount through join options for bot seeding", async () => {
 await test("joins by room code and tracks room_not_found failures", async () => {
   const service = new MultiplayerSessionService("player-alpha");
   const originalJoinByCode = backendApiService.joinMultiplayerRoomByCode.bind(backendApiService);
+  const capturedRequests: Array<{ playerId: string; gameDifficulty?: string }> = [];
 
   let callCount = 0;
   (
     backendApiService as {
       joinMultiplayerRoomByCode: typeof backendApiService.joinMultiplayerRoomByCode;
     }
-  ).joinMultiplayerRoomByCode = async () => {
+  ).joinMultiplayerRoomByCode = async (_roomCode, request) => {
+    capturedRequests.push({
+      playerId: request.playerId,
+      gameDifficulty: request.gameDifficulty,
+    });
     callCount += 1;
     if (callCount === 1) {
       return {
@@ -314,10 +319,12 @@ await test("joins by room code and tracks room_not_found failures", async () => 
   };
 
   try {
-    const joined = await service.joinRoomByCode("ab12cd");
+    const joined = await service.joinRoomByCode("ab12cd", { gameDifficulty: "hard" });
     assert(joined !== null, "Expected room-code join success");
     assertEqual(joined?.sessionId, "session-by-code", "Expected joined room-code session");
     assertEqual(service.getLastJoinFailureReason(), null, "Expected no join failure after success");
+    assertEqual(capturedRequests[0]?.playerId, "player-alpha", "Expected room-code join player id");
+    assertEqual(capturedRequests[0]?.gameDifficulty, "hard", "Expected room-code gameDifficulty passthrough");
 
     const missing = await service.joinRoomByCode("missing");
     assertEqual(missing, null, "Expected room-code join failure");
