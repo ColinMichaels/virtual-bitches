@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-02-27T04:57:32.359Z",
+  "generatedAt": "2026-02-27T05:09:00.404Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-9fe47e9",
+      "date": "2026-02-27T04:59:34.000Z",
+      "title": "Add multi-provider support for bot meme avatars and improve API key handling",
+      "content": "<p>Add multi-provider support for bot meme avatars and improve API key handling</p><p><strong>Commit:</strong> <code>9fe47e9</code></p><p>- Added support for multiple meme API providers (`humorapi` and `apileague`) with failover capabilities.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "9fe47e943d2a5cb9aa9c1a27fa945c366e88cced",
+        "shortHash": "9fe47e9",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9fe47e943d2a5cb9aa9c1a27fa945c366e88cced"
+      }
+    },
     {
       "id": "git-e702f53",
       "date": "2026-02-27T04:52:18.000Z",
@@ -547,20 +561,6 @@
         "hash": "c4f2fe9c1b543679fa1bcb5a677087bf7a551d75",
         "shortHash": "c4f2fe9",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c4f2fe9c1b543679fa1bcb5a677087bf7a551d75"
-      }
-    },
-    {
-      "id": "git-4bbe812",
-      "date": "2026-02-26T12:34:41.000Z",
-      "title": "Add `ModalManager` for centralized modal handling and update related components",
-      "content": "<p>Add `ModalManager` for centralized modal handling and update related components</p><p><strong>Commit:</strong> <code>4bbe812</code></p><p>- Introduced `ModalManager` to coordinate showing, stacking, and closing modals across the app (`modalManager.ts`).</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "4bbe8120a38c6477fe59a1f4a2f5ebd60a71f96a",
-        "shortHash": "4bbe812",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/4bbe8120a38c6477fe59a1f4a2f5ebd60a71f96a"
       }
     }
   ]
