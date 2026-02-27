@@ -20,6 +20,7 @@ Environment variables:
 - `TURN_TIMEOUT_WARNING_MS` (pre-timeout warning lead, default: `10000`)
 - `MULTIPLAYER_PARTICIPANT_STALE_MS` (disconnect grace window before stale player pruning, default: `45000`)
 - `MULTIPLAYER_CLEANUP_INTERVAL_MS` (background sweep interval for stale players/sessions, default: `15000`)
+- `PUBLIC_ROOM_MIN_PER_DIFFICULTY` (minimum joinable public rooms per difficulty lane, default: `1`)
 - `FIREBASE_PROJECT_ID` (recommended for Firebase token audience validation)
 - `FIREBASE_AUTH_MODE` (`auto`, `admin`, or `legacy`, default: `auto`)
 - `FIREBASE_SERVICE_ACCOUNT_JSON` (optional inline service account JSON for Admin SDK init)

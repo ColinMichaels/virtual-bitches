@@ -512,6 +512,19 @@ async function runRoomLifecycleChecks(runSuffix) {
   const initialRooms = initialListing.rooms;
   const defaultRooms = initialRooms.filter((room) => room?.roomType === "public_default");
   assert(defaultRooms.length >= 2, "expected at least two default public lobby rooms");
+  const defaultDifficulties = new Set(
+    defaultRooms
+      .map((room) =>
+        typeof room?.gameDifficulty === "string" ? room.gameDifficulty.trim().toLowerCase() : ""
+      )
+      .filter((difficulty) => difficulty.length > 0)
+  );
+  ["easy", "normal", "hard"].forEach((difficulty) => {
+    assert(
+      defaultDifficulties.has(difficulty),
+      `expected at least one default ${difficulty} public lobby room`
+    );
+  });
 
   const joinablePublicRooms = initialRooms.filter((room) => {
     if (!room || room.isPublic !== true || room.sessionComplete === true) {

@@ -70,6 +70,15 @@ const PUBLIC_ROOM_BASE_COUNT = normalizePublicRoomCountValue(
   process.env.PUBLIC_ROOM_BASE_COUNT,
   2
 );
+const PUBLIC_ROOM_DIFFICULTY_ORDER = ["normal", "easy", "hard"];
+const PUBLIC_ROOM_MIN_PER_DIFFICULTY = normalizePublicRoomCountValue(
+  process.env.PUBLIC_ROOM_MIN_PER_DIFFICULTY,
+  1
+);
+const PUBLIC_ROOM_DEFAULT_TARGET_COUNT = Math.max(
+  PUBLIC_ROOM_BASE_COUNT,
+  PUBLIC_ROOM_MIN_PER_DIFFICULTY * PUBLIC_ROOM_DIFFICULTY_ORDER.length
+);
 const PUBLIC_ROOM_MIN_JOINABLE = normalizePublicRoomCountValue(
   process.env.PUBLIC_ROOM_MIN_JOINABLE,
   PUBLIC_ROOM_BASE_COUNT
@@ -2932,6 +2941,15 @@ function buildDefaultPublicRoomCode(slot) {
   return normalizeRoomCode(`${PUBLIC_ROOM_CODE_PREFIX}${slot + 1}`);
 }
 
+function resolveDefaultPublicRoomDifficulty(slot) {
+  const normalizedSlot = normalizePublicRoomSlot(slot);
+  if (normalizedSlot === null) {
+    return "normal";
+  }
+  const difficultyIndex = normalizedSlot % PUBLIC_ROOM_DIFFICULTY_ORDER.length;
+  return PUBLIC_ROOM_DIFFICULTY_ORDER[difficultyIndex] ?? "normal";
+}
+
 function buildPublicOverflowRoomCode() {
   const existingCodes = new Set(
     Object.values(store.multiplayerSessions)
@@ -2974,18 +2992,27 @@ function isSessionJoinablePublicRoom(session, now = Date.now()) {
   return getHumanParticipantCount(session) < MAX_MULTIPLAYER_HUMAN_PLAYERS;
 }
 
-function createPublicRoom(roomKind, now = Date.now(), slot = null) {
+function createPublicRoom(roomKind, now = Date.now(), slot = null, options = {}) {
   const normalizedKind =
     roomKind === ROOM_KINDS.publicDefault ? ROOM_KINDS.publicDefault : ROOM_KINDS.publicOverflow;
+  const normalizedSlot =
+    normalizedKind === ROOM_KINDS.publicDefault && Number.isFinite(slot)
+      ? Math.max(0, Math.floor(slot))
+      : null;
   const sessionId = randomUUID();
   const roomCode =
-    normalizedKind === ROOM_KINDS.publicDefault && Number.isFinite(slot)
-      ? buildDefaultPublicRoomCode(Math.max(0, Math.floor(slot)))
+    normalizedSlot !== null
+      ? buildDefaultPublicRoomCode(normalizedSlot)
       : buildPublicOverflowRoomCode();
+  const preferredDifficulty = normalizeGameDifficulty(options?.gameDifficulty);
+  const sessionDifficulty =
+    normalizedSlot !== null
+      ? resolveDefaultPublicRoomDifficulty(normalizedSlot)
+      : preferredDifficulty;
   const session = {
     sessionId,
     roomCode,
-    gameDifficulty: "normal",
+    gameDifficulty: sessionDifficulty,
     wsUrl: WS_BASE_URL,
     roomKind: normalizedKind,
     createdAt: now,
@@ -2998,8 +3025,8 @@ function createPublicRoom(roomKind, now = Date.now(), slot = null) {
     participants: {},
     turnState: null,
   };
-  if (normalizedKind === ROOM_KINDS.publicDefault && Number.isFinite(slot)) {
-    session.publicRoomSlot = Math.max(0, Math.floor(slot));
+  if (normalizedSlot !== null) {
+    session.publicRoomSlot = normalizedSlot;
   }
 
   store.multiplayerSessions[sessionId] = session;
@@ -3014,9 +3041,13 @@ function resetPublicRoomForIdle(session, now = Date.now()) {
   }
 
   const roomKind = getSessionRoomKind(session);
+  const normalizedSlot = normalizePublicRoomSlot(session.publicRoomSlot);
   session.participants = {};
   session.turnState = null;
-  session.gameDifficulty = "normal";
+  session.gameDifficulty =
+    roomKind === ROOM_KINDS.publicDefault
+      ? resolveDefaultPublicRoomDifficulty(normalizedSlot)
+      : normalizeGameDifficulty(session.gameDifficulty);
   session.gameStartedAt = now;
   session.lastActivityAt = now;
   session.expiresAt =
@@ -3131,7 +3162,7 @@ function reconcilePublicRoomInventory(now = Date.now()) {
     }
 
     const normalizedSlot = normalizePublicRoomSlot(session.publicRoomSlot);
-    if (normalizedSlot === null || normalizedSlot >= PUBLIC_ROOM_BASE_COUNT) {
+    if (normalizedSlot === null || normalizedSlot >= PUBLIC_ROOM_DEFAULT_TARGET_COUNT) {
       session.roomKind = ROOM_KINDS.publicOverflow;
       if (Object.prototype.hasOwnProperty.call(session, "publicRoomSlot")) {
         delete session.publicRoomSlot;
@@ -3158,6 +3189,14 @@ function reconcilePublicRoomInventory(now = Date.now()) {
       session.roomCode = expectedCode;
       changed = true;
     }
+    const expectedDifficulty = resolveDefaultPublicRoomDifficulty(normalizedSlot);
+    if (
+      resolveSessionGameDifficulty(session) !== expectedDifficulty &&
+      getHumanParticipantCount(session) === 0
+    ) {
+      session.gameDifficulty = expectedDifficulty;
+      changed = true;
+    }
 
     if (!Number.isFinite(session.expiresAt) || session.expiresAt <= now + 5000) {
       session.expiresAt = now + MULTIPLAYER_SESSION_IDLE_TTL_MS;
@@ -3165,16 +3204,41 @@ function reconcilePublicRoomInventory(now = Date.now()) {
     }
   });
 
-  for (let slot = 0; slot < PUBLIC_ROOM_BASE_COUNT; slot += 1) {
+  for (let slot = 0; slot < PUBLIC_ROOM_DEFAULT_TARGET_COUNT; slot += 1) {
     if (!defaultSlots.has(slot)) {
       createPublicRoom(ROOM_KINDS.publicDefault, now, slot);
       changed = true;
     }
   }
 
+  const joinablePublicRoomsByDifficulty = new Map(
+    PUBLIC_ROOM_DIFFICULTY_ORDER.map((difficulty) => [difficulty, 0])
+  );
   let joinablePublicRooms = Object.values(store.multiplayerSessions).filter((session) =>
     isSessionJoinablePublicRoom(session, now)
   ).length;
+  Object.values(store.multiplayerSessions).forEach((session) => {
+    if (!isSessionJoinablePublicRoom(session, now)) {
+      return;
+    }
+    const difficulty = resolveSessionGameDifficulty(session);
+    const currentCount = joinablePublicRoomsByDifficulty.get(difficulty) ?? 0;
+    joinablePublicRoomsByDifficulty.set(difficulty, currentCount + 1);
+  });
+
+  PUBLIC_ROOM_DIFFICULTY_ORDER.forEach((difficulty) => {
+    let availableCount = joinablePublicRoomsByDifficulty.get(difficulty) ?? 0;
+    while (availableCount < PUBLIC_ROOM_MIN_PER_DIFFICULTY) {
+      createPublicRoom(ROOM_KINDS.publicOverflow, now, null, {
+        gameDifficulty: difficulty,
+      });
+      availableCount += 1;
+      joinablePublicRooms += 1;
+      joinablePublicRoomsByDifficulty.set(difficulty, availableCount);
+      changed = true;
+    }
+  });
+
   while (joinablePublicRooms < PUBLIC_ROOM_MIN_JOINABLE) {
     createPublicRoom(ROOM_KINDS.publicOverflow, now);
     joinablePublicRooms += 1;
