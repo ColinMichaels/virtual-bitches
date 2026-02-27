@@ -46,18 +46,18 @@ export class SessionExpiryModal {
     modal.style.display = "none";
     modal.innerHTML = `
       <div class="modal-backdrop"></div>
-      <div class="modal-content session-expiry-modal-content">
+      <div class="modal-content confirm-modal-content session-expiry-modal-content">
         <div class="modal-header">
           <h2>Room Expired</h2>
           <button class="modal-close" title="Close">&times;</button>
         </div>
-        <div class="session-expiry-content">
-          <p>This multiplayer room expired or became inactive.</p>
-          <p data-session-expiry-reason></p>
-          <p>You can return to the lobby to join/create another room, or continue solo immediately.</p>
-          <div class="session-expiry-actions">
-            <button class="btn btn-danger btn-session-lobby">Return to Lobby</button>
-            <button class="btn btn-primary btn-session-solo">Continue Solo</button>
+        <div class="session-expiry-content confirm-modal-body">
+          <p class="confirm-modal-message">This multiplayer room expired or became inactive.</p>
+          <p class="confirm-modal-message" data-session-expiry-reason></p>
+          <p class="confirm-modal-message">You can return to the lobby to join/create another room, or continue solo immediately.</p>
+          <div class="session-expiry-actions confirm-modal-actions">
+            <button class="btn btn-primary primary btn-session-lobby">Return to Lobby</button>
+            <button class="btn btn-secondary secondary btn-session-solo">Continue Solo</button>
           </div>
         </div>
       </div>

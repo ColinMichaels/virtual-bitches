@@ -1451,9 +1451,12 @@ button.primary,
   border-color: var(--color-primary-border);
   background: var(--btn-primary-gradient);
   color: var(--btn-text-color);
-  font-size: 30px;
   text-shadow: var(--btn-text-shadow);
   box-shadow: var(--btn-primary-shadow);
+}
+
+#action-btn.btn-primary {
+  font-size: 30px;
 }
 
 button.primary:hover:not(:disabled),
@@ -2293,47 +2296,41 @@ body.splash-active :is(
 
 /* Settings Modal */
 #settings-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
   z-index: 11000;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  padding-top: max(10px, env(safe-area-inset-top));
-  padding-right: max(10px, env(safe-area-inset-right));
-  padding-bottom: max(10px, env(safe-area-inset-bottom));
-  padding-left: max(10px, env(safe-area-inset-left));
-}
-
-.settings-backdrop {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: var(--ui-surface-overlay);
-  backdrop-filter: blur(5px);
 }
 
 .settings-content {
   position: relative;
   z-index: 1;
   background: var(--ui-surface-elevated);
-  padding: 40px;
   border-radius: 12px;
-  max-width: 600px;
-  width: 90%;
+  max-width: min(760px, 96vw);
+  width: min(760px, 96vw);
   max-height: min(
-    80vh,
+    88vh,
     calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 20px)
   );
-  overflow-y: auto;
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--ui-border-soft);
   box-shadow: var(--ui-shadow-panel);
+}
+
+.settings-header {
+  flex-shrink: 0;
+  padding: 26px 30px 12px;
+  border-bottom: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-elevated);
+}
+
+.settings-header .modal-header {
+  margin-bottom: 12px;
+}
+
+.settings-header .modal-header h2 {
+  margin: 0;
 }
 
 #settings-admin-modal {
@@ -2401,7 +2398,7 @@ body.splash-active :is(
 }
 
 .settings-content h2 {
-  margin: 0 0 24px 0;
+  margin: 0 0 16px 0;
   color: var(--color-primary);
   font-size: 32px;
 }
@@ -2409,9 +2406,15 @@ body.splash-active :is(
 .settings-tabs {
   display: flex;
   gap: 10px;
-  margin-bottom: 22px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--ui-border-soft);
+  margin: 0;
+  padding: 0;
+}
+
+.settings-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 30px 12px;
 }
 
 .settings-tab-btn {
@@ -2446,6 +2449,10 @@ body.splash-active :is(
 
 .settings-section {
   margin-bottom: 32px;
+}
+
+.settings-tab-panel > .settings-section:last-child {
+  margin-bottom: 0;
 }
 
 .settings-section h3 {
@@ -2504,13 +2511,15 @@ body.splash-active :is(
 }
 
 .settings-buttons {
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   grid-auto-rows: minmax(44px, auto);
   gap: 10px;
-  margin-top: 24px;
-  padding-top: 24px;
+  margin-top: 0;
+  padding: 14px 30px 24px;
   border-top: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-elevated);
 }
 
 .settings-buttons .btn {
@@ -3794,23 +3803,15 @@ body.splash-active :is(
   max-width: 560px;
 }
 
-.session-expiry-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.session-expiry-content p {
-  margin: 0;
-  color: var(--ui-text-secondary);
-  font-size: 14px;
-  line-height: 1.4;
+.session-expiry-modal-content .modal-header h2 {
+  color: var(--status-warning);
 }
 
 .session-expiry-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .btn-session-lobby,
@@ -4781,10 +4782,24 @@ body.splash-active :is(
   }
 
   .settings-content {
-    padding: 20px;
+    max-width: min(100%, 96vw);
+    width: min(100%, 96vw);
     max-height: calc(
       100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 14px
     );
+    padding: 0;
+  }
+
+  .settings-header {
+    padding: 18px 18px 10px;
+  }
+
+  .settings-body {
+    padding: 14px 18px 10px;
+  }
+
+  .settings-buttons {
+    padding: 12px 18px 18px;
   }
 
   .settings-tabs {
@@ -5287,6 +5302,10 @@ body.splash-active :is(
 
   .modal-header h2 {
     font-size: 18px;
+  }
+
+  .settings-content {
+    padding: 0;
   }
 
   /* Game Over */
