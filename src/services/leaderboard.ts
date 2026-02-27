@@ -12,6 +12,7 @@ const log = logger.create("LeaderboardService");
 const MAX_FLUSH_PER_BATCH = 8;
 const MAX_SERVER_LEADERBOARD_ENTRIES = 200;
 const AUTO_SYNC_INTERVAL_MS = 30000;
+const ACCOUNT_PROFILE_RETRY_COOLDOWN_MS = 60000;
 
 export type LeaderboardSyncState = "idle" | "syncing" | "offline" | "error";
 
@@ -27,6 +28,7 @@ export interface LeaderboardSyncStatus {
 export class LeaderboardService {
   private flushInFlight = false;
   private accountProfile: AuthenticatedUserProfile | null = null;
+  private nextAccountProfileFetchAt = 0;
   private autoSyncStarted = false;
   private autoSyncIntervalHandle?: ReturnType<typeof setInterval>;
   private syncStatus: LeaderboardSyncStatus = {
@@ -108,17 +110,22 @@ export class LeaderboardService {
         return 0;
       }
 
+      const pending = scoreHistoryService
+        .getUnsyncedGlobalScores()
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .slice(0, Math.max(1, Math.floor(limit)));
+      if (pending.length === 0) {
+        this.syncStatus.state = "idle";
+        this.emitSyncStatusChanged();
+        return 0;
+      }
+
       const profile = await this.getAccountProfile(true);
       if (!profile || profile.isAnonymous || !profile.leaderboardName?.trim()) {
         this.syncStatus.state = "idle";
         this.emitSyncStatusChanged();
         return 0;
       }
-
-      const pending = scoreHistoryService
-        .getUnsyncedGlobalScores()
-        .sort((a, b) => a.timestamp - b.timestamp)
-        .slice(0, Math.max(1, Math.floor(limit)));
 
       let submitted = 0;
       for (const score of pending) {
@@ -179,14 +186,26 @@ export class LeaderboardService {
       return this.accountProfile;
     }
 
+    if (this.nextAccountProfileFetchAt > Date.now()) {
+      return this.accountProfile;
+    }
+
     await firebaseAuthService.initialize();
     const user = firebaseAuthService.getCurrentUserProfile();
     if (!user || user.isAnonymous) {
       this.accountProfile = null;
+      this.nextAccountProfileFetchAt = 0;
       return null;
     }
 
     const profile = await backendApiService.getAuthenticatedUserProfile();
+    if (!profile) {
+      this.accountProfile = null;
+      this.nextAccountProfileFetchAt = Date.now() + ACCOUNT_PROFILE_RETRY_COOLDOWN_MS;
+      return null;
+    }
+
+    this.nextAccountProfileFetchAt = 0;
     this.accountProfile = profile;
     return profile;
   }
@@ -208,6 +227,7 @@ export class LeaderboardService {
 
   clearCachedProfile(): void {
     this.accountProfile = null;
+    this.nextAccountProfileFetchAt = 0;
     this.emitSyncStatusChanged();
   }
 

@@ -28,6 +28,8 @@ const ACTIVE_SEAT_FLOAT_AMPLITUDE = 0.16;
 const ACTIVE_SEAT_FLOAT_SPEED = 0.0048;
 const ACTIVE_SEAT_PULSE_SPEED = 0.0072;
 const ACTIVE_SEAT_SURGE_SPEED = 0.0106;
+const AVATAR_TEXTURE_RETRY_BASE_MS = 20000;
+const AVATAR_TEXTURE_RETRY_MAX_MS = 5 * 60 * 1000;
 
 type SeatChatBubbleTone = "info" | "success" | "warning" | "error";
 
@@ -40,6 +42,16 @@ export interface SeatChatBubbleOptions {
 interface SeatChatBubbleVisual {
   root: Mesh;
   textTexture: DynamicTexture;
+}
+
+interface SeatAvatarTextureState {
+  url?: string;
+  texture: Texture | null;
+}
+
+interface AvatarTextureFailureState {
+  failures: number;
+  nextRetryAt: number;
 }
 
 /**
@@ -71,7 +83,8 @@ export class PlayerSeatRenderer {
   private scoreZoneMeshes: Map<number, Mesh> = new Map();
   private turnMarkerMeshes: Map<number, Mesh> = new Map();
   private seatStates: Map<number, SeatState> = new Map();
-  private seatAvatarTextures: Map<number, { url?: string; texture: Texture | null }> = new Map();
+  private seatAvatarTextures: Map<number, SeatAvatarTextureState> = new Map();
+  private avatarTextureFailuresByUrl: Map<string, AvatarTextureFailureState> = new Map();
   private scorePulseTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
   private chatBubbleHideTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
   private highlightedSeatIndex: number | null = null;
@@ -646,9 +659,19 @@ export class PlayerSeatRenderer {
     const normalizedUrl =
       typeof avatarUrl === "string" && avatarUrl.trim().length > 0 ? avatarUrl.trim() : undefined;
     const existing = this.seatAvatarTextures.get(seatIndex) ?? { url: undefined, texture: null };
-    if (existing.url === normalizedUrl) {
+    if (existing.url === normalizedUrl && existing.texture) {
       headMaterial.diffuseTexture = existing.texture ?? null;
       return Boolean(existing.texture);
+    }
+
+    const now = Date.now();
+    if (normalizedUrl) {
+      const failureState = this.avatarTextureFailuresByUrl.get(normalizedUrl);
+      if (failureState && failureState.nextRetryAt > now) {
+        this.seatAvatarTextures.set(seatIndex, { url: normalizedUrl, texture: null });
+        headMaterial.diffuseTexture = null;
+        return false;
+      }
     }
 
     if (existing.texture) {
@@ -680,14 +703,22 @@ export class PlayerSeatRenderer {
             return;
           }
           this.fitTextureToAvatarSurface(texture);
+          this.avatarTextureFailuresByUrl.delete(normalizedUrl);
           headMaterial.diffuseTexture = texture;
           headMaterial.useAlphaFromDiffuseTexture = false;
         },
         () => {
-          const latest = this.seatAvatarTextures.get(seatIndex);
-          if (latest?.texture === texture) {
-            this.seatAvatarTextures.set(seatIndex, { url: undefined, texture: null });
-          }
+          const latestFailure = this.avatarTextureFailuresByUrl.get(normalizedUrl);
+          const failureCount = (latestFailure?.failures ?? 0) + 1;
+          const retryDelayMs = Math.min(
+            AVATAR_TEXTURE_RETRY_MAX_MS,
+            AVATAR_TEXTURE_RETRY_BASE_MS * Math.max(1, failureCount)
+          );
+          this.avatarTextureFailuresByUrl.set(normalizedUrl, {
+            failures: failureCount,
+            nextRetryAt: Date.now() + retryDelayMs,
+          });
+          this.seatAvatarTextures.set(seatIndex, { url: normalizedUrl, texture: null });
           if (texture) {
             texture.dispose();
           }
@@ -1104,6 +1135,7 @@ export class PlayerSeatRenderer {
     this.scoreZoneMeshes.clear();
     this.turnMarkerMeshes.clear();
     this.seatAvatarTextures.clear();
+    this.avatarTextureFailuresByUrl.clear();
     this.scorePulseTimers.clear();
     this.chatBubbleHideTimers.clear();
     this.seatStates.clear();
