@@ -98,9 +98,11 @@ Optional GitHub Environment variables for cache behavior:
 
 Optional GitHub Environment variables for CDN smoke checks:
 
-- `CDN_VERIFY_RETRIES` (default: `3`)
-- `CDN_VERIFY_DELAY_MS` (default: `2000`)
+- `CDN_VERIFY_RETRIES` (default: `8`)
+- `CDN_VERIFY_DELAY_MS` (default: `3000`)
 - `CDN_VERIFY_TIMEOUT_MS` (default: `15000`)
+- `CDN_REQUIRE_PUBLIC_READ` (default: `1`; fail smoke if public HTTP reads do not work)
+- `CDN_AUTOCONFIGURE_PUBLIC_READ` (default: `1`; CI applies `roles/storage.objectViewer` for `allUsers` before smoke)
 
 Manual verification command:
 
@@ -129,3 +131,10 @@ If upload fails with `gs://... not found: 404`:
   - `<project-id>.appspot.com`
 
 The upload script auto-tries both common Firebase bucket formats and, if needed, scans project buckets to pick a matching fallback.
+
+If CDN verification fails with HTTP `403`:
+
+- The bucket objects are not publicly readable at `https://storage.googleapis.com/<bucket>/...`.
+- In CI, keep `CDN_AUTOCONFIGURE_PUBLIC_READ=1` (default) so deploy applies:
+  - `roles/storage.objectViewer` to member `allUsers`
+- If your org policy blocks public buckets, set `CDN_REQUIRE_PUBLIC_READ=0` and use an authenticated/private asset strategy instead.

@@ -20,6 +20,7 @@ Required keys:
 - `VITE_API_BASE_URL`
 - `VITE_WS_URL`
 - `VITE_ASSET_BASE_URL` (optional CDN/storage origin for runtime assets)
+- `VITE_OG_IMAGE_URL` (optional social share image override; defaults to current BISCUITS CDN ad image)
 - `VITE_FIREBASE_API_KEY`
 - `VITE_FIREBASE_AUTH_DOMAIN`
 - `VITE_FIREBASE_PROJECT_ID`
@@ -28,6 +29,7 @@ Required keys:
 - `VITE_FIREBASE_APP_ID`
 - `VITE_FIREBASE_MEASUREMENT_ID` (optional but recommended)
 - `VITE_ENABLE_ADMIN_UI` (optional, default `0` in production; set `1` to expose in-app admin monitor UI)
+- `VITE_FACEBOOK_APP_ID` (optional, recommended for richer Facebook share insights/debugging)
 
 Optional direct asset overrides:
 - `VITE_BRAND_LOGO_URL`
@@ -168,9 +170,11 @@ Recommended setup (GitHub Environments):
   - `VITE_ENABLE_ADMIN_UI` (optional)
   - `CDN_ASSET_CACHE_CONTROL` (optional; default `public,max-age=86400`)
   - `CDN_CONTENT_CACHE_CONTROL` (optional; default `public,max-age=300,must-revalidate`)
-  - `CDN_VERIFY_RETRIES` (optional; default `3`)
-  - `CDN_VERIFY_DELAY_MS` (optional; default `2000`)
+  - `CDN_VERIFY_RETRIES` (optional; default `8`)
+  - `CDN_VERIFY_DELAY_MS` (optional; default `3000`)
   - `CDN_VERIFY_TIMEOUT_MS` (optional; default `15000`)
+  - `CDN_REQUIRE_PUBLIC_READ` (optional; default `1`)
+  - `CDN_AUTOCONFIGURE_PUBLIC_READ` (optional; default `1`)
   - `API_STORE_BACKEND` (recommended: `firestore`)
   - `API_FIRESTORE_PREFIX` (optional; default `api_v1`)
   - `FIREBASE_AUTH_MODE` (recommended: `admin` for production)

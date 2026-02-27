@@ -1,9 +1,10 @@
-const DEFAULT_CANONICAL_URL = "https://yourdomain.com/path";
-const DEFAULT_OG_IMAGE = "https://yourcdn.com/og/your-image-1200x630.jpg";
+const DEFAULT_CANONICAL_URL = "https://biscuits-488600.web.app/";
+const DEFAULT_OG_IMAGE =
+  "https://storage.googleapis.com/biscuits-488600.firebasestorage.app/assets/ads/betahelp_ad.png";
 const DEFAULT_TITLE = "BISCUITS - Push Your Luck Dice Game";
-const DEFAULT_DESCRIPTION = "Short, compelling summary that matches the page content.";
-const DEFAULT_IMAGE_ALT = "Describe the thumbnail for accessibility.";
-const DEFAULT_FB_APP_ID = "YOUR_APP_ID";
+const DEFAULT_DESCRIPTION = "Roll low, score lower, and challenge friends in BISCUITS.";
+const DEFAULT_IMAGE_ALT = "BISCUITS alpha tester callout artwork.";
+const DEFAULT_FB_APP_ID = "";
 
 const SHARE_QUERY_PARAM_ALLOWLIST = new Set(["seed", "score", "log", "difficulty", "variant"]);
 
@@ -83,7 +84,11 @@ export function applyFacebookShareMeta(options: FacebookShareMetaOptions = {}): 
   upsertMetaProperty("og:image:height", String(imageHeight));
   upsertMetaProperty("og:image:alt", imageAlt);
   upsertMetaProperty("og:locale", locale);
-  upsertMetaProperty("fb:app_id", fbAppId);
+  if (fbAppId) {
+    upsertMetaProperty("fb:app_id", fbAppId);
+  } else {
+    removeMetaProperty("fb:app_id");
+  }
   upsertMetaName("twitter:card", "summary_large_image");
 }
 
@@ -141,6 +146,12 @@ function upsertMetaProperty(property: string, content: string): void {
   meta.content = content;
   meta.dataset.shareMeta = property;
   document.head.appendChild(meta);
+}
+
+function removeMetaProperty(property: string): void {
+  const selector = `meta[property="${cssEscape(property)}"]`;
+  const existing = document.querySelector<HTMLMetaElement>(selector);
+  existing?.remove();
 }
 
 function upsertMetaName(name: string, content: string): void {

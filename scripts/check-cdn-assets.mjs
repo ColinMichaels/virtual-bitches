@@ -112,6 +112,11 @@ async function verifyUrl(url, options) {
       clearTimeout(timeout);
 
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(
+            `HTTP ${response.status} (object not publicly readable at this URL; verify bucket IAM/storage rules for public CDN access)`
+          );
+        }
         throw new Error(`HTTP ${response.status}`);
       }
 
