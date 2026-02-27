@@ -4,7 +4,7 @@
  */
 
 import { audioService } from "../services/audio.js";
-import { getUpdatesFeedUrl } from "../services/assetUrl.js";
+import { getUpdatesFeedUrlCandidates } from "../services/assetUrl.js";
 import { getLocalPlayerId } from "../services/playerIdentity.js";
 import { logger } from "../utils/logger.js";
 import type {
@@ -149,12 +149,26 @@ export class UpdatesPanel {
    */
   private async loadUpdates(): Promise<void> {
     try {
-      const response = await fetch(getUpdatesFeedUrl());
-      if (!response.ok) {
-        throw new Error(`Failed to load updates: ${response.status}`);
+      const candidates = getUpdatesFeedUrlCandidates();
+      let data: UpdatesFeed | null = null;
+      let lastError: unknown = null;
+
+      for (const candidate of candidates) {
+        try {
+          const response = await fetch(candidate);
+          if (!response.ok) {
+            throw new Error(`updates_fetch_failed:${response.status}`);
+          }
+          data = (await response.json()) as UpdatesFeed;
+          break;
+        } catch (error) {
+          lastError = error;
+        }
       }
 
-      const data: UpdatesFeed = await response.json();
+      if (!data) {
+        throw lastError ?? new Error("updates_fetch_failed");
+      }
       this.updates = data.updates || [];
 
       // Sort by date (newest first)

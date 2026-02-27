@@ -5,7 +5,7 @@
 
 import { settingsService } from "./settings.js";
 import { logger } from "../utils/logger.js";
-import { getGameMusicUrl } from "./assetUrl.js";
+import { getGameMusicUrlCandidates } from "./assetUrl.js";
 
 const log = logger.create('AudioService');
 
@@ -236,11 +236,26 @@ export class AudioService {
     this.musicBufferPromise = (async () => {
       try {
         // Hardcoded for now. Future media service can supply CDN-backed track URLs.
-        const response = await fetch(getGameMusicUrl());
-        if (!response.ok) {
-          throw new Error(`music_fetch_failed:${response.status}`);
+        const candidates = getGameMusicUrlCandidates();
+        let fileBuffer: ArrayBuffer | null = null;
+        let lastError: unknown = null;
+
+        for (const candidate of candidates) {
+          try {
+            const response = await fetch(candidate);
+            if (!response.ok) {
+              throw new Error(`music_fetch_failed:${response.status}`);
+            }
+            fileBuffer = await response.arrayBuffer();
+            break;
+          } catch (error) {
+            lastError = error;
+          }
         }
-        const fileBuffer = await response.arrayBuffer();
+
+        if (!fileBuffer) {
+          throw lastError ?? new Error("music_fetch_failed");
+        }
         const decoded = await this.context!.decodeAudioData(fileBuffer);
         return decoded;
       } catch (error) {
