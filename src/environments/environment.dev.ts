@@ -17,7 +17,7 @@ const parseBooleanFlag = (rawValue: string | undefined, fallback: boolean): bool
 };
 
 export const environment: Environment = {
-  production: false,
+  production: true,
   apiBaseUrl: env.VITE_API_BASE_URL ?? "https://api-dev.biscuits-game.com/api",
   assetBaseUrl: env.VITE_ASSET_BASE_URL ?? "",
   wsUrl: env.VITE_WS_URL ?? "wss://ws-dev.biscuits-game.com",
