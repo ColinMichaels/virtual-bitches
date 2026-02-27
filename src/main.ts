@@ -299,6 +299,19 @@ async function showRules(): Promise<void> {
   modal.show();
 }
 
+async function replayTutorialFromRulesModal(): Promise<void> {
+  if (gameStarted) {
+    return;
+  }
+  const started = await startGame({
+    playMode: "solo",
+    forceTutorialReplay: true,
+  });
+  if (started) {
+    splash.hide();
+  }
+}
+
 async function getSettingsModal(): Promise<SettingsModal> {
   if (!settingsModalPromise) {
     settingsModalPromise = import("./ui/settings.js").then(
@@ -321,7 +334,13 @@ async function getLeaderboardModal(): Promise<LeaderboardModal> {
 
 async function getRulesModal(): Promise<RulesModal> {
   if (!rulesModalPromise) {
-    rulesModalPromise = import("./ui/rules.js").then(({ RulesModal }) => new RulesModal());
+    rulesModalPromise = import("./ui/rules.js").then(({ RulesModal }) => {
+      const modal = new RulesModal();
+      modal.setOnReplayTutorial(() => {
+        void replayTutorialFromRulesModal();
+      });
+      return modal;
+    });
   }
 
   return rulesModalPromise;

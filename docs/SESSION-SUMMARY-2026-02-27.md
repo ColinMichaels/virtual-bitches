@@ -22,6 +22,11 @@
 - Refreshed `docs/TODO.md` project status line to current version context.
 - Added a concise finish-up shortlist for next iteration planning.
 - Marked commit-link release-note tasks as complete.
+- Refined splash onboarding UX:
+  - removed persistent splash `Replay Tutorial` button
+  - kept tutorial replay entry at top of `How To Play` modal
+  - added splash language switcher with confirm-before-switch + reload behavior
+  - applied flagged/branded language selector styling for improved readability (splash + settings)
 
 ### Multiplayer Messaging + Moderation Foundation
 - Added player room-channel messaging flow (`public` + `direct`) over multiplayer websocket transport.

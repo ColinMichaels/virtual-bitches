@@ -24,6 +24,11 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - [x] Add Wave A i18n coverage for settings shell + tutorial shell with a new in-settings language selector
   - [x] Complete Wave A i18n migration for remaining shell/menu/modal surfaces (index HUD labels/buttons, account/admin status copy)
   - [x] Complete Wave A splash multiplayer localization key coverage and validation (`npx tsc --noEmit`, `test:i18n`, `build:dev`)
+  - [x] Refactor splash actions for space + clarity:
+    - remove splash `Replay Tutorial` button
+    - keep replay entry in `How To Play` modal
+    - add splash language switch with confirm + reload safety
+    - add flagged/branded language selector treatment for splash/settings readability
   - [x] Diagnose active deployment error first (blocking next feature wave); capture build/deploy logs and root cause.
   - [ ] Begin Wave B i18n migration for gameplay runtime status/notification messaging (`gameRuntime.ts`, turn banners, scoring/action prompts) after deployment issue is resolved.
 

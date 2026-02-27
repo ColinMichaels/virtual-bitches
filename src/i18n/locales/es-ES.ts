@@ -15,11 +15,16 @@ export const esES: TranslationDictionary = {
 
   "splash.subtitle": "Juego de dados de tentar la suerte",
   "splash.tagline": "Lanza • Selecciona • Puntua bajo para ganar",
+  "splash.language.label": "Idioma",
+  "splash.language.confirm.title": "Cambiar idioma?",
+  "splash.language.confirm.message":
+    "Cambiar a {{locale}} y recargar ahora? Se perderan cambios sin guardar en menus actuales.",
+  "splash.language.confirm.confirm": "Cambiar y recargar",
+  "splash.language.confirm.cancel": "Mantener idioma actual",
   "splash.mode.solo": "Solo",
   "splash.mode.multiplayer": "Multijugador",
   "splash.playModeAria": "Selecciona modo de juego",
   "splash.button.startGame": "Iniciar juego",
-  "splash.button.replayTutorial": "Repetir tutorial",
   "splash.button.howToPlay": "Como jugar",
   "splash.button.leaderboard": "Clasificacion",
   "splash.button.settings": "Configuracion",

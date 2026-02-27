@@ -1561,6 +1561,33 @@ button.danger,
   color: var(--control-placeholder);
 }
 
+.language-select {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border-color: rgba(var(--color-primary-rgb), 0.58);
+  background: linear-gradient(180deg, rgba(44, 58, 96, 0.92) 0%, rgba(19, 30, 56, 0.94) 100%);
+  color: #f7fbff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.38);
+  padding-right: 30px;
+}
+
+.language-select:hover {
+  border-color: rgba(var(--color-secondary-rgb), 0.82);
+  background: linear-gradient(180deg, rgba(56, 74, 118, 0.94) 0%, rgba(24, 37, 67, 0.96) 100%);
+}
+
+.language-select:focus-visible {
+  border-color: rgba(var(--color-primary-rgb), 0.9);
+  box-shadow: var(--ui-focus-ring), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.language-select option {
+  color: #081120;
+  background: #edf5ff;
+  text-shadow: none;
+  font-weight: 700;
+}
+
 input[type="checkbox"],
 input[type="radio"],
 input[type="range"] {
@@ -1813,6 +1840,28 @@ body.splash-active :is(
   color: var(--splash-tagline-color);
   margin: 0 0 24px 0;
   font-style: italic;
+}
+
+.splash-language-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.splash-language-picker label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ui-text-secondary);
+}
+
+.splash-language-picker select {
+  min-width: 180px;
+  border-radius: var(--control-radius);
+  color: var(--control-text-color);
+  font-size: 14px;
+  padding: 8px 12px;
 }
 
 .splash-mode-picker {
@@ -4835,6 +4884,7 @@ body.splash-active :is(
     min-width: 0;
   }
 
+  .splash-language-picker select,
   .splash-multiplayer-options select,
   .splash-multiplayer-options input {
     width: 100%;
@@ -5186,6 +5236,11 @@ body.splash-active :is(
   .splash-mode-btn {
     padding: 8px 10px;
     font-size: 13px;
+  }
+
+  .splash-language-picker {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .splash-multiplayer-options p {

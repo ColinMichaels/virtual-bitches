@@ -73,7 +73,7 @@ Lower total score wins.
 - Tutorial is an interactive guided flow (roll, select, score).
 - At completion, the tutorial scoring step is auto-undone so you can optimize your selection.
 - A highlight pulse marks restored dice.
-- You can replay tutorial anytime from this screen using the **Replay Tutorial** button, or before a run from the splash screen.
+- You can replay tutorial anytime from this screen using the **Replay Tutorial** button.
 
 ## Controls
 

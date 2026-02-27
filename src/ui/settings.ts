@@ -135,9 +135,9 @@ export class SettingsModal {
 
             <div class="setting-row">
               <label for="game-language">${t("settings.controls.language.label")}</label>
-              <select id="game-language">
-                <option value="en-US" ${getLocale() === "en-US" ? "selected" : ""}>${t("settings.controls.language.option.enUS")}</option>
-                <option value="es-ES" ${getLocale() === "es-ES" ? "selected" : ""}>${t("settings.controls.language.option.esES")}</option>
+              <select id="game-language" class="language-select">
+                <option value="en-US" ${getLocale() === "en-US" ? "selected" : ""}>${this.getLocaleOptionLabel("en-US")}</option>
+                <option value="es-ES" ${getLocale() === "es-ES" ? "selected" : ""}>${this.getLocaleOptionLabel("es-ES")}</option>
               </select>
             </div>
 
@@ -2183,6 +2183,11 @@ export class SettingsModal {
       default:
         return t("settings.controls.language.option.enUS");
     }
+  }
+
+  private getLocaleOptionLabel(locale: LocaleCode): string {
+    const flag = locale === "es-ES" ? "&#x1F1EA;&#x1F1F8;" : "&#x1F1FA;&#x1F1F8;";
+    return `${flag} ${this.getLocaleLabel(locale)}`;
   }
 
   private getAvatarInitial(displayName: string): string {
