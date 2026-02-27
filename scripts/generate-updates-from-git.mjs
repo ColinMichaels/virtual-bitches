@@ -27,8 +27,11 @@ async function run() {
   const outputPath = path.resolve(projectRoot, options.outputPath || DEFAULT_OUTPUT_RELATIVE_PATH);
 
   const version = await resolveVersion(options.version);
+  const repositoryWebBaseUrl = resolveRepositoryWebBaseUrl();
   const commits = loadCommits(maxCommits);
-  const updates = commits.map((commit) => mapCommitToUpdate(commit, version));
+  const updates = commits.map((commit) =>
+    mapCommitToUpdate(commit, version, repositoryWebBaseUrl)
+  );
 
   const payload = {
     generatedAt: new Date().toISOString(),
@@ -140,10 +143,19 @@ function loadCommits(maxCommits) {
     });
 }
 
-function mapCommitToUpdate(commit, version) {
+function mapCommitToUpdate(commit, version, repositoryWebBaseUrl) {
   const normalizedTitle = stripCommitPrefix(commit.subject);
   const type = inferUpdateType(commit.subject, commit.body);
   const bodySummary = summarizeBody(commit.body);
+  const pullRequestNumber = extractPullRequestNumber(commit.subject, commit.body);
+  const commitUrl =
+    repositoryWebBaseUrl && commit.hash
+      ? `${repositoryWebBaseUrl}/commit/${encodeURIComponent(commit.hash)}`
+      : undefined;
+  const pullRequestUrl =
+    repositoryWebBaseUrl && Number.isFinite(pullRequestNumber)
+      ? `${repositoryWebBaseUrl}/pull/${pullRequestNumber}`
+      : undefined;
 
   const contentParts = [
     `<p>${escapeHtml(normalizedTitle)}</p>`,
@@ -165,8 +177,81 @@ function mapCommitToUpdate(commit, version) {
     commit: {
       hash: commit.hash,
       shortHash: commit.shortHash,
+      ...(commitUrl ? { url: commitUrl } : {}),
+      ...(Number.isFinite(pullRequestNumber)
+        ? {
+            pullRequestNumber,
+            ...(pullRequestUrl ? { pullRequestUrl } : {}),
+          }
+        : {}),
     },
   };
+}
+
+function resolveRepositoryWebBaseUrl() {
+  try {
+    const remoteUrl = execFileSync("git", ["config", "--get", "remote.origin.url"], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+    return normalizeRepositoryWebBaseUrl(remoteUrl);
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeRepositoryWebBaseUrl(remoteUrl) {
+  if (!remoteUrl || typeof remoteUrl !== "string") {
+    return undefined;
+  }
+
+  const trimmed = remoteUrl.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  // git@github.com:owner/repo(.git)
+  const scpStyleMatch = trimmed.match(/^git@([^:]+):(.+?)(?:\.git)?$/i);
+  if (scpStyleMatch) {
+    return `https://${scpStyleMatch[1]}/${scpStyleMatch[2]}`.replace(/\/+$/, "");
+  }
+
+  // https://github.com/owner/repo(.git) or ssh://git@github.com/owner/repo(.git)
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname;
+    const pathname = parsed.pathname.replace(/^\/+/, "").replace(/\.git$/i, "");
+    if (!host || !pathname) {
+      return undefined;
+    }
+    return `https://${host}/${pathname}`.replace(/\/+$/, "");
+  } catch {
+    return undefined;
+  }
+}
+
+function extractPullRequestNumber(subject, body) {
+  const haystack = `${subject || ""}\n${body || ""}`;
+  const patterns = [
+    /\(#(\d+)\)\s*$/m,
+    /\bpull request\b[\s:#-]*(\d+)\b/i,
+    /\bpr[\s:#-]+(\d+)\b/i,
+    /\/pull\/(\d+)\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = haystack.match(pattern);
+    if (!match) {
+      continue;
+    }
+    const value = Number.parseInt(match[1], 10);
+    if (Number.isFinite(value) && value > 0) {
+      return value;
+    }
+  }
+
+  return undefined;
 }
 
 function normalizeDate(rawDate) {

@@ -6563,6 +6563,30 @@ body.splash-active :is(
   margin-bottom: 0;
 }
 
+.update-links {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.update-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.5);
+}
+
+.update-link:hover {
+  color: #ffffff;
+  border-bottom-color: rgba(255, 255, 255, 0.85);
+}
+
 /* Scrollbar for updates list */
 .updates-list::-webkit-scrollbar {
   width: 6px;
