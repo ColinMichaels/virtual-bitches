@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "brand:audit": "node scripts/brand-audit.mjs",
+    "brand:rewrite": "node scripts/brand-rewrite.mjs",
+    "test:brand-rewrite": "node scripts/brand-rewrite.test.mjs",
     "updates:generate": "node scripts/generate-updates-from-git.mjs",
     "copy:assets": "node scripts/copy-assets.mjs",
     "copy:assets:sync": "node scripts/copy-assets.mjs --sync-themes",
@@ -22,6 +25,7 @@
     "test:chaos-execution": "tsx src/chaos/upgrades/executionProfile.test.ts",
     "test:chaos-upgrades": "tsx src/chaos/upgrades/progressionService.test.ts",
     "test:controls": "tsx src/services/controlInversion.test.ts",
+    "test:i18n": "tsx src/i18n/i18n.test.ts",
     "test:network": "tsx src/multiplayer/networkService.test.ts",
     "test:session-service": "tsx src/multiplayer/sessionService.test.ts",
     "test:session-expiry-flow": "tsx src/multiplayer/sessionExpiryFlow.test.ts",

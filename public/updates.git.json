@@ -1,8 +1,36 @@
 {
-  "generatedAt": "2026-02-27T16:47:52.617Z",
+  "generatedAt": "2026-02-27T17:40:34.720Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-ba6a5ad",
+      "date": "2026-02-27T17:10:52.000Z",
+      "title": "Centralize branding configuration and integrate runtime brand metadata application",
+      "content": "<p>Centralize branding configuration and integrate runtime brand metadata application</p><p><strong>Commit:</strong> <code>ba6a5ad</code></p><p>- Introduced `gameBrand` configuration with typed branding fields (`productName`, `ogTitle`, `ogDescription`, etc.).</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "ba6a5adf375692d485182a9a54578a1a57a0ec0f",
+        "shortHash": "ba6a5ad",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/ba6a5adf375692d485182a9a54578a1a57a0ec0f"
+      }
+    },
+    {
+      "id": "git-9beabb4",
+      "date": "2026-02-27T16:55:23.000Z",
+      "title": "Add post-game lifecycle and next-game queuing logic",
+      "content": "<p>Add post-game lifecycle and next-game queuing logic</p><p><strong>Commit:</strong> <code>9beabb4</code></p><p>- Implemented lifecycle management for post-game sessions with inactivity handling and countdowns.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "9beabb472f11c1c5f5496e279a99a23a208f7c78",
+        "shortHash": "9beabb4",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9beabb472f11c1c5f5496e279a99a23a208f7c78"
+      }
+    },
     {
       "id": "git-3224403",
       "date": "2026-02-27T16:28:39.000Z",
@@ -533,34 +561,6 @@
         "hash": "185811fc2816b2d5d7b8ba7694bab4275d0e0457",
         "shortHash": "185811f",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/185811fc2816b2d5d7b8ba7694bab4275d0e0457"
-      }
-    },
-    {
-      "id": "git-a2be08b",
-      "date": "2026-02-26T22:00:39.000Z",
-      "title": "Remove Google Sign-In button and related logic from leaderboard UI",
-      "content": "<p>Remove Google Sign-In button and related logic from leaderboard UI</p><p><strong>Commit:</strong> <code>a2be08b</code></p><p>- Eliminated the display and handling of Google Sign-In button in the global leaderboard UI.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "a2be08b3692a76880391929ce60dcdec0f73e47a",
-        "shortHash": "a2be08b",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a2be08b3692a76880391929ce60dcdec0f73e47a"
-      }
-    },
-    {
-      "id": "git-dc3197d",
-      "date": "2026-02-26T21:49:44.000Z",
-      "title": "Add player score syncing and retrieval features",
-      "content": "<p>Add player score syncing and retrieval features</p><p><strong>Commit:</strong> <code>dc3197d</code></p><p>- Implemented backend API endpoints for handling player scores:</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "dc3197d3d813021f6be90476389e2a23b0eb53cb",
-        "shortHash": "dc3197d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/dc3197d3d813021f6be90476389e2a23b0eb53cb"
       }
     }
   ]

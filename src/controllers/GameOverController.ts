@@ -10,6 +10,8 @@ import { leaderboardService } from "../services/leaderboard.js";
 import { notificationService } from "../ui/notifications.js";
 import { generateShareURL } from "../game/state.js";
 import { buildScoreSeedShareUrl } from "../social/share/facebookShareMeta.js";
+import { gameBrand } from "../config/brand.js";
+import { t } from "../i18n/index.js";
 import { logger } from "../utils/logger.js";
 import type { GameState } from "../engine/types.js";
 import type { GameScene } from "../render/scene.js";
@@ -35,6 +37,7 @@ export class GameOverController {
     this.shareLinkEl = document.getElementById("share-link")!;
     this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement | null;
     this.waitNextGameBtn = document.getElementById("wait-next-game-btn") as HTMLButtonElement | null;
+    this.localizeStaticCopy();
   }
 
   /**
@@ -66,7 +69,10 @@ export class GameOverController {
     const rank = scoreHistoryService.getRank(state.score);
 
     // Show game over notification
-    notificationService.show(`🎮 Game Complete! Final Score: ${state.score}`, "success");
+    notificationService.show(
+      t("gameOver.notification.complete", { score: state.score }),
+      "success"
+    );
 
     // Update final score display
     this.finalScoreEl.textContent = state.score.toString();
@@ -105,7 +111,7 @@ export class GameOverController {
     // Difficulty badge with emoji
     const difficulty = state.mode.difficulty;
     const difficultyEmoji = difficulty === "easy" ? "🌱" : difficulty === "normal" ? "⚔️" : "🔥";
-    const difficultyLabel = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+    const difficultyLabel = this.getDifficultyLabel(difficulty);
     const difficultyColor = difficulty === "easy" ? "#4CAF50" : difficulty === "normal" ? "#2196F3" : "#FF5722";
 
     if (rank) {
@@ -117,12 +123,12 @@ export class GameOverController {
             ${difficultyEmoji} ${difficultyLabel}
           </span>
         </p>
-        <p style="font-size: 1.2em; opacity: 0.8; margin: 10px 0;">${rankEmoji} Rank #${rank} of ${totalGames} games</p>
+        <p style="font-size: 1.2em; opacity: 0.8; margin: 10px 0;">${t("gameOver.rank.label", { emoji: rankEmoji, rank, totalGames })}</p>
       `;
 
       // Add special message for personal best
       if (state.score === stats.bestScore) {
-        rankEl.innerHTML += `<p style="color: gold; font-weight: bold; margin: 5px 0;">🎉 NEW PERSONAL BEST!</p>`;
+        rankEl.innerHTML += `<p style="color: gold; font-weight: bold; margin: 5px 0;">${t("gameOver.rank.personalBest")}</p>`;
       }
     } else {
       rankEl.innerHTML = `
@@ -131,7 +137,7 @@ export class GameOverController {
             ${difficultyEmoji} ${difficultyLabel}
           </span>
         </p>
-        <p style="opacity: 0.8; margin: 10px 0;">🎮 First game!</p>
+        <p style="opacity: 0.8; margin: 10px 0;">${t("gameOver.rank.firstGame")}</p>
       `;
     }
   }
@@ -147,9 +153,9 @@ export class GameOverController {
       copyBtn.onclick = () => {
         audioService.playSfx("click");
         navigator.clipboard.writeText(shareURL).then(() => {
-          notificationService.show("Seed copied to clipboard!", "success");
+          notificationService.show(t("gameOver.seed.copySuccess"), "success");
         }).catch(() => {
-          notificationService.show("Failed to copy seed", "error");
+          notificationService.show(t("gameOver.seed.copyFailed"), "error");
         });
       };
     }
@@ -161,12 +167,12 @@ export class GameOverController {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `biscuits-seed-${score}.txt`;
+        a.download = `${this.getProductSlug()}-seed-${score}.txt`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        notificationService.show("Seed downloaded!", "success");
+        notificationService.show(t("gameOver.seed.downloadSuccess"), "success");
       };
     }
   }
@@ -189,5 +195,70 @@ export class GameOverController {
       this.newGameBtn.style.display = showWaitForNextGame ? "none" : "inline-flex";
       this.newGameBtn.disabled = false;
     }
+  }
+
+  private localizeStaticCopy(): void {
+    const heading = this.gameOverEl.querySelector("h1");
+    if (heading) {
+      heading.textContent = t("gameOver.title");
+    }
+
+    const lowerIsBetter = this.gameOverEl.querySelector<HTMLParagraphElement>("#game-over-lower-better");
+    if (lowerIsBetter) {
+      lowerIsBetter.textContent = t("gameOver.lowerIsBetter");
+    }
+
+    const seedInfo = this.gameOverEl.querySelector<HTMLParagraphElement>("#seed-info-text");
+    if (seedInfo) {
+      seedInfo.textContent = t("gameOver.seedInfo");
+    }
+
+    const copySeedLabel = document.getElementById("copy-seed-label");
+    if (copySeedLabel) {
+      copySeedLabel.textContent = t("gameOver.button.copySeed");
+    }
+
+    const downloadSeedLabel = document.getElementById("download-seed-label");
+    if (downloadSeedLabel) {
+      downloadSeedLabel.textContent = t("gameOver.button.downloadSeed");
+    }
+
+    const mainMenuButton = document.getElementById("return-main-menu-btn");
+    if (mainMenuButton) {
+      mainMenuButton.textContent = t("gameOver.button.mainMenu");
+    }
+
+    const leaderboardButton = document.getElementById("view-leaderboard-btn");
+    if (leaderboardButton) {
+      leaderboardButton.textContent = t("gameOver.button.viewLeaderboard");
+    }
+
+    if (this.newGameBtn) {
+      this.newGameBtn.textContent = t("gameOver.button.newGame");
+    }
+    if (this.waitNextGameBtn) {
+      this.waitNextGameBtn.textContent = t("gameOver.button.waitNextGame");
+    }
+  }
+
+  private getDifficultyLabel(difficulty: GameState["mode"]["difficulty"]): string {
+    switch (difficulty) {
+      case "easy":
+        return t("difficulty.easy");
+      case "hard":
+        return t("difficulty.hard");
+      case "normal":
+      default:
+        return t("difficulty.normal");
+    }
+  }
+
+  private getProductSlug(): string {
+    const slug = gameBrand.productName
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return slug || "game";
   }
 }

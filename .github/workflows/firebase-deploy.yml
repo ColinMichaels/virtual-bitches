@@ -390,6 +390,7 @@ jobs:
           E2E_API_BASE_URL: ${{ steps.deploy-api.outputs.url }}
           E2E_FIREBASE_ID_TOKEN: ${{ secrets.E2E_FIREBASE_ID_TOKEN }}
           E2E_ADMIN_TOKEN: ${{ secrets.API_ADMIN_TOKEN }}
+          E2E_QUEUE_LIFECYCLE_WAIT_MS: ${{ vars.E2E_QUEUE_LIFECYCLE_WAIT_MS || '90000' }}
           E2E_ASSERT_STORAGE_CUTOVER: ${{ (secrets.API_ADMIN_TOKEN != '' || secrets.E2E_FIREBASE_ID_TOKEN != '') && '1' || '0' }}
           E2E_EXPECT_STORAGE_BACKEND: ${{ vars.API_STORE_BACKEND || 'firestore' }}
           E2E_EXPECT_FIRESTORE_PREFIX: ${{ vars.API_FIRESTORE_PREFIX || 'api_v1' }}

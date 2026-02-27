@@ -6,6 +6,7 @@
 import { marked } from "marked";
 import { audioService } from "../services/audio.js";
 import { getRulesMarkdownUrlCandidates } from "../services/assetUrl.js";
+import { t } from "../i18n/index.js";
 import { logger } from "../utils/logger.js";
 import { modalManager } from "./modalManager.js";
 
@@ -25,14 +26,14 @@ export class RulesModal {
       <div class="modal-backdrop"></div>
       <div class="modal-content rules-modal-content">
         <div class="modal-header">
-          <h2>How To Play</h2>
-          <button class="modal-close" aria-label="Close">&times;</button>
+          <h2>${t("rules.modal.title")}</h2>
+          <button class="modal-close" aria-label="${t("rules.modal.closeAria")}">&times;</button>
         </div>
         <div class="rules-actions">
-          <button class="btn btn-outline btn-rules-replay" type="button">Replay Tutorial</button>
+          <button class="btn btn-outline btn-rules-replay" type="button">${t("rules.modal.replayTutorial")}</button>
         </div>
         <div class="modal-body rules-body">
-          <div class="loading">Loading rules...</div>
+          <div class="loading">${t("rules.modal.loading")}</div>
         </div>
       </div>
     `;
@@ -70,7 +71,7 @@ export class RulesModal {
       throw lastError ?? new Error("rules_fetch_failed");
     } catch (error) {
       log.error("Failed to load rules:", error);
-      this.rulesContent = "<p>Failed to load rules. Please try again.</p>";
+      this.rulesContent = `<p>${t("rules.modal.loadFailed")}</p>`;
       this.renderRules();
     }
   }

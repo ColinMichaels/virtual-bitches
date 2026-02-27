@@ -1,12 +1,45 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-27 (camera assist + updates commit-link + multiplayer room channels + winner queue lifecycle)
+**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-27 (Wave A i18n complete + deployment diagnostics priority)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
 ---
 
 ## 🔴 High Priority
+
+### Branding + I18N Overhaul (2026-02-27)
+- **Status**: 🟡 In Progress
+- **Plan Doc**: `docs/BRAND-I18N-ROLL-OUT-PLAN.md`
+- **Summary**:
+  - Centralize game branding into typed config (`productName`, logo/meta fields, age gate metadata)
+  - Add safe, case-preserving brand replacement tooling with protected infra/deploy allowlists
+  - Implement typed localization system and migrate UI text in waves (shell first, gameplay messaging second)
+- **Immediate Next Step**:
+  - [x] Execute Phase 0 (safety tooling + dry-run audit) before any mass replacement writes
+  - [x] Continue Phase 1 integration (brand config wiring for remaining shell/meta/splash surfaces)
+  - [x] Start Phase 3 i18n scaffold (typed locale dictionaries + translator service)
+  - [x] Add Wave A i18n coverage for rules modal, alpha warning modal, and game-over modal messaging/buttons
+  - [x] Add locale key parity guard test (`src/i18n/i18n.test.ts`)
+  - [x] Add Wave A i18n coverage for settings shell + tutorial shell with a new in-settings language selector
+  - [x] Complete Wave A i18n migration for remaining shell/menu/modal surfaces (index HUD labels/buttons, account/admin status copy)
+  - [x] Complete Wave A splash multiplayer localization key coverage and validation (`npx tsc --noEmit`, `test:i18n`, `build:dev`)
+  - [x] Diagnose active deployment error first (blocking next feature wave); capture build/deploy logs and root cause.
+  - [ ] Begin Wave B i18n migration for gameplay runtime status/notification messaging (`gameRuntime.ts`, turn banners, scoring/action prompts) after deployment issue is resolved.
+
+### Deployment Error Diagnostics (2026-02-27)
+- **Status**: 🟡 Mitigation Applied, Pending CI Verification
+- **Context**: Prioritize deployment stability before continuing Wave B gameplay messaging migration.
+- **Progress (2026-02-27)**:
+  - Winner-queue smoke failure reproduced from CI logs: `queue lifecycle did not auto-start a fresh round within expected wait window`.
+  - Root cause identified: smoke timeout window (`12s`) was shorter than production post-round auto-start delay (`60s`).
+  - Mitigation applied: increased queue lifecycle wait budget in `api/e2e/smoke.mjs` and set workflow env override in `.github/workflows/firebase-deploy.yml`.
+- **Tasks**:
+  - [x] Capture exact failing step and error output (build, asset copy, hosting rewrite/proxy, or backend endpoint mismatch).
+  - [x] Identify whether failure is frontend artifact, server runtime, environment variable, or dependency/version mismatch.
+  - [x] Implement fix for observed queue-lifecycle wait-window mismatch.
+  - [ ] Re-run GitHub Actions deploy smoke to confirm mitigation in CI.
+  - [ ] Document root cause + mitigation in `docs/AUDIT-2026-02-25.md` follow-up section or a new deployment incident note.
 
 ### Camera System & Machinima Tools (Phase 1 COMPLETE, Phase 2 PARTIAL) 📷
 - **Status**: ✅ Phase 1 COMPLETE (2026-02-24) • 🟡 Phase 2 PARTIAL (2026-02-25 foundation work)

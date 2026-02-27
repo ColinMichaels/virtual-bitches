@@ -7,6 +7,7 @@ import { audioService } from "../services/audio.js";
 import { hapticsService } from "../services/haptics.js";
 import { cameraService, type CameraPosition } from "../services/cameraService.js";
 import type { GameState } from "../engine/types.js";
+import { onLocaleChange, t } from "../i18n/index.js";
 import type { LeaderboardModal } from "../ui/leaderboard.js";
 import type { RulesModal } from "../ui/rules.js";
 import type { GameScene } from "../render/scene.js";
@@ -115,6 +116,9 @@ export class InputController {
     this.setupCameraControls();
     this.setupMobileMenu();
     this.setupKeyboard();
+    onLocaleChange(() => {
+      this.refreshMobileCameraSlots();
+    });
   }
 
   /**
@@ -382,10 +386,34 @@ export class InputController {
       icon: string;
       view: "default" | "top" | "side" | "front";
     }> = [
-      { mode: "default", label: "Default", meta: "Preset", icon: "📷", view: "default" },
-      { mode: "default", label: "Top", meta: "Preset", icon: "⬆️", view: "top" },
-      { mode: "default", label: "Side", meta: "Preset", icon: "↔️", view: "side" },
-      { mode: "default", label: "Front", meta: "Preset", icon: "🎯", view: "front" },
+      {
+        mode: "default",
+        label: t("shell.mobile.camera.default"),
+        meta: t("shell.mobile.camera.meta.preset"),
+        icon: "📷",
+        view: "default",
+      },
+      {
+        mode: "default",
+        label: t("shell.mobile.camera.top"),
+        meta: t("shell.mobile.camera.meta.preset"),
+        icon: "⬆️",
+        view: "top",
+      },
+      {
+        mode: "default",
+        label: t("shell.mobile.camera.side"),
+        meta: t("shell.mobile.camera.meta.preset"),
+        icon: "↔️",
+        view: "side",
+      },
+      {
+        mode: "default",
+        label: t("shell.mobile.camera.front"),
+        meta: t("shell.mobile.camera.meta.preset"),
+        icon: "🎯",
+        view: "front",
+      },
     ];
 
     const favoritePositions = cameraService
@@ -426,11 +454,13 @@ export class InputController {
     icon: string;
     positionId: string;
   } {
-    const shortLabel = position.name.trim().slice(0, 12) || "Saved";
+    const shortLabel = position.name.trim().slice(0, 12) || t("shell.mobile.camera.saved");
     return {
       mode: "saved",
       label: shortLabel,
-      meta: position.isFavorite ? "Pinned" : "Saved",
+      meta: position.isFavorite
+        ? t("shell.mobile.camera.meta.pinned")
+        : t("shell.mobile.camera.meta.saved"),
       icon: position.isFavorite ? "📌" : "📷",
       positionId: position.id,
     };
@@ -454,7 +484,10 @@ export class InputController {
       button.dataset.cameraMode = slot.mode;
       button.dataset.cameraPositionId = slot.positionId ?? "";
       button.dataset.cameraView = slot.view ?? "";
-      button.title = slot.mode === "saved" ? `Pinned: ${slot.label}` : `${slot.label} View`;
+      button.title =
+        slot.mode === "saved"
+          ? t("shell.mobile.camera.savedTitle", { label: slot.label })
+          : t("shell.mobile.camera.viewTitle", { label: slot.label });
 
       const iconEl = button.querySelector<HTMLElement>(".mobile-camera-slot-icon");
       const nameEl = button.querySelector<HTMLElement>(".mobile-camera-slot-name");

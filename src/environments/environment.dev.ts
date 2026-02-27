@@ -22,7 +22,7 @@ export const environment: Environment = {
   assetBaseUrl: env.VITE_ASSET_BASE_URL ?? "",
   wsUrl: env.VITE_WS_URL ?? "wss://ws-dev.biscuits-game.com",
   adminUiEnabled: parseBooleanFlag(env.VITE_ENABLE_ADMIN_UI, true),
-  gameTitle: "Virtual Bitches",
+  gameTitle: "Virtual Biscuits",
   features: {
     leaderboard: true,
     multiplayer: true,

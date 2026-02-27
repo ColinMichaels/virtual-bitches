@@ -1,4 +1,5 @@
 import { environment } from "@env";
+import { gameBrand } from "../config/brand.js";
 
 const env = (import.meta as ImportMeta & { env?: Record<string, string> }).env ?? {};
 const HTTP_URL_REGEX = /^https?:\/\//i;
@@ -122,7 +123,7 @@ export function getBrandLogoUrl(): string {
 }
 
 export function getBrandLogoUrlCandidates(): string[] {
-  return getOverrideUrlCandidates(env.VITE_BRAND_LOGO_URL, "assets/logos/Biscuits_logo.png");
+  return getOverrideUrlCandidates(env.VITE_BRAND_LOGO_URL, gameBrand.logoUrl);
 }
 
 export function getGameMusicUrlCandidates(): string[] {

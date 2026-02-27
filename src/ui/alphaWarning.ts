@@ -4,6 +4,8 @@
  */
 
 import { audioService } from "../services/audio.js";
+import { gameBrand } from "../config/brand.js";
+import { t } from "../i18n/index.js";
 import { logger } from "../utils/logger.js";
 import { modalManager } from "./modalManager.js";
 
@@ -23,56 +25,55 @@ export class AlphaWarningModal {
     this.container.innerHTML = `
       <div class="modal-backdrop alpha-backdrop"></div>
       <div class="modal-content alpha-content">
-        <div class="alpha-badge">⚠️ ALPHA RELEASE</div>
+        <div class="alpha-badge">${t("alpha.badge")}</div>
 
         <div class="alpha-hero">
-          <img src="./alpha-banner.png" alt="Alpha Release" class="alpha-image"
+          <img src="./alpha-banner.png" alt="${t("alpha.imageAlt")}" class="alpha-image"
                onerror="this.onerror=null; this.src='./alpha-warning.png';" />
         </div>
 
         <div class="alpha-body">
-          <h2>Welcome to BISCUITS Alpha!</h2>
-          <p class="alpha-subtitle">Pre-Beta Development Build</p>
+          <h2>${t("alpha.title", { productName: gameBrand.productName })}</h2>
+          <p class="alpha-subtitle">${t("alpha.subtitle")}</p>
 
           <div class="alpha-message">
             <p>
-              Thank you for testing BISCUITS! This is an <strong>alpha pre-release</strong> version
-              and is still under active development.
+              ${t("alpha.message.intro", { productName: gameBrand.productName })}
             </p>
 
             <div class="alpha-warnings">
               <div class="alpha-warning-item">
                 <span class="alpha-icon">🐛</span>
-                <span>You may encounter bugs or unexpected behavior</span>
+                <span>${t("alpha.warning.bugs")}</span>
               </div>
               <div class="alpha-warning-item">
                 <span class="alpha-icon">💾</span>
-                <span>Saved data may be reset between updates</span>
+                <span>${t("alpha.warning.dataReset")}</span>
               </div>
               <div class="alpha-warning-item">
                 <span class="alpha-icon">🚧</span>
-                <span>Features are incomplete and subject to change</span>
+                <span>${t("alpha.warning.incomplete")}</span>
               </div>
               <div class="alpha-warning-item">
                 <span class="alpha-icon">📱</span>
-                <span>Mobile experience is still being optimized</span>
+                <span>${t("alpha.warning.mobile")}</span>
               </div>
             </div>
 
             <p class="alpha-thanks">
-              Your feedback helps make BISCUITS better! Please report any issues you encounter.
+              ${t("alpha.thanks", { productName: gameBrand.productName })}
             </p>
           </div>
 
           <div class="alpha-checkbox">
             <label>
               <input type="checkbox" id="alpha-dont-show" />
-              Don't show this again
+              ${t("alpha.checkbox.dontShowAgain")}
             </label>
           </div>
 
           <div class="alpha-actions">
-            <button id="alpha-accept-btn" class="btn btn-primary primary">I Understand, Let's Play!</button>
+            <button id="alpha-accept-btn" class="btn btn-primary primary">${t("alpha.button.accept")}</button>
           </div>
         </div>
       </div>

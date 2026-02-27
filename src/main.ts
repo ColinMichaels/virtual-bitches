@@ -6,6 +6,8 @@ import { settingsService } from "./services/settings.js";
 import { getBrandLogoUrl } from "./services/assetUrl.js";
 import { environment } from "@env";
 import { logger } from "./utils/logger.js";
+import { applyBrandMetadataToDocument } from "./config/brand.js";
+import { applyTranslationsToDom, onLocaleChange, t } from "./i18n/index.js";
 import type { SplashStartOptions } from "./ui/splash.js";
 import { initializeFacebookShareMeta } from "./social/share/facebookShareMeta.js";
 
@@ -54,14 +56,19 @@ let lastFirebaseReauthPromptAt = 0;
 
 registerAuthSessionHandlers();
 hydrateBrandAssets();
+applyBrandMetadataToDocument();
 initializeFacebookShareMeta();
+applyTranslationsToDom();
+onLocaleChange(() => {
+  applyTranslationsToDom();
+});
 applyMobileDiceLayoutPreference(settingsService.getSettings().controls.mobileDiceLayout);
 settingsService.onChange((settings) => {
   applyMobileDiceLayoutPreference(settings.controls.mobileDiceLayout);
 });
 
 bootLoadingScreen.show();
-setBootStatus("Loading theme catalog...", 8);
+setBootStatus(t("main.boot.loadingThemeCatalog"), 8);
 
 void themeManager
   .initialize()
@@ -75,7 +82,7 @@ void themeManager
   });
 
 async function initializeShellUi(): Promise<void> {
-  setBootStatus("Preparing main menu...", 18);
+  setBootStatus(t("main.boot.preparingMainMenu"), 18);
 
   splash = new SplashScreen(
     (startOptions) => startGame(startOptions),
@@ -91,29 +98,29 @@ async function initializeShellUi(): Promise<void> {
   );
 
   try {
-    setBootStatus("Loading floating dice...", 36);
+    setBootStatus(t("main.boot.loadingFloatingDice"), 36);
     await splash.prepareBackground((status) => {
       const normalized = status.toLowerCase();
       if (normalized.includes("initializing")) {
-        setBootStatus("Starting 3D menu...", 50);
+        setBootStatus(t("main.boot.starting3dMenu"), 50);
         return;
       }
       if (normalized.includes("assets")) {
-        setBootStatus("Loading dice assets...", 64);
+        setBootStatus(t("main.boot.loadingDiceAssets"), 64);
         return;
       }
       if (normalized.includes("spawning")) {
-        setBootStatus("Summoning floating dice...", 76);
+        setBootStatus(t("main.boot.summoningFloatingDice"), 76);
         return;
       }
       if (normalized.includes("animating")) {
-        setBootStatus("Finalizing menu...", 84);
+        setBootStatus(t("main.boot.finalizingMenu"), 84);
         return;
       }
       setBootStatus(status, 58);
     });
 
-    setBootStatus("Checking updates...", 90);
+    setBootStatus(t("main.boot.checkingUpdates"), 90);
     await getUpdatesPanel();
     void maybeShowAlphaWarning();
   } catch (error) {
@@ -170,7 +177,7 @@ async function startGame(startOptions: SplashStartOptions): Promise<boolean> {
     return true;
   } catch (error) {
     log.error("Failed to load game runtime:", error);
-    notificationService.show("Failed to load game engine. Please refresh and try again.", "error", 3200);
+    notificationService.show(t("main.error.loadGameEngine"), "error", 3200);
     return false;
   }
 }
@@ -215,8 +222,8 @@ async function maybeAutoStartFromMultiplayerInvite(): Promise<void> {
     return;
   }
 
-  const inviteLabel = invite.roomCode ?? invite.sessionId ?? "multiplayer room";
-  notificationService.show(`Rejoining ${inviteLabel}...`, "info", 2200);
+  const inviteLabel = invite.roomCode ?? invite.sessionId ?? t("main.multiplayer.roomFallback");
+  notificationService.show(t("main.multiplayer.rejoining", { room: inviteLabel }), "info", 2200);
   const { firebaseAuthService } = await getAuthServices();
   await firebaseAuthService.initialize();
   if (!firebaseAuthService.isAuthenticated()) {
@@ -409,9 +416,8 @@ async function promptForFirebaseReauth(reason?: string): Promise<void> {
       return;
     }
 
-    const reasonSuffix = reason ? ` (${reason})` : "";
     notificationService.show(
-      `Your sign-in session expired${reasonSuffix}. Please authenticate again.`,
+      t("main.auth.sessionExpired", { reason: reason ? ` (${reason})` : "" }),
       "warning",
       3200
     );
@@ -422,14 +428,14 @@ async function promptForFirebaseReauth(reason?: string): Promise<void> {
       const signedIn = await firebaseAuthService.signInWithGoogle();
       if (signedIn) {
         setGuestModeEnabled(false);
-        notificationService.show("Signed in successfully.", "success", 2200);
+        notificationService.show(t("main.auth.signInSuccess"), "success", 2200);
       }
       return;
     }
 
     if (choice === "guest") {
       setGuestModeEnabled(true);
-      notificationService.show("Continuing in guest mode.", "info", 2400);
+      notificationService.show(t("main.auth.continueGuest"), "info", 2400);
     }
   } finally {
     firebaseReauthPromptInFlight = false;
@@ -455,13 +461,13 @@ async function ensurePlayerAccessChoice(firebaseAuthService: FirebaseAuthService
 
   if (choice === "guest") {
     setGuestModeEnabled(true);
-    notificationService.show("Guest mode enabled. Leaderboard posting is disabled.", "info", 2600);
+    notificationService.show(t("main.auth.guestModeEnabled"), "info", 2600);
     return true;
   }
 
   const signedIn = await firebaseAuthService.signInWithGoogle();
   if (!signedIn) {
-    notificationService.show("Google sign-in failed. Try again or continue as guest.", "warning", 2800);
+    notificationService.show(t("main.auth.googleSignInFailed"), "warning", 2800);
     return false;
   }
 
@@ -509,7 +515,7 @@ function setBootStatus(message: string, progress?: number): void {
 }
 
 async function completeBootLoading(): Promise<void> {
-  setBootStatus("Ready", 100);
+  setBootStatus(t("main.boot.ready"), 100);
   await waitForBootProgress(99, 1000);
 
   const elapsed = performance.now() - bootStartedAt;

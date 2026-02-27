@@ -4,6 +4,8 @@
  */
 
 import { audioService } from "../services/audio.js";
+import { gameBrand } from "../config/brand.js";
+import { t } from "../i18n/index.js";
 import { settingsService } from "../services/settings.js";
 import { logger } from "../utils/logger.js";
 import { confirmAction } from "./confirmModal.js";
@@ -38,82 +40,7 @@ export class TutorialModal {
   private tutorialMusicChoiceCommitted = false;
   private tutorialMusicSnapshot: { musicEnabled: boolean; musicVolume: number } | null = null;
 
-  private steps: TutorialStep[] = [
-    {
-      title: "Welcome to BISCUITS!",
-      content: "A push-your-luck dice game where <strong>lower scores win</strong>. Let's learn by playing!",
-      image: "🎲"
-    },
-    {
-      title: "Understanding Scoring",
-      content: "Each die scores: <strong>(max value - rolled value)</strong><br><br>🎯 d6 showing 6 = <strong>0 points</strong> (perfect!)<br>😬 d6 showing 1 = <strong>5 points</strong> (bad!)<br><br>Lower is better!",
-      image: "📊"
-    },
-    {
-      title: "Let's Roll!",
-      content: "Click the <strong>Roll Dice</strong> button to roll all your dice. You get 3 rolls per game.",
-      image: "🎲",
-      spotlight: "#action-btn",
-      waitForAction: true,
-      actionType: 'roll'
-    },
-    {
-      title: "Select Dice",
-      content: "Great! Now <strong>click on dice</strong> to select them. Green highlights = 0 points (best). Try selecting dice with green highlights!",
-      image: "👆",
-      spotlight: "#dice-row",
-      waitForAction: true,
-      actionType: 'select'
-    },
-    {
-      title: "Score Selected",
-      content: "Perfect! Now click <strong>Score</strong> to lock in those dice. They'll be removed from play.",
-      image: "✅",
-      spotlight: "#action-btn",
-      waitForAction: true,
-      actionType: 'score'
-    },
-    {
-      title: "Audio And Settings",
-      content: "Open <strong>Settings</strong> now (<strong>Esc</strong> or the gear button). We'll open Audio controls and preview music.",
-      image: "⚙️",
-      spotlight: "#settings-gear-btn, #mobile-settings-btn",
-      waitForAction: true,
-      actionType: "openSettings"
-    },
-    {
-      title: "Music Only",
-      content: "This step controls <strong>music only</strong>. Sound effects are configured separately in the next step.",
-      image: "🎵",
-      spotlight: "#audio-music-toggle-row, #music-enabled, #audio-music-volume-row, #music-volume",
-      waitForAction: true,
-      actionType: "musicChoice"
-    },
-    {
-      title: "Sound Effects Separate",
-      content: "Use these controls if you want quieter clicks/rolls. Music mute does not mute sound effects.",
-      image: "🔔",
-      spotlight: "#audio-sfx-toggle-row, #sfx-enabled, #audio-sfx-volume-row, #sfx-volume",
-      actionType: "sfxInfo"
-    },
-    {
-      title: "Dice Theme",
-      content: "You can change your dice look in <strong>Settings → Graphics</strong>. Use the highlighted Dice Theme dropdown.",
-      image: "🎨",
-      spotlight: "#theme-switcher-container, #theme-dropdown",
-      actionType: "themeInfo"
-    },
-    {
-      title: "Keep Going!",
-      content: "You've got the basics! Continue playing this practice game. Remember:<br>• Lower scores win<br>• You have 3 rolls total<br>• Once scored, dice are gone",
-      image: "🎯"
-    },
-    {
-      title: "Try Easy Mode?",
-      content: "Want help while you learn? <strong>Easy Mode</strong> shows hints and lets you undo mistakes.<br><br>You can change modes anytime in Settings.",
-      image: "✨"
-    }
-  ];
+  private steps: TutorialStep[] = [];
 
   constructor() {
     // Create spotlight overlay
@@ -132,16 +59,18 @@ export class TutorialModal {
       <div class="modal-content tutorial-content">
         <div class="tutorial-step">
           <div class="tutorial-icon">🎲</div>
-          <h2 class="tutorial-title">Welcome!</h2>
+          <h2 class="tutorial-title">${t("tutorial.modal.title")}</h2>
           <div class="tutorial-body"></div>
           <div class="tutorial-nav">
-            <button id="tutorial-skip" class="btn btn-secondary secondary">Skip Tutorial</button>
+            <button id="tutorial-skip" class="btn btn-secondary secondary">${t("tutorial.button.skip")}</button>
             <div class="tutorial-dots"></div>
-            <button id="tutorial-next" class="btn btn-primary primary">Next</button>
+            <button id="tutorial-next" class="btn btn-primary primary">${t("tutorial.button.next")}</button>
           </div>
         </div>
       </div>
     `;
+
+    this.steps = this.buildSteps();
 
     document.body.appendChild(this.container);
     modalManager.register({
@@ -263,7 +192,9 @@ export class TutorialModal {
       // Show next button
       nextBtn.style.display = "inline-block";
       this.isWaitingForAction = false;
-      nextBtn.textContent = this.currentStep === this.steps.length - 1 ? "Finish Tutorial" : "Next";
+      nextBtn.textContent = this.currentStep === this.steps.length - 1
+        ? t("tutorial.button.finish")
+        : t("tutorial.button.next");
     }
   }
 
@@ -404,34 +335,34 @@ export class TutorialModal {
   private getWaitingActionText(actionType?: TutorialActionType): string {
     switch (actionType) {
       case "roll":
-        return "Waiting for you to roll...";
+        return t("tutorial.waiting.roll");
       case "select":
-        return "Waiting for you to select dice...";
+        return t("tutorial.waiting.select");
       case "score":
-        return "Waiting for you to score selected dice...";
+        return t("tutorial.waiting.score");
       case "openSettings":
-        return "Waiting for you to open Settings...";
+        return t("tutorial.waiting.openSettings");
       case "musicChoice":
-        return "Choose mute or keep music to continue...";
+        return t("tutorial.waiting.musicChoice");
       default:
-        return "Waiting for your action...";
+        return t("tutorial.waiting.default");
     }
   }
 
   private getSettingsFocusMessage(actionType?: TutorialActionType): string {
     if (actionType === "openSettings") {
-      return "Opening <strong>Settings → Audio</strong> so you can preview and configure music.";
+      return t("tutorial.settingsFocus.openSettings");
     }
     if (actionType === "musicChoice") {
-      return "Music setup only: use the highlighted <strong>Music</strong> controls, then choose below.";
+      return t("tutorial.settingsFocus.musicChoice");
     }
     if (actionType === "sfxInfo") {
-      return "Sound effects are separate: use the highlighted <strong>Sound Effects</strong> controls if needed.";
+      return t("tutorial.settingsFocus.sfxInfo");
     }
     if (actionType === "themeInfo") {
-      return "Theme setup: switch to <strong>Graphics</strong> and use the highlighted <strong>Dice Theme</strong> dropdown.";
+      return t("tutorial.settingsFocus.themeInfo");
     }
-    return "Adjust audio settings.";
+    return t("tutorial.settingsFocus.default");
   }
 
   private requestSettingsTabForStep(actionType?: TutorialActionType): void {
@@ -465,8 +396,8 @@ export class TutorialModal {
     const controls = document.createElement("div");
     controls.className = "tutorial-music-choice";
     controls.innerHTML = `
-      <button type="button" class="btn btn-danger danger" data-music-choice="mute">Mute Music</button>
-      <button type="button" class="btn btn-primary primary" data-music-choice="keep">Keep Music On</button>
+      <button type="button" class="btn btn-danger danger" data-music-choice="mute">${t("tutorial.musicChoice.mute")}</button>
+      <button type="button" class="btn btn-primary primary" data-music-choice="keep">${t("tutorial.musicChoice.keep")}</button>
     `;
 
     controls.querySelector<HTMLButtonElement>('[data-music-choice="mute"]')?.addEventListener("click", () => {
@@ -590,15 +521,10 @@ export class TutorialModal {
 
   private async offerEasyMode(): Promise<void> {
     const wantsEasyMode = await confirmAction({
-      title: "Tutorial Complete",
-      message:
-        "Would you like to enable Easy Mode?\n\n" +
-        "Easy Mode includes:\n" +
-        "- Color-coded hints for best moves\n" +
-        "- Undo button to fix mistakes\n\n" +
-        "You can change this anytime in Settings.",
-      confirmLabel: "Enable Easy Mode",
-      cancelLabel: "Not Now",
+      title: t("tutorial.easyModePrompt.title"),
+      message: t("tutorial.easyModePrompt.message"),
+      confirmLabel: t("tutorial.easyModePrompt.confirm"),
+      cancelLabel: t("tutorial.easyModePrompt.cancel"),
       tone: "primary",
     });
 
@@ -628,6 +554,11 @@ export class TutorialModal {
     modalManager.requestOpen("tutorial-modal");
     this.container.style.display = "flex";
     this.container.classList.remove("tutorial-modal--settings-focus");
+    const skipBtn = document.getElementById("tutorial-skip");
+    if (skipBtn) {
+      skipBtn.textContent = t("tutorial.button.skip");
+    }
+    this.steps = this.buildSteps();
     this.currentStep = 0;
     this.autoOpenSettingsRequested = false;
     this.tutorialMusicPreviewStarted = false;
@@ -668,5 +599,84 @@ export class TutorialModal {
       return "graphics";
     }
     return null;
+  }
+
+  private buildSteps(): TutorialStep[] {
+    return [
+      {
+        title: t("tutorial.step.welcome.title", { productName: gameBrand.productName }),
+        content: t("tutorial.step.welcome.content"),
+        image: "🎲",
+      },
+      {
+        title: t("tutorial.step.scoring.title"),
+        content: t("tutorial.step.scoring.content"),
+        image: "📊",
+      },
+      {
+        title: t("tutorial.step.roll.title"),
+        content: t("tutorial.step.roll.content"),
+        image: "🎲",
+        spotlight: "#action-btn",
+        waitForAction: true,
+        actionType: "roll",
+      },
+      {
+        title: t("tutorial.step.select.title"),
+        content: t("tutorial.step.select.content"),
+        image: "👆",
+        spotlight: "#dice-row",
+        waitForAction: true,
+        actionType: "select",
+      },
+      {
+        title: t("tutorial.step.score.title"),
+        content: t("tutorial.step.score.content"),
+        image: "✅",
+        spotlight: "#action-btn",
+        waitForAction: true,
+        actionType: "score",
+      },
+      {
+        title: t("tutorial.step.audioSettings.title"),
+        content: t("tutorial.step.audioSettings.content"),
+        image: "⚙️",
+        spotlight: "#settings-gear-btn, #mobile-settings-btn",
+        waitForAction: true,
+        actionType: "openSettings",
+      },
+      {
+        title: t("tutorial.step.musicOnly.title"),
+        content: t("tutorial.step.musicOnly.content"),
+        image: "🎵",
+        spotlight: "#audio-music-toggle-row, #music-enabled, #audio-music-volume-row, #music-volume",
+        waitForAction: true,
+        actionType: "musicChoice",
+      },
+      {
+        title: t("tutorial.step.sfxSeparate.title"),
+        content: t("tutorial.step.sfxSeparate.content"),
+        image: "🔔",
+        spotlight: "#audio-sfx-toggle-row, #sfx-enabled, #audio-sfx-volume-row, #sfx-volume",
+        actionType: "sfxInfo",
+      },
+      {
+        title: t("tutorial.step.theme.title"),
+        content: t("tutorial.step.theme.content"),
+        image: "🎨",
+        spotlight: "#theme-switcher-container, #theme-dropdown",
+        actionType: "themeInfo",
+      },
+      {
+        title: t("tutorial.step.keepGoing.title"),
+        content: t("tutorial.step.keepGoing.content"),
+        image: "🎯",
+      },
+      {
+        title: t("tutorial.step.easyMode.title"),
+        content: t("tutorial.step.easyMode.content"),
+        image: "✨",
+      },
+    ];
   }
 }
