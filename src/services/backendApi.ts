@@ -114,8 +114,10 @@ export interface MultiplayerSessionRecord {
   sessionComplete?: boolean;
   completedAt?: number | null;
   createdAt: number;
+  gameStartedAt?: number;
   lastActivityAt?: number;
   expiresAt?: number;
+  serverNow?: number;
 }
 
 export interface MultiplayerRoomListing {

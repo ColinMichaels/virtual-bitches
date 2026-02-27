@@ -207,7 +207,10 @@ class Game implements GameCallbacks {
   private controlInversion: ControlInversionService;
   private multiplayerNetwork?: MultiplayerNetworkService;
   private multiplayerSessionService: MultiplayerSessionService;
-  private gameStartTime: number;
+  private gameStartTime = Date.now();
+  private gameStartServerAt: number | null = null;
+  private serverClockOffsetMs = 0;
+  private serverClockSampleCount = 0;
   private selectedDieIndex = 0; // For keyboard navigation
   private selectedSeatFocusIndex = -1; // For waiting/spectator keyboard camera cycling
   private inputController: InputController;
@@ -458,8 +461,7 @@ class Game implements GameCallbacks {
     this.scene.updateTableContrast(settings.display.visual.tableContrast);
     this.hud = new HUD();
     this.hud.setTurnSyncStatus(null);
-    this.gameStartTime = Date.now();
-    this.hud.setGameClockStart(this.gameStartTime);
+    this.resetLocalGameClockStart();
     this.startHudClockTicker();
     this.startTurnSyncWatchdog();
     this.diceRow = new DiceRow((dieId) => this.handleDieClick(dieId), this.diceRenderer as any);
@@ -664,10 +666,6 @@ class Game implements GameCallbacks {
       this.diceRow.setHintMode(true);
       tutorialModal.show();
     }
-
-    // Track game start time
-    this.gameStartTime = Date.now();
-    this.hud.setGameClockStart(this.gameStartTime);
   }
 
   private startHudClockTicker(): void {
@@ -677,6 +675,98 @@ class Game implements GameCallbacks {
     this.hudClockHandle = setInterval(() => {
       this.hud.tick();
     }, 250);
+  }
+
+  private resetLocalGameClockStart(): void {
+    this.gameStartServerAt = null;
+    this.gameStartTime = Date.now();
+    this.hud.setGameClockStart(this.gameStartTime);
+  }
+
+  private syncServerClockOffset(serverNowMs: number | null | undefined): void {
+    if (typeof serverNowMs !== "number" || !Number.isFinite(serverNowMs) || serverNowMs <= 0) {
+      return;
+    }
+
+    const measuredOffset = Date.now() - Math.floor(serverNowMs);
+    if (!Number.isFinite(measuredOffset)) {
+      return;
+    }
+
+    if (this.serverClockSampleCount <= 0) {
+      this.serverClockOffsetMs = measuredOffset;
+      this.serverClockSampleCount = 1;
+      return;
+    }
+
+    // Keep jitter low while still adapting to drift.
+    this.serverClockOffsetMs = Math.round(this.serverClockOffsetMs * 0.75 + measuredOffset * 0.25);
+    this.serverClockSampleCount = Math.min(64, this.serverClockSampleCount + 1);
+  }
+
+  private mapServerTimestampToLocalClock(serverTimestampMs: number | null | undefined): number | null {
+    if (
+      typeof serverTimestampMs !== "number" ||
+      !Number.isFinite(serverTimestampMs) ||
+      serverTimestampMs <= 0
+    ) {
+      return null;
+    }
+    return Math.floor(serverTimestampMs + this.serverClockOffsetMs);
+  }
+
+  private resolveServerNowTimestamp(source: {
+    serverNow?: number;
+    timestamp?: number;
+  }): number | null {
+    if (typeof source.serverNow === "number" && Number.isFinite(source.serverNow) && source.serverNow > 0) {
+      return Math.floor(source.serverNow);
+    }
+    if (typeof source.timestamp === "number" && Number.isFinite(source.timestamp) && source.timestamp > 0) {
+      return Math.floor(source.timestamp);
+    }
+    return null;
+  }
+
+  private applyMultiplayerClockFromServer(
+    source: {
+      gameStartedAt?: number;
+      createdAt?: number;
+      serverNow?: number;
+      timestamp?: number;
+    },
+    options?: { force?: boolean }
+  ): void {
+    const serverNowMs = this.resolveServerNowTimestamp(source);
+    this.syncServerClockOffset(serverNowMs);
+
+    const serverGameStartAt =
+      typeof source.gameStartedAt === "number" &&
+      Number.isFinite(source.gameStartedAt) &&
+      source.gameStartedAt > 0
+        ? Math.floor(source.gameStartedAt)
+        : typeof source.createdAt === "number" &&
+            Number.isFinite(source.createdAt) &&
+            source.createdAt > 0
+          ? Math.floor(source.createdAt)
+          : null;
+    if (!serverGameStartAt) {
+      return;
+    }
+
+    const localGameStartAt = this.mapServerTimestampToLocalClock(serverGameStartAt) ?? serverGameStartAt;
+    const shouldApply =
+      options?.force === true ||
+      this.gameStartServerAt === null ||
+      this.gameStartServerAt !== serverGameStartAt ||
+      Math.abs(localGameStartAt - this.gameStartTime) > 600;
+    if (!shouldApply) {
+      return;
+    }
+
+    this.gameStartServerAt = serverGameStartAt;
+    this.gameStartTime = localGameStartAt;
+    this.hud.setGameClockStart(this.gameStartTime);
   }
 
   private touchMultiplayerTurnSyncActivity(): void {
@@ -812,10 +902,14 @@ class Game implements GameCallbacks {
   }
 
   private applyTurnTiming(deadlineAt?: number | null): void {
-    this.activeTurnDeadlineAt =
+    const normalizedDeadline =
       typeof deadlineAt === "number" && Number.isFinite(deadlineAt) && deadlineAt > 0
         ? Math.floor(deadlineAt)
         : null;
+    this.activeTurnDeadlineAt =
+      normalizedDeadline === null
+        ? null
+        : this.mapServerTimestampToLocalClock(normalizedDeadline) ?? normalizedDeadline;
     this.syncHudTurnTimer();
   }
 
@@ -1271,6 +1365,7 @@ class Game implements GameCallbacks {
     playerDataSyncService.setSessionId(session.sessionId);
     this.sessionExpiryPromptActive = false;
     this.lastTurnPlanPreview = "";
+    this.applyMultiplayerClockFromServer(session, { force: true });
     this.applyMultiplayerSeatState(session);
     this.touchMultiplayerTurnSyncActivity();
     this.hud.setTurnSyncStatus("ok", "Sync Ready");
@@ -1290,6 +1385,7 @@ class Game implements GameCallbacks {
   }
 
   private applyMultiplayerSeatState(session: MultiplayerSessionRecord): void {
+    this.applyMultiplayerClockFromServer(session);
     const seatedParticipants = this.computeSeatedParticipants(session);
     this.syncBotMemeAvatarState(seatedParticipants);
     const participantBySeat = new Map<number, SeatedMultiplayerParticipant>();
@@ -1975,8 +2071,7 @@ class Game implements GameCallbacks {
     this.activeRollServerId = null;
     this.selectedDieIndex = 0;
     this.selectedSeatFocusIndex = -1;
-    this.gameStartTime = Date.now();
-    this.hud.setGameClockStart(this.gameStartTime);
+    this.resetLocalGameClockStart();
     this.applyTurnTiming(null);
     notificationService.show("Next multiplayer game started.", "info", 1800);
   }
@@ -2334,6 +2429,7 @@ class Game implements GameCallbacks {
     if (message.sessionId !== previousSession.sessionId) {
       return;
     }
+    this.applyMultiplayerClockFromServer(message);
 
     const hasTurnState = Object.prototype.hasOwnProperty.call(message, "turnState");
     const hasStandings = Object.prototype.hasOwnProperty.call(message, "standings");
@@ -2351,8 +2447,14 @@ class Game implements GameCallbacks {
       ...(hasCompletedAt
         ? { completedAt: message.completedAt ?? null }
         : {}),
+      ...(typeof message.gameStartedAt === "number" && Number.isFinite(message.gameStartedAt)
+        ? { gameStartedAt: message.gameStartedAt }
+        : {}),
       ...(typeof message.expiresAt === "number" && Number.isFinite(message.expiresAt)
         ? { expiresAt: message.expiresAt }
+        : {}),
+      ...(typeof message.serverNow === "number" && Number.isFinite(message.serverNow)
+        ? { serverNow: message.serverNow }
         : {}),
     });
     if (!syncedSession) {
@@ -2378,6 +2480,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.applyMultiplayerClockFromServer(message);
     this.touchMultiplayerTurnSyncActivity();
     this.clearPendingTurnTransitionSyncRecovery();
     const previousActiveTurnPlayerId = this.activeTurnPlayerId;
@@ -2422,6 +2525,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.syncServerClockOffset(message.timestamp);
     this.touchMultiplayerTurnSyncActivity();
     const previousActiveTurnPlayerId = this.activeTurnPlayerId;
     this.pendingTurnEndSync = false;
@@ -2464,6 +2568,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.syncServerClockOffset(message.timestamp);
     this.touchMultiplayerTurnSyncActivity();
     const expiresAt =
       typeof message.turnExpiresAt === "number" && Number.isFinite(message.turnExpiresAt)
@@ -2497,6 +2602,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.syncServerClockOffset(message.timestamp);
     this.touchMultiplayerTurnSyncActivity();
     this.applyTurnTiming(null);
     const playerId = typeof message.playerId === "string" ? message.playerId : "";
@@ -2527,6 +2633,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.syncServerClockOffset(message.timestamp);
     this.touchMultiplayerTurnSyncActivity();
     if (!message?.playerId) {
       return;
@@ -3427,8 +3534,7 @@ class Game implements GameCallbacks {
       GameFlowController.updateHintMode(this.state, this.diceRow);
       GameFlowController.resetForNewGame(this.diceRenderer);
       this.animating = false;
-      this.gameStartTime = Date.now();
-      this.hud.setGameClockStart(this.gameStartTime);
+      this.resetLocalGameClockStart();
       this.applyTurnTiming(null);
       this.updateUI();
       notificationService.show("New Game Started!", "success");
@@ -3786,8 +3892,7 @@ class Game implements GameCallbacks {
     this.state = GameFlowController.createNewGame();
     GameFlowController.resetForNewGame(this.diceRenderer);
     this.animating = false;
-    this.gameStartTime = Date.now();
-    this.hud.setGameClockStart(this.gameStartTime);
+    this.resetLocalGameClockStart();
     this.applyTurnTiming(null);
     this.updateUI();
     notificationService.show("New Game!", "success");
@@ -3808,8 +3913,7 @@ class Game implements GameCallbacks {
     GameFlowController.updateHintMode(this.state, this.diceRow);
     GameFlowController.resetForNewGame(this.diceRenderer);
     this.animating = false;
-    this.gameStartTime = Date.now();
-    this.hud.setGameClockStart(this.gameStartTime);
+    this.resetLocalGameClockStart();
     this.applyTurnTiming(null);
     this.updateUI();
     notificationService.show("New Game Started!", "success");

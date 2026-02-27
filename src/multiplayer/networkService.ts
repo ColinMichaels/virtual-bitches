@@ -74,6 +74,7 @@ export interface MultiplayerTurnStartMessage {
   phase?: MultiplayerTurnPhase;
   activeRollServerId?: string | null;
   activeRoll?: MultiplayerTurnRollPayload | null;
+  gameStartedAt?: number;
   turnExpiresAt?: number | null;
   turnTimeoutMs?: number;
   timestamp?: number;
@@ -218,7 +219,9 @@ export interface MultiplayerSessionStateMessage {
   sessionComplete?: boolean;
   completedAt?: number | null;
   createdAt: number;
+  gameStartedAt?: number;
   expiresAt?: number;
+  serverNow?: number;
   timestamp?: number;
   source?: string;
 }
