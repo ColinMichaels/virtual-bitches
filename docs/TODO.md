@@ -455,6 +455,14 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 
 ### Future Features (See FUTURE-FEATURES.md)
 
+#### Player Emote System (Avatar Reactions)
+- **Status**: 🔵 Planned
+- **Context**: Seat chat currently uses simple text-above-head overlays; replace with a custom emote/reaction system.
+- **Tasks**:
+  - [ ] Design custom emote visuals for player avatars (non-chat-bubble style)
+  - [ ] Add emote trigger pipeline for local + multiplayer events
+  - [ ] Add settings controls to mute/disable emotes
+
 #### Social Share Metadata Completion
 - **Status**: 🟡 In progress
 - **Completed**:

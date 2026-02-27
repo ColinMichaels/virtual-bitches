@@ -6,17 +6,18 @@
 
 import {
   Scene,
+  AbstractMesh,
   Mesh,
-  Material,
   StandardMaterial,
   ShaderMaterial,
   Color3,
+  Scalar,
   Vector3,
   Texture,
 } from "@babylonjs/core";
 import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
 import "@babylonjs/loaders/glTF";
-import { themeManager } from "../services/themeManager.js";
+import { themeManager, type ThemeConfig } from "../services/themeManager.js";
 import { logger } from "../utils/logger.js";
 import { createColorMaterial } from "./colorMaterial.js";
 
@@ -42,13 +43,39 @@ const DIE_COLORS = [
   "#f5deb3", // Cream
 ];
 
+const SPLASH_DICE_WRAP_DISTANCE = 24;
+const SPLASH_DICE_SPEED_MULTIPLIER = 74;
+const SPLASH_DICE_NEAR_SCALE_DISTANCE = 6;
+const SPLASH_DICE_FAR_SCALE_DISTANCE = 36;
+const SPLASH_DICE_NEAR_SCALE_MULTIPLIER = 1.9;
+const SPLASH_DICE_FAR_SCALE_MULTIPLIER = 0.07;
+const SPLASH_DICE_EDGE_FADE_START = 0.52;
+const SPLASH_DICE_EDGE_FADE_RANGE = 0.52;
+const CROSS_THEME_SPAWN_CHANCE = 0.68;
+const EXTRA_THEME_POOL_LIMIT = 6;
+
+interface SplashDieMotionState {
+  mesh: Mesh;
+  velocity: Vector3;
+  rotationVelocity: Vector3;
+  baseScale: number;
+  dieType: string;
+}
+
 export class SplashDiceRenderer {
   private templateMeshes = new Map<string, Mesh>();
   private diceMeshes: Mesh[] = [];
+  private dieMotionStates: SplashDieMotionState[] = [];
+  private motionStateByMeshId = new Map<number, SplashDieMotionState>();
+  private dieThemeByMeshId = new Map<number, string>();
   private material: StandardMaterial | ShaderMaterial | null = null;
   private geometryLoaded = false;
   private unsubscribeTheme?: () => void;
   private initPromise: Promise<void>;
+  private animationRegistered = false;
+  private readonly animateDice = () => {
+    this.updateDiceMotion();
+  };
 
   // Material cache for fallback themes (themeName -> material)
   private materialCache = new Map<string, StandardMaterial | ShaderMaterial>();
@@ -140,18 +167,55 @@ export class SplashDiceRenderer {
       return;
     }
 
-    // Clear material cache
-    this.materialCache.clear();
+    this.disposeMaterialCache();
 
-    // Load primary theme material
-    await this.loadMaterialForTheme(themeConfig, false);
+    // Load current theme first, then fallback/alternates for random spawn variety.
+    await this.loadMaterialForTheme(themeConfig);
 
     // Load fallback theme material if configured
     if (themeConfig.fallbackTheme) {
       const fallbackConfig = themeManager.getThemeConfig(themeConfig.fallbackTheme);
       if (fallbackConfig) {
         log.info(`Loading fallback splash material: ${fallbackConfig.name}`);
-        await this.loadMaterialForTheme(fallbackConfig, true);
+        try {
+          await this.loadMaterialForTheme(fallbackConfig);
+        } catch (error) {
+          log.warn(`Failed loading fallback splash material "${fallbackConfig.systemName}"`, error);
+        }
+      }
+    }
+
+    const availableThemeNames = themeManager
+      .getAvailableThemes()
+      .map((theme) => theme.name)
+      .filter((themeName) => {
+        if (themeName === themeConfig.systemName) {
+          return false;
+        }
+        if (themeName === themeConfig.fallbackTheme) {
+          return false;
+        }
+        return this.materialCache.has(themeName) === false;
+      })
+      .sort(() => Math.random() - 0.5)
+      .slice(0, EXTRA_THEME_POOL_LIMIT);
+
+    for (const themeName of availableThemeNames) {
+      const config = themeManager.getThemeConfig(themeName);
+      if (!config) {
+        continue;
+      }
+      try {
+        await this.loadMaterialForTheme(config);
+      } catch (error) {
+        log.warn(`Failed loading ambient splash material "${config.systemName}"`, error);
+      }
+    }
+
+    if (!this.material) {
+      const fallbackPrimary = this.materialCache.get(themeConfig.systemName);
+      if (fallbackPrimary) {
+        this.material = fallbackPrimary;
       }
     }
   }
@@ -159,7 +223,7 @@ export class SplashDiceRenderer {
   /**
    * Load material for a specific theme
    */
-  private async loadMaterialForTheme(themeConfig: any, isFallback: boolean): Promise<void> {
+  private async loadMaterialForTheme(themeConfig: ThemeConfig): Promise<void> {
     const basePath = themeManager.getThemePath(themeConfig.systemName);
     log.info(`Loading splash material from: ${basePath}`);
 
@@ -219,7 +283,7 @@ export class SplashDiceRenderer {
         normalMap.vOffset = textureOffset.v || 0;
       }
 
-      const materialName = isFallback ? `splash-dice-material-${themeConfig.systemName}` : "splash-dice-material";
+      const materialName = `splash-dice-material-${themeConfig.systemName}`;
       const material = new StandardMaterial(materialName, this.scene);
       material.diffuseTexture = diffuseTexture;
       material.bumpTexture = normalMap;
@@ -229,10 +293,8 @@ export class SplashDiceRenderer {
       }
       material.specularColor = new Color3(0.5, 0.5, 0.5);
       material.specularPower = themeConfig.material.specularPower || 64;
-
-      if (isFallback) {
-        this.materialCache.set(themeConfig.systemName, material);
-      } else {
+      this.materialCache.set(themeConfig.systemName, material);
+      if (themeConfig.systemName === themeManager.getCurrentTheme()) {
         this.material = material;
       }
     } else {
@@ -295,7 +357,7 @@ export class SplashDiceRenderer {
       // Use custom shader material for proper color blending
       // Dark base color + light pip textures for good contrast
       const darkBaseColor = new Color3(0.2, 0.2, 0.2);
-      const materialName = isFallback ? `splash-dice-color-material-${themeConfig.systemName}` : "splash-dice-color-material";
+      const materialName = `splash-dice-color-material-${themeConfig.systemName}`;
       const material = createColorMaterial(
         materialName,
         this.scene,
@@ -310,14 +372,63 @@ export class SplashDiceRenderer {
         }
       ) as any;
 
-      if (isFallback) {
-        this.materialCache.set(themeConfig.systemName, material);
-      } else {
+      this.materialCache.set(themeConfig.systemName, material);
+      if (themeConfig.systemName === themeManager.getCurrentTheme()) {
         this.material = material;
       }
     }
 
     log.info("Splash material loaded");
+  }
+
+  private disposeMaterialCache(): void {
+    this.materialCache.forEach((material) => material.dispose());
+    this.materialCache.clear();
+    this.material = null;
+  }
+
+  private resolveMaterialForDie(
+    dieType: string
+  ): { material: StandardMaterial | ShaderMaterial; themeName: string } | null {
+    const currentThemeConfig = themeManager.getCurrentThemeConfig();
+    const currentThemeName = currentThemeConfig?.systemName ?? themeManager.getCurrentTheme();
+    const fallbackThemeName =
+      currentThemeConfig?.useFallbackFor?.includes(dieType) === true
+        ? currentThemeConfig.fallbackTheme
+        : undefined;
+
+    if (fallbackThemeName && this.materialCache.has(fallbackThemeName)) {
+      const fallbackMaterial = this.materialCache.get(fallbackThemeName)!;
+      return { material: fallbackMaterial, themeName: fallbackThemeName };
+    }
+
+    const currentThemeMaterial =
+      (currentThemeName && this.materialCache.get(currentThemeName)) || this.material;
+    const alternateThemeNames = Array.from(this.materialCache.keys()).filter(
+      (themeName) => themeName !== currentThemeName
+    );
+
+    const shouldUseAlternate =
+      alternateThemeNames.length > 0 && Math.random() < CROSS_THEME_SPAWN_CHANCE;
+    if (shouldUseAlternate) {
+      const randomIndex = Math.floor(Math.random() * alternateThemeNames.length);
+      const randomThemeName = alternateThemeNames[randomIndex];
+      const randomThemeMaterial = this.materialCache.get(randomThemeName);
+      if (randomThemeMaterial) {
+        return { material: randomThemeMaterial, themeName: randomThemeName };
+      }
+    }
+
+    if (currentThemeMaterial && currentThemeName) {
+      return { material: currentThemeMaterial, themeName: currentThemeName };
+    }
+    const firstThemeEntry = this.materialCache.entries().next().value as
+      | [string, StandardMaterial | ShaderMaterial]
+      | undefined;
+    if (firstThemeEntry) {
+      return { themeName: firstThemeEntry[0], material: firstThemeEntry[1] };
+    }
+    return null;
   }
 
   /**
@@ -346,7 +457,7 @@ export class SplashDiceRenderer {
       // Clone die
       const die = template.clone(`splash-die-${i}`, null, false, false) as Mesh;
       die.setEnabled(true);
-      die.isPickable = false;
+      die.isPickable = true;
 
       // Random position in 3D space
       const angle = Math.random() * Math.PI * 2;
@@ -367,21 +478,16 @@ export class SplashDiceRenderer {
       const scaleFactor = size * 10;
       die.scaling = new Vector3(scaleFactor, scaleFactor, scaleFactor);
 
-      // Determine which material to use (primary or fallback)
-      const currentTheme = themeManager.getCurrentThemeConfig();
-      let materialToUse = this.material;
-
-      if (currentTheme?.useFallbackFor?.includes(dieType) && currentTheme.fallbackTheme) {
-        const fallbackMaterial = this.materialCache.get(currentTheme.fallbackTheme);
-        if (fallbackMaterial) {
-          materialToUse = fallbackMaterial;
-          log.debug(`Splash die ${dieType} using fallback material: ${currentTheme.fallbackTheme}`);
-        }
+      const materialSelection = this.resolveMaterialForDie(dieType);
+      if (!materialSelection) {
+        die.dispose();
+        continue;
       }
+      const materialToUse = materialSelection.material;
 
       // Clone material with color tint (only for StandardMaterial)
       const baseColor = Color3.FromHexString(DIE_COLORS[i % DIE_COLORS.length]);
-      const mat = materialToUse!.clone(`splash-mat-${i}`) as StandardMaterial | ShaderMaterial;
+      const mat = materialToUse.clone(`splash-mat-${i}`) as StandardMaterial | ShaderMaterial;
 
       // Only apply diffuse color tint for StandardMaterial
       if (mat instanceof StandardMaterial) {
@@ -406,34 +512,127 @@ export class SplashDiceRenderer {
       const velocityY = (Math.random() - 0.5) * 0.08;
       const velocityZ = (Math.random() - 0.5) * 0.08;
 
-      const maxDistance = 15;
-
-      // Animation
-      this.scene.registerBeforeRender(() => {
-        die.rotation.x += rotSpeedX;
-        die.rotation.y += rotSpeedY;
-        die.rotation.z += rotSpeedZ;
-
-        die.position.x += velocityX;
-        die.position.y += velocityY;
-        die.position.z += velocityZ;
-
-        // Wrap around
-        if (Math.abs(die.position.x) > maxDistance) {
-          die.position.x = -Math.sign(die.position.x) * maxDistance;
-        }
-        if (Math.abs(die.position.y) > maxDistance) {
-          die.position.y = -Math.sign(die.position.y) * maxDistance;
-        }
-        if (Math.abs(die.position.z) > maxDistance) {
-          die.position.z = -Math.sign(die.position.z) * maxDistance;
-        }
-      });
-
+      const motionState: SplashDieMotionState = {
+        mesh: die,
+        velocity: new Vector3(velocityX, velocityY, velocityZ),
+        rotationVelocity: new Vector3(rotSpeedX, rotSpeedY, rotSpeedZ),
+        baseScale: scaleFactor,
+        dieType,
+      };
+      this.dieMotionStates.push(motionState);
+      this.motionStateByMeshId.set(die.uniqueId, motionState);
+      this.dieThemeByMeshId.set(die.uniqueId, materialSelection.themeName);
       this.diceMeshes.push(die);
     }
+    this.ensureAnimationLoop();
 
     log.info(`Created ${count} splash dice`);
+  }
+
+  isDiceMesh(mesh: AbstractMesh): boolean {
+    return this.motionStateByMeshId.has(mesh.uniqueId);
+  }
+
+  nudgeDie(mesh: AbstractMesh): void {
+    const state = this.motionStateByMeshId.get(mesh.uniqueId);
+    if (!state) {
+      return;
+    }
+
+    const impulseVector = state.mesh.position.clone();
+    if (impulseVector.lengthSquared() < 0.0001) {
+      impulseVector.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
+    }
+    impulseVector.normalize();
+    const impulseStrength = 0.04 + Math.random() * 0.06;
+    state.velocity.addInPlace(impulseVector.scale(impulseStrength));
+    state.velocity.y += (Math.random() - 0.25) * 0.05;
+
+    const maxVelocity = 0.2;
+    const velocityLength = state.velocity.length();
+    if (velocityLength > maxVelocity) {
+      state.velocity.scaleInPlace(maxVelocity / velocityLength);
+    }
+
+    state.rotationVelocity.scaleInPlace(1.12);
+  }
+
+  private ensureAnimationLoop(): void {
+    if (this.animationRegistered) {
+      return;
+    }
+    this.scene.registerBeforeRender(this.animateDice);
+    this.animationRegistered = true;
+  }
+
+  private updateDiceMotion(): void {
+    if (this.dieMotionStates.length === 0) {
+      return;
+    }
+
+    const camera = this.scene.activeCamera;
+    if (!camera) {
+      return;
+    }
+
+    const deltaSeconds = Math.min(this.scene.getEngine().getDeltaTime() / 1000, 0.05);
+    const frameScale = deltaSeconds * SPLASH_DICE_SPEED_MULTIPLIER;
+    const cameraPosition = camera.globalPosition ?? (camera as any).position;
+    if (!cameraPosition) {
+      return;
+    }
+
+    this.dieMotionStates.forEach((state) => {
+      const { mesh, velocity, rotationVelocity } = state;
+      mesh.rotation.x += rotationVelocity.x * frameScale;
+      mesh.rotation.y += rotationVelocity.y * frameScale;
+      mesh.rotation.z += rotationVelocity.z * frameScale;
+
+      mesh.position.x += velocity.x * frameScale;
+      mesh.position.y += velocity.y * frameScale;
+      mesh.position.z += velocity.z * frameScale;
+
+      // Wrap in volume to keep endless motion.
+      if (Math.abs(mesh.position.x) > SPLASH_DICE_WRAP_DISTANCE) {
+        mesh.position.x = -Math.sign(mesh.position.x) * SPLASH_DICE_WRAP_DISTANCE;
+      }
+      if (Math.abs(mesh.position.y) > SPLASH_DICE_WRAP_DISTANCE) {
+        mesh.position.y = -Math.sign(mesh.position.y) * SPLASH_DICE_WRAP_DISTANCE;
+      }
+      if (Math.abs(mesh.position.z) > SPLASH_DICE_WRAP_DISTANCE) {
+        mesh.position.z = -Math.sign(mesh.position.z) * SPLASH_DICE_WRAP_DISTANCE;
+      }
+
+      // Scale by camera distance: grow when approaching, shrink when receding.
+      const distanceToCamera = Vector3.Distance(mesh.position, cameraPosition);
+      const distanceT = Scalar.Clamp(
+        (distanceToCamera - SPLASH_DICE_NEAR_SCALE_DISTANCE) /
+          (SPLASH_DICE_FAR_SCALE_DISTANCE - SPLASH_DICE_NEAR_SCALE_DISTANCE),
+        0,
+        1
+      );
+      const easedDistanceT = distanceT * distanceT;
+      const distanceScale =
+        SPLASH_DICE_NEAR_SCALE_MULTIPLIER +
+        (SPLASH_DICE_FAR_SCALE_MULTIPLIER - SPLASH_DICE_NEAR_SCALE_MULTIPLIER) * easedDistanceT;
+
+      // Additional edge fade makes wrap transitions feel less abrupt.
+      const edgeDistance = Math.max(
+        Math.abs(mesh.position.x),
+        Math.abs(mesh.position.y),
+        Math.abs(mesh.position.z)
+      );
+      const edgeFadeT = Scalar.Clamp(
+        (edgeDistance - SPLASH_DICE_WRAP_DISTANCE * SPLASH_DICE_EDGE_FADE_START) /
+          (SPLASH_DICE_WRAP_DISTANCE * SPLASH_DICE_EDGE_FADE_RANGE),
+        0,
+        1
+      );
+      const edgeScale = 1 - edgeFadeT * 0.92;
+
+      const scaledSize = Math.max(0.08, state.baseScale * distanceScale * edgeScale);
+      mesh.scaling.set(scaledSize, scaledSize, scaledSize);
+    });
   }
 
   /**
@@ -442,30 +641,34 @@ export class SplashDiceRenderer {
   private async onThemeChanged(): Promise<void> {
     log.info("Theme changed for splash dice...");
 
-    // Dispose old material
-    this.material?.dispose();
-
     // Reload material
     await this.createMaterial();
 
-    // Update all dice materials
-    this.diceMeshes.forEach((die, index) => {
-      if (this.material) {
-        const baseColor = Color3.FromHexString(DIE_COLORS[index % DIE_COLORS.length]);
-        const mat = this.material.clone(`splash-mat-${index}`) as StandardMaterial | ShaderMaterial;
-
-        // Only apply diffuse color tint for StandardMaterial
-        if (mat instanceof StandardMaterial) {
-          mat.diffuseColor = new Color3(
-            0.5 + baseColor.r * 0.5,
-            0.5 + baseColor.g * 0.5,
-            0.5 + baseColor.b * 0.5
-          );
-        }
-
-        die.material?.dispose();
-        die.material = mat;
+    // Update all dice materials with fresh random cross-theme assignment.
+    this.dieMotionStates.forEach((motionState, index) => {
+      const die = motionState.mesh;
+      const materialSelection = this.resolveMaterialForDie(motionState.dieType);
+      if (!materialSelection) {
+        return;
       }
+
+      const baseColor = Color3.FromHexString(DIE_COLORS[index % DIE_COLORS.length]);
+      const mat = materialSelection.material.clone(
+        `splash-mat-theme-${index}-${materialSelection.themeName}`
+      ) as StandardMaterial | ShaderMaterial;
+
+      // Only apply diffuse color tint for StandardMaterial
+      if (mat instanceof StandardMaterial) {
+        mat.diffuseColor = new Color3(
+          0.5 + baseColor.r * 0.5,
+          0.5 + baseColor.g * 0.5,
+          0.5 + baseColor.b * 0.5
+        );
+      }
+
+      die.material?.dispose();
+      die.material = mat;
+      this.dieThemeByMeshId.set(die.uniqueId, materialSelection.themeName);
     });
 
     log.info("Splash dice theme updated");
@@ -477,12 +680,20 @@ export class SplashDiceRenderer {
   dispose(): void {
     this.unsubscribeTheme?.();
 
+    if (this.animationRegistered) {
+      this.scene.unregisterBeforeRender(this.animateDice);
+      this.animationRegistered = false;
+    }
+
     this.diceMeshes.forEach(die => die.dispose());
     this.diceMeshes = [];
+    this.dieMotionStates = [];
+    this.motionStateByMeshId.clear();
+    this.dieThemeByMeshId.clear();
 
     this.templateMeshes.forEach(mesh => mesh.dispose());
     this.templateMeshes.clear();
 
-    this.material?.dispose();
+    this.disposeMaterialCache();
   }
 }

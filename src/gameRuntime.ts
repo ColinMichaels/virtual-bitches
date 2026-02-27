@@ -109,6 +109,31 @@ function formatCameraAttackLabel(effectType: string): string {
   }
 }
 
+function resolveCameraAttackLightingColor(effectType: string): Color3 {
+  switch (effectType) {
+    case "shake":
+      return new Color3(1.0, 0.55, 0.38);
+    case "spin":
+      return new Color3(0.62, 0.78, 1.0);
+    case "zoom":
+      return new Color3(0.5, 0.98, 0.9);
+    case "drunk":
+      return new Color3(0.82, 0.58, 1.0);
+    case "tilt":
+      return new Color3(0.95, 0.8, 0.46);
+    default:
+      return new Color3(0.7, 0.52, 1.0);
+  }
+}
+
+function resolveCameraAttackLightingDuration(message: CameraAttackMessage, minimumMs: number): number {
+  const attackDurationMs =
+    typeof message.duration === "number" && Number.isFinite(message.duration)
+      ? Math.floor(message.duration)
+      : minimumMs;
+  return Math.max(minimumMs, Math.min(attackDurationMs, 2600));
+}
+
 function normalizeParticipantScore(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     return 0;
@@ -331,6 +356,10 @@ class Game implements GameCallbacks {
       const detail = (event as CustomEvent<{ message?: CameraAttackMessage }>).detail;
       const message = detail?.message;
       if (!message) return;
+      this.scene.triggerSpecialMoveLighting(
+        resolveCameraAttackLightingColor(message.effectType),
+        900
+      );
       notificationService.show(
         `Attack sent: ${formatCameraAttackLabel(message.effectType)} Lv${message.level}`,
         "info",
@@ -365,6 +394,10 @@ class Game implements GameCallbacks {
       const detail = (event as CustomEvent<{ message?: CameraAttackMessage }>).detail;
       const message = detail?.message;
       if (!message) return;
+      this.scene.triggerSpecialMoveLighting(
+        resolveCameraAttackLightingColor(message.effectType),
+        resolveCameraAttackLightingDuration(message, 1200)
+      );
 
       notificationService.show(
         `Effect active: ${formatCameraAttackLabel(message.effectType)}`,
@@ -1344,7 +1377,7 @@ class Game implements GameCallbacks {
       });
     }
     this.scene.playerSeatRenderer.highlightSeat(currentSeatIndex);
-    this.scene.playerSeatRenderer.setActiveTurnSeat(currentSeatIndex);
+    this.scene.setActiveTurnSeat(currentSeatIndex);
     this.hud.setMultiplayerStandings([], null);
     this.hud.setMultiplayerActiveTurn(null);
     this.hud.setTurnSyncStatus(null);
@@ -1646,19 +1679,19 @@ class Game implements GameCallbacks {
   private updateTurnSeatHighlight(activePlayerId: string | null): void {
     if (!activePlayerId) {
       this.scene.playerSeatRenderer.highlightSeat(this.scene.currentPlayerSeat);
-      this.scene.playerSeatRenderer.setActiveTurnSeat(this.scene.currentPlayerSeat);
+      this.scene.setActiveTurnSeat(this.scene.currentPlayerSeat);
       return;
     }
 
     const seatIndex = this.participantSeatById.get(activePlayerId);
     if (typeof seatIndex === "number") {
       this.scene.playerSeatRenderer.highlightSeat(seatIndex);
-      this.scene.playerSeatRenderer.setActiveTurnSeat(seatIndex);
+      this.scene.setActiveTurnSeat(seatIndex);
       return;
     }
 
     this.scene.playerSeatRenderer.highlightSeat(this.scene.currentPlayerSeat);
-    this.scene.playerSeatRenderer.setActiveTurnSeat(this.scene.currentPlayerSeat);
+    this.scene.setActiveTurnSeat(this.scene.currentPlayerSeat);
   }
 
   private getSeatScoreZonePosition(playerId: string): { seatIndex: number; x: number; y: number; z: number } | null {
@@ -1977,6 +2010,7 @@ class Game implements GameCallbacks {
     this.applyMultiplayerSeatState(syncedSession);
     if (syncedSession.sessionComplete === true && !this.lastSessionComplete) {
       this.lastSessionComplete = true;
+      this.scene.triggerVictoryLighting(3200);
       notificationService.show("Session complete. Final standings locked.", "success", 2600);
     } else if (syncedSession.sessionComplete !== true) {
       this.lastSessionComplete = false;

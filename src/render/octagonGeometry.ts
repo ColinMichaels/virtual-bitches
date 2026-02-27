@@ -57,19 +57,21 @@ export function getOctagonVertices(radius: number, y: number = 0): Vector3[] {
  * @param tableRadius - Radius of the octagon table
  * @param seatDistance - Additional distance from table edge (default: 3 units)
  * @param height - Y coordinate for seat position (default: 2 units)
+ * @param angleOffset - Rotation offset for the seat ring in radians (default: 0)
  * @returns Array of 8 PlayerSeat objects
  */
 export function calculatePlayerSeats(
   tableRadius: number,
   seatDistance: number = 3,
-  height: number = 2
+  height: number = 2,
+  angleOffset: number = 0
 ): PlayerSeat[] {
   const seats: PlayerSeat[] = [];
   const angleStep = (Math.PI * 2) / 8; // 45 degrees
   const totalRadius = tableRadius + seatDistance;
 
   for (let i = 0; i < 8; i++) {
-    const angle = angleStep * i;
+    const angle = angleStep * i + angleOffset;
     const x = totalRadius * Math.cos(angle);
     const z = totalRadius * Math.sin(angle);
 

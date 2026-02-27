@@ -6,6 +6,7 @@ import {
   Vector3,
   HemisphericLight,
   DirectionalLight,
+  Light,
   SpotLight,
   ShadowGenerator,
   MeshBuilder,
@@ -29,6 +30,18 @@ import { logger } from "../utils/logger.js";
 // Register custom shaders once at module load
 registerCustomShaders();
 const log = logger.create("GameScene");
+const PLAYER_SEAT_DISTANCE_FROM_TABLE = 1.0;
+const PLAYER_SEAT_ANGLE_OFFSET = Math.PI / 4; // Shift by one octagon segment
+const ACTIVE_PLAYER_LIGHT_HEIGHT = 10.8;
+const ACTIVE_PLAYER_LIGHT_OUTWARD_OFFSET = 2.6;
+const ACTIVE_PLAYER_LIGHT_TRACKING_SMOOTHING = 0.14;
+const ACTIVE_PLAYER_LIGHT_PULSE_SPEED = 0.0042;
+const PLAY_SPOT_INNER_ANGLE_RATIO = 0.4;
+const SCORE_SPOT_INNER_ANGLE_RATIO = 0.36;
+const DICE_SPOT_INNER_ANGLE_RATIO = 0.33;
+const ACTIVE_PLAYER_SPOT_INNER_ANGLE_RATIO = 0.28;
+
+type GameplayLightingScenario = "default" | "suspense" | "special_move" | "victory";
 
 export class GameScene {
   engine: Engine;
@@ -36,6 +49,22 @@ export class GameScene {
   camera: ArcRotateCamera;
   shadowGenerator: ShadowGenerator;
   private defaultCameraState: { alpha: number; beta: number; radius: number };
+  private ambientLight!: HemisphericLight;
+  private sunLight!: DirectionalLight;
+  private playSpotLight!: SpotLight;
+  private scoreSpotLight!: SpotLight;
+  private rimLight!: DirectionalLight;
+  private diceSpotLights: SpotLight[] = [];
+  private activePlayerSpotLight!: SpotLight;
+  private activeTurnSeatForLighting: number | null = null;
+  private activeLightPosition = new Vector3(0, 0, 0);
+  private activeLightInitialized = false;
+  private activeSpotBaseIntensity = 2.2;
+  private lightingScenario: GameplayLightingScenario = "suspense";
+  private scenarioResetTimer: ReturnType<typeof setTimeout> | null = null;
+  private backgroundLayer: Layer | null = null;
+  private backgroundGradientTexture: DynamicTexture | null = null;
+  private readonly activeSeatLightingAnimator: () => void;
 
   // Octagon table properties for multiplayer future-proofing
   public playerSeats: PlayerSeat[]; // 8 player positions around octagon
@@ -50,6 +79,9 @@ export class GameScene {
     });
 
     this.scene = new Scene(this.engine);
+    this.activeSeatLightingAnimator = () => {
+      this.updateActiveSeatLighting();
+    };
 
     // Create gradient background with atmospheric depth
     // Lighter at top (ceiling), darker at bottom (floor)
@@ -84,96 +116,126 @@ export class GameScene {
     // Lighting setup - brighter casino-style lighting with depth
 
     // Ambient base lighting - brighter overall illumination
-    const ambient = new HemisphericLight(
+    this.ambientLight = new HemisphericLight(
       "ambient",
       new Vector3(0, 1, 0),
       this.scene
     );
-    ambient.intensity = 1.0; // Increased for brighter scene
-    ambient.groundColor = new Color3(0.2, 0.2, 0.25); // Brighter ground reflection
-    ambient.specular = new Color3(0.1, 0.1, 0.1); // Slight specular
+    this.ambientLight.intensity = 1.0; // Increased for brighter scene
+    this.ambientLight.groundColor = new Color3(0.2, 0.2, 0.25); // Brighter ground reflection
+    this.ambientLight.specular = new Color3(0.1, 0.1, 0.1); // Slight specular
 
     // Main directional light (overhead) - brighter
-    const sun = new DirectionalLight(
+    this.sunLight = new DirectionalLight(
       "sun",
       new Vector3(-1, -2, -1),
       this.scene
     );
-    sun.position = new Vector3(10, 25, 10);
-    sun.intensity = 1.2; // Increased for better visibility
-    sun.diffuse = new Color3(1.0, 0.98, 0.95); // Warm white
-    sun.specular = new Color3(0.3, 0.3, 0.3); // Brighter specular highlights
+    this.sunLight.position = new Vector3(10, 25, 10);
+    this.sunLight.intensity = 1.2; // Increased for better visibility
+    this.sunLight.diffuse = new Color3(1.0, 0.98, 0.95); // Warm white
+    this.sunLight.specular = new Color3(0.3, 0.3, 0.3); // Brighter specular highlights
 
     // Spotlight on play area - much brighter center focus
-    const playSpot = new SpotLight(
+    this.playSpotLight = new SpotLight(
       "playSpot",
       new Vector3(0, 20, 0), // Higher position
       new Vector3(0, -1, 0),
-      Math.PI / 2.5, // Wider cone
-      1.5,
+      Math.PI / 2.35, // Wider cone + softer edge
+      1.0,
       this.scene
     );
-    playSpot.intensity = 1.2; // Doubled intensity
-    playSpot.diffuse = new Color3(1, 0.98, 0.93); // Warm casino lighting
-    playSpot.specular = new Color3(0.2, 0.2, 0.2);
+    this.playSpotLight.intensity = 1.2; // Doubled intensity
+    this.playSpotLight.diffuse = new Color3(1, 0.98, 0.93); // Warm casino lighting
+    this.playSpotLight.specular = new Color3(0.2, 0.2, 0.2);
+    this.playSpotLight.falloffType = Light.FALLOFF_GLTF;
+    this.playSpotLight.innerAngle = this.playSpotLight.angle * PLAY_SPOT_INNER_ANGLE_RATIO;
 
     // Spotlight on scored area - brighter
-    const scoreSpot = new SpotLight(
+    this.scoreSpotLight = new SpotLight(
       "scoreSpot",
       new Vector3(9, 15, 0), // Adjusted for new score position
       new Vector3(0, -1, 0),
-      Math.PI / 3,
-      2,
+      Math.PI / 2.9, // Slightly wider cone for less hard cutoff
+      1.05,
       this.scene
     );
-    scoreSpot.intensity = 0.8; // Doubled
-    scoreSpot.diffuse = new Color3(1, 0.98, 0.95); // Match main lighting
-    scoreSpot.specular = new Color3(0.2, 0.2, 0.2);
+    this.scoreSpotLight.intensity = 0.8; // Doubled
+    this.scoreSpotLight.diffuse = new Color3(1, 0.98, 0.95); // Match main lighting
+    this.scoreSpotLight.specular = new Color3(0.2, 0.2, 0.2);
+    this.scoreSpotLight.falloffType = Light.FALLOFF_GLTF;
+    this.scoreSpotLight.innerAngle = this.scoreSpotLight.angle * SCORE_SPOT_INNER_ANGLE_RATIO;
 
     // Rim light for depth (from behind/side) - brighter
-    const rimLight = new DirectionalLight(
+    this.rimLight = new DirectionalLight(
       "rimLight",
       new Vector3(1, -1, 1),
       this.scene
     );
-    rimLight.position = new Vector3(-15, 12, -10);
-    rimLight.intensity = 0.6; // Doubled for better edge definition
-    rimLight.diffuse = new Color3(0.9, 0.95, 1); // Cool rim light
-    rimLight.specular = new Color3(0.2, 0.2, 0.25);
+    this.rimLight.position = new Vector3(-15, 12, -10);
+    this.rimLight.intensity = 0.6; // Doubled for better edge definition
+    this.rimLight.diffuse = new Color3(0.9, 0.95, 1); // Cool rim light
+    this.rimLight.specular = new Color3(0.2, 0.2, 0.25);
 
     // Dedicated dice spotlights - enhance dice readability on dark table
     const diceSpot1 = new SpotLight(
       "diceSpot1",
       new Vector3(-3, 18, -3), // Left-front elevated position
       new Vector3(0, -1, 0.1), // Slight forward tilt
-      Math.PI / 3.5, // Focused cone
-      2.5, // Sharp falloff
+      Math.PI / 3.1, // Slightly wider cone
+      1.1, // Softer decay
       this.scene
     );
     diceSpot1.intensity = 1.5; // Strong, focused light
     diceSpot1.diffuse = new Color3(1.0, 0.98, 0.95); // Neutral white
     diceSpot1.specular = new Color3(0.4, 0.4, 0.4); // Strong specular for dice pips
+    diceSpot1.falloffType = Light.FALLOFF_GLTF;
+    diceSpot1.innerAngle = diceSpot1.angle * DICE_SPOT_INNER_ANGLE_RATIO;
 
     const diceSpot2 = new SpotLight(
       "diceSpot2",
       new Vector3(3, 18, 3), // Right-back elevated position
       new Vector3(0, -1, -0.1), // Slight backward tilt
-      Math.PI / 3.5, // Focused cone
-      2.5, // Sharp falloff
+      Math.PI / 3.1, // Slightly wider cone
+      1.1, // Softer decay
       this.scene
     );
     diceSpot2.intensity = 1.5; // Strong, focused light
     diceSpot2.diffuse = new Color3(1.0, 0.98, 0.95); // Neutral white
     diceSpot2.specular = new Color3(0.4, 0.4, 0.4); // Strong specular for dice pips
+    diceSpot2.falloffType = Light.FALLOFF_GLTF;
+    diceSpot2.innerAngle = diceSpot2.angle * DICE_SPOT_INNER_ANGLE_RATIO;
+    this.diceSpotLights = [diceSpot1, diceSpot2];
+
+    // Focused spotlight that tracks the active player seat.
+    this.activePlayerSpotLight = new SpotLight(
+      "activePlayerSpot",
+      new Vector3(0, ACTIVE_PLAYER_LIGHT_HEIGHT, 0),
+      new Vector3(0, -1, 0),
+      Math.PI / 5.8, // Wider cone to avoid harsh edge ring
+      1.15,
+      this.scene
+    );
+    this.activePlayerSpotLight.intensity = this.activeSpotBaseIntensity;
+    this.activePlayerSpotLight.diffuse = new Color3(0.58, 1.0, 0.74);
+    this.activePlayerSpotLight.specular = new Color3(0.26, 0.36, 0.26);
+    this.activePlayerSpotLight.falloffType = Light.FALLOFF_GLTF;
+    this.activePlayerSpotLight.innerAngle =
+      this.activePlayerSpotLight.angle * ACTIVE_PLAYER_SPOT_INNER_ANGLE_RATIO;
 
     // Shadows - enhanced for better definition
-    this.shadowGenerator = new ShadowGenerator(2048, sun); // Increased resolution
+    this.shadowGenerator = new ShadowGenerator(2048, this.sunLight); // Increased resolution
     this.shadowGenerator.useBlurExponentialShadowMap = true;
     this.shadowGenerator.blurScale = 1.5; // Sharper edges (was 2)
     this.shadowGenerator.darkness = 0.5; // Darker shadows for better contrast
 
     // Calculate player seat positions (for future multiplayer)
-    this.playerSeats = calculatePlayerSeats(this.tableRadius);
+    this.playerSeats = calculatePlayerSeats(
+      this.tableRadius,
+      PLAYER_SEAT_DISTANCE_FROM_TABLE,
+      2,
+      PLAYER_SEAT_ANGLE_OFFSET
+    );
 
     // Create table/surface
     this.createTable();
@@ -182,6 +244,9 @@ export class GameScene {
     this.playerSeatRenderer = new PlayerSeatRenderer(this.scene);
     this.playerSeatRenderer.createPlayerSeats(this.playerSeats, this.currentPlayerSeat);
     this.playerSeatRenderer.highlightSeat(this.currentPlayerSeat);
+    this.setActiveTurnSeat(this.currentPlayerSeat);
+    this.setGameplayLightingScenario("suspense");
+    this.scene.registerBeforeRender(this.activeSeatLightingAnimator);
 
     // Set up click handler for empty seats (will be passed from main.ts)
     // Callback will show "Multiplayer Coming Soon" notification
@@ -497,6 +562,183 @@ export class GameScene {
   }
 
   /**
+   * Set active turn seat for both seat visuals and cinematic lighting.
+   */
+  setActiveTurnSeat(seatIndex: number | null): void {
+    this.playerSeatRenderer?.setActiveTurnSeat(seatIndex);
+    const normalizedSeat =
+      typeof seatIndex === "number" && Number.isFinite(seatIndex)
+        ? Math.floor(seatIndex)
+        : null;
+    const fallbackSeat = this.currentPlayerSeat;
+    this.activeTurnSeatForLighting =
+      normalizedSeat !== null &&
+      normalizedSeat >= 0 &&
+      normalizedSeat < this.playerSeats.length
+        ? normalizedSeat
+        : fallbackSeat;
+  }
+
+  /**
+   * Apply a lighting scenario for ambience and gameplay feedback.
+   */
+  setGameplayLightingScenario(
+    scenario: GameplayLightingScenario,
+    options: { color?: Color3; durationMs?: number } = {}
+  ): void {
+    this.lightingScenario = scenario;
+    if (this.scenarioResetTimer) {
+      clearTimeout(this.scenarioResetTimer);
+      this.scenarioResetTimer = null;
+    }
+
+    const profiles = {
+      default: {
+        ambient: 0.62,
+        sun: 0.82,
+        playSpot: 0.82,
+        scoreSpot: 0.58,
+        rim: 0.46,
+        dice: 0.95,
+        activeSpot: 2.0,
+        activeColor: new Color3(0.52, 0.95, 0.7),
+        activeSpecular: new Color3(0.24, 0.33, 0.24),
+        bgTop: "#1f2a37",
+        bgMid: "#131b25",
+        bgBottom: "#06090f",
+      },
+      suspense: {
+        ambient: 0.42,
+        sun: 0.62,
+        playSpot: 0.58,
+        scoreSpot: 0.42,
+        rim: 0.32,
+        dice: 0.72,
+        activeSpot: 2.32,
+        activeColor: new Color3(0.56, 1.0, 0.72),
+        activeSpecular: new Color3(0.28, 0.37, 0.28),
+        bgTop: "#151e2a",
+        bgMid: "#0b1018",
+        bgBottom: "#020306",
+      },
+      special_move: {
+        ambient: 0.36,
+        sun: 0.54,
+        playSpot: 0.48,
+        scoreSpot: 0.38,
+        rim: 0.28,
+        dice: 0.62,
+        activeSpot: 2.78,
+        activeColor: new Color3(0.74, 0.54, 1.0),
+        activeSpecular: new Color3(0.36, 0.3, 0.42),
+        bgTop: "#1b1428",
+        bgMid: "#120d1c",
+        bgBottom: "#06040d",
+      },
+      victory: {
+        ambient: 0.54,
+        sun: 0.72,
+        playSpot: 0.74,
+        scoreSpot: 0.52,
+        rim: 0.44,
+        dice: 0.86,
+        activeSpot: 2.92,
+        activeColor: new Color3(1.0, 0.78, 0.34),
+        activeSpecular: new Color3(0.44, 0.33, 0.2),
+        bgTop: "#23190f",
+        bgMid: "#151006",
+        bgBottom: "#080502",
+      },
+    } as const;
+
+    const profile = profiles[scenario];
+    this.ambientLight.intensity = profile.ambient;
+    this.sunLight.intensity = profile.sun;
+    this.playSpotLight.intensity = profile.playSpot;
+    this.scoreSpotLight.intensity = profile.scoreSpot;
+    this.rimLight.intensity = profile.rim;
+    this.diceSpotLights.forEach((light) => {
+      light.intensity = profile.dice;
+    });
+
+    this.activeSpotBaseIntensity = profile.activeSpot;
+    this.activePlayerSpotLight.diffuse = options.color ?? profile.activeColor;
+    this.activePlayerSpotLight.specular = profile.activeSpecular;
+    this.renderBackgroundGradient(profile.bgTop, profile.bgMid, profile.bgBottom);
+
+    const durationMs =
+      typeof options.durationMs === "number" && Number.isFinite(options.durationMs)
+        ? Math.max(0, Math.floor(options.durationMs))
+        : 0;
+    if (durationMs > 0 && scenario !== "suspense") {
+      this.scenarioResetTimer = setTimeout(() => {
+        this.scenarioResetTimer = null;
+        this.setGameplayLightingScenario("suspense");
+      }, durationMs);
+    }
+  }
+
+  triggerSpecialMoveLighting(
+    color: Color3 = new Color3(0.7, 0.52, 1.0),
+    durationMs: number = 1400
+  ): void {
+    this.setGameplayLightingScenario("special_move", { color, durationMs });
+  }
+
+  triggerVictoryLighting(durationMs: number = 2200): void {
+    this.setGameplayLightingScenario("victory", { durationMs });
+  }
+
+  private updateActiveSeatLighting(): void {
+    if (this.playerSeats.length === 0 || !this.activePlayerSpotLight) {
+      return;
+    }
+
+    const activeSeatIndex =
+      typeof this.activeTurnSeatForLighting === "number"
+        ? this.activeTurnSeatForLighting
+        : this.currentPlayerSeat;
+    const seat = this.playerSeats[activeSeatIndex] ?? this.playerSeats[this.currentPlayerSeat];
+    if (!seat) {
+      return;
+    }
+
+    const target = new Vector3(seat.position.x, 1.9, seat.position.z);
+    const outward = new Vector3(seat.position.x, 0, seat.position.z);
+    if (outward.lengthSquared() < 0.0001) {
+      outward.set(0, 0, 1);
+    } else {
+      outward.normalize();
+    }
+
+    const desiredPosition = new Vector3(
+      target.x + outward.x * ACTIVE_PLAYER_LIGHT_OUTWARD_OFFSET,
+      ACTIVE_PLAYER_LIGHT_HEIGHT,
+      target.z + outward.z * ACTIVE_PLAYER_LIGHT_OUTWARD_OFFSET
+    );
+
+    if (!this.activeLightInitialized) {
+      this.activeLightPosition.copyFrom(desiredPosition);
+      this.activeLightInitialized = true;
+    } else {
+      this.activeLightPosition = Vector3.Lerp(
+        this.activeLightPosition,
+        desiredPosition,
+        ACTIVE_PLAYER_LIGHT_TRACKING_SMOOTHING
+      );
+    }
+
+    this.activePlayerSpotLight.position.copyFrom(this.activeLightPosition);
+    const direction = target.subtract(this.activeLightPosition);
+    if (direction.lengthSquared() > 0.0001) {
+      this.activePlayerSpotLight.direction = direction.normalize();
+    }
+
+    const pulse = (Math.sin(Date.now() * ACTIVE_PLAYER_LIGHT_PULSE_SPEED) + 1) / 2;
+    this.activePlayerSpotLight.intensity = this.activeSpotBaseIntensity * (0.9 + pulse * 0.22);
+  }
+
+  /**
    * Set callback for when empty player seats are clicked
    * @param callback - Function to call with seat index
    */
@@ -692,6 +934,12 @@ export class GameScene {
    * Create celebration effect for perfect roll or game complete
    */
   celebrateSuccess(type: "perfect" | "complete") {
+    if (type === "complete") {
+      this.triggerVictoryLighting(2400);
+    } else {
+      this.triggerSpecialMoveLighting(new Color3(0.88, 0.66, 1.0), 1600);
+    }
+
     const intensity = particleService.getIntensity();
 
     // Minimal intensity: skip celebrations
@@ -800,36 +1048,37 @@ export class GameScene {
     log.debug("Procedural felt texture applied as fallback");
   }
 
+  private renderBackgroundGradient(top: string, middle: string, bottom: string): void {
+    if (!this.backgroundGradientTexture) {
+      return;
+    }
+
+    const ctx = this.backgroundGradientTexture.getContext() as CanvasRenderingContext2D;
+    const gradient = ctx.createLinearGradient(0, 0, 0, 512);
+    gradient.addColorStop(0, top);
+    gradient.addColorStop(0.45, middle);
+    gradient.addColorStop(1, bottom);
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 512, 512);
+    this.backgroundGradientTexture.update();
+  }
+
   /**
    * Create gradient background with atmospheric depth
    * Creates light-to-dark gradient from top to bottom
    */
   private createGradientBackground(): void {
     // Create dynamic texture for gradient
-    const gradientTexture = new DynamicTexture(
+    this.backgroundGradientTexture = new DynamicTexture(
       "backgroundGradient",
       { width: 512, height: 512 },
       this.scene,
       false
     );
 
-    const ctx = gradientTexture.getContext() as CanvasRenderingContext2D;
-
-    // Create vertical gradient (top to bottom)
-    const gradient = ctx.createLinearGradient(0, 0, 0, 512);
-
-    // Top: Lighter atmospheric blue-gray (ceiling/sky)
-    gradient.addColorStop(0, "#2a3545"); // Medium blue-gray
-    gradient.addColorStop(0.3, "#1f2935"); // Darker
-    gradient.addColorStop(0.6, "#151c26"); // Even darker
-    gradient.addColorStop(1, "#0a0f16"); // Very dark at bottom (floor)
-
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 512, 512);
-    gradientTexture.update();
-
     // Create background layer
-    const backgroundLayer = new Layer(
+    this.backgroundLayer = new Layer(
       "backgroundLayer",
       null, // Pass null for imgUrl, assign texture directly instead
       this.scene,
@@ -837,11 +1086,21 @@ export class GameScene {
     );
 
     // Assign DynamicTexture to Layer's texture property
-    backgroundLayer.texture = gradientTexture;
-    backgroundLayer.isBackground = true;
+    this.backgroundLayer.texture = this.backgroundGradientTexture;
+    this.backgroundLayer.isBackground = true;
+    this.renderBackgroundGradient("#2a3545", "#1f2935", "#0a0f16");
   }
 
   dispose() {
+    if (this.scenarioResetTimer) {
+      clearTimeout(this.scenarioResetTimer);
+      this.scenarioResetTimer = null;
+    }
+    this.scene.unregisterBeforeRender(this.activeSeatLightingAnimator);
+    this.backgroundLayer?.dispose();
+    this.backgroundLayer = null;
+    this.backgroundGradientTexture?.dispose();
+    this.backgroundGradientTexture = null;
     this.playerSeatRenderer?.dispose();
     this.engine.dispose();
   }
