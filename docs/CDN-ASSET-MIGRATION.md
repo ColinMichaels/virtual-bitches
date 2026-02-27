@@ -89,6 +89,7 @@ The GitHub Actions pipeline now includes a dedicated `deploy-assets` job in
 - uploads optimized assets to Firebase Storage
 
 It runs after the main deploy job and prefers `VITE_FIREBASE_STORAGE_BUCKET`; if missing/invalid it falls back to project bucket discovery.
+CDN smoke verification uses the upload-resolved bucket URL to avoid false negatives when fallback bucket resolution is used.
 
 Optional GitHub Environment variables for cache behavior:
 

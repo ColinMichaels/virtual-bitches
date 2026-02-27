@@ -587,6 +587,7 @@ jobs:
         run: node scripts/optimize-public-images.mjs --require-tool
 
       - name: Upload assets to Firebase Storage
+        id: upload-assets
         env:
           FIREBASE_PROJECT_ID: ${{ steps.target-assets.outputs.project_id }}
           FIREBASE_STORAGE_BUCKET: ${{ steps.target-assets.outputs.fb_storage_bucket }}
@@ -600,11 +601,21 @@ jobs:
 
       - name: Smoke Test CDN Assets
         env:
-          ASSET_BASE_URL: ${{ steps.target-assets.outputs.asset_base_url }}
+          ASSET_BASE_URL_FALLBACK: ${{ steps.target-assets.outputs.asset_base_url }}
           CDN_VERIFY_RETRIES: ${{ vars.CDN_VERIFY_RETRIES || '3' }}
           CDN_VERIFY_DELAY_MS: ${{ vars.CDN_VERIFY_DELAY_MS || '2000' }}
           CDN_VERIFY_TIMEOUT_MS: ${{ vars.CDN_VERIFY_TIMEOUT_MS || '15000' }}
         run: |
+          set -euo pipefail
+          ASSET_BASE_URL="${CDN_RESOLVED_ASSET_BASE_URL:-${ASSET_BASE_URL_FALLBACK:-}}"
+          if [ -z "${ASSET_BASE_URL:-}" ]; then
+            echo "Missing ASSET_BASE_URL for CDN smoke verification."
+            exit 1
+          fi
+          if [ "${ASSET_BASE_URL%/}" = "$ASSET_BASE_URL" ]; then
+            ASSET_BASE_URL="${ASSET_BASE_URL}/"
+          fi
+          echo "CDN smoke verification base URL: ${ASSET_BASE_URL}"
           node scripts/check-cdn-assets.mjs \
             --retries "$CDN_VERIFY_RETRIES" \
             --delay-ms "$CDN_VERIFY_DELAY_MS" \
