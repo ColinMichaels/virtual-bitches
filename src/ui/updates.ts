@@ -22,6 +22,14 @@ const FEED_AUTO_REFRESH_MS = 120000;
 
 type UpdateSource = "release" | "commit" | "live";
 
+interface GameUpdateCommitReference {
+  hash: string;
+  shortHash: string;
+  url?: string;
+  pullRequestNumber?: number;
+  pullRequestUrl?: string;
+}
+
 export interface GameUpdate {
   id: string;
   date: string;
@@ -30,6 +38,7 @@ export interface GameUpdate {
   version?: string;
   type?: "feature" | "bugfix" | "announcement" | "alert";
   source?: UpdateSource;
+  commit?: GameUpdateCommitReference;
 }
 
 export interface UpdatesFeed {
@@ -323,6 +332,7 @@ export class UpdatesPanel {
       version: update.version,
       type: this.normalizeUpdateType(update.type as MultiplayerGameUpdateMessage["updateType"]),
       source,
+      commit: this.normalizeCommitReference((update as { commit?: unknown }).commit),
     };
   }
 
@@ -385,6 +395,7 @@ export class UpdatesPanel {
       const safeUpdateId = this.escapeHtml(update.id);
       const safeTitle = this.escapeHtml(update.title);
       const safeVersion = typeof update.version === "string" ? this.escapeHtml(update.version) : "";
+      const linksHtml = this.renderUpdateLinks(update);
 
       return `
         <div class="update-item ${isNew ? 'update-new' : ''}" data-update-id="${safeUpdateId}">
@@ -399,11 +410,43 @@ export class UpdatesPanel {
           </div>
           <h4 class="update-title">${safeTitle}</h4>
           <div class="update-content">${update.content}</div>
+          ${linksHtml ? `<div class="update-links">${linksHtml}</div>` : ""}
         </div>
       `;
     }).join("");
 
     listContainer.innerHTML = html;
+  }
+
+  private renderUpdateLinks(update: GameUpdate): string {
+    if (!update.commit) {
+      return "";
+    }
+
+    const links: string[] = [];
+    if (update.commit.url) {
+      links.push(
+        `<a class="update-link" href="${this.escapeHtml(
+          update.commit.url
+        )}" target="_blank" rel="noopener noreferrer">Commit ${this.escapeHtml(
+          update.commit.shortHash
+        )}</a>`
+      );
+    }
+
+    if (update.commit.pullRequestUrl) {
+      const prLabel =
+        typeof update.commit.pullRequestNumber === "number"
+          ? `PR #${update.commit.pullRequestNumber}`
+          : "Pull Request";
+      links.push(
+        `<a class="update-link" href="${this.escapeHtml(
+          update.commit.pullRequestUrl
+        )}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(prLabel)}</a>`
+      );
+    }
+
+    return links.join("");
   }
 
   /**
@@ -571,6 +614,61 @@ export class UpdatesPanel {
     }
 
     return new Date(fallbackTimestamp).toISOString();
+  }
+
+  private normalizeCommitReference(commit: unknown): GameUpdateCommitReference | undefined {
+    if (!commit || typeof commit !== "object") {
+      return undefined;
+    }
+
+    const candidate = commit as Partial<GameUpdateCommitReference>;
+    const hash = typeof candidate.hash === "string" ? candidate.hash.trim() : "";
+    const shortHash = typeof candidate.shortHash === "string" ? candidate.shortHash.trim() : "";
+    if (!hash || !shortHash) {
+      return undefined;
+    }
+
+    const normalized: GameUpdateCommitReference = {
+      hash,
+      shortHash,
+    };
+
+    const url = this.normalizeHttpUrl(candidate.url);
+    if (url) {
+      normalized.url = url;
+    }
+
+    if (Number.isFinite(candidate.pullRequestNumber as number)) {
+      const prNumber = Math.max(1, Math.floor(candidate.pullRequestNumber as number));
+      normalized.pullRequestNumber = prNumber;
+    }
+
+    const pullRequestUrl = this.normalizeHttpUrl(candidate.pullRequestUrl);
+    if (pullRequestUrl) {
+      normalized.pullRequestUrl = pullRequestUrl;
+    }
+
+    return normalized;
+  }
+
+  private normalizeHttpUrl(value: unknown): string | undefined {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return undefined;
+      }
+      return parsed.toString();
+    } catch {
+      return undefined;
+    }
   }
 
   private escapeHtml(value: string): string {

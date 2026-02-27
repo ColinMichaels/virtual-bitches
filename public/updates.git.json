@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-02-27T04:22:22.366Z",
+  "generatedAt": "2026-02-27T04:30:02.240Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-da062cc",
+      "date": "2026-02-27T04:26:22.000Z",
+      "title": "Add camera assist feature and improve keyboard focus navigation",
+      "content": "<p>Add camera assist feature and improve keyboard focus navigation</p><p><strong>Commit:</strong> <code>da062cc</code></p><p>- Introduced camera assist toggle for Easy mode with automated camera movements after scoring.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "da062cc1fcefe4ed27b5182fe2a19a40508e3968",
+        "shortHash": "da062cc",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/da062cc1fcefe4ed27b5182fe2a19a40508e3968"
+      }
+    },
     {
       "id": "git-7f9c563",
       "date": "2026-02-27T04:07:48.000Z",
@@ -13,7 +27,8 @@
       "source": "commit",
       "commit": {
         "hash": "7f9c563b1aad48bdd1737c4b4129560eb0138108",
-        "shortHash": "7f9c563"
+        "shortHash": "7f9c563",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/7f9c563b1aad48bdd1737c4b4129560eb0138108"
       }
     },
     {
@@ -26,7 +41,8 @@
       "source": "commit",
       "commit": {
         "hash": "52c3aa2cbfd01e08fde39eac116026f9560beea1",
-        "shortHash": "52c3aa2"
+        "shortHash": "52c3aa2",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/52c3aa2cbfd01e08fde39eac116026f9560beea1"
       }
     },
     {
@@ -39,7 +55,8 @@
       "source": "commit",
       "commit": {
         "hash": "ca0aa726aa9ddbc479f9605675a56dd5aadd74b8",
-        "shortHash": "ca0aa72"
+        "shortHash": "ca0aa72",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/ca0aa726aa9ddbc479f9605675a56dd5aadd74b8"
       }
     },
     {
@@ -52,7 +69,8 @@
       "source": "commit",
       "commit": {
         "hash": "c62534de4a46d3cf634a31c454e4d58650e8e19e",
-        "shortHash": "c62534d"
+        "shortHash": "c62534d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c62534de4a46d3cf634a31c454e4d58650e8e19e"
       }
     },
     {
@@ -65,7 +83,8 @@
       "source": "commit",
       "commit": {
         "hash": "bf2b6eba6e9f091fddcc4c9091facfca1dd90eb9",
-        "shortHash": "bf2b6eb"
+        "shortHash": "bf2b6eb",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/bf2b6eba6e9f091fddcc4c9091facfca1dd90eb9"
       }
     },
     {
@@ -78,7 +97,8 @@
       "source": "commit",
       "commit": {
         "hash": "ba970659780e48ab672cf7e2d44e4404283f08b1",
-        "shortHash": "ba97065"
+        "shortHash": "ba97065",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/ba970659780e48ab672cf7e2d44e4404283f08b1"
       }
     },
     {
@@ -91,7 +111,8 @@
       "source": "commit",
       "commit": {
         "hash": "c377a29e4aecd9c9ff460d30b33fa9c4cff57945",
-        "shortHash": "c377a29"
+        "shortHash": "c377a29",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c377a29e4aecd9c9ff460d30b33fa9c4cff57945"
       }
     },
     {
@@ -104,7 +125,8 @@
       "source": "commit",
       "commit": {
         "hash": "5910e97a26417c2edbf2e0dc55a16cb14c59ecc3",
-        "shortHash": "5910e97"
+        "shortHash": "5910e97",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/5910e97a26417c2edbf2e0dc55a16cb14c59ecc3"
       }
     },
     {
@@ -117,7 +139,8 @@
       "source": "commit",
       "commit": {
         "hash": "de296f14a42d125d718f7e3cf8675edb3dd3eaee",
-        "shortHash": "de296f1"
+        "shortHash": "de296f1",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/de296f14a42d125d718f7e3cf8675edb3dd3eaee"
       }
     },
     {
@@ -130,7 +153,8 @@
       "source": "commit",
       "commit": {
         "hash": "57c7678ce7b28746e8f8533f30b769cc691bf12f",
-        "shortHash": "57c7678"
+        "shortHash": "57c7678",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/57c7678ce7b28746e8f8533f30b769cc691bf12f"
       }
     },
     {
@@ -143,7 +167,8 @@
       "source": "commit",
       "commit": {
         "hash": "6ef2940c49345696271eeef62711ca3301fa1f9a",
-        "shortHash": "6ef2940"
+        "shortHash": "6ef2940",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/6ef2940c49345696271eeef62711ca3301fa1f9a"
       }
     },
     {
@@ -156,7 +181,8 @@
       "source": "commit",
       "commit": {
         "hash": "7cb17b9b0af199c779d947166758d714ba676d96",
-        "shortHash": "7cb17b9"
+        "shortHash": "7cb17b9",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/7cb17b9b0af199c779d947166758d714ba676d96"
       }
     },
     {
@@ -169,7 +195,8 @@
       "source": "commit",
       "commit": {
         "hash": "29fe62a96133511cb4710648e63cb690b760c6da",
-        "shortHash": "29fe62a"
+        "shortHash": "29fe62a",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/29fe62a96133511cb4710648e63cb690b760c6da"
       }
     },
     {
@@ -182,7 +209,8 @@
       "source": "commit",
       "commit": {
         "hash": "b790710c9a08f96aadacfff3cc0808027ea8e916",
-        "shortHash": "b790710"
+        "shortHash": "b790710",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/b790710c9a08f96aadacfff3cc0808027ea8e916"
       }
     },
     {
@@ -195,7 +223,8 @@
       "source": "commit",
       "commit": {
         "hash": "5714e7d61c8ec81a53e2be379b693dbd2ec80a28",
-        "shortHash": "5714e7d"
+        "shortHash": "5714e7d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/5714e7d61c8ec81a53e2be379b693dbd2ec80a28"
       }
     },
     {
@@ -208,7 +237,8 @@
       "source": "commit",
       "commit": {
         "hash": "53369648f0d382aabd7d996cabfd1fecb94714f4",
-        "shortHash": "5336964"
+        "shortHash": "5336964",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/53369648f0d382aabd7d996cabfd1fecb94714f4"
       }
     },
     {
@@ -221,7 +251,8 @@
       "source": "commit",
       "commit": {
         "hash": "d60fa79e13fb5feae83a92f3de115bc1aa2da1aa",
-        "shortHash": "d60fa79"
+        "shortHash": "d60fa79",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d60fa79e13fb5feae83a92f3de115bc1aa2da1aa"
       }
     },
     {
@@ -234,7 +265,8 @@
       "source": "commit",
       "commit": {
         "hash": "f55e145f9984f89af01f2988b815a195dca6218d",
-        "shortHash": "f55e145"
+        "shortHash": "f55e145",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/f55e145f9984f89af01f2988b815a195dca6218d"
       }
     },
     {
@@ -247,7 +279,8 @@
       "source": "commit",
       "commit": {
         "hash": "185811fc2816b2d5d7b8ba7694bab4275d0e0457",
-        "shortHash": "185811f"
+        "shortHash": "185811f",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/185811fc2816b2d5d7b8ba7694bab4275d0e0457"
       }
     },
     {
@@ -260,7 +293,8 @@
       "source": "commit",
       "commit": {
         "hash": "a2be08b3692a76880391929ce60dcdec0f73e47a",
-        "shortHash": "a2be08b"
+        "shortHash": "a2be08b",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a2be08b3692a76880391929ce60dcdec0f73e47a"
       }
     },
     {
@@ -273,7 +307,8 @@
       "source": "commit",
       "commit": {
         "hash": "dc3197d3d813021f6be90476389e2a23b0eb53cb",
-        "shortHash": "dc3197d"
+        "shortHash": "dc3197d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/dc3197d3d813021f6be90476389e2a23b0eb53cb"
       }
     },
     {
@@ -286,7 +321,8 @@
       "source": "commit",
       "commit": {
         "hash": "8896db142f8d7f9aebcf824f037cac80e3ebc1b1",
-        "shortHash": "8896db1"
+        "shortHash": "8896db1",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8896db142f8d7f9aebcf824f037cac80e3ebc1b1"
       }
     },
     {
@@ -299,7 +335,8 @@
       "source": "commit",
       "commit": {
         "hash": "14bf91e4db2850d099cc5b68d16f4a11eb21d0f6",
-        "shortHash": "14bf91e"
+        "shortHash": "14bf91e",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/14bf91e4db2850d099cc5b68d16f4a11eb21d0f6"
       }
     },
     {
@@ -312,7 +349,8 @@
       "source": "commit",
       "commit": {
         "hash": "a46133478dfaf607f49d516164b8b43a2322e187",
-        "shortHash": "a461334"
+        "shortHash": "a461334",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a46133478dfaf607f49d516164b8b43a2322e187"
       }
     },
     {
@@ -325,7 +363,8 @@
       "source": "commit",
       "commit": {
         "hash": "d427c7cb3d651897429715675521a3415a4fadb8",
-        "shortHash": "d427c7c"
+        "shortHash": "d427c7c",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d427c7cb3d651897429715675521a3415a4fadb8"
       }
     },
     {
@@ -338,7 +377,8 @@
       "source": "commit",
       "commit": {
         "hash": "a9bde212c74adb14e8e62615803f1a1220252a69",
-        "shortHash": "a9bde21"
+        "shortHash": "a9bde21",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a9bde212c74adb14e8e62615803f1a1220252a69"
       }
     },
     {
@@ -351,7 +391,8 @@
       "source": "commit",
       "commit": {
         "hash": "e0d2dc5645b0c462acdeb6ef42f0a2b09f114224",
-        "shortHash": "e0d2dc5"
+        "shortHash": "e0d2dc5",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/e0d2dc5645b0c462acdeb6ef42f0a2b09f114224"
       }
     },
     {
@@ -364,7 +405,8 @@
       "source": "commit",
       "commit": {
         "hash": "ae8404d4696d11208adf485ff0078e597d968ef1",
-        "shortHash": "ae8404d"
+        "shortHash": "ae8404d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/ae8404d4696d11208adf485ff0078e597d968ef1"
       }
     },
     {
@@ -377,7 +419,8 @@
       "source": "commit",
       "commit": {
         "hash": "d1a72f3211872838ac640e9f9f1bc2a1d75b6220",
-        "shortHash": "d1a72f3"
+        "shortHash": "d1a72f3",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d1a72f3211872838ac640e9f9f1bc2a1d75b6220"
       }
     },
     {
@@ -390,7 +433,8 @@
       "source": "commit",
       "commit": {
         "hash": "3794c61c49fca15e9b85de303dd4bff2a2f23464",
-        "shortHash": "3794c61"
+        "shortHash": "3794c61",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/3794c61c49fca15e9b85de303dd4bff2a2f23464"
       }
     },
     {
@@ -403,7 +447,8 @@
       "source": "commit",
       "commit": {
         "hash": "7fdf4bc52e1d0070362afea8d49dc56e7cd93fc3",
-        "shortHash": "7fdf4bc"
+        "shortHash": "7fdf4bc",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/7fdf4bc52e1d0070362afea8d49dc56e7cd93fc3"
       }
     },
     {
@@ -416,7 +461,8 @@
       "source": "commit",
       "commit": {
         "hash": "849d39de934907a34f79d7eee90ece54b16f5549",
-        "shortHash": "849d39d"
+        "shortHash": "849d39d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/849d39de934907a34f79d7eee90ece54b16f5549"
       }
     },
     {
@@ -429,7 +475,8 @@
       "source": "commit",
       "commit": {
         "hash": "9702b1ea34bfecdd2f528e6179c153f7c2259034",
-        "shortHash": "9702b1e"
+        "shortHash": "9702b1e",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9702b1ea34bfecdd2f528e6179c153f7c2259034"
       }
     },
     {
@@ -442,7 +489,8 @@
       "source": "commit",
       "commit": {
         "hash": "a27150c88b2ad883706c67549280fe647432a6c2",
-        "shortHash": "a27150c"
+        "shortHash": "a27150c",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a27150c88b2ad883706c67549280fe647432a6c2"
       }
     },
     {
@@ -455,7 +503,8 @@
       "source": "commit",
       "commit": {
         "hash": "c4f2fe9c1b543679fa1bcb5a677087bf7a551d75",
-        "shortHash": "c4f2fe9"
+        "shortHash": "c4f2fe9",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c4f2fe9c1b543679fa1bcb5a677087bf7a551d75"
       }
     },
     {
@@ -468,7 +517,8 @@
       "source": "commit",
       "commit": {
         "hash": "4bbe8120a38c6477fe59a1f4a2f5ebd60a71f96a",
-        "shortHash": "4bbe812"
+        "shortHash": "4bbe812",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/4bbe8120a38c6477fe59a1f4a2f5ebd60a71f96a"
       }
     },
     {
@@ -481,7 +531,8 @@
       "source": "commit",
       "commit": {
         "hash": "8f64381c69533230fc5148b31618c27e61f1cec1",
-        "shortHash": "8f64381"
+        "shortHash": "8f64381",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8f64381c69533230fc5148b31618c27e61f1cec1"
       }
     },
     {
@@ -494,7 +545,8 @@
       "source": "commit",
       "commit": {
         "hash": "9b4f1109091669708c31bb4114a59b75b87792a9",
-        "shortHash": "9b4f110"
+        "shortHash": "9b4f110",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9b4f1109091669708c31bb4114a59b75b87792a9"
       }
     },
     {
@@ -507,20 +559,8 @@
       "source": "commit",
       "commit": {
         "hash": "188c46dcde8c44aafa45e0066315a21e679296e0",
-        "shortHash": "188c46d"
-      }
-    },
-    {
-      "id": "git-163272a",
-      "date": "2026-02-26T11:37:15.000Z",
-      "title": "Add \"Return to Main Menu\" functionality and button enhancements",
-      "content": "<p>Add &quot;Return to Main Menu&quot; functionality and button enhancements</p><p><strong>Commit:</strong> <code>163272a</code></p><p>- Introduced `handleReturnToMainMenu` callback and button in `InputController`.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "163272af55201f03905a351e14076b815133f40b",
-        "shortHash": "163272a"
+        "shortHash": "188c46d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/188c46dcde8c44aafa45e0066315a21e679296e0"
       }
     }
   ]
