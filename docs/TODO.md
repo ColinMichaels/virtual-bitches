@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-27 (Wave A i18n complete + deployment diagnostics priority)
+**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-27 (Wave A i18n complete + multiplayer lobby polish + notification UX update)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -232,6 +232,43 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - [ ] Next bot pass: add dynamic playstyle shifts by match phase (opening/midgame/endgame) and player trend adaptation
   - ✅ Added optional replay-tutorial entry point from splash screen (pre-game)
   - [ ] Add regression test ensuring no browser `confirm(...)` remains in gameplay paths and migrate temporary chat `prompt(...)` compose flow to in-game modal UI
+
+### Multiplayer Lobby Overlay + Room Browser/Difficulty Pass (2026-02-27)
+- **Status**: ✅ Core implementation complete; focused QA/test follow-up pending
+- **Scope**: Keep multiplayer controls stable in-view across devices, improve room discovery UX, and enforce room difficulty end-to-end.
+- **Completed**:
+  - ✅ Converted splash multiplayer options into overlay panel flow so controls stay centered/visible while options scroll.
+  - ✅ Locked `Join Game` action to fixed modal footer placement (desktop + mobile), with disabled state until a valid room selection/code exists.
+  - ✅ Updated multiplayer CTA behavior:
+    - splash primary action label now switches to `Join Game` in multiplayer mode
+    - join action remains disabled until a room is selected or a valid private code is present
+  - ✅ Reworked room browser into card grid with stronger typography and clearer metadata hierarchy.
+  - ✅ Added room difficulty levels (`easy` | `normal` | `hard`) to multiplayer room model and cards.
+  - ✅ Added room-card difficulty badges using status palette:
+    - easy -> success/green
+    - normal -> warning/yellow
+    - hard -> error/red
+  - ✅ Added room filtering controls (name search, room type, difficulty, minimum players) and pagination controls.
+  - ✅ Hid pagination controls automatically when filtered results fit the current page size.
+  - ✅ Added no-result and loading placeholders to keep room-grid height stable and prevent layout jumping.
+  - ✅ Added create-room section differentiation and private-room toggle flow with conditional room-name/player-limit inputs.
+  - ✅ Moved join-seed bot controls into dedicated lower settings section and removed earlier duplicate placement.
+  - ✅ Standardized modal controls to match app patterns:
+    - close action uses modal-style `X`
+    - refresh action uses compact icon button
+  - ✅ Updated refresh icon implementation to shared SVG renderer (`src/ui/icons.ts`) for consistent use across surfaces.
+  - ✅ Removed redundant `Clock` label text in multiplayer modal while keeping active timer value visible.
+  - ✅ Updated multiplayer timer behavior so displayed time resets with each new game/round start.
+  - ✅ Tightened stale-session cleanup:
+    - room/player expiry checks reinforced
+    - bot timeout disconnect/pruning behavior hardened
+  - ✅ Added/confirmed backend + typing support for room difficulty persistence and join behavior.
+  - ✅ Enforced room-selected difficulty for joiners so gameplay mechanics match room configuration.
+  - ✅ Updated room queueing behavior to keep public difficulty availability balanced (at least one baseline room each for easy/normal/hard, with overflow as needed).
+- **Follow-up TODO**:
+  - [ ] Add targeted integration tests for difficulty inheritance/enforcement on room join and restart flows.
+  - [ ] Add targeted API/service tests for queue replenishment guarantees per difficulty tier.
+  - [ ] Run focused mobile-device QA for long room lists and extreme filter/no-result combinations.
 
 ### Mobile Menu + iOS Responsive + Admin Console UX Pass (2026-02-26)
 - **Status**: ✅ Complete

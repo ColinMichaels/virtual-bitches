@@ -1,8 +1,92 @@
 {
-  "generatedAt": "2026-02-27T19:59:58.932Z",
+  "generatedAt": "2026-02-27T22:31:39.775Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-01fe1f4",
+      "date": "2026-02-27T22:05:26.000Z",
+      "title": "Add dynamic difficulty balancing and room allocation for public multiplayer sessions",
+      "content": "<p>Add dynamic difficulty balancing and room allocation for public multiplayer sessions</p><p><strong>Commit:</strong> <code>01fe1f4</code></p><p>- Introduced dynamic minimum room allocation per difficulty level (`PUBLIC_ROOM_MIN_PER_DIFFICULTY`).</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "01fe1f4809ab01cc79e62d4b0ec0f24104e0b32f",
+        "shortHash": "01fe1f4",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/01fe1f4809ab01cc79e62d4b0ec0f24104e0b32f"
+      }
+    },
+    {
+      "id": "git-8a491f9",
+      "date": "2026-02-27T22:00:48.000Z",
+      "title": "Add session cleanup sweeps and improve timeout handling",
+      "content": "<p>Add session cleanup sweeps and improve timeout handling</p><p><strong>Commit:</strong> <code>8a491f9</code></p><p>- Introduced `MULTIPLAYER_CLEANUP_INTERVAL_MS` to configure periodic session cleanup intervals.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "8a491f936d394926da11001c2e2e0cb1820513a9",
+        "shortHash": "8a491f9",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8a491f936d394926da11001c2e2e0cb1820513a9"
+      }
+    },
+    {
+      "id": "git-38fb698",
+      "date": "2026-02-27T21:31:47.000Z",
+      "title": "Add session cleanup sweeps and improve timeout handling",
+      "content": "<p>Add session cleanup sweeps and improve timeout handling</p><p><strong>Commit:</strong> <code>38fb698</code></p><p>- Introduced `MULTIPLAYER_CLEANUP_INTERVAL_MS` to configure periodic session cleanup intervals.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "38fb698ec47a06a752fea4519107c72c49d9d0d4",
+        "shortHash": "38fb698",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/38fb698ec47a06a752fea4519107c72c49d9d0d4"
+      }
+    },
+    {
+      "id": "git-abd929e",
+      "date": "2026-02-27T20:57:25.000Z",
+      "title": "Add \"Join Game\" button to multiplayer splash screen and enhance UI actions",
+      "content": "<p>Add &quot;Join Game&quot; button to multiplayer splash screen and enhance UI actions</p><p><strong>Commit:</strong> <code>abd929e</code></p><p>- Added new &quot;Join Game&quot; button with updated localization for `en-US` and `es-ES`.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "abd929e33ff63c1a9fcd5223108b2023b9a9d3b6",
+        "shortHash": "abd929e",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/abd929e33ff63c1a9fcd5223108b2023b9a9d3b6"
+      }
+    },
+    {
+      "id": "git-59974f8",
+      "date": "2026-02-27T20:42:33.000Z",
+      "title": "Add difficulty support for multiplayer sessions and update UI",
+      "content": "<p>Add difficulty support for multiplayer sessions and update UI</p><p><strong>Commit:</strong> <code>59974f8</code></p><p>- Integrated `gameDifficulty` attribute into multiplayer session handling for session creation, joining, and updates.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "59974f8fa469b1bd3327b18f8896219a879348c3",
+        "shortHash": "59974f8",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/59974f8fa469b1bd3327b18f8896219a879348c3"
+      }
+    },
+    {
+      "id": "git-dd38fbf",
+      "date": "2026-02-27T20:01:20.000Z",
+      "title": "Add undo and deselect badge tooltips with styling",
+      "content": "<p>Add undo and deselect badge tooltips with styling</p><p><strong>Commit:</strong> <code>dd38fbf</code></p><p>- Introduced tooltips for undo and deselect badges (`undoBadgeTooltip`, `deselectAll`) with localization support.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "dd38fbfc3ec587f5f954aded73495743c3f12300",
+        "shortHash": "dd38fbf",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/dd38fbfc3ec587f5f954aded73495743c3f12300"
+      }
+    },
     {
       "id": "git-7acc14e",
       "date": "2026-02-27T19:48:13.000Z",
@@ -477,90 +561,6 @@
         "hash": "7f9c563b1aad48bdd1737c4b4129560eb0138108",
         "shortHash": "7f9c563",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/7f9c563b1aad48bdd1737c4b4129560eb0138108"
-      }
-    },
-    {
-      "id": "git-52c3aa2",
-      "date": "2026-02-27T03:57:56.000Z",
-      "title": "Integrate bot avatar rotation and improve multiplayer bot avatar management",
-      "content": "<p>Integrate bot avatar rotation and improve multiplayer bot avatar management</p><p><strong>Commit:</strong> <code>52c3aa2</code></p><p>- Added `botMemeAvatarService` for bot meme avatar generation with fallback support.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "52c3aa2cbfd01e08fde39eac116026f9560beea1",
-        "shortHash": "52c3aa2",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/52c3aa2cbfd01e08fde39eac116026f9560beea1"
-      }
-    },
-    {
-      "id": "git-ca0aa72",
-      "date": "2026-02-27T03:48:23.000Z",
-      "title": "Refactor color variables and gradients for enhanced styling consistency across themes.",
-      "content": "<p>Refactor color variables and gradients for enhanced styling consistency across themes.</p><p><strong>Commit:</strong> <code>ca0aa72</code></p><p>Ticket: feature/api-testing</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "ca0aa726aa9ddbc479f9605675a56dd5aadd74b8",
-        "shortHash": "ca0aa72",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/ca0aa726aa9ddbc479f9605675a56dd5aadd74b8"
-      }
-    },
-    {
-      "id": "git-c62534d",
-      "date": "2026-02-27T03:37:50.000Z",
-      "title": "Add `updates:generate` script and integrate it into build and development workflows",
-      "content": "<p>Add `updates:generate` script and integrate it into build and development workflows</p><p><strong>Commit:</strong> <code>c62534d</code></p><p>- Introduced `scripts/generate-updates-from-git.mjs` to generate JSON data from commit history.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "c62534de4a46d3cf634a31c454e4d58650e8e19e",
-        "shortHash": "c62534d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c62534de4a46d3cf634a31c454e4d58650e8e19e"
-      }
-    },
-    {
-      "id": "git-bf2b6eb",
-      "date": "2026-02-27T03:19:32.000Z",
-      "title": "Enhance `SplashBackground3D` with interactive dice animation, police lighting effects, and improved gradient backgrounds",
-      "content": "<p>Enhance `SplashBackground3D` with interactive dice animation, police lighting effects, and improved gradient backgrounds</p><p><strong>Commit:</strong> <code>bf2b6eb</code></p><p>- Added interactive dice nudging and police lighting mode triggered by user input.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "bf2b6eba6e9f091fddcc4c9091facfca1dd90eb9",
-        "shortHash": "bf2b6eb",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/bf2b6eba6e9f091fddcc4c9091facfca1dd90eb9"
-      }
-    },
-    {
-      "id": "git-ba97065",
-      "date": "2026-02-27T01:44:36.000Z",
-      "title": "Remove geometry loader and legacy materials, enhance ParticleService runtime position resolvers",
-      "content": "<p>Remove geometry loader and legacy materials, enhance ParticleService runtime position resolvers</p><p><strong>Commit:</strong> <code>ba97065</code></p><p>- Deleted unused dice geometry loader (`geometryLoader.ts`) and legacy materials (`materials.ts`).</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "ba970659780e48ab672cf7e2d44e4404283f08b1",
-        "shortHash": "ba97065",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/ba970659780e48ab672cf7e2d44e4404283f08b1"
-      }
-    },
-    {
-      "id": "git-c377a29",
-      "date": "2026-02-27T01:29:53.000Z",
-      "title": "Remove `VITE_ASSET_BASE_URL` references from CI and documentation",
-      "content": "<p>Remove `VITE_ASSET_BASE_URL` references from CI and documentation</p><p><strong>Commit:</strong> <code>c377a29</code></p><p>- Eliminated unused `VITE_ASSET_BASE_URL` and related variables in Firebase deployment workflows.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "c377a29e4aecd9c9ff460d30b33fa9c4cff57945",
-        "shortHash": "c377a29",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c377a29e4aecd9c9ff460d30b33fa9c4cff57945"
       }
     }
   ]

@@ -191,6 +191,7 @@ const TURN_SYNC_REQUEST_COOLDOWN_MS = 7000;
 const TURN_SYNC_STALE_RECOVERY_MS = 4500;
 const MULTIPLAYER_IDENTITY_CACHE_MS = 30000;
 const TURN_SELECTION_SYNC_DEBOUNCE_MS = 80;
+const DEFAULT_MULTIPLAYER_ROUND_CYCLE_MS = 60 * 1000;
 
 class Game implements GameCallbacks {
   private state: GameState;
@@ -214,6 +215,7 @@ class Game implements GameCallbacks {
   private multiplayerSessionService: MultiplayerSessionService;
   private gameStartTime = Date.now();
   private gameStartServerAt: number | null = null;
+  private multiplayerRoundCycleMs = DEFAULT_MULTIPLAYER_ROUND_CYCLE_MS;
   private serverClockOffsetMs = 0;
   private serverClockSampleCount = 0;
   private selectedDieIndex = 0; // For keyboard navigation
@@ -296,6 +298,17 @@ class Game implements GameCallbacks {
     this.multiplayerOptions.gameDifficulty = difficulty;
     this.state.mode.difficulty = difficulty;
     GameFlowController.updateHintMode(this.state, this.diceRow);
+  }
+
+  private normalizeMultiplayerRoundCycleMs(value: unknown): number | null {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return null;
+    }
+    const normalized = Math.floor(value);
+    if (normalized < 5000) {
+      return null;
+    }
+    return Math.min(10 * 60 * 1000, normalized);
   }
 
   constructor(sessionBootstrap: GameSessionBootstrapOptions) {
@@ -742,6 +755,7 @@ class Game implements GameCallbacks {
     this.gameStartServerAt = null;
     this.gameStartTime = Date.now();
     this.hud.setGameClockStart(this.gameStartTime);
+    this.hud.setRoundCountdownDeadline(null);
   }
 
   private syncServerClockOffset(serverNowMs: number | null | undefined): void {
@@ -792,6 +806,8 @@ class Game implements GameCallbacks {
   private applyMultiplayerClockFromServer(
     source: {
       gameStartedAt?: number;
+      nextGameStartsAt?: number;
+      nextGameAutoStartDelayMs?: number;
       createdAt?: number;
       serverNow?: number;
       timestamp?: number;
@@ -800,6 +816,12 @@ class Game implements GameCallbacks {
   ): void {
     const serverNowMs = this.resolveServerNowTimestamp(source);
     this.syncServerClockOffset(serverNowMs);
+    const normalizedRoundCycleMs = this.normalizeMultiplayerRoundCycleMs(
+      source.nextGameAutoStartDelayMs
+    );
+    if (normalizedRoundCycleMs) {
+      this.multiplayerRoundCycleMs = normalizedRoundCycleMs;
+    }
 
     const explicitGameStartedAt =
       typeof source.gameStartedAt === "number" &&
@@ -815,7 +837,21 @@ class Game implements GameCallbacks {
         : null;
     const serverGameStartAt =
       explicitGameStartedAt ?? (this.gameStartServerAt === null ? fallbackCreatedAt : null);
+    const knownServerGameStartAt = serverGameStartAt ?? this.gameStartServerAt;
     if (!serverGameStartAt) {
+      if (this.playMode === "multiplayer" && knownServerGameStartAt) {
+        const explicitNextGameStartsAt =
+          typeof source.nextGameStartsAt === "number" &&
+          Number.isFinite(source.nextGameStartsAt) &&
+          source.nextGameStartsAt > 0
+            ? Math.floor(source.nextGameStartsAt)
+            : null;
+        const serverCountdownDeadlineAt =
+          explicitNextGameStartsAt ?? (knownServerGameStartAt + this.multiplayerRoundCycleMs);
+        const localCountdownDeadlineAt =
+          this.mapServerTimestampToLocalClock(serverCountdownDeadlineAt) ?? serverCountdownDeadlineAt;
+        this.hud.setRoundCountdownDeadline(localCountdownDeadlineAt);
+      }
       return;
     }
 
@@ -826,12 +862,40 @@ class Game implements GameCallbacks {
       this.gameStartServerAt !== serverGameStartAt ||
       Math.abs(localGameStartAt - this.gameStartTime) > 600;
     if (!shouldApply) {
+      const fallbackServerGameStartAt = this.gameStartServerAt;
+      if (!fallbackServerGameStartAt || this.playMode !== "multiplayer") {
+        return;
+      }
+      const explicitNextGameStartsAt =
+        typeof source.nextGameStartsAt === "number" &&
+        Number.isFinite(source.nextGameStartsAt) &&
+        source.nextGameStartsAt > 0
+          ? Math.floor(source.nextGameStartsAt)
+          : null;
+      const serverCountdownDeadlineAt =
+        explicitNextGameStartsAt ?? (fallbackServerGameStartAt + this.multiplayerRoundCycleMs);
+      const localCountdownDeadlineAt =
+        this.mapServerTimestampToLocalClock(serverCountdownDeadlineAt) ?? serverCountdownDeadlineAt;
+      this.hud.setRoundCountdownDeadline(localCountdownDeadlineAt);
       return;
     }
 
     this.gameStartServerAt = serverGameStartAt;
     this.gameStartTime = localGameStartAt;
     this.hud.setGameClockStart(this.gameStartTime);
+    if (this.playMode === "multiplayer") {
+      const explicitNextGameStartsAt =
+        typeof source.nextGameStartsAt === "number" &&
+        Number.isFinite(source.nextGameStartsAt) &&
+        source.nextGameStartsAt > 0
+          ? Math.floor(source.nextGameStartsAt)
+          : null;
+      const serverCountdownDeadlineAt =
+        explicitNextGameStartsAt ?? (serverGameStartAt + this.multiplayerRoundCycleMs);
+      const localCountdownDeadlineAt =
+        this.mapServerTimestampToLocalClock(serverCountdownDeadlineAt) ?? serverCountdownDeadlineAt;
+      this.hud.setRoundCountdownDeadline(localCountdownDeadlineAt);
+    }
   }
 
   private touchMultiplayerTurnSyncActivity(): void {
@@ -1453,6 +1517,13 @@ class Game implements GameCallbacks {
 
     this.updateInviteLinkControlVisibility();
     log.info(`Joined multiplayer session via API scaffold: ${session.sessionId}`);
+    window.setTimeout(() => {
+      const activeSessionId = this.multiplayerSessionService.getActiveSession()?.sessionId;
+      if (activeSessionId !== session.sessionId) {
+        return;
+      }
+      void this.requestTurnSyncRefresh("post_join_sync");
+    }, 350);
   }
 
   private applyMultiplayerSeatState(session: MultiplayerSessionRecord): void {
@@ -1751,6 +1822,7 @@ class Game implements GameCallbacks {
     this.multiplayerTurnPlan = null;
     this.stopBotMemeAvatarRotation();
     this.botMemeAvatarByPlayerId.clear();
+    this.hud.setRoundCountdownDeadline(null);
 
     const seatCount = Math.max(1, this.scene.playerSeats.length || 8);
     const currentSeatIndex = this.scene.currentPlayerSeat;
@@ -2771,6 +2843,13 @@ class Game implements GameCallbacks {
       ...(typeof message.gameStartedAt === "number" && Number.isFinite(message.gameStartedAt)
         ? { gameStartedAt: message.gameStartedAt }
         : {}),
+      ...(typeof message.nextGameStartsAt === "number" && Number.isFinite(message.nextGameStartsAt)
+        ? { nextGameStartsAt: message.nextGameStartsAt }
+        : {}),
+      ...(typeof message.nextGameAutoStartDelayMs === "number" &&
+      Number.isFinite(message.nextGameAutoStartDelayMs)
+        ? { nextGameAutoStartDelayMs: message.nextGameAutoStartDelayMs }
+        : {}),
       ...(typeof message.expiresAt === "number" && Number.isFinite(message.expiresAt)
         ? { expiresAt: message.expiresAt }
         : {}),
@@ -3706,6 +3785,7 @@ class Game implements GameCallbacks {
     this.lastSessionComplete = false;
     this.hud.setMultiplayerStandings([], null);
     this.hud.setTurnSyncStatus(null);
+    this.hud.setRoundCountdownDeadline(null);
     playerDataSyncService.setSessionId(undefined);
     this.clearSessionQueryParam();
     this.updateInviteLinkControlVisibility();

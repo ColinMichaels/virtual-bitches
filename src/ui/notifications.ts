@@ -5,8 +5,14 @@
 
 export type NotificationType = "info" | "success" | "warning" | "error";
 
+export interface NotificationShowOptions {
+  detail?: string;
+}
+
 interface QueuedNotification {
   message: string;
+  detail?: string;
+  dedupeKey: string;
   type: NotificationType;
   duration: number;
   timestamp: number;
@@ -16,9 +22,13 @@ interface QueuedNotification {
 export class NotificationService {
   private container: HTMLElement;
   private queue: QueuedNotification[] = [];
-  private activeNotifications: Map<HTMLElement, { removeTimer: number }> = new Map();
+  private activeNotifications: Map<
+    HTMLElement,
+    { removeTimer: number; dedupeKey: string; height: number }
+  > = new Map();
   private maxVisible = 3; // Maximum notifications visible at once
   private debounceMs = 500; // Ignore duplicate messages within this window
+  private stackGapPx = 12;
   private isProcessing = false;
 
   // Priority levels (higher = more important)
@@ -41,17 +51,29 @@ export class NotificationService {
    * @param message The message to display
    * @param type The notification type (info, success, warning, error)
    * @param duration Duration in milliseconds (default: 2000ms to match animation)
+   * @param options Optional detail line (smaller text) shown under the main message
    */
-  show(message: string, type: NotificationType = "info", duration: number = 2000): void {
+  show(
+    message: string,
+    type: NotificationType = "info",
+    duration: number = 2000,
+    options?: NotificationShowOptions
+  ): void {
+    const normalized = this.normalizeMessage(message, options?.detail);
+    if (!normalized) {
+      return;
+    }
     const now = Date.now();
 
     // Check for duplicate in active notifications or recent queue (debouncing)
-    if (this.isDuplicate(message, now)) {
+    if (this.isDuplicate(normalized.dedupeKey, now)) {
       return;
     }
 
     const notification: QueuedNotification = {
-      message,
+      message: normalized.message,
+      detail: normalized.detail,
+      dedupeKey: normalized.dedupeKey,
       type,
       duration,
       timestamp: now,
@@ -69,18 +91,63 @@ export class NotificationService {
   /**
    * Check if message is duplicate within debounce window
    */
-  private isDuplicate(message: string, now: number): boolean {
+  private isDuplicate(dedupeKey: string, now: number): boolean {
     // Check active notifications
-    for (const [el] of this.activeNotifications) {
-      if (el.textContent === message) {
+    for (const [, notificationState] of this.activeNotifications) {
+      if (notificationState.dedupeKey === dedupeKey) {
         return true;
       }
     }
 
     // Check recent queue items
     return this.queue.some(
-      (n) => n.message === message && now - n.timestamp < this.debounceMs
+      (n) => n.dedupeKey === dedupeKey && now - n.timestamp < this.debounceMs
     );
+  }
+
+  private normalizeMessage(
+    message: string,
+    detail?: string
+  ): { message: string; detail?: string; dedupeKey: string } | null {
+    const trimmedMessage = message.trim();
+    let primary = trimmedMessage;
+    let secondary = detail?.trim() ?? "";
+
+    if (!secondary && trimmedMessage.includes("\n")) {
+      const lines = trimmedMessage
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      primary = lines.shift() ?? "";
+      secondary = lines.join(" ");
+    }
+
+    if (!primary && secondary) {
+      primary = secondary;
+      secondary = "";
+    }
+    if (!primary) {
+      return null;
+    }
+
+    const dedupeKey = secondary ? `${primary}\n${secondary}` : primary;
+    return {
+      message: primary,
+      detail: secondary || undefined,
+      dedupeKey,
+    };
+  }
+
+  private calculateNextOffset(): number {
+    let offset = 0;
+    for (const [, notificationState] of this.activeNotifications) {
+      offset += notificationState.height + this.stackGapPx;
+    }
+    return offset;
+  }
+
+  private measureNotificationHeight(el: HTMLElement): number {
+    return Math.max(40, Math.ceil(el.getBoundingClientRect().height));
   }
 
   /**
@@ -105,15 +172,27 @@ export class NotificationService {
    * Display a single notification
    */
   private displayNotification(notification: QueuedNotification): void {
-    const { message, type, duration } = notification;
+    const { message, detail, type, duration, dedupeKey } = notification;
 
     // Create notification element
     const el = document.createElement("div");
     el.className = `notification notification-${type}`;
-    el.textContent = message;
+    el.setAttribute("role", "status");
+
+    const primaryLine = document.createElement("p");
+    primaryLine.className = "notification-message";
+    primaryLine.textContent = message;
+    el.appendChild(primaryLine);
+
+    if (detail) {
+      const detailLine = document.createElement("p");
+      detailLine.className = "notification-detail";
+      detailLine.textContent = detail;
+      el.appendChild(detailLine);
+    }
 
     // Calculate vertical offset based on active notifications
-    const offset = this.activeNotifications.size * 80; // 80px per notification
+    const offset = this.calculateNextOffset();
     el.style.top = `${offset}px`;
 
     // Add to container
@@ -124,7 +203,12 @@ export class NotificationService {
       this.removeNotification(el);
     }, duration);
 
-    this.activeNotifications.set(el, { removeTimer });
+    this.activeNotifications.set(el, {
+      removeTimer,
+      dedupeKey,
+      height: this.measureNotificationHeight(el),
+    });
+    this.restackNotifications();
   }
 
   /**
@@ -154,10 +238,11 @@ export class NotificationService {
    * Restack all active notifications after removal
    */
   private restackNotifications(): void {
-    let index = 0;
-    for (const [el] of this.activeNotifications) {
-      el.style.top = `${index * 80}px`;
-      index++;
+    let offset = 0;
+    for (const [el, notificationState] of this.activeNotifications) {
+      notificationState.height = this.measureNotificationHeight(el);
+      el.style.top = `${offset}px`;
+      offset += notificationState.height + this.stackGapPx;
     }
   }
 

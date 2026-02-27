@@ -1042,6 +1042,8 @@ async function handleJoinSessionByTarget(req, res, target) {
   const queuedForNextGame = isReturningParticipant
     ? normalizeQueuedForNextGame(existingParticipant?.queuedForNextGame)
     : shouldQueueForNextGame;
+  const hasActiveTurnBeforeJoin =
+    typeof ensureSessionTurnState(session)?.activeTurnPlayerId === "string";
   if (!isReturningParticipant && getHumanParticipantCount(session) >= MAX_MULTIPLAYER_HUMAN_PLAYERS) {
     sendJson(res, 409, { error: "Room is full", reason: "room_full" });
     return;
@@ -1063,7 +1065,9 @@ async function handleJoinSessionByTarget(req, res, target) {
       : {}),
     joinedAt: existingParticipant?.joinedAt ?? now,
     lastHeartbeatAt: now,
-    isReady: isReturningParticipant ? existingParticipant?.isReady === true : false,
+    isReady: isReturningParticipant
+      ? existingParticipant?.isReady === true
+      : queuedForNextGame || hasActiveTurnBeforeJoin,
     score: normalizeParticipantScore(existingParticipant?.score),
     remainingDice: normalizeParticipantRemainingDice(existingParticipant?.remainingDice),
     queuedForNextGame,
@@ -2803,6 +2807,8 @@ function buildSessionResponse(session, playerId, auth) {
     completedAt: snapshot.completedAt,
     createdAt: snapshot.createdAt,
     gameStartedAt: snapshot.gameStartedAt,
+    nextGameStartsAt: snapshot.nextGameStartsAt,
+    nextGameAutoStartDelayMs: snapshot.nextGameAutoStartDelayMs,
     lastActivityAt: snapshot.lastActivityAt,
     expiresAt: snapshot.expiresAt,
     serverNow: now,
@@ -2813,6 +2819,8 @@ function buildSessionSnapshot(session) {
   const turnState = ensureSessionTurnState(session);
   const participants = serializeSessionParticipants(session);
   const standings = buildSessionStandings(session);
+  const gameStartedAt = resolveSessionGameStartedAt(session);
+  const nextGameStartsAt = resolveSessionNextGameStartsAt(session, gameStartedAt);
   const humanCount = participants.filter((participant) => !isBotParticipant(participant)).length;
   const activeGameParticipants = participants.filter(
     (participant) => participant.queuedForNextGame !== true
@@ -2835,7 +2843,9 @@ function buildSessionSnapshot(session) {
     sessionComplete,
     completedAt: sessionComplete ? resolveSessionCompletedAt(standings) : null,
     createdAt: session.createdAt,
-    gameStartedAt: resolveSessionGameStartedAt(session),
+    gameStartedAt,
+    nextGameStartsAt,
+    nextGameAutoStartDelayMs: NEXT_GAME_AUTO_START_DELAY_MS,
     lastActivityAt: resolveSessionLastActivityAt(session),
     expiresAt: session.expiresAt,
   };
@@ -3276,6 +3286,16 @@ function resolveSessionGameStartedAt(session, fallback = Date.now()) {
   }
 
   return gameStartedAt;
+}
+
+function resolveSessionNextGameStartsAt(session, fallback = Date.now()) {
+  const gameStartedAt = resolveSessionGameStartedAt(session, fallback);
+  const defaultNextGameStartsAt = gameStartedAt + NEXT_GAME_AUTO_START_DELAY_MS;
+  const scheduledNextGameStartsAt = normalizePostGameTimestamp(session?.nextGameStartsAt);
+  if (scheduledNextGameStartsAt !== null) {
+    return scheduledNextGameStartsAt;
+  }
+  return defaultNextGameStartsAt;
 }
 
 function isRoomParticipantActive(sessionId, participant, now = Date.now()) {
@@ -4595,11 +4615,8 @@ function scheduleSessionPostGameLifecycle(session, timestamp = Date.now()) {
   }
 
   const completedAt = Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
-  const currentNextGameStartsAt = normalizePostGameTimestamp(session?.nextGameStartsAt);
-  const nextGameStartsAt =
-    currentNextGameStartsAt !== null
-      ? currentNextGameStartsAt
-      : completedAt + NEXT_GAME_AUTO_START_DELAY_MS;
+  const gameStartedAt = resolveSessionGameStartedAt(session, completedAt);
+  const nextGameStartsAt = gameStartedAt + NEXT_GAME_AUTO_START_DELAY_MS;
   const currentPostGameActivityAt = normalizePostGameTimestamp(session?.postGameActivityAt);
   const postGameActivityAt =
     currentPostGameActivityAt !== null ? currentPostGameActivityAt : completedAt;
@@ -7104,11 +7121,16 @@ function handleTurnActionMessage(client, session, payload) {
         severity: "success",
         timestamp,
       });
+      const nextGameStartsAt = resolveSessionNextGameStartsAt(session, timestamp);
+      const nextGameSecondsRemaining = Math.max(
+        1,
+        Math.ceil((nextGameStartsAt - timestamp) / 1000)
+      );
       broadcastSystemRoomChannelMessage(client.sessionId, {
         topic: "next_game_pending",
         title: "Next Game",
-        message: `Next game starts in ${Math.max(1, Math.floor(NEXT_GAME_AUTO_START_DELAY_MS / 1000))}s.`,
-        severity: "info",
+        message: `Next game starts in ${nextGameSecondsRemaining}s.`,
+        severity: nextGameSecondsRemaining <= 3 ? "warning" : "info",
         timestamp,
       });
 

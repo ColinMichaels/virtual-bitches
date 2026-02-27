@@ -8,6 +8,7 @@ import { environment } from "@env";
 import { logger } from "./utils/logger.js";
 import { applyBrandMetadataToDocument } from "./config/brand.js";
 import { applyTranslationsToDom, onLocaleChange, t } from "./i18n/index.js";
+import { renderSettingsIconSvg } from "./ui/icons.js";
 import type { SplashStartOptions } from "./ui/splash.js";
 import { initializeFacebookShareMeta } from "./social/share/facebookShareMeta.js";
 
@@ -56,6 +57,7 @@ let lastFirebaseReauthPromptAt = 0;
 
 registerAuthSessionHandlers();
 hydrateBrandAssets();
+hydrateShellIcons();
 applyBrandMetadataToDocument();
 initializeFacebookShareMeta();
 applyTranslationsToDom();
@@ -246,6 +248,23 @@ function hydrateBrandAssets(): void {
   const miniLogo = document.getElementById("stats-mini-logo") as HTMLImageElement | null;
   if (miniLogo) {
     miniLogo.src = getBrandLogoUrl();
+  }
+}
+
+function hydrateShellIcons(): void {
+  const desktopSettingsButton = document.getElementById("settings-gear-btn");
+  if (desktopSettingsButton) {
+    desktopSettingsButton.innerHTML = renderSettingsIconSvg(20);
+  }
+
+  const mobileSettingsButton = document.getElementById("mobile-settings-btn");
+  if (mobileSettingsButton) {
+    const existingSvg = mobileSettingsButton.querySelector("svg");
+    if (existingSvg) {
+      existingSvg.outerHTML = renderSettingsIconSvg(20);
+    } else {
+      mobileSettingsButton.insertAdjacentHTML("afterbegin", renderSettingsIconSvg(20));
+    }
   }
 }
 

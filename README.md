@@ -64,6 +64,13 @@ Examples:
 - Mobile-responsive HUD and settings/tutor flows
 - CDN-ready runtime asset loading
 
+## Recent Updates (2026-02-27)
+
+- Multiplayer lobby now runs as an overlay panel with fixed `Join Game` action for steadier mobile/desktop UX.
+- Room browser upgraded with card grid, filters, difficulty badges, and pagination-aware empty-state placeholders.
+- Multiplayer rooms now support/enforce `easy`, `normal`, and `hard` difficulty levels end-to-end.
+- In-game notifications now wrap cleanly and support a smaller second detail line for extra context.
+
 ## Project Layout
 
 ```text

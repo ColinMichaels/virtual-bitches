@@ -483,6 +483,19 @@ h1, h2, h3, h4, h5, h6 {
   color: #8fd3ff;
 }
 
+.stat-clock-value.is-round-countdown {
+  color: #9fe7ff;
+}
+
+.stat-clock-value.is-round-countdown-warning {
+  color: #ffd27a;
+}
+
+.stat-clock-value.is-round-countdown-critical {
+  color: #ff8f8f;
+  text-shadow: 0 0 10px rgba(255, 143, 143, 0.35);
+}
+
 .stat-subvalue-compact {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.72);
@@ -3935,16 +3948,37 @@ body.splash-active :is(
   letter-spacing: 2px;
   opacity: 0;
   position: absolute;
-  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.08;
   text-shadow: 0 0 10px currentColor,
                0 0 20px currentColor,
                0 0 30px currentColor,
                0 2px 4px rgba(0, 0, 0, 0.8);
   animation: floatUp 2s ease-out forwards;
   transition: top 0.3s ease-out;
-  overflow: hidden;
-  text-overflow: ellipsis;
   max-width: 100%;
+}
+
+.notification-message {
+  margin: 0;
+  max-width: 100%;
+}
+
+.notification-detail {
+  margin: 0;
+  max-width: 100%;
+  font-size: 0.58em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  opacity: 0.88;
+  text-transform: none;
 }
 
 @keyframes floatUp {
@@ -3991,9 +4025,12 @@ body.splash-active :is(
     font-weight: 800;
     letter-spacing: 1.5px;
     max-width: 90vw;
-    white-space: normal;
-    word-wrap: break-word;
-    line-height: 1.2;
+    line-height: 1.12;
+  }
+
+  .notification-detail {
+    font-size: 0.66em;
+    letter-spacing: 0.06em;
   }
 
   @keyframes floatUp {
