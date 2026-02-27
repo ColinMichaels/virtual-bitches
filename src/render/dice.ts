@@ -117,6 +117,30 @@ const SIDES_TO_DIE_KIND: Record<number, DieKind> = {
   12: "d12",
   20: "d20",
 };
+const FACE_LOCKED_ROTATION_KINDS = new Set<DieKind>(["d8", "d10", "d12", "d20"]);
+
+function hashRandomSeed(seed: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function createRollRandom(seed: string | number | undefined): () => number {
+  if (seed === undefined || seed === null || seed === "") {
+    return Math.random;
+  }
+
+  let state = hashRandomSeed(String(seed));
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 interface SpectatorPreviewState {
   rollingDice: DieState[];
@@ -1037,18 +1061,24 @@ export class DiceRenderer {
     }
   }
 
-  animateRoll(dice: DieState[], onComplete: () => void, rollAreaPosition?: Vector3) {
+  animateRoll(
+    dice: DieState[],
+    onComplete: () => void,
+    rollAreaPosition?: Vector3,
+    options?: { seed?: string | number }
+  ) {
     const activeDice = dice.filter((d) => d.inPlay && !d.scored);
     if (activeDice.length === 0) {
       onComplete();
       return;
     }
+    const random = createRollRandom(options?.seed);
 
     // Shuffle dice order for randomized positioning on grid
     // Fisher-Yates shuffle to randomize which dice land where
     const shuffledDice = [...activeDice];
     for (let i = shuffledDice.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(random() * (i + 1));
       [shuffledDice[i], shuffledDice[j]] = [shuffledDice[j], shuffledDice[i]];
     }
 
@@ -1093,8 +1123,8 @@ export class DiceRenderer {
       const maxAttempts = 10;
 
       while (attempts < maxAttempts) {
-        const randomX = offsetX + (Math.random() - 0.5) * randomSpread;
-        const randomZ = offsetZ + (Math.random() - 0.5) * randomSpread;
+        const randomX = offsetX + (random() - 0.5) * randomSpread;
+        const randomZ = offsetZ + (random() - 0.5) * randomSpread;
 
         // Check collision with already placed dice
         let hasCollision = false;
@@ -1130,14 +1160,14 @@ export class DiceRenderer {
 
       // Staggered drop timing creates cascading effect (dice don't all drop at once)
       const dropDelay = i * 2; // 2 frames delay per die (cascade effect)
-      const animDuration = 31 + Math.random() * 7; // Slightly faster animation
+      const animDuration = 31 + random() * 7; // Slightly faster animation
 
       // Random starting position (clustered center) that moves to final position
       // Creates "scrambling" effect as dice spread out while falling
       const startClusterRadius = 3; // Start in tight cluster
-      const startX = rollAreaX + (Math.random() - 0.5) * startClusterRadius;
-      const startZ = rollAreaZ + (Math.random() - 0.5) * startClusterRadius;
-      const startY = DROP_START_HEIGHT + (Math.random() - 0.5) * 4; // Varied heights
+      const startX = rollAreaX + (random() - 0.5) * startClusterRadius;
+      const startZ = rollAreaZ + (random() - 0.5) * startClusterRadius;
+      const startY = DROP_START_HEIGHT + (random() - 0.5) * 4; // Varied heights
       const endY = DROP_END_HEIGHT;
 
       // Set initial position (clustered)
@@ -1146,8 +1176,11 @@ export class DiceRenderer {
       // Calculate rotation to show the rolled value face-up
       const baseRotation = this.getRotationForValue(die.def.kind, die.value);
 
-      // Add random Y-axis rotation for natural variation
-      const randomYRotation = Math.random() * Math.PI * 2;
+      // Preserve exact face mapping for non-cubic dice.
+      // Applying extra Euler yaw to these kinds can skew the intended face-up result.
+      const randomYRotation = FACE_LOCKED_ROTATION_KINDS.has(die.def.kind)
+        ? 0
+        : random() * Math.PI * 2;
       const finalRotation = new Vector3(
         baseRotation.x,
         baseRotation.y + randomYRotation,
@@ -1155,9 +1188,9 @@ export class DiceRenderer {
       );
 
       const startRotation = new Vector3(
-        Math.random() * Math.PI * 2,
-        Math.random() * Math.PI * 2,
-        Math.random() * Math.PI * 2
+        random() * Math.PI * 2,
+        random() * Math.PI * 2,
+        random() * Math.PI * 2
       );
       mesh.rotation = startRotation;
 
@@ -1171,7 +1204,7 @@ export class DiceRenderer {
       );
 
       // Add mid-point for more interesting trajectory
-      const midX = (startX + finalX) / 2 + (Math.random() - 0.5) * 2;
+      const midX = (startX + finalX) / 2 + (random() - 0.5) * 2;
       xAnim.setKeys([
         { frame: dropDelay, value: startX },
         { frame: dropDelay + animDuration * 0.4, value: midX },
@@ -1187,7 +1220,7 @@ export class DiceRenderer {
         Animation.ANIMATIONLOOPMODE_CONSTANT
       );
 
-      const midZ = (startZ + finalZ) / 2 + (Math.random() - 0.5) * 2;
+      const midZ = (startZ + finalZ) / 2 + (random() - 0.5) * 2;
       zAnim.setKeys([
         { frame: dropDelay, value: startZ },
         { frame: dropDelay + animDuration * 0.4, value: midZ },
@@ -1221,9 +1254,9 @@ export class DiceRenderer {
       );
 
       const midRotation = new Vector3(
-        startRotation.x + (Math.random() - 0.5) * Math.PI * 2,
-        startRotation.y + (Math.random() - 0.5) * Math.PI * 3,
-        startRotation.z + (Math.random() - 0.5) * Math.PI * 2
+        startRotation.x + (random() - 0.5) * Math.PI * 2,
+        startRotation.y + (random() - 0.5) * Math.PI * 3,
+        startRotation.z + (random() - 0.5) * Math.PI * 2
       );
 
       rotAnim.setKeys([
@@ -1363,7 +1396,11 @@ export class DiceRenderer {
 
   startSpectatorRollPreview(
     previewKey: string,
-    roll: { rollIndex: number; dice: Array<{ dieId: string; sides: number; value?: number }> },
+    roll: {
+      rollIndex: number;
+      dice: Array<{ dieId: string; sides: number; value?: number }>;
+      serverRollId?: string;
+    },
     scoreAreaPosition: Vector3
   ): boolean {
     const key = typeof previewKey === "string" ? previewKey.trim() : "";
@@ -1421,10 +1458,14 @@ export class DiceRenderer {
     preview.rollingSourceToTempId = sourceToTempId;
     preview.rollingTempIds = dice.map((die) => die.id);
     preview.scoreAreaPosition = scoreAreaPosition.clone();
+    const previewSeed =
+      typeof roll.serverRollId === "string" && roll.serverRollId.trim().length > 0
+        ? roll.serverRollId.trim()
+        : `${key}:${safeRollIndex}`;
 
     this.animateRoll(dice, () => {
       this.scheduleSpectatorRollingCleanup(key);
-    }, rollAreaPosition);
+    }, rollAreaPosition, { seed: previewSeed });
     return true;
   }
 

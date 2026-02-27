@@ -52,6 +52,7 @@ export interface MultiplayerSessionParticipant {
   isReady?: boolean;
   score?: number;
   remainingDice?: number;
+  queuedForNextGame?: boolean;
   isComplete?: boolean;
   completedAt?: number | null;
 }
@@ -68,6 +69,7 @@ export interface MultiplayerSessionStanding {
   isReady?: boolean;
   score?: number;
   remainingDice?: number;
+  queuedForNextGame?: boolean;
   isComplete?: boolean;
   completedAt?: number | null;
   placement: number;
@@ -571,11 +573,18 @@ export class BackendApiService {
 
     if (!response.ok) {
       const errorSummary = await readErrorSummary(response);
+      const isAuthProfileProbe = method === "GET" && path === "/auth/me";
       if (
         response.status === 401 &&
         (authMode === "firebase" || authMode === "firebaseOptional")
       ) {
+        if (isAuthProfileProbe) {
+          return null;
+        }
         this.dispatchFirebaseSessionExpired(path, errorSummary);
+      }
+      if (isAuthProfileProbe && response.status === 401) {
+        return null;
       }
       if (errorSummary) {
         log.warn(`API request failed: ${method} ${path} (${response.status}) - ${errorSummary}`);

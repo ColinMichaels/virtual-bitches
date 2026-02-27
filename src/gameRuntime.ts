@@ -92,6 +92,7 @@ interface SeatedMultiplayerParticipant {
   isReady: boolean;
   score: number;
   remainingDice: number;
+  queuedForNextGame: boolean;
   isComplete: boolean;
   completedAt: number | null;
 }
@@ -173,6 +174,10 @@ function normalizeCompletedAt(value: unknown): number | null {
     return null;
   }
   return Math.floor(value);
+}
+
+function normalizeQueuedForNextGame(value: unknown): boolean {
+  return value === true;
 }
 
 const TURN_NUDGE_COOLDOWN_MS = 7000;
@@ -1293,7 +1298,12 @@ class Game implements GameCallbacks {
     this.participantIdBySeat.clear();
     this.participantLabelById.clear();
     const showReadyState =
-      seatedParticipants.filter((participant) => !participant.isBot && !participant.isComplete)
+      seatedParticipants.filter(
+        (participant) =>
+          !participant.isBot &&
+          !participant.isComplete &&
+          !participant.queuedForNextGame
+      )
         .length > 1;
     seatedParticipants.forEach((participant) => {
       participantBySeat.set(participant.seatIndex, participant);
@@ -1351,15 +1361,17 @@ class Game implements GameCallbacks {
     }
 
     this.multiplayerTurnPlan = buildClockwiseTurnPlan(
-      seatedParticipants.map((participant) => ({
-        playerId: participant.playerId,
-        displayName: this.formatParticipantLabel(
-          participant,
-          participant.playerId === this.localPlayerId
-        ),
-        seatIndex: participant.seatIndex,
-        isBot: participant.isBot,
-      })),
+      seatedParticipants
+        .filter((participant) => !participant.queuedForNextGame)
+        .map((participant) => ({
+          playerId: participant.playerId,
+          displayName: this.formatParticipantLabel(
+            participant,
+            participant.playerId === this.localPlayerId
+          ),
+          seatIndex: participant.seatIndex,
+          isBot: participant.isBot,
+        })),
       currentSeatIndex
     );
 
@@ -1619,6 +1631,7 @@ class Game implements GameCallbacks {
       isReady: localParticipant?.isReady === true,
       score: normalizeParticipantScore(localParticipant?.score),
       remainingDice: normalizeRemainingDice(localParticipant?.remainingDice),
+      queuedForNextGame: normalizeQueuedForNextGame(localParticipant?.queuedForNextGame),
       isComplete: localParticipant?.isComplete === true,
       completedAt: normalizeCompletedAt(localParticipant?.completedAt),
     });
@@ -1642,6 +1655,7 @@ class Game implements GameCallbacks {
         isReady: participant.isReady,
         score: participant.score,
         remainingDice: participant.remainingDice,
+        queuedForNextGame: participant.queuedForNextGame,
         isComplete: participant.isComplete,
         completedAt: participant.completedAt,
       });
@@ -1661,6 +1675,7 @@ class Game implements GameCallbacks {
     isReady: boolean;
     score: number;
     remainingDice: number;
+    queuedForNextGame: boolean;
     isComplete: boolean;
     completedAt: number | null;
     joinedAt: number;
@@ -1676,6 +1691,7 @@ class Game implements GameCallbacks {
         isReady: boolean;
         score: number;
         remainingDice: number;
+        queuedForNextGame: boolean;
         isComplete: boolean;
         completedAt: number | null;
         joinedAt: number;
@@ -1707,6 +1723,7 @@ class Game implements GameCallbacks {
         isReady: Boolean(participant.isBot) ? true : participant.isReady === true,
         score: normalizeParticipantScore(participant.score),
         remainingDice: normalizeRemainingDice(participant.remainingDice),
+        queuedForNextGame: normalizeQueuedForNextGame(participant.queuedForNextGame),
         isComplete: participant.isComplete === true,
         completedAt: normalizeCompletedAt(participant.completedAt),
         joinedAt:
@@ -1726,6 +1743,7 @@ class Game implements GameCallbacks {
         isReady: true,
         score: normalizeParticipantScore(this.state.score),
         remainingDice: 0,
+        queuedForNextGame: false,
         isComplete: false,
         completedAt: null,
         joinedAt: -1,
@@ -1775,6 +1793,9 @@ class Game implements GameCallbacks {
     showReadyState: boolean
   ): string {
     const label = this.formatParticipantLabel(participant, isCurrentPlayer);
+    if (participant.queuedForNextGame) {
+      return `${label} • NEXT`.slice(0, 24);
+    }
     if (participant.isComplete) {
       return `${label} • DONE`.slice(0, 24);
     }
@@ -1814,14 +1835,16 @@ class Game implements GameCallbacks {
   ): void {
     const participants = Array.isArray(session.standings) && session.standings.length > 0
       ? session.standings
-      : seatedParticipants.map((participant) => ({
-          playerId: participant.playerId,
-          displayName: participant.displayName,
-          isBot: participant.isBot,
-          score: participant.score,
-          isComplete: participant.isComplete,
-          placement: 0,
-        }));
+      : seatedParticipants
+          .filter((participant) => !participant.queuedForNextGame)
+          .map((participant) => ({
+            playerId: participant.playerId,
+            displayName: participant.displayName,
+            isBot: participant.isBot,
+            score: participant.score,
+            isComplete: participant.isComplete,
+            placement: 0,
+          }));
 
     const entries = participants.map((participant, index) => {
       const playerId = participant.playerId;
@@ -1846,6 +1869,116 @@ class Game implements GameCallbacks {
     });
 
     this.hud.setMultiplayerStandings(entries, session.turnState?.activeTurnPlayerId ?? null);
+  }
+
+  private getSessionParticipantById(
+    session: MultiplayerSessionRecord,
+    playerId: string
+  ): MultiplayerSessionParticipant | null {
+    const participants = Array.isArray(session.participants) ? session.participants : [];
+    for (const participant of participants) {
+      if (!participant || typeof participant.playerId !== "string") {
+        continue;
+      }
+      if (participant.playerId === playerId) {
+        return participant;
+      }
+    }
+    return null;
+  }
+
+  private shouldResetLocalStateForNextMultiplayerGame(
+    previousSession: MultiplayerSessionRecord,
+    nextSession: MultiplayerSessionRecord
+  ): boolean {
+    if (this.playMode !== "multiplayer") {
+      return false;
+    }
+
+    const previousLocalParticipant = this.getSessionParticipantById(previousSession, this.localPlayerId);
+    const nextLocalParticipant = this.getSessionParticipantById(nextSession, this.localPlayerId);
+    if (!previousLocalParticipant || !nextLocalParticipant) {
+      return false;
+    }
+
+    const previousScore = normalizeParticipantScore(previousLocalParticipant.score);
+    const nextScore = normalizeParticipantScore(nextLocalParticipant.score);
+    const previousRemaining = normalizeRemainingDice(previousLocalParticipant.remainingDice);
+    const nextRemaining = normalizeRemainingDice(nextLocalParticipant.remainingDice);
+    const nextRound =
+      typeof nextSession.turnState?.round === "number" && Number.isFinite(nextSession.turnState.round)
+        ? Math.max(1, Math.floor(nextSession.turnState.round))
+        : 1;
+    const nextTurnNumber =
+      typeof nextSession.turnState?.turnNumber === "number" &&
+      Number.isFinite(nextSession.turnState.turnNumber)
+        ? Math.max(1, Math.floor(nextSession.turnState.turnNumber))
+        : 1;
+    if (nextRound !== 1 || nextTurnNumber !== 1) {
+      return false;
+    }
+
+    if (
+      nextScore !== 0 ||
+      nextLocalParticipant.isComplete === true ||
+      normalizeQueuedForNextGame(nextLocalParticipant.queuedForNextGame) ||
+      nextRemaining <= 0
+    ) {
+      return false;
+    }
+
+    const previousRound =
+      typeof previousSession.turnState?.round === "number" &&
+      Number.isFinite(previousSession.turnState.round)
+        ? Math.max(1, Math.floor(previousSession.turnState.round))
+        : 1;
+    const previousTurnNumber =
+      typeof previousSession.turnState?.turnNumber === "number" &&
+      Number.isFinite(previousSession.turnState.turnNumber)
+        ? Math.max(1, Math.floor(previousSession.turnState.turnNumber))
+        : 1;
+    const hadRuntimeProgress =
+      this.state.score > 0 || this.state.rollIndex > 0 || this.state.status !== "READY";
+    const hadSessionProgress =
+      previousSession.sessionComplete === true ||
+      previousLocalParticipant.isComplete === true ||
+      previousScore > 0 ||
+      previousRemaining <= 0 ||
+      previousRound > 1 ||
+      previousTurnNumber > 1;
+    if (!hadRuntimeProgress && !hadSessionProgress) {
+      return false;
+    }
+
+    const countersRewound =
+      nextScore < previousScore ||
+      nextRemaining > previousRemaining ||
+      previousSession.sessionComplete === true;
+    if (countersRewound) {
+      return true;
+    }
+    if (!hadSessionProgress) {
+      return false;
+    }
+    return hadRuntimeProgress && previousLocalParticipant.isComplete === true;
+  }
+
+  private resetLocalStateForNextMultiplayerGame(): void {
+    this.gameOverController.hide();
+    this.state = GameFlowController.createNewGame();
+    GameFlowController.updateHintMode(this.state, this.diceRow);
+    this.diceRenderer.clearDice();
+    this.scene.returnCameraToDefaultOverview(true);
+    this.animating = false;
+    this.awaitingMultiplayerRoll = false;
+    this.pendingTurnEndSync = false;
+    this.activeRollServerId = null;
+    this.selectedDieIndex = 0;
+    this.selectedSeatFocusIndex = -1;
+    this.gameStartTime = Date.now();
+    this.hud.setGameClockStart(this.gameStartTime);
+    this.applyTurnTiming(null);
+    notificationService.show("Next multiplayer game started.", "info", 1800);
   }
 
   private applyTurnStateFromSession(session: MultiplayerSessionRecord): void {
@@ -2194,11 +2327,11 @@ class Game implements GameCallbacks {
   }
 
   private handleMultiplayerSessionState(message: MultiplayerSessionStateMessage): void {
-    const activeSession = this.multiplayerSessionService.getActiveSession();
-    if (!activeSession) {
+    const previousSession = this.multiplayerSessionService.getActiveSession();
+    if (!previousSession) {
       return;
     }
-    if (message.sessionId !== activeSession.sessionId) {
+    if (message.sessionId !== previousSession.sessionId) {
       return;
     }
 
@@ -2227,6 +2360,9 @@ class Game implements GameCallbacks {
     }
 
     this.touchMultiplayerTurnSyncActivity();
+    if (this.shouldResetLocalStateForNextMultiplayerGame(previousSession, syncedSession)) {
+      this.resetLocalStateForNextMultiplayerGame();
+    }
     this.applyMultiplayerSeatState(syncedSession);
     if (syncedSession.sessionComplete === true && !this.lastSessionComplete) {
       this.lastSessionComplete = true;
@@ -2524,6 +2660,7 @@ class Game implements GameCallbacks {
         participant &&
         participant.playerId !== this.localPlayerId &&
         !participant.isBot &&
+        participant.queuedForNextGame !== true &&
         participant.isComplete !== true
     );
   }
@@ -2535,6 +2672,7 @@ class Game implements GameCallbacks {
         participant &&
         participant.playerId !== this.localPlayerId &&
         participant.isBot === true &&
+        participant.queuedForNextGame !== true &&
         participant.isComplete !== true
     );
   }
@@ -2818,6 +2956,10 @@ class Game implements GameCallbacks {
       if (tutorialModal.isActive()) {
         tutorialModal.onPlayerAction("roll");
       }
+    }, undefined, {
+      seed: typeof roll.serverRollId === "string" && roll.serverRollId.trim().length > 0
+        ? roll.serverRollId.trim()
+        : `roll-${rollIndex}`,
     });
 
     return true;
