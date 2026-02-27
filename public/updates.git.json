@@ -1,8 +1,134 @@
 {
-  "generatedAt": "2026-02-27T12:46:04.449Z",
+  "generatedAt": "2026-02-27T16:26:51.130Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-38acc7d",
+      "date": "2026-02-27T15:46:53.000Z",
+      "title": "Add support for turn actions and session state updates with dice selection logic",
+      "content": "<p>Add support for turn actions and session state updates with dice selection logic</p><p><strong>Commit:</strong> <code>38acc7d</code></p><p>- Introduced `select` turn action for granular dice selection.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "38acc7d353410a342ddd28479e64b49d1b38f74e",
+        "shortHash": "38acc7d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/38acc7d353410a342ddd28479e64b49d1b38f74e"
+      }
+    },
+    {
+      "id": "git-178e337",
+      "date": "2026-02-27T15:21:04.000Z",
+      "title": "Add `canManualNewGame` checks to restrict manual game starts during multiplayer sessions",
+      "content": "<p>Add `canManualNewGame` checks to restrict manual game starts during multiplayer sessions</p><p><strong>Commit:</strong> <code>178e337</code></p><p>- Introduced `canManualNewGame()` method to ensure manual game starts are disabled in multiplayer mode or active session states.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "178e337675bcb052027d6c2ad294a13995f51160",
+        "shortHash": "178e337",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/178e337675bcb052027d6c2ad294a13995f51160"
+      }
+    },
+    {
+      "id": "git-8c75625",
+      "date": "2026-02-27T15:11:01.000Z",
+      "title": "Add server-synced game start time and clock offset logic",
+      "content": "<p>Add server-synced game start time and clock offset logic</p><p><strong>Commit:</strong> <code>8c75625</code></p><p>- Introduced `gameStartedAt` and `serverNow` fields to synchronize game start and server timestamps.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "8c75625cde5bd65b25ccaf92acdd3566461ca253",
+        "shortHash": "8c75625",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8c75625cde5bd65b25ccaf92acdd3566461ca253"
+      }
+    },
+    {
+      "id": "git-a45c19d",
+      "date": "2026-02-27T14:59:54.000Z",
+      "title": "Add multiplayer invite autostart and stale participant pruning",
+      "content": "<p>Add multiplayer invite autostart and stale participant pruning</p><p><strong>Commit:</strong> <code>a45c19d</code></p><p>- Added `maybeAutoStartFromMultiplayerInvite` for initiating sessions directly from invite links.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "a45c19decf2b699971bac143fbcf8d2283c49584",
+        "shortHash": "a45c19d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a45c19decf2b699971bac143fbcf8d2283c49584"
+      }
+    },
+    {
+      "id": "git-9acfb0c",
+      "date": "2026-02-27T14:37:40.000Z",
+      "title": "Add support for queuing participants for the next game",
+      "content": "<p>Add support for queuing participants for the next game</p><p><strong>Commit:</strong> <code>9acfb0c</code></p><p>- Introduced `queuedForNextGame` attribute to manage participants waiting for the next game.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "9acfb0c004e9d97313e1f12731990a5066bd50f2",
+        "shortHash": "9acfb0c",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9acfb0c004e9d97313e1f12731990a5066bd50f2"
+      }
+    },
+    {
+      "id": "git-1b4e000",
+      "date": "2026-02-27T14:06:31.000Z",
+      "title": "Add retry mechanisms for profile and avatar texture fetching",
+      "content": "<p>Add retry mechanisms for profile and avatar texture fetching</p><p><strong>Commit:</strong> <code>1b4e000</code></p><p>- Introduced retry logic with cooldowns for user profile (`ACCOUNT_PROFILE_RETRY_COOLDOWN_MS`) and avatar textures (`AVATAR_TEXTURE_RETRY_BASE_MS` and `AVATAR_TEXTURE_RETRY_MAX_MS`) to handle intermittent failures.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "1b4e0006e3da807c985449e64d476ca1e0301af1",
+        "shortHash": "1b4e000",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/1b4e0006e3da807c985449e64d476ca1e0301af1"
+      }
+    },
+    {
+      "id": "git-f6e7245",
+      "date": "2026-02-27T13:16:46.000Z",
+      "title": "Improve RNG seeding strategy and enhance dice rotation logic",
+      "content": "<p>Improve RNG seeding strategy and enhance dice rotation logic</p><p><strong>Commit:</strong> <code>f6e7245</code></p><p>- Updated `RNG` to derive independent 32-bit states using salted seed variants for better entropy.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "f6e72458715258c78b81f9cb61e09432b349a5f8",
+        "shortHash": "f6e7245",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/f6e72458715258c78b81f9cb61e09432b349a5f8"
+      }
+    },
+    {
+      "id": "git-0875032",
+      "date": "2026-02-27T12:55:34.000Z",
+      "title": "Integrate new features and fixes for leaderboard, proxy, and UI",
+      "content": "<p>Integrate new features and fixes for leaderboard, proxy, and UI</p><p><strong>Commit:</strong> <code>0875032</code></p><p>- Updated leaderboard logic to handle anonymous users and initialize user profiles securely.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "0875032ad76f74ffe05eaac27a94ac76a64c9a1d",
+        "shortHash": "0875032",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/0875032ad76f74ffe05eaac27a94ac76a64c9a1d"
+      }
+    },
+    {
+      "id": "git-e75cfcf",
+      "date": "2026-02-27T12:46:58.000Z",
+      "title": "Integrate new features and fixes for leaderboard, proxy, and UI",
+      "content": "<p>Integrate new features and fixes for leaderboard, proxy, and UI</p><p><strong>Commit:</strong> <code>e75cfcf</code></p><p>- Updated leaderboard logic to handle anonymous users and initialize user profiles securely.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "e75cfcf9a72c064e3b15f70e80a7301efe08850f",
+        "shortHash": "e75cfcf",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/e75cfcf9a72c064e3b15f70e80a7301efe08850f"
+      }
+    },
     {
       "id": "git-730d6b0",
       "date": "2026-02-27T12:38:19.000Z",
@@ -435,132 +561,6 @@
         "hash": "8896db142f8d7f9aebcf824f037cac80e3ebc1b1",
         "shortHash": "8896db1",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8896db142f8d7f9aebcf824f037cac80e3ebc1b1"
-      }
-    },
-    {
-      "id": "git-14bf91e",
-      "date": "2026-02-26T20:39:45.000Z",
-      "title": "Update mobile menu and camera controls for enhanced responsiveness and usability",
-      "content": "<p>Update mobile menu and camera controls for enhanced responsiveness and usability</p><p><strong>Commit:</strong> <code>14bf91e</code></p><p>- Added grouped sections (`Game`, `Social`, `Extras`) to improve mobile menu scanability.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "14bf91e4db2850d099cc5b68d16f4a11eb21d0f6",
-        "shortHash": "14bf91e",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/14bf91e4db2850d099cc5b68d16f4a11eb21d0f6"
-      }
-    },
-    {
-      "id": "git-a461334",
-      "date": "2026-02-26T20:21:09.000Z",
-      "title": "Add turn action banner with dynamic updates",
-      "content": "<p>Add turn action banner with dynamic updates</p><p><strong>Commit:</strong> <code>a461334</code></p><p>- Introduced `#turn-action-banner` for turn-specific messaging and player guidance.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "a46133478dfaf607f49d516164b8b43a2322e187",
-        "shortHash": "a461334",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a46133478dfaf607f49d516164b8b43a2322e187"
-      }
-    },
-    {
-      "id": "git-d427c7c",
-      "date": "2026-02-26T20:04:03.000Z",
-      "title": "Add mobile dice layout preference and UI updates",
-      "content": "<p>Add mobile dice layout preference and UI updates</p><p><strong>Commit:</strong> <code>d427c7c</code></p><p>- Introduced mobile dice layout options (&quot;wrapped&quot;, &quot;single-row&quot;, &quot;perimeter&quot;) with settings persistence and dynamic UI updates.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "d427c7cb3d651897429715675521a3415a4fadb8",
-        "shortHash": "d427c7c",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d427c7cb3d651897429715675521a3415a4fadb8"
-      }
-    },
-    {
-      "id": "git-a9bde21",
-      "date": "2026-02-26T18:36:38.000Z",
-      "title": "Add bot seeding during session or room joins with backend and UI integration",
-      "content": "<p>Add bot seeding during session or room joins with backend and UI integration</p><p><strong>Commit:</strong> <code>a9bde21</code></p><p>- Introduced the ability to seed bots when joining multiplayer sessions or rooms, supporting up to `4` bots per join.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "a9bde212c74adb14e8e62615803f1a1220252a69",
-        "shortHash": "a9bde21",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a9bde212c74adb14e8e62615803f1a1220252a69"
-      }
-    },
-    {
-      "id": "git-e0d2dc5",
-      "date": "2026-02-26T17:55:18.000Z",
-      "title": "Add `/api/admin/storage` endpoint and Firestore diagnostics integration",
-      "content": "<p>Add `/api/admin/storage` endpoint and Firestore diagnostics integration</p><p><strong>Commit:</strong> <code>e0d2dc5</code></p><p>- Introduced `/api/admin/storage` endpoint to expose persistence backend details and section summaries for audit checks.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "e0d2dc5645b0c462acdeb6ef42f0a2b09f114224",
-        "shortHash": "e0d2dc5",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/e0d2dc5645b0c462acdeb6ef42f0a2b09f114224"
-      }
-    },
-    {
-      "id": "git-ae8404d",
-      "date": "2026-02-26T17:45:03.000Z",
-      "title": "Add admin audit logging and UI updates",
-      "content": "<p>Add admin audit logging and UI updates</p><p><strong>Commit:</strong> <code>ae8404d</code></p><p>- Introduced `/api/admin/audit` endpoint for retrieving admin audit trail logs.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "ae8404d4696d11208adf485ff0078e597d968ef1",
-        "shortHash": "ae8404d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/ae8404d4696d11208adf485ff0078e597d968ef1"
-      }
-    },
-    {
-      "id": "git-d1a72f3",
-      "date": "2026-02-26T17:24:12.000Z",
-      "title": "Add admin session control endpoints and UI integration",
-      "content": "<p>Add admin session control endpoints and UI integration</p><p><strong>Commit:</strong> <code>d1a72f3</code></p><p>- Added API endpoints for expiring rooms and removing participants:</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "d1a72f3211872838ac640e9f9f1bc2a1d75b6220",
-        "shortHash": "d1a72f3",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d1a72f3211872838ac640e9f9f1bc2a1d75b6220"
-      }
-    },
-    {
-      "id": "git-3794c61",
-      "date": "2026-02-26T17:12:48.000Z",
-      "title": "Add admin API endpoints and admin panel integration",
-      "content": "<p>Add admin API endpoints and admin panel integration</p><p><strong>Commit:</strong> <code>3794c61</code></p><p>- Added admin API endpoints for managing roles, rooms, metrics, and overview (`/api/admin/*` routes).</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "3794c61c49fca15e9b85de303dd4bff2a2f23464",
-        "shortHash": "3794c61",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/3794c61c49fca15e9b85de303dd4bff2a2f23464"
-      }
-    },
-    {
-      "id": "git-7fdf4bc",
-      "date": "2026-02-26T16:46:34.000Z",
-      "title": "Add private room code flow and friends system scaffolding",
-      "content": "<p>Add private room code flow and friends system scaffolding</p><p><strong>Commit:</strong> <code>7fdf4bc</code></p><p>- Implemented private room join via code with UI and backend API integration (`joinRoomByCode` flow).</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "7fdf4bc52e1d0070362afea8d49dc56e7cd93fc3",
-        "shortHash": "7fdf4bc",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/7fdf4bc52e1d0070362afea8d49dc56e7cd93fc3"
       }
     }
   ]

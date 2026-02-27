@@ -34,6 +34,14 @@ const ADMIN_OWNER_UID_ALLOWLIST = parseDelimitedEnvSet(process.env.API_ADMIN_OWN
 const ADMIN_OWNER_EMAIL_ALLOWLIST = parseDelimitedEnvSet(process.env.API_ADMIN_OWNER_EMAILS, (value) =>
   value.toLowerCase()
 );
+const ROOM_CHANNEL_BAD_PLAYER_IDS = parseDelimitedEnvSet(
+  process.env.MULTIPLAYER_ROOM_CHANNEL_BAD_PLAYER_IDS,
+  (value) => value.replace(/\s+/g, "")
+);
+const ROOM_CHANNEL_BAD_TERMS = parseDelimitedEnvSet(
+  process.env.MULTIPLAYER_ROOM_CHANNEL_BAD_TERMS,
+  (value) => value.toLowerCase()
+);
 const log = logger.create("Server");
 const ALLOW_SHORT_SESSION_TTLS = process.env.ALLOW_SHORT_SESSION_TTLS === "1";
 const SESSION_IDLE_TTL_MIN_MS = ALLOW_SHORT_SESSION_TTLS ? 2000 : 60 * 1000;
@@ -329,6 +337,14 @@ async function handleRequest(req, res) {
       /^\/api\/admin\/sessions\/[^/]+\/participants\/[^/]+\/remove$/.test(pathname)
     ) {
       await handleAdminRemoveParticipant(req, res, pathname);
+      return;
+    }
+
+    if (
+      req.method === "POST" &&
+      /^\/api\/admin\/sessions\/[^/]+\/channel\/messages$/.test(pathname)
+    ) {
+      await handleAdminSessionChannelMessage(req, res, pathname);
       return;
     }
 
@@ -674,11 +690,25 @@ async function handlePutProfile(req, res, pathname) {
   }
 
   const now = Date.now();
+  const existingProfile =
+    store.players[playerId] && typeof store.players[playerId] === "object"
+      ? store.players[playerId]
+      : null;
+  const incomingBlockedPlayerIds = Object.prototype.hasOwnProperty.call(body, "blockedPlayerIds")
+    ? body.blockedPlayerIds
+    : undefined;
+  const blockedPlayerIds = normalizeBlockedPlayerIds(
+    Array.isArray(incomingBlockedPlayerIds)
+      ? incomingBlockedPlayerIds
+      : existingProfile?.blockedPlayerIds,
+    playerId
+  );
   const profile = {
     playerId,
     displayName: typeof body.displayName === "string" ? body.displayName : undefined,
     settings: body.settings ?? {},
     upgradeProgression: body.upgradeProgression ?? {},
+    ...(blockedPlayerIds.length > 0 ? { blockedPlayerIds } : {}),
     updatedAt: typeof body.updatedAt === "number" ? body.updatedAt : now,
   };
 
@@ -865,12 +895,18 @@ async function handleCreateSession(req, res) {
     return;
   }
   const expiresAt = now + MULTIPLAYER_SESSION_IDLE_TTL_MS;
+  const participantBlockedPlayerIds = resolveParticipantBlockedPlayerIds(playerId, {
+    candidateBlockedPlayerIds: body?.blockedPlayerIds,
+  });
   const participants = {
     [playerId]: {
       playerId,
       displayName: typeof body?.displayName === "string" ? body.displayName : undefined,
       avatarUrl: normalizeAvatarUrl(body?.avatarUrl),
       providerId: normalizeProviderId(body?.providerId),
+      ...(participantBlockedPlayerIds.length > 0
+        ? { blockedPlayerIds: participantBlockedPlayerIds }
+        : {}),
       joinedAt: now,
       lastHeartbeatAt: now,
       isReady: false,
@@ -969,6 +1005,10 @@ async function handleJoinSessionByTarget(req, res, target) {
     return;
   }
 
+  const participantBlockedPlayerIds = resolveParticipantBlockedPlayerIds(playerId, {
+    candidateBlockedPlayerIds: body?.blockedPlayerIds,
+    fallbackBlockedPlayerIds: existingParticipant?.blockedPlayerIds,
+  });
   session.participants[playerId] = {
     playerId,
     displayName:
@@ -976,6 +1016,9 @@ async function handleJoinSessionByTarget(req, res, target) {
     avatarUrl: normalizeAvatarUrl(body?.avatarUrl) ?? normalizeAvatarUrl(existingParticipant?.avatarUrl),
     providerId:
       normalizeProviderId(body?.providerId) ?? normalizeProviderId(existingParticipant?.providerId),
+    ...(participantBlockedPlayerIds.length > 0
+      ? { blockedPlayerIds: participantBlockedPlayerIds }
+      : {}),
     joinedAt: existingParticipant?.joinedAt ?? now,
     lastHeartbeatAt: now,
     isReady: isReturningParticipant ? existingParticipant?.isReady === true : false,
@@ -1457,6 +1500,132 @@ async function handleAdminRemoveParticipant(req, res, pathname) {
     playerId,
     sessionExpired: removal.sessionExpired,
     roomInventoryChanged: removal.roomInventoryChanged,
+    principal: buildAdminPrincipal(auth),
+  });
+}
+
+async function handleAdminSessionChannelMessage(req, res, pathname) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.operator });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const sessionId = decodeURIComponent(pathname.split("/")[4] ?? "").trim();
+  if (!sessionId) {
+    sendJson(res, 400, {
+      error: "Invalid session ID",
+      reason: "invalid_session_id",
+    });
+    return;
+  }
+
+  const session = store.multiplayerSessions[sessionId];
+  if (!session || session.expiresAt <= Date.now()) {
+    sendJson(res, 404, {
+      error: "Session not found",
+      reason: "unknown_session",
+    });
+    return;
+  }
+
+  const body = await parseJsonBody(req);
+  const channel = body?.channel === "direct" ? "direct" : "public";
+  const rawMessage = typeof body?.message === "string" ? body.message.trim() : "";
+  if (!rawMessage) {
+    sendJson(res, 400, {
+      error: "Message is required",
+      reason: "missing_message",
+    });
+    return;
+  }
+  const message = rawMessage.slice(0, 320);
+  const title =
+    typeof body?.title === "string" && body.title.trim().length > 0
+      ? body.title.trim().slice(0, 80)
+      : channel === "direct"
+        ? "Direct"
+        : "Room";
+  const topic =
+    typeof body?.topic === "string" && body.topic.trim().length > 0
+      ? body.topic.trim().slice(0, 32).toLowerCase()
+      : undefined;
+  const severity =
+    body?.severity === "success" ||
+    body?.severity === "warning" ||
+    body?.severity === "error"
+      ? body.severity
+      : "info";
+  const sourceRole =
+    body?.sourceRole === "service" || body?.sourceRole === "system"
+      ? body.sourceRole
+      : "admin";
+  const sourcePlayerId =
+    typeof body?.sourcePlayerId === "string" && body.sourcePlayerId.trim().length > 0
+      ? body.sourcePlayerId.trim()
+      : undefined;
+  const targetPlayerId =
+    typeof body?.targetPlayerId === "string" && body.targetPlayerId.trim().length > 0
+      ? body.targetPlayerId.trim()
+      : "";
+
+  if (channel === "direct" && !targetPlayerId) {
+    sendJson(res, 400, {
+      error: "Direct messages require targetPlayerId",
+      reason: "missing_target_player",
+    });
+    return;
+  }
+  if (targetPlayerId && !session.participants[targetPlayerId]) {
+    sendJson(res, 404, {
+      error: "Target player not found in session",
+      reason: "unknown_player",
+    });
+    return;
+  }
+
+  const payload = {
+    type: "room_channel",
+    id: randomUUID(),
+    channel,
+    ...(topic ? { topic } : {}),
+    ...(sourcePlayerId ? { playerId: sourcePlayerId, sourcePlayerId } : {}),
+    sourceRole,
+    title,
+    message,
+    severity,
+    ...(channel === "direct" ? { targetPlayerId } : {}),
+    timestamp: Date.now(),
+  };
+
+  const rawPayload = JSON.stringify(payload);
+  if (channel === "direct") {
+    sendToSessionPlayer(sessionId, targetPlayerId, rawPayload, null);
+  } else {
+    broadcastToSession(sessionId, rawPayload, null);
+  }
+
+  recordAdminAuditEvent(auth, "channel_message", {
+    summary:
+      channel === "direct"
+        ? `Sent direct ${topic ?? "message"} to ${targetPlayerId} in ${sessionId}`
+        : `Broadcast ${topic ?? "message"} in ${sessionId}`,
+    sessionId,
+    ...(channel === "direct" ? { playerId: targetPlayerId } : {}),
+    channel,
+    topic,
+    sourceRole,
+  });
+  await persistStore();
+
+  sendJson(res, 200, {
+    ok: true,
+    sessionId,
+    channel,
+    ...(channel === "direct" ? { targetPlayerId } : {}),
     principal: buildAdminPrincipal(auth),
   });
 }
@@ -5438,6 +5607,126 @@ function normalizeProviderId(value) {
   return safe || undefined;
 }
 
+function normalizeBlockedPlayerIds(value, ownerPlayerId = "") {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const owner =
+    typeof ownerPlayerId === "string" && ownerPlayerId.trim().length > 0
+      ? ownerPlayerId.trim()
+      : "";
+  const normalized = [];
+  const seen = new Set();
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const candidate = entry.trim();
+    if (!candidate || candidate === owner || seen.has(candidate)) {
+      continue;
+    }
+    seen.add(candidate);
+    normalized.push(candidate);
+    if (normalized.length >= 128) {
+      break;
+    }
+  }
+  return normalized;
+}
+
+function resolveParticipantBlockedPlayerIds(
+  playerId,
+  { candidateBlockedPlayerIds, fallbackBlockedPlayerIds } = {}
+) {
+  const fromCandidate = normalizeBlockedPlayerIds(candidateBlockedPlayerIds, playerId);
+  if (fromCandidate.length > 0) {
+    return fromCandidate;
+  }
+  if (Array.isArray(candidateBlockedPlayerIds)) {
+    return [];
+  }
+  const fromFallback = normalizeBlockedPlayerIds(fallbackBlockedPlayerIds, playerId);
+  if (fromFallback.length > 0) {
+    return fromFallback;
+  }
+  const profile = store.players[playerId];
+  return normalizeBlockedPlayerIds(profile?.blockedPlayerIds, playerId);
+}
+
+function getBlockedPlayerIdsForParticipant(session, playerId) {
+  if (!session || typeof playerId !== "string" || playerId.trim().length === 0) {
+    return [];
+  }
+  const participant = session.participants?.[playerId];
+  if (participant && Array.isArray(participant.blockedPlayerIds)) {
+    return normalizeBlockedPlayerIds(participant.blockedPlayerIds, playerId);
+  }
+  const profile = store.players[playerId];
+  return normalizeBlockedPlayerIds(profile?.blockedPlayerIds, playerId);
+}
+
+function hasRoomChannelBlockRelationship(session, ownerPlayerId, targetPlayerId) {
+  const owner =
+    typeof ownerPlayerId === "string" && ownerPlayerId.trim().length > 0
+      ? ownerPlayerId.trim()
+      : "";
+  const target =
+    typeof targetPlayerId === "string" && targetPlayerId.trim().length > 0
+      ? targetPlayerId.trim()
+      : "";
+  if (!owner || !target || owner === target) {
+    return false;
+  }
+  const blocked = getBlockedPlayerIdsForParticipant(session, owner);
+  return blocked.includes(target);
+}
+
+function isRoomChannelSenderRestricted(playerId) {
+  if (typeof playerId !== "string" || playerId.trim().length === 0) {
+    return false;
+  }
+  return ROOM_CHANNEL_BAD_PLAYER_IDS.has(playerId.trim());
+}
+
+function normalizeRoomChannelMessage(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim().replace(/\s+/g, " ").slice(0, 320);
+}
+
+function normalizeRoomChannelTopic(value) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9_.:-]/g, "").slice(0, 32);
+  return normalized || undefined;
+}
+
+function normalizeRoomChannelTitle(value, channel = "public") {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim().replace(/\s+/g, " ").slice(0, 80);
+  }
+  return channel === "direct" ? "Direct" : "Room";
+}
+
+function containsBlockedRoomChannelTerm(message) {
+  if (ROOM_CHANNEL_BAD_TERMS.size === 0) {
+    return false;
+  }
+  const normalized = normalizeRoomChannelMessage(message).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  for (const term of ROOM_CHANNEL_BAD_TERMS) {
+    if (term && normalized.includes(term)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function upsertFirebasePlayer(uid, patch) {
   if (!uid) return;
   const current = store.firebasePlayers[uid] ?? { uid };
@@ -6044,27 +6333,16 @@ function handleSocketMessage(client, rawMessage) {
   session.participants[client.playerId].lastHeartbeatAt = now;
   markSessionActivity(session, client.playerId, now);
 
-  let outboundRawMessage = rawMessage;
-  if (payload.type === "game_update" || payload.type === "player_notification") {
-    const enrichedPayload = {
-      ...payload,
-      playerId:
-        typeof payload.playerId === "string" && payload.playerId.trim().length > 0
-          ? payload.playerId
-          : client.playerId,
-      sourcePlayerId:
-        typeof payload.sourcePlayerId === "string" && payload.sourcePlayerId.trim().length > 0
-          ? payload.sourcePlayerId
-          : client.playerId,
-      timestamp:
-        typeof payload.timestamp === "number" && Number.isFinite(payload.timestamp)
-          ? payload.timestamp
-          : now,
-    };
-    outboundRawMessage = JSON.stringify(enrichedPayload);
+  if (
+    payload.type === "game_update" ||
+    payload.type === "player_notification" ||
+    payload.type === "room_channel"
+  ) {
+    relayRealtimeSocketMessage(client, session, payload, now);
+    return;
   }
 
-  broadcastToSession(client.sessionId, outboundRawMessage, client);
+  broadcastToSession(client.sessionId, rawMessage, client);
 }
 
 function isSupportedSocketPayload(payload) {
@@ -6087,6 +6365,13 @@ function isSupportedSocketPayload(payload) {
       payload.message.trim().length > 0
     );
   }
+  if (messageType === "room_channel") {
+    return (
+      (payload.channel === "public" || payload.channel === "direct") &&
+      typeof payload.message === "string" &&
+      payload.message.trim().length > 0
+    );
+  }
   if (messageType === "turn_end") {
     return true;
   }
@@ -6094,6 +6379,93 @@ function isSupportedSocketPayload(payload) {
     return payload.action === "roll" || payload.action === "score" || payload.action === "select";
   }
   return false;
+}
+
+function relayRealtimeSocketMessage(client, session, payload, now = Date.now()) {
+  const targetPlayerId =
+    typeof payload.targetPlayerId === "string" ? payload.targetPlayerId.trim() : "";
+  const hasTargetPlayer = targetPlayerId.length > 0;
+  if (hasTargetPlayer && !session?.participants?.[targetPlayerId]) {
+    sendSocketError(client, "invalid_target_player", "target_player_not_in_session");
+    return;
+  }
+  if (payload.type === "room_channel") {
+    if (isRoomChannelSenderRestricted(client.playerId)) {
+      sendSocketError(client, "room_channel_sender_restricted", "room_channel_sender_restricted");
+      return;
+    }
+    const normalizedMessage = normalizeRoomChannelMessage(payload.message);
+    if (!normalizedMessage) {
+      sendSocketError(client, "room_channel_invalid_message", "room_channel_invalid_message");
+      return;
+    }
+    if (containsBlockedRoomChannelTerm(normalizedMessage)) {
+      sendSocketError(client, "room_channel_message_blocked", "room_channel_message_blocked");
+      return;
+    }
+  }
+
+  const base = {
+    ...payload,
+    playerId: client.playerId,
+    sourcePlayerId: client.playerId,
+    timestamp:
+      typeof payload.timestamp === "number" && Number.isFinite(payload.timestamp)
+        ? payload.timestamp
+        : now,
+  };
+
+  const normalizedChannel =
+    payload.type === "room_channel"
+      ? payload.channel === "direct"
+        ? "direct"
+        : "public"
+      : hasTargetPlayer
+        ? "direct"
+        : "public";
+
+  if (payload.type === "room_channel") {
+    base.channel = normalizedChannel;
+    const normalizedTopic = normalizeRoomChannelTopic(payload.topic);
+    if (normalizedTopic) {
+      base.topic = normalizedTopic;
+    } else {
+      delete base.topic;
+    }
+    base.title = normalizeRoomChannelTitle(payload.title, normalizedChannel);
+    base.message = normalizeRoomChannelMessage(payload.message);
+    base.sourceRole = "player";
+  }
+
+  if (normalizedChannel === "direct") {
+    const directTargetPlayerId = hasTargetPlayer ? targetPlayerId : "";
+    if (!directTargetPlayerId) {
+      sendSocketError(client, "invalid_target_player", "target_player_required_for_direct");
+      return;
+    }
+    if (
+      hasRoomChannelBlockRelationship(session, client.playerId, directTargetPlayerId) ||
+      hasRoomChannelBlockRelationship(session, directTargetPlayerId, client.playerId)
+    ) {
+      sendSocketError(client, "room_channel_blocked", "room_channel_blocked");
+      return;
+    }
+    base.targetPlayerId = directTargetPlayerId;
+    sendToSessionPlayer(
+      client.sessionId,
+      directTargetPlayerId,
+      JSON.stringify(base),
+      client
+    );
+    return;
+  }
+
+  delete base.targetPlayerId;
+  if (payload.type === "room_channel") {
+    broadcastRoomChannelToSession(session, base, client);
+    return;
+  }
+  broadcastToSession(client.sessionId, JSON.stringify(base), client);
 }
 
 function handleTurnActionMessage(client, session, payload) {
@@ -6416,6 +6788,75 @@ function broadcastToSession(sessionId, rawMessage, sender) {
       writeSocketFrame(client.socket, 0x1, Buffer.from(rawMessage, "utf8"));
     } catch (error) {
       log.warn("Failed to broadcast WebSocket message", error);
+      safeCloseSocket(client, WS_CLOSE_CODES.internalError, "send_failed");
+    }
+  }
+}
+
+function sendToSessionPlayer(sessionId, playerId, rawMessage, sender = null) {
+  const targetPlayerId = typeof playerId === "string" ? playerId.trim() : "";
+  if (!targetPlayerId) {
+    return;
+  }
+
+  const clients = wsSessionClients.get(sessionId);
+  if (!clients || clients.size === 0) {
+    return;
+  }
+
+  for (const client of clients) {
+    if (client === sender || client.closed || client.socket.destroyed) {
+      continue;
+    }
+    if (client.playerId !== targetPlayerId) {
+      continue;
+    }
+
+    try {
+      writeSocketFrame(client.socket, 0x1, Buffer.from(rawMessage, "utf8"));
+    } catch (error) {
+      log.warn("Failed to send WebSocket direct message", error);
+      safeCloseSocket(client, WS_CLOSE_CODES.internalError, "send_failed");
+    }
+  }
+}
+
+function broadcastRoomChannelToSession(session, payload, sender = null) {
+  const sessionId = typeof session?.sessionId === "string" ? session.sessionId.trim() : "";
+  if (!sessionId) {
+    return;
+  }
+  const sourcePlayerId =
+    typeof payload?.sourcePlayerId === "string" ? payload.sourcePlayerId.trim() : "";
+  if (!sourcePlayerId) {
+    return;
+  }
+
+  const clients = wsSessionClients.get(sessionId);
+  if (!clients || clients.size === 0) {
+    return;
+  }
+
+  const rawMessage = JSON.stringify(payload);
+  for (const client of clients) {
+    if (client === sender || client.closed || client.socket.destroyed) {
+      continue;
+    }
+    const recipientPlayerId = typeof client.playerId === "string" ? client.playerId.trim() : "";
+    if (!recipientPlayerId || recipientPlayerId === sourcePlayerId) {
+      continue;
+    }
+    if (
+      hasRoomChannelBlockRelationship(session, recipientPlayerId, sourcePlayerId) ||
+      hasRoomChannelBlockRelationship(session, sourcePlayerId, recipientPlayerId)
+    ) {
+      continue;
+    }
+
+    try {
+      writeSocketFrame(client.socket, 0x1, Buffer.from(rawMessage, "utf8"));
+    } catch (error) {
+      log.warn("Failed to broadcast room channel WebSocket message", error);
       safeCloseSocket(client, WS_CLOSE_CODES.internalError, "send_failed");
     }
   }

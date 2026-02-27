@@ -80,6 +80,7 @@ API_DEPLOY_PRESERVE_DB=0 API_STORE_BACKEND=file API_ALLOW_FILE_STORE_IN_PRODUCTI
 - `PUT /api/admin/roles/:uid`
 - `POST /api/admin/sessions/:sessionId/expire`
 - `POST /api/admin/sessions/:sessionId/participants/:playerId/remove`
+- `POST /api/admin/sessions/:sessionId/channel/messages`
 - `POST /api/multiplayer/sessions`
 - `POST /api/multiplayer/sessions/:sessionId/join`
 - `POST /api/multiplayer/rooms/:roomCode/join`
@@ -103,6 +104,7 @@ Planned (not implemented yet):
   - `GET` to inspect authenticated account profile
   - `PUT` with `{ "displayName": "<name>" }` to set leaderboard name
   - profile payload includes provider details (`provider`, `providerId`) and optional `photoUrl` from social auth
+- `/api/players/:playerId/profile` accepts optional `blockedPlayerIds: string[]` to persist multiplayer chat block preferences.
 - Session creation/join returns:
   - `playerToken` for WS query auth
   - `auth` bundle (`accessToken`, `refreshToken`, `expiresAt`, `tokenType`)
@@ -120,6 +122,7 @@ Planned (not implemented yet):
   - `operator` and `owner` may run room control mutations:
     - expire room session
     - remove participant from room
+    - send room channel messages (`public` broadcast or `direct` to `targetPlayerId`)
   - `GET /api/admin/storage` exposes active persistence backend + section counts for audit checks.
   - Admin metrics now include cumulative turn auto-advance counters for timeout advances and bot advances.
   - Mutation actions are written to admin audit logs and exposed via `GET /api/admin/audit`.
@@ -139,6 +142,11 @@ Planned (not implemented yet):
   - `particle:emit`
   - `game_update` (`title` + `content` required)
   - `player_notification` (`message` required, optional `targetPlayerId`)
+  - `room_channel` (`channel: "public" | "direct"`, `message` required, `targetPlayerId` required for `direct`)
+    - server enforces block lists for sender/recipient visibility
+    - server can reject sender/message via moderation lists:
+      - `MULTIPLAYER_ROOM_CHANNEL_BAD_PLAYER_IDS`
+      - `MULTIPLAYER_ROOM_CHANNEL_BAD_TERMS`
 - Turn flow messages:
   - client -> server: `turn_action` (`roll` | `score`), `turn_end`
   - server -> clients: `turn_action`, `turn_end`, `turn_start`, `turn_timeout_warning`, `turn_auto_advanced`

@@ -401,6 +401,58 @@ async function run() {
     "player notification message mismatch on host receive"
   );
 
+  const publicRoomChannel = createRoomChannelMessage(runSuffix, {
+    channel: "public",
+    topic: "chat",
+    title: "E2E Public Chat",
+    message: "Public room channel relay test",
+  });
+  hostSocket.send(JSON.stringify(publicRoomChannel));
+  const guestRoomChannel = await waitForMessage(
+    guestSocket,
+    (payload) =>
+      payload?.type === "room_channel" && payload?.id === publicRoomChannel.id,
+    "guest room channel public receive"
+  );
+  assertEqual(
+    guestRoomChannel.channel,
+    "public",
+    "room channel public routing mismatch on guest receive"
+  );
+  assert(
+    guestRoomChannel.message === publicRoomChannel.message,
+    "room channel public message mismatch on guest receive"
+  );
+
+  const directRoomChannel = createRoomChannelMessage(runSuffix, {
+    channel: "direct",
+    topic: "whisper",
+    title: "E2E Whisper",
+    message: "Direct room channel relay test",
+    targetPlayerId: hostPlayerId,
+  });
+  guestSocket.send(JSON.stringify(directRoomChannel));
+  const hostRoomChannel = await waitForMessage(
+    hostSocket,
+    (payload) =>
+      payload?.type === "room_channel" && payload?.id === directRoomChannel.id,
+    "host room channel direct receive"
+  );
+  assertEqual(
+    hostRoomChannel.channel,
+    "direct",
+    "room channel direct routing mismatch on host receive"
+  );
+  assertEqual(
+    hostRoomChannel.targetPlayerId,
+    hostPlayerId,
+    "room channel direct target mismatch on host receive"
+  );
+  assert(
+    hostRoomChannel.message === directRoomChannel.message,
+    "room channel direct message mismatch on host receive"
+  );
+
   if (assertBotTraffic) {
     await waitForMessage(hostSocket, isBotPayload, "host bot websocket traffic receive");
   }
@@ -1156,6 +1208,28 @@ function createPlayerNotification(suffix) {
     title: "E2E Notification",
     message: "Player notification relay test",
     severity: "info",
+    timestamp: Date.now(),
+  };
+}
+
+function createRoomChannelMessage(
+  suffix,
+  { channel = "public", topic = "chat", title = "E2E Room Channel", message, targetPlayerId } = {}
+) {
+  const normalizedMessage =
+    typeof message === "string" && message.trim().length > 0
+      ? message.trim()
+      : "Room channel relay test";
+  return {
+    type: "room_channel",
+    id: `e2e-room-channel-${suffix}-${channel}-${randomUUID().slice(0, 6)}`,
+    channel: channel === "direct" ? "direct" : "public",
+    topic,
+    title,
+    message: normalizedMessage,
+    ...(channel === "direct" && typeof targetPlayerId === "string"
+      ? { targetPlayerId }
+      : {}),
     timestamp: Date.now(),
   };
 }

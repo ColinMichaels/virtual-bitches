@@ -2,6 +2,7 @@ import {
   MultiplayerNetworkService,
   type MultiplayerGameUpdateMessage,
   type MultiplayerPlayerNotificationMessage,
+  type MultiplayerRoomChannelMessage,
   type MultiplayerTurnAutoAdvancedMessage,
   type MultiplayerTurnActionMessage,
   type MultiplayerTurnEndMessage,
@@ -149,6 +150,21 @@ function createPlayerNotificationMessage(): MultiplayerPlayerNotificationMessage
     title: "Heads Up",
     message: "You have been targeted by a chaos attack",
     severity: "warning",
+    timestamp: Date.now(),
+  };
+}
+
+function createRoomChannelMessage(): MultiplayerRoomChannelMessage {
+  return {
+    type: "room_channel",
+    id: "channel-1",
+    channel: "direct",
+    topic: "nudge",
+    sourceRole: "player",
+    title: "Nudge",
+    message: "Your turn is up. Take your turn!",
+    severity: "warning",
+    targetPlayerId: "player-2",
     timestamp: Date.now(),
   };
 }
@@ -492,6 +508,33 @@ await test("dispatches inbound multiplayer player notification event", () => {
   assertEqual(received!.severity, "warning", "Expected notification severity");
 });
 
+await test("dispatches inbound multiplayer room channel event", () => {
+  const eventTarget = new EventTarget();
+  let socket: MockWebSocket | null = null;
+  let received: MultiplayerRoomChannelMessage | null = null;
+
+  eventTarget.addEventListener("multiplayer:channel:received", (event: Event) => {
+    received = (event as CustomEvent<MultiplayerRoomChannelMessage>).detail;
+  });
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local",
+    eventTarget,
+    autoReconnect: false,
+    webSocketFactory: () => {
+      socket = new MockWebSocket();
+      return socket;
+    },
+  });
+
+  network.connect();
+  socket!.emitOpen();
+  socket!.emitMessage(createRoomChannelMessage());
+
+  assert(received !== null, "Expected inbound room channel message");
+  assertEqual(received!.channel, "direct", "Expected room channel routing type");
+});
+
 await test("dispatches inbound multiplayer turn start/end events", () => {
   const eventTarget = new EventTarget();
   let socket: MockWebSocket | null = null;
@@ -661,6 +704,39 @@ await test("bridges outgoing player notification to websocket", () => {
   const sent = JSON.parse(socket!.sentPayloads[0]) as MultiplayerPlayerNotificationMessage;
   assertEqual(sent.id, outgoing.id, "Expected sent notification payload to match");
   assertEqual(sentEventCount, 1, "Expected notification sent feedback event");
+});
+
+await test("bridges outgoing room channel message to websocket", () => {
+  const eventTarget = new EventTarget();
+  let socket: MockWebSocket | null = null;
+  let sentEventCount = 0;
+  eventTarget.addEventListener("multiplayer:channel:sent", () => {
+    sentEventCount += 1;
+  });
+
+  const network = new MultiplayerNetworkService({
+    wsUrl: "ws://test.local",
+    eventTarget,
+    autoReconnect: false,
+    webSocketFactory: () => {
+      socket = new MockWebSocket();
+      return socket;
+    },
+  });
+
+  network.enableEventBridge();
+  network.connect();
+  socket!.emitOpen();
+
+  const outgoing = createRoomChannelMessage();
+  eventTarget.dispatchEvent(
+    new CustomEvent("multiplayer:channel:send", { detail: outgoing })
+  );
+
+  assertEqual(socket!.sentPayloads.length, 1, "Expected one outbound room channel payload");
+  const sent = JSON.parse(socket!.sentPayloads[0]) as MultiplayerRoomChannelMessage;
+  assertEqual(sent.id, outgoing.id, "Expected sent room channel payload to match");
+  assertEqual(sentEventCount, 1, "Expected room channel sent feedback event");
 });
 
 await test("bridges outgoing turn_end to websocket", () => {

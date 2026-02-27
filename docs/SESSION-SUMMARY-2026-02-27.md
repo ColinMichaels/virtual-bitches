@@ -1,6 +1,6 @@
 # BISCUITS - Session Summary
 **Date:** February 27, 2026  
-**Focus:** Camera-assist UX, keyboard camera flow, release-note linkability, and roadmap cleanup
+**Focus:** Camera-assist UX, keyboard camera flow, release-note linkability, multiplayer room-channel messaging, and roadmap cleanup
 
 ---
 
@@ -22,6 +22,18 @@
 - Refreshed `docs/TODO.md` project status line to current version context.
 - Added a concise finish-up shortlist for next iteration planning.
 - Marked commit-link release-note tasks as complete.
+
+### Multiplayer Messaging + Moderation Foundation
+- Added player room-channel messaging flow (`public` + `direct`) over multiplayer websocket transport.
+- Added player-facing keyboard shortcuts for quick compose:
+  - `M` = public room message
+  - `W` = direct whisper
+- Unified nudge delivery onto room-channel direct messages so targeted delivery is explicit.
+- Added server moderation and privacy enforcement for room-channel messages:
+  - sender deny list support (`MULTIPLAYER_ROOM_CHANNEL_BAD_PLAYER_IDS`)
+  - blocked-term filter support (`MULTIPLAYER_ROOM_CHANNEL_BAD_TERMS`)
+  - per-player block-list checks for both direct whispers and public room broadcasts
+- Extended profile/session plumbing for persisted `blockedPlayerIds` and documented the new contract.
 
 ---
 

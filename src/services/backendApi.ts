@@ -16,6 +16,7 @@ export interface PlayerProfileRecord {
   displayName?: string;
   settings: Settings;
   upgradeProgression: UpgradeProgressionState;
+  blockedPlayerIds?: string[];
   updatedAt: number;
 }
 
@@ -145,6 +146,7 @@ export interface CreateMultiplayerSessionRequest {
   displayName?: string;
   avatarUrl?: string;
   providerId?: string;
+  blockedPlayerIds?: string[];
   botCount?: number;
   gameDifficulty?: MultiplayerGameDifficulty;
 }
@@ -154,6 +156,7 @@ export interface JoinMultiplayerSessionRequest {
   displayName?: string;
   avatarUrl?: string;
   providerId?: string;
+  blockedPlayerIds?: string[];
   botCount?: number;
 }
 
