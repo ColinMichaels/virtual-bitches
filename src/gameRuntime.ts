@@ -65,6 +65,7 @@ import {
 } from "./multiplayer/turnPlanner.js";
 import { resolveSessionExpiryOutcome } from "./multiplayer/sessionExpiryFlow.js";
 import { botMemeAvatarService } from "./services/botMemeAvatarService.js";
+import { t } from "./i18n/index.js";
 
 const log = logger.create('Game');
 const BOT_MEME_UNIQUE_ATTEMPTS = 4;
@@ -4526,6 +4527,21 @@ class Game implements GameCallbacks {
     bannerEl.classList.toggle("is-urgent", urgent);
   }
 
+  private getUndoCountForCurrentRoll(): number {
+    let scoreActionsInCurrentRoll = 0;
+    for (let index = this.state.actionLog.length - 1; index >= 0; index -= 1) {
+      const action = this.state.actionLog[index];
+      if (action.t === "SCORE_SELECTED") {
+        scoreActionsInCurrentRoll += 1;
+        continue;
+      }
+      if (action.t === "ROLL") {
+        break;
+      }
+    }
+    return scoreActionsInCurrentRoll;
+  }
+
   private updateUI(): void {
     this.updateInviteLinkControlVisibility();
     this.hud.update(this.state);
@@ -4559,6 +4575,8 @@ class Game implements GameCallbacks {
         : "Wait for Next Game";
     }
 
+    const hasSelection = this.state.selected.size > 0;
+
     // Update multipurpose action button
     if (this.state.status === "READY") {
       this.actionBtn.textContent = isTurnLocked
@@ -4566,9 +4584,7 @@ class Game implements GameCallbacks {
         : "Roll";
       this.actionBtn.disabled = this.animating || this.paused || isTurnLocked;
       this.actionBtn.className = "btn btn-primary primary";
-      this.deselectBtn.style.display = "none";
     } else if (this.state.status === "ROLLED") {
-      const hasSelection = this.state.selected.size > 0;
       if (hasSelection) {
         // Calculate points for button text
         const scoredDice = this.state.dice.filter((d) => this.state.selected.has(d.id));
@@ -4578,27 +4594,53 @@ class Game implements GameCallbacks {
           : `Score +${points} (Space)`;
         this.actionBtn.disabled = this.animating || this.paused || isTurnLocked;
         this.actionBtn.className = "btn btn-primary primary";
-        this.deselectBtn.style.display = isTurnLocked ? "none" : "inline-block";
       } else {
         this.actionBtn.textContent = isTurnLocked
           ? `Waiting: ${this.activeTurnPlayerId ? this.getParticipantLabel(this.activeTurnPlayerId) : "Sync"}`
           : "Select Dice to Score";
         this.actionBtn.disabled = true;
         this.actionBtn.className = "btn btn-secondary secondary";
-        this.deselectBtn.style.display = "none";
       }
     } else {
       this.actionBtn.disabled = true;
-      this.deselectBtn.style.display = "none";
     }
 
-    // Update undo button (only visible in Easy Mode after scoring)
-    // Show undo when: Easy Mode + player has scored at least once + ready for next roll or still in rolled state
-    if (isUndoAllowed(this.state.mode) && canUndo(this.state) && (this.state.status === "READY" || this.state.status === "ROLLED")) {
-      this.undoBtn.style.display = "inline-block";
+    // Deselect badge is anchored to the action button so layout remains stable.
+    const showDeselectBadge =
+      this.state.status === "ROLLED" &&
+      hasSelection &&
+      !isTurnLocked;
+    if (showDeselectBadge) {
+      const deselectTooltip = t("shell.controls.deselectAll");
+      this.deselectBtn.style.display = "inline-flex";
+      this.deselectBtn.disabled = this.animating || this.paused;
+      this.deselectBtn.title = deselectTooltip;
+      this.deselectBtn.setAttribute("aria-label", deselectTooltip);
+      this.deselectBtn.dataset.tooltip = deselectTooltip;
+    } else {
+      this.deselectBtn.style.display = "none";
+      this.deselectBtn.removeAttribute("data-tooltip");
+    }
+
+    // Update undo badge (Easy mode only). The badge is anchored on the action button
+    // so the action tap target never shifts when undo availability changes.
+    const undoCount = this.getUndoCountForCurrentRoll();
+    const showUndoBadge =
+      isUndoAllowed(this.state.mode) &&
+      undoCount > 0 &&
+      canUndo(this.state) &&
+      (this.state.status === "READY" || this.state.status === "ROLLED");
+
+    if (showUndoBadge) {
+      const undoTooltip = t("shell.controls.undoBadgeTooltip", { count: String(undoCount) });
+      this.undoBtn.style.display = "inline-flex";
       this.undoBtn.disabled = this.animating || this.paused;
+      this.undoBtn.title = undoTooltip;
+      this.undoBtn.setAttribute("aria-label", undoTooltip);
+      this.undoBtn.dataset.tooltip = undoTooltip;
     } else {
       this.undoBtn.style.display = "none";
+      this.undoBtn.removeAttribute("data-tooltip");
     }
   }
 }

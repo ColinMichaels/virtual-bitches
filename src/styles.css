@@ -1432,6 +1432,102 @@ h1, h2, h3, h4, h5, h6 {
   max-width: 600px;
 }
 
+#action-btn-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+#undo-btn.undo-badge-btn {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: linear-gradient(180deg, rgba(23, 31, 56, 0.98), rgba(11, 16, 31, 0.98));
+  color: #f4f8ff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(132, 182, 255, 0.25);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+
+#deselect-btn.deselect-badge-btn {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: linear-gradient(180deg, rgba(17, 36, 52, 0.98), rgba(10, 21, 32, 0.98));
+  color: #f4f8ff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(111, 226, 255, 0.25);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+
+#deselect-btn.deselect-badge-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+#deselect-btn.deselect-badge-btn:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.04);
+}
+
+#deselect-btn.deselect-badge-btn:disabled {
+  opacity: 0.52;
+}
+
+#undo-btn.undo-badge-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+#undo-btn.undo-badge-btn:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.04);
+}
+
+#undo-btn.undo-badge-btn:disabled {
+  opacity: 0.52;
+}
+
+#deselect-btn.deselect-badge-btn[data-tooltip]:hover::after,
+#deselect-btn.deselect-badge-btn[data-tooltip]:focus-visible::after,
+#undo-btn.undo-badge-btn[data-tooltip]:hover::after,
+#undo-btn.undo-badge-btn[data-tooltip]:focus-visible::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  white-space: nowrap;
+  background: rgba(8, 12, 24, 0.96);
+  color: #f0f4ff;
+  border: 1px solid rgba(163, 195, 255, 0.36);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  pointer-events: none;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+#deselect-btn.deselect-badge-btn[data-tooltip]:hover::after,
+#deselect-btn.deselect-badge-btn[data-tooltip]:focus-visible::after {
+  left: 0;
+  right: auto;
+}
+
 button {
   display: inline-flex;
   align-items: center;
@@ -4817,6 +4913,10 @@ body.splash-active :is(
     text-overflow: ellipsis;
   }
 
+  #action-btn-wrap {
+    width: 100%;
+  }
+
   /* Game Over Screen */
   #game-over {
     width: 90%;
@@ -5311,6 +5411,10 @@ body.splash-active :is(
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  #action-btn-wrap {
+    width: 100%;
   }
 
   /* Splash Screen */
@@ -6992,6 +7096,10 @@ body.splash-active :is(
     padding: 14px 10px;
   }
 
+  #action-btn-wrap {
+    width: 100%;
+  }
+
   #turn-action-banner {
     min-height: 50px;
     padding: 10px 12px;
@@ -7137,6 +7245,10 @@ body.splash-active :is(
   }
 
   #action-btn {
+    width: 100%;
+  }
+
+  #action-btn-wrap {
     width: 100%;
   }
 }

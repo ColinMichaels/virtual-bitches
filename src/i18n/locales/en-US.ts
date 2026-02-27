@@ -307,6 +307,7 @@ export const enUS = {
   "shell.controls.deselectAll": "Deselect All",
   "shell.controls.undoTitle": "Undo last selection",
   "shell.controls.undo": "Undo",
+  "shell.controls.undoBadgeTooltip": "Undos left: {{count}}",
   "shell.mobile.menuTitle": "Menu",
   "shell.mobile.cameraView": "Camera View",
   "shell.mobile.cameraSlot1Title": "Camera Slot 1",
