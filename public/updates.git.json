@@ -1,8 +1,50 @@
 {
-  "generatedAt": "2026-02-27T19:22:13.070Z",
+  "generatedAt": "2026-02-27T19:45:44.166Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-e55f6e2",
+      "date": "2026-02-27T19:33:24.000Z",
+      "title": "Add feedback form link and update documentation references",
+      "content": "<p>Add feedback form link and update documentation references</p><p><strong>Commit:</strong> <code>e55f6e2</code></p><p>- Added feedback form link to `README.md` for quick user access.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "e55f6e2e065268e62452d7b9da467dc94508a541",
+        "shortHash": "e55f6e2",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/e55f6e2e065268e62452d7b9da467dc94508a541"
+      }
+    },
+    {
+      "id": "git-f3a6411",
+      "date": "2026-02-27T19:27:07.000Z",
+      "title": "Add contributor invite documentation for onboarding details",
+      "content": "<p>Add contributor invite documentation for onboarding details</p><p><strong>Commit:</strong> <code>f3a6411</code></p><p>- Created `WIKI-CONTRIBUTOR-INVITE.md` for outlining project overview, gameplay mechanics, and key code entry points.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "f3a641151da7a7237ece32e63f4fc79d1fbd1ce5",
+        "shortHash": "f3a6411",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/f3a641151da7a7237ece32e63f4fc79d1fbd1ce5"
+      }
+    },
+    {
+      "id": "git-03570fd",
+      "date": "2026-02-27T19:22:49.000Z",
+      "title": "Update modal behavior and session expiry styling",
+      "content": "<p>Update modal behavior and session expiry styling</p><p><strong>Commit:</strong> <code>03570fd</code></p><p>- Refactored modal stack handling by introducing `preserveOpenIds` for selective modal preservation during transitions.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "03570fde2db107f893c2f9eee07bef8864c4e00b",
+        "shortHash": "03570fd",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/03570fde2db107f893c2f9eee07bef8864c4e00b"
+      }
+    },
     {
       "id": "git-66352fe",
       "date": "2026-02-27T18:56:29.000Z",
@@ -519,48 +561,6 @@
         "hash": "5910e97a26417c2edbf2e0dc55a16cb14c59ecc3",
         "shortHash": "5910e97",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/5910e97a26417c2edbf2e0dc55a16cb14c59ecc3"
-      }
-    },
-    {
-      "id": "git-de296f1",
-      "date": "2026-02-27T01:09:55.000Z",
-      "title": "Add multi-URL fallback support for asset fetching",
-      "content": "<p>Add multi-URL fallback support for asset fetching</p><p><strong>Commit:</strong> <code>de296f1</code></p><p>- Refactored asset URL resolution in `assetUrl.ts` to support multiple candidates for improved reliability.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "de296f14a42d125d718f7e3cf8675edb3dd3eaee",
-        "shortHash": "de296f1",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/de296f14a42d125d718f7e3cf8675edb3dd3eaee"
-      }
-    },
-    {
-      "id": "git-57c7678",
-      "date": "2026-02-27T00:47:12.000Z",
-      "title": "Update CI and documentation for private CDN mode support",
-      "content": "<p>Update CI and documentation for private CDN mode support</p><p><strong>Commit:</strong> <code>57c7678</code></p><p>- Updated default values for `CDN_REQUIRE_PUBLIC_READ` and `CDN_AUTOCONFIGURE_PUBLIC_READ` to `0` for private mode.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "57c7678ce7b28746e8f8533f30b769cc691bf12f",
-        "shortHash": "57c7678",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/57c7678ce7b28746e8f8533f30b769cc691bf12f"
-      }
-    },
-    {
-      "id": "git-6ef2940",
-      "date": "2026-02-27T00:35:34.000Z",
-      "title": "Align BISCUITS metadata and CI workflows with production URLs",
-      "content": "<p>Align BISCUITS metadata and CI workflows with production URLs</p><p><strong>Commit:</strong> <code>6ef2940</code></p><p>- Updated social sharing metadata (Facebook/Open Graph/Twitter) to use production BISCUITS site and CDN ad images.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "6ef2940c49345696271eeef62711ca3301fa1f9a",
-        "shortHash": "6ef2940",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/6ef2940c49345696271eeef62711ca3301fa1f9a"
       }
     }
   ]
