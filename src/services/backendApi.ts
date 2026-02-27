@@ -315,6 +315,7 @@ export class BackendApiService {
       `/players/${encodeURIComponent(playerId)}/scores?limit=${boundedLimit}`,
       {
         method: "GET",
+        authMode: "none",
       }
     );
   }
