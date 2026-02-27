@@ -23,6 +23,7 @@ export const enUS = {
   "splash.mode.multiplayer": "Multiplayer",
   "splash.playModeAria": "Choose play mode",
   "splash.button.startGame": "Start Game",
+  "splash.button.joinGame": "Join Game",
   "splash.button.howToPlay": "How to Play",
   "splash.button.feedback": "Feedback",
   "splash.button.leaderboard": "Leaderboard",

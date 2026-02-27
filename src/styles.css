@@ -2217,6 +2217,11 @@ body.splash-active :is(
   cursor: not-allowed;
 }
 
+.splash-multiplayer-icon-btn svg,
+.updates-refresh-btn svg {
+  display: block;
+}
+
 .splash-room-filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -2549,6 +2554,16 @@ body.splash-active :is(
   margin: 0;
   font-size: 12px;
   color: var(--ui-text-dim);
+}
+
+.splash-multiplayer-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.splash-multiplayer-actions .btn {
+  min-width: 160px;
 }
 
 .splash-buttons {
@@ -5509,6 +5524,15 @@ body.splash-active :is(
 
   .splash-room-pagination-controls label {
     width: 100%;
+  }
+
+  .splash-multiplayer-actions {
+    justify-content: stretch;
+  }
+
+  .splash-multiplayer-actions .btn {
+    width: 100%;
+    min-width: 0;
   }
 
   .splash-private-config-grid {

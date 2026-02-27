@@ -14,6 +14,7 @@ import type {
   MultiplayerGameUpdateMessage,
   MultiplayerPlayerNotificationMessage,
 } from "../multiplayer/networkService.js";
+import { renderRefreshIconSvg } from "./icons.js";
 
 const log = logger.create('UpdatesPanel');
 
@@ -102,10 +103,7 @@ export class UpdatesPanel {
           </div>
           <div class="updates-header-actions">
             <button id="updates-refresh-btn" class="updates-refresh-btn" title="Refresh">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
-                <polyline points="21 3 21 9 15 9"></polyline>
-              </svg>
+              ${renderRefreshIconSvg(16)}
             </button>
             <button id="updates-close-btn" class="updates-close-btn" title="Close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">

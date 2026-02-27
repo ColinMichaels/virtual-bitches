@@ -18,6 +18,8 @@ Environment variables:
 - `API_DEPLOY_PRESERVE_DB` (deploy helper flag, default: `1`; keeps Firestore backend pinned during deploy)
 - `TURN_TIMEOUT_MS` (active turn timeout window, default: `45000`)
 - `TURN_TIMEOUT_WARNING_MS` (pre-timeout warning lead, default: `10000`)
+- `MULTIPLAYER_PARTICIPANT_STALE_MS` (disconnect grace window before stale player pruning, default: `45000`)
+- `MULTIPLAYER_CLEANUP_INTERVAL_MS` (background sweep interval for stale players/sessions, default: `15000`)
 - `FIREBASE_PROJECT_ID` (recommended for Firebase token audience validation)
 - `FIREBASE_AUTH_MODE` (`auto`, `admin`, or `legacy`, default: `auto`)
 - `FIREBASE_SERVICE_ACCOUNT_JSON` (optional inline service account JSON for Admin SDK init)

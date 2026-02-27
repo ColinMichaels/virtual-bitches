@@ -12,6 +12,7 @@ import { getBrandLogoUrl } from "../services/assetUrl.js";
 import { gameBrand } from "../config/brand.js";
 import { getLocale, setLocale, t, type LocaleCode } from "../i18n/index.js";
 import { confirmAction } from "./confirmModal.js";
+import { renderRefreshIconSvg } from "./icons.js";
 import { environment } from "@env";
 
 const log = logger.create("SplashScreen");
@@ -154,7 +155,7 @@ export class SplashScreen {
                   title="${t("splash.multiplayer.refreshRooms")}"
                   aria-label="${t("splash.multiplayer.refreshRooms")}"
                 >
-                  &#x21bb;
+                  ${renderRefreshIconSvg(18)}
                 </button>
               </div>
               <div class="splash-room-filters">
@@ -317,6 +318,15 @@ export class SplashScreen {
 
             <p id="splash-room-status">${t("splash.multiplayer.status.noActivePublicRooms")}</p>
             <p class="splash-multiplayer-hint">${t("splash.multiplayer.pickLobbyHint")}</p>
+            <div class="splash-multiplayer-actions">
+              <button
+                type="button"
+                id="splash-multiplayer-join"
+                class="btn btn-primary primary"
+              >
+                ${t("splash.button.joinGame")}
+              </button>
+            </div>
           </section>
         </div>
         <div class="splash-buttons">
@@ -377,6 +387,8 @@ export class SplashScreen {
       this.container.querySelector<HTMLButtonElement>("#splash-room-page-next");
     const roomCodeInput = this.container.querySelector<HTMLInputElement>("#splash-room-code");
     const roomCodeJoinButton = this.container.querySelector<HTMLButtonElement>("#splash-room-code-join");
+    const multiplayerJoinButton =
+      this.container.querySelector<HTMLButtonElement>("#splash-multiplayer-join");
     const refreshButton = this.container.querySelector<HTMLButtonElement>("#splash-room-refresh");
 
     multiplayerOpenButton?.addEventListener("click", () => {
@@ -591,6 +603,9 @@ export class SplashScreen {
       if (startButton) {
         startButton.disabled = true;
       }
+      if (multiplayerJoinButton) {
+        multiplayerJoinButton.disabled = true;
+      }
 
       try {
         const shouldStart = await Promise.resolve(onStart(options));
@@ -603,11 +618,18 @@ export class SplashScreen {
         if (startButton) {
           startButton.disabled = false;
         }
+        if (multiplayerJoinButton) {
+          multiplayerJoinButton.disabled = false;
+        }
         this.updateRoomCodeValidationUi();
       }
     };
 
-    startButton?.addEventListener("click", () => {
+    const startCurrentMode = (): void => {
+      if (this.playMode === "multiplayer" && !this.canJoinSelectedMultiplayerRoom()) {
+        this.updateStartActionsUi();
+        return;
+      }
       const privateModeEnabled = this.isPrivateRoomModeEnabled();
       const roomCodeValidationError =
         this.playMode === "multiplayer" && privateModeEnabled
@@ -632,6 +654,17 @@ export class SplashScreen {
             }
           : undefined,
       });
+    };
+
+    startButton?.addEventListener("click", () => {
+      startCurrentMode();
+    });
+    multiplayerJoinButton?.addEventListener("click", () => {
+      if (multiplayerJoinButton.disabled) {
+        return;
+      }
+      audioService.playSfx("click");
+      startCurrentMode();
     });
     roomCodeJoinButton?.addEventListener("click", () => {
       if (roomCodeJoinButton.disabled) {
@@ -758,6 +791,7 @@ export class SplashScreen {
     this.renderRoomCards();
     this.updateRoomCodeValidationUi();
     this.updateRoomStatus();
+    this.updateStartActionsUi();
     this.lastRenderedPlayMode = this.playMode;
   }
 
@@ -774,6 +808,38 @@ export class SplashScreen {
 
   private isPrivateRoomModeEnabled(): boolean {
     return this.privateRoomMode;
+  }
+
+  private canJoinSelectedMultiplayerRoom(): boolean {
+    if (this.playMode !== "multiplayer") {
+      return false;
+    }
+    if (this.isPrivateRoomModeEnabled()) {
+      const roomCodeValidationError = this.getRoomCodeValidationError(this.privateRoomCode);
+      return !roomCodeValidationError;
+    }
+    return (
+      typeof this.selectedRoomSessionId === "string" &&
+      this.selectedRoomSessionId.trim().length > 0
+    );
+  }
+
+  private updateStartActionsUi(): void {
+    const startButton = this.container.querySelector<HTMLButtonElement>("#start-game-btn");
+    const multiplayerJoinButton =
+      this.container.querySelector<HTMLButtonElement>("#splash-multiplayer-join");
+    const joinMode = this.playMode === "multiplayer";
+    const label = joinMode ? t("splash.button.joinGame") : t("splash.button.startGame");
+    const multiplayerJoinReady = this.canJoinSelectedMultiplayerRoom();
+
+    if (startButton) {
+      startButton.textContent = label;
+      startButton.disabled = joinMode ? !multiplayerJoinReady : false;
+    }
+    if (multiplayerJoinButton) {
+      multiplayerJoinButton.textContent = t("splash.button.joinGame");
+      multiplayerJoinButton.disabled = !multiplayerJoinReady;
+    }
   }
 
   private updatePrivateRoomModeUi(): void {
@@ -898,6 +964,7 @@ export class SplashScreen {
     if (!filteredRooms.some((room) => room.sessionId === this.selectedRoomSessionId)) {
       this.selectedRoomSessionId = null;
       this.updateMultiplayerDifficultyUi();
+      this.updateStartActionsUi();
     }
   }
 
@@ -1270,6 +1337,7 @@ export class SplashScreen {
         this.privateRoomCode.length === 0 ||
         Boolean(validationError);
     }
+    this.updateStartActionsUi();
   }
 
   private setRoomCodeFeedback(

@@ -801,16 +801,20 @@ class Game implements GameCallbacks {
     const serverNowMs = this.resolveServerNowTimestamp(source);
     this.syncServerClockOffset(serverNowMs);
 
-    const serverGameStartAt =
+    const explicitGameStartedAt =
       typeof source.gameStartedAt === "number" &&
       Number.isFinite(source.gameStartedAt) &&
       source.gameStartedAt > 0
         ? Math.floor(source.gameStartedAt)
-        : typeof source.createdAt === "number" &&
-            Number.isFinite(source.createdAt) &&
-            source.createdAt > 0
-          ? Math.floor(source.createdAt)
-          : null;
+        : null;
+    const fallbackCreatedAt =
+      typeof source.createdAt === "number" &&
+      Number.isFinite(source.createdAt) &&
+      source.createdAt > 0
+        ? Math.floor(source.createdAt)
+        : null;
+    const serverGameStartAt =
+      explicitGameStartedAt ?? (this.gameStartServerAt === null ? fallbackCreatedAt : null);
     if (!serverGameStartAt) {
       return;
     }
