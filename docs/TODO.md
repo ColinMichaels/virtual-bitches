@@ -38,7 +38,11 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - **Progress (2026-02-27)**:
   - Winner-queue smoke failure reproduced from CI logs: `queue lifecycle did not auto-start a fresh round within expected wait window`.
   - Root cause identified: smoke timeout window (`12s`) was shorter than production post-round auto-start delay (`60s`).
-  - Mitigation applied: increased queue lifecycle wait budget in `api/e2e/smoke.mjs` and set workflow env override in `.github/workflows/firebase-deploy.yml`.
+  - Root cause extension identified: queue smoke polling used `/auth/refresh`, but that endpoint did not refresh participant liveness, allowing 45s stale-heartbeat pruning to expire the room before 60s auto-restart.
+  - Mitigation applied:
+    - increased queue lifecycle wait budget in `api/e2e/smoke.mjs` and set workflow env override in `.github/workflows/firebase-deploy.yml`
+    - updated `/auth/refresh` to refresh participant liveness and session activity
+    - added periodic heartbeat pings during queue lifecycle smoke polling
 - **Tasks**:
   - [x] Capture exact failing step and error output (build, asset copy, hosting rewrite/proxy, or backend endpoint mismatch).
   - [x] Identify whether failure is frontend artifact, server runtime, environment variable, or dependency/version mismatch.

@@ -1257,6 +1257,15 @@ async function handleRefreshSessionAuth(req, res, pathname) {
     return;
   }
 
+  const now = Date.now();
+  const participant = session.participants[playerId];
+  if (participant && typeof participant === "object") {
+    participant.lastHeartbeatAt = now;
+  }
+  // Token refresh is an authenticated presence signal and should keep the participant active.
+  markSessionActivity(session, playerId, now, { countAsPlayerAction: false });
+  reconcileSessionLoops(sessionId);
+
   const auth = issueAuthTokenBundle(playerId, sessionId);
   const response = buildSessionResponse(session, playerId, auth);
   await persistStore();

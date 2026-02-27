@@ -725,7 +725,25 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
 
     const deadline = Date.now() + Math.max(5000, queueLifecycleWaitMs);
     let restarted = null;
+    let lastHeartbeatPingAt = 0;
     while (Date.now() < deadline) {
+      const now = Date.now();
+      if (now - lastHeartbeatPingAt >= 5000) {
+        const heartbeat = await apiRequest(
+          `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/heartbeat`,
+          {
+            method: "POST",
+            accessToken: hostAccessToken,
+            body: { playerId: queueHostPlayerId },
+          }
+        );
+        assert(
+          heartbeat?.ok === true,
+          `queue lifecycle heartbeat did not return ok=true (reason=${String(heartbeat?.reason ?? "unknown")})`
+        );
+        lastHeartbeatPingAt = now;
+      }
+
       const refreshed = await apiRequest(
         `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/auth/refresh`,
         {
