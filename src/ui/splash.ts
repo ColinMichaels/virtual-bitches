@@ -10,7 +10,8 @@ import type { SplashBackground3D } from "./splashBackground3d.js";
 import { getLocalPlayerId } from "../services/playerIdentity.js";
 import { getBrandLogoUrl } from "../services/assetUrl.js";
 import { gameBrand } from "../config/brand.js";
-import { t } from "../i18n/index.js";
+import { getLocale, setLocale, t, type LocaleCode } from "../i18n/index.js";
+import { confirmAction } from "./confirmModal.js";
 
 const log = logger.create("SplashScreen");
 
@@ -66,6 +67,13 @@ export class SplashScreen {
         </div>
         <p class="splash-subtitle">${t("splash.subtitle")}</p>
         <p class="splash-tagline">${t("splash.tagline")}</p>
+        <div class="splash-language-picker">
+          <label for="splash-language-select">${t("splash.language.label")}</label>
+          <select id="splash-language-select" class="language-select" aria-label="${t("splash.language.label")}">
+            <option value="en-US" ${getLocale() === "en-US" ? "selected" : ""}>${this.getLocaleOptionLabel("en-US")}</option>
+            <option value="es-ES" ${getLocale() === "es-ES" ? "selected" : ""}>${this.getLocaleOptionLabel("es-ES")}</option>
+          </select>
+        </div>
         <div class="splash-mode-picker" role="radiogroup" aria-label="${t("splash.playModeAria")}">
           <button
             type="button"
@@ -138,7 +146,6 @@ export class SplashScreen {
         </div>
         <div class="splash-buttons">
           <button id="start-game-btn" class="btn btn-primary primary splash-btn">${t("splash.button.startGame")}</button>
-          <button id="splash-replay-tutorial-btn" class="btn btn-secondary secondary splash-btn">${t("splash.button.replayTutorial")}</button>
           <button id="splash-rules-btn" class="btn btn-secondary splash-btn">${t("splash.button.howToPlay")}</button>
           <button id="splash-leaderboard-btn" class="btn btn-secondary splash-btn">${t("splash.button.leaderboard")}</button>
           <button id="splash-settings-btn" class="btn btn-secondary splash-btn">${t("splash.button.settings")}</button>
@@ -227,17 +234,17 @@ export class SplashScreen {
     });
 
     const startButton = this.container.querySelector<HTMLButtonElement>("#start-game-btn");
-    const replayTutorialButton = this.container.querySelector<HTMLButtonElement>("#splash-replay-tutorial-btn");
+    const languageSelect = this.container.querySelector<HTMLSelectElement>("#splash-language-select");
+    languageSelect?.addEventListener("change", () => {
+      void this.handleLanguageSelectionChange(languageSelect);
+    });
     const attemptStart = async (options: SplashStartOptions): Promise<boolean> => {
-      if (startButton?.disabled || replayTutorialButton?.disabled) {
+      if (startButton?.disabled) {
         return false;
       }
 
       if (startButton) {
         startButton.disabled = true;
-      }
-      if (replayTutorialButton) {
-        replayTutorialButton.disabled = true;
       }
 
       try {
@@ -250,9 +257,6 @@ export class SplashScreen {
       } finally {
         if (startButton) {
           startButton.disabled = false;
-        }
-        if (replayTutorialButton) {
-          replayTutorialButton.disabled = false;
         }
         this.updateRoomCodeValidationUi();
       }
@@ -290,14 +294,6 @@ export class SplashScreen {
       this.playMode = "multiplayer";
       this.syncPlayModeUi();
       void this.handleJoinCodeQuickAction(attemptStart);
-    });
-
-    replayTutorialButton?.addEventListener("click", () => {
-      audioService.playSfx("click");
-      void attemptStart({
-        playMode: "solo",
-        forceTutorialReplay: true,
-      });
     });
 
     document.getElementById("splash-rules-btn")?.addEventListener("click", () => {
@@ -719,5 +715,54 @@ export class SplashScreen {
     }
     const note = t("splash.multiplayer.joinSeedStatus", { count: joinSeedCount });
     return withLeadingSpace ? ` ${note}` : note;
+  }
+
+  private async handleLanguageSelectionChange(languageSelect: HTMLSelectElement): Promise<void> {
+    const currentLocale = getLocale();
+    const rawLocale = languageSelect.value;
+    if (rawLocale !== "en-US" && rawLocale !== "es-ES") {
+      languageSelect.value = currentLocale;
+      return;
+    }
+
+    const nextLocale = rawLocale as LocaleCode;
+    if (nextLocale === currentLocale) {
+      return;
+    }
+
+    const confirmed = await confirmAction({
+      title: t("splash.language.confirm.title"),
+      message: t("splash.language.confirm.message", {
+        locale: this.getLocaleLabel(nextLocale),
+      }),
+      confirmLabel: t("splash.language.confirm.confirm"),
+      cancelLabel: t("splash.language.confirm.cancel"),
+      tone: "primary",
+    });
+    if (!confirmed) {
+      languageSelect.value = currentLocale;
+      return;
+    }
+
+    setLocale(nextLocale);
+    languageSelect.disabled = true;
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
+  }
+
+  private getLocaleLabel(locale: LocaleCode): string {
+    switch (locale) {
+      case "es-ES":
+        return t("settings.controls.language.option.esES");
+      case "en-US":
+      default:
+        return t("settings.controls.language.option.enUS");
+    }
+  }
+
+  private getLocaleOptionLabel(locale: LocaleCode): string {
+    const flag = locale === "es-ES" ? "&#x1F1EA;&#x1F1F8;" : "&#x1F1FA;&#x1F1F8;";
+    return `${flag} ${this.getLocaleLabel(locale)}`;
   }
 }

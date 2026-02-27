@@ -1,8 +1,36 @@
 {
-  "generatedAt": "2026-02-27T17:40:34.720Z",
+  "generatedAt": "2026-02-27T17:58:54.615Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-bb73068",
+      "date": "2026-02-27T17:47:57.000Z",
+      "title": "Update queue lifecycle timeout for CI stability and deployment mitigation",
+      "content": "<p>Update queue lifecycle timeout for CI stability and deployment mitigation</p><p><strong>Commit:</strong> <code>bb73068</code></p><p>- Increased default `queueLifecycleWaitMs` to align with production auto-start delay (60s).</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "bb73068c8fecac686c44833227a1b2d58d6756d3",
+        "shortHash": "bb73068",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/bb73068c8fecac686c44833227a1b2d58d6756d3"
+      }
+    },
+    {
+      "id": "git-4f1d3ae",
+      "date": "2026-02-27T17:43:34.000Z",
+      "title": "Centralize branding configuration and integrate runtime brand metadata application",
+      "content": "<p>Centralize branding configuration and integrate runtime brand metadata application</p><p><strong>Commit:</strong> <code>4f1d3ae</code></p><p>- Introduced `gameBrand` configuration with typed branding fields (`productName`, `ogTitle`, `ogDescription`, etc.).</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "4f1d3ae35fea5344bfbe067eae9afbda73d89186",
+        "shortHash": "4f1d3ae",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/4f1d3ae35fea5344bfbe067eae9afbda73d89186"
+      }
+    },
     {
       "id": "git-ba6a5ad",
       "date": "2026-02-27T17:10:52.000Z",
@@ -533,34 +561,6 @@
         "hash": "d60fa79e13fb5feae83a92f3de115bc1aa2da1aa",
         "shortHash": "d60fa79",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d60fa79e13fb5feae83a92f3de115bc1aa2da1aa"
-      }
-    },
-    {
-      "id": "git-f55e145",
-      "date": "2026-02-26T22:47:53.000Z",
-      "title": "Add Facebook share metadata and provider-based avatar support",
-      "content": "<p>Add Facebook share metadata and provider-based avatar support</p><p><strong>Commit:</strong> <code>f55e145</code></p><p>- Implemented social sharing metadata for Facebook, including Open Graph tags and dynamic canonical URL generation.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "f55e145f9984f89af01f2988b815a195dca6218d",
-        "shortHash": "f55e145",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/f55e145f9984f89af01f2988b815a195dca6218d"
-      }
-    },
-    {
-      "id": "git-185811f",
-      "date": "2026-02-26T22:19:46.000Z",
-      "title": "Improve global leaderboard error handling and UI fallback",
-      "content": "<p>Improve global leaderboard error handling and UI fallback</p><p><strong>Commit:</strong> <code>185811f</code></p><p>- Updated `getGlobalLeaderboard` to return `null` instead of an empty array on failure.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "185811fc2816b2d5d7b8ba7694bab4275d0e0457",
-        "shortHash": "185811f",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/185811fc2816b2d5d7b8ba7694bab4275d0e0457"
       }
     }
   ]

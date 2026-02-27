@@ -13,11 +13,16 @@ export const enUS = {
 
   "splash.subtitle": "Push Your Luck Dice Game",
   "splash.tagline": "Roll • Select • Score Low to Win",
+  "splash.language.label": "Language",
+  "splash.language.confirm.title": "Switch Language?",
+  "splash.language.confirm.message":
+    "Switch to {{locale}} and reload now? Unsaved changes in current menus will be lost.",
+  "splash.language.confirm.confirm": "Switch And Reload",
+  "splash.language.confirm.cancel": "Keep Current Language",
   "splash.mode.solo": "Solo",
   "splash.mode.multiplayer": "Multiplayer",
   "splash.playModeAria": "Choose play mode",
   "splash.button.startGame": "Start Game",
-  "splash.button.replayTutorial": "Replay Tutorial",
   "splash.button.howToPlay": "How to Play",
   "splash.button.leaderboard": "Leaderboard",
   "splash.button.settings": "Settings",
