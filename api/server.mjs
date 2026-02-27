@@ -115,6 +115,10 @@ const MULTIPLAYER_PARTICIPANT_STALE_MS = normalizeTurnTimeoutValue(
   process.env.MULTIPLAYER_PARTICIPANT_STALE_MS,
   45000
 );
+const MULTIPLAYER_CLEANUP_INTERVAL_MS = normalizeTurnTimeoutValue(
+  process.env.MULTIPLAYER_CLEANUP_INTERVAL_MS,
+  15000
+);
 const TURN_TIMEOUT_WARNING_MS = normalizeTurnWarningValue(
   process.env.TURN_TIMEOUT_WARNING_MS,
   TURN_TIMEOUT_MS,
@@ -224,7 +228,15 @@ server.listen(PORT, () => {
   log.info(`Listening on http://localhost:${PORT}`);
   log.info(`Health endpoint: http://localhost:${PORT}/api/health`);
   log.info(`WebSocket endpoint: ws://localhost:${PORT}/?session=<id>&playerId=<id>&token=<token>`);
+  log.info(`Session cleanup sweep: every ${MULTIPLAYER_CLEANUP_INTERVAL_MS}ms`);
 });
+
+const cleanupSweepHandle = setInterval(() => {
+  cleanupExpiredRecords();
+}, MULTIPLAYER_CLEANUP_INTERVAL_MS);
+if (typeof cleanupSweepHandle.unref === "function") {
+  cleanupSweepHandle.unref();
+}
 
 async function bootstrap() {
   storeAdapter = await createStoreAdapter({
@@ -5738,13 +5750,13 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
 
   const timedOutPlayerId = turnState.activeTurnPlayerId;
   const timedOutParticipant = session.participants?.[timedOutPlayerId];
-  if (
-    timedOutParticipant &&
-    !isBotParticipant(timedOutParticipant)
-  ) {
+  if (timedOutParticipant) {
+    const timeoutSource = isBotParticipant(timedOutParticipant)
+      ? "bot_timeout_forfeit"
+      : "turn_timeout_forfeit";
     const removal = removeParticipantFromSession(sessionId, timedOutPlayerId, {
-      source: "turn_timeout_forfeit",
-      socketReason: "turn_timeout_forfeit",
+      source: timeoutSource,
+      socketReason: timeoutSource,
     });
     if (removal.ok) {
       turnAdvanceMetrics.timeoutAutoAdvanceCount += 1;
@@ -7153,14 +7165,14 @@ function unregisterSocketClient(client) {
   const participant = session?.participants?.[client.playerId];
   if (participant && !isBotParticipant(participant)) {
     // Keep readiness state during short disconnects so browser refresh reconnects do not
-    // deadlock turn sync. Stale participants are removed by heartbeat pruning.
+    // deadlock turn sync. Stale participants are removed by heartbeat pruning + cleanup sweeps.
     participant.lastHeartbeatAt =
       Number.isFinite(participant.lastHeartbeatAt) && participant.lastHeartbeatAt > 0
         ? participant.lastHeartbeatAt
         : Date.now();
   }
 
-  reconcileTurnTimeoutLoop(client.sessionId);
+  reconcileSessionLoops(client.sessionId);
 }
 
 function disconnectPlayerSockets(sessionId, playerId, closeCode, reason) {
