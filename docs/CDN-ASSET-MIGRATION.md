@@ -101,8 +101,8 @@ Optional GitHub Environment variables for CDN smoke checks:
 - `CDN_VERIFY_RETRIES` (default: `8`)
 - `CDN_VERIFY_DELAY_MS` (default: `3000`)
 - `CDN_VERIFY_TIMEOUT_MS` (default: `15000`)
-- `CDN_REQUIRE_PUBLIC_READ` (default: `1`; fail smoke if public HTTP reads do not work)
-- `CDN_AUTOCONFIGURE_PUBLIC_READ` (default: `1`; CI applies `roles/storage.objectViewer` for `allUsers` before smoke)
+- `CDN_REQUIRE_PUBLIC_READ` (default: `0`; when `0`, CI verifies object existence via `gcloud` instead of public HTTP)
+- `CDN_AUTOCONFIGURE_PUBLIC_READ` (default: `0`; only used when `CDN_REQUIRE_PUBLIC_READ=1` to apply public object-viewer IAM)
 
 Manual verification command:
 
@@ -135,6 +135,11 @@ The upload script auto-tries both common Firebase bucket formats and, if needed,
 If CDN verification fails with HTTP `403`:
 
 - The bucket objects are not publicly readable at `https://storage.googleapis.com/<bucket>/...`.
-- In CI, keep `CDN_AUTOCONFIGURE_PUBLIC_READ=1` (default) so deploy applies:
+- In CI public mode, set `CDN_AUTOCONFIGURE_PUBLIC_READ=1` so deploy applies:
   - `roles/storage.objectViewer` to member `allUsers`
 - If your org policy blocks public buckets, set `CDN_REQUIRE_PUBLIC_READ=0` and use an authenticated/private asset strategy instead.
+
+Private mode recommendation:
+
+- Keep `CDN_REQUIRE_PUBLIC_READ=0` for locked-down buckets.
+- If frontend runtime should avoid direct public bucket URLs, leave `VITE_ASSET_BASE_URL` unset so app assets resolve from Hosting paths.
