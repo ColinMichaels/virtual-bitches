@@ -66,6 +66,7 @@ import { resolveSessionExpiryOutcome } from "./multiplayer/sessionExpiryFlow.js"
 import { botMemeAvatarService } from "./services/botMemeAvatarService.js";
 
 const log = logger.create('Game');
+const BOT_MEME_UNIQUE_ATTEMPTS = 4;
 
 export type GamePlayMode = "solo" | "multiplayer";
 
@@ -124,6 +125,13 @@ function resolveCameraAttackLightingColor(effectType: string): Color3 {
       return new Color3(0.95, 0.8, 0.46);
     default:
       return new Color3(0.7, 0.52, 1.0);
+  }
+}
+
+function shuffleInPlace<T>(items: T[]): void {
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
   }
 }
 
@@ -1374,6 +1382,18 @@ class Game implements GameCallbacks {
         this.botMemeAvatarByPlayerId.delete(playerId);
       }
     });
+    const seenAssignedUrls = new Set<string>();
+    botParticipants.forEach((participant) => {
+      const assignedUrl = this.botMemeAvatarByPlayerId.get(participant.playerId);
+      if (!assignedUrl) {
+        return;
+      }
+      if (seenAssignedUrls.has(assignedUrl)) {
+        this.botMemeAvatarByPlayerId.delete(participant.playerId);
+        return;
+      }
+      seenAssignedUrls.add(assignedUrl);
+    });
 
     if (botParticipants.length === 0) {
       this.stopBotMemeAvatarRotation();
@@ -1457,6 +1477,7 @@ class Game implements GameCallbacks {
         targets = botParticipants.filter(
           (participant) => !this.botMemeAvatarByPlayerId.has(participant.playerId)
         );
+        shuffleInPlace(targets);
       } else {
         const randomIndex = Math.floor(Math.random() * botParticipants.length);
         const randomBot = botParticipants[randomIndex];
@@ -1482,10 +1503,7 @@ class Game implements GameCallbacks {
         if (currentUrl) {
           occupiedUrls.delete(currentUrl);
         }
-
-        const nextUrl = await botMemeAvatarService.getMemeAvatarUrl({
-          excludeUrls: occupiedUrls,
-        });
+        const nextUrl = await this.getUniqueBotMemeAvatarUrl(occupiedUrls, currentUrl);
 
         if (currentUrl) {
           occupiedUrls.add(currentUrl);
@@ -1512,6 +1530,22 @@ class Game implements GameCallbacks {
     } finally {
       this.botMemeAvatarRefreshInFlight = false;
     }
+  }
+
+  private async getUniqueBotMemeAvatarUrl(
+    occupiedUrls: Set<string>,
+    currentUrl: string | undefined
+  ): Promise<string | undefined> {
+    for (let attempt = 0; attempt < BOT_MEME_UNIQUE_ATTEMPTS; attempt += 1) {
+      const nextUrl = await botMemeAvatarService.getMemeAvatarUrl({
+        excludeUrls: new Set(occupiedUrls),
+      });
+      if (!nextUrl || nextUrl === currentUrl || occupiedUrls.has(nextUrl)) {
+        continue;
+      }
+      return nextUrl;
+    }
+    return undefined;
   }
 
   private applySoloSeatState(): void {

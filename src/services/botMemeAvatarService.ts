@@ -119,6 +119,12 @@ class BotMemeAvatarService {
         resolveAssetUrl("assets/ads/betahelp_ad.png"),
         resolveAssetUrl("assets/logos/Biscuits_logo.png"),
         resolveAssetUrl("assets/game-textures/biscuits_felt_table_texture_darker.jpg"),
+        resolveAssetUrl("assets/game-textures/biscuits_table_top_texture.png"),
+        resolveAssetUrl("assets/themes/default/diffuse-light.png"),
+        resolveAssetUrl("assets/themes/smooth/diffuse-light.png"),
+        resolveAssetUrl("assets/themes/gemstone/gemstone-light.png"),
+        resolveAssetUrl("assets/themes/rust/diffuse-light.png"),
+        resolveAssetUrl("assets/themes/wooden/diffuse.jpg"),
       ]
         .map((candidate) => normalizeImageUrl(candidate))
         .filter((candidate): candidate is string => typeof candidate === "string")
