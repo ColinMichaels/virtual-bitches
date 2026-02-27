@@ -7,14 +7,22 @@ export class SeededRNG {
   private s1: number;
 
   constructor(seed: string) {
-    // Hash seed string to two 32-bit numbers
-    const h = this.hashString(seed);
-    this.s0 = h & 0xFFFFFFFF;
-    this.s1 = (h >>> 32) & 0xFFFFFFFF;
+    // Derive two independent 32-bit states from the seed.
+    // Using different salts avoids correlated initial states.
+    this.s0 = this.hashString(`${seed}:s0`);
+    this.s1 = this.hashString(`${seed}:s1`);
 
     // Ensure non-zero state
     if (this.s0 === 0) this.s0 = 0x9E3779B9;
     if (this.s1 === 0) this.s1 = 0x7F4A7C15;
+
+    // Avoid identical state values, which can reduce effective entropy.
+    if (this.s0 === this.s1) {
+      this.s1 = (this.s1 ^ 0xA5A5A5A5) >>> 0;
+      if (this.s1 === 0) {
+        this.s1 = 0x7F4A7C15;
+      }
+    }
   }
 
   private hashString(str: string): number {

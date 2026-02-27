@@ -117,6 +117,7 @@ const SIDES_TO_DIE_KIND: Record<number, DieKind> = {
   12: "d12",
   20: "d20",
 };
+const FACE_LOCKED_ROTATION_KINDS = new Set<DieKind>(["d8", "d10", "d12", "d20"]);
 
 interface SpectatorPreviewState {
   rollingDice: DieState[];
@@ -1146,8 +1147,11 @@ export class DiceRenderer {
       // Calculate rotation to show the rolled value face-up
       const baseRotation = this.getRotationForValue(die.def.kind, die.value);
 
-      // Add random Y-axis rotation for natural variation
-      const randomYRotation = Math.random() * Math.PI * 2;
+      // Preserve exact face mapping for non-cubic dice.
+      // Applying extra Euler yaw to these kinds can skew the intended face-up result.
+      const randomYRotation = FACE_LOCKED_ROTATION_KINDS.has(die.def.kind)
+        ? 0
+        : Math.random() * Math.PI * 2;
       const finalRotation = new Vector3(
         baseRotation.x,
         baseRotation.y + randomYRotation,
