@@ -51,8 +51,6 @@ const SPLASH_DICE_NEAR_SCALE_MULTIPLIER = 1.9;
 const SPLASH_DICE_FAR_SCALE_MULTIPLIER = 0.07;
 const SPLASH_DICE_EDGE_FADE_START = 0.52;
 const SPLASH_DICE_EDGE_FADE_RANGE = 0.52;
-const CROSS_THEME_SPAWN_CHANCE = 0.68;
-const EXTRA_THEME_POOL_LIMIT = 6;
 
 interface SplashDieMotionState {
   mesh: Mesh;
@@ -169,7 +167,7 @@ export class SplashDiceRenderer {
 
     this.disposeMaterialCache();
 
-    // Load current theme first, then fallback/alternates for random spawn variety.
+    // Load current theme first.
     await this.loadMaterialForTheme(themeConfig);
 
     // Load fallback theme material if configured
@@ -182,33 +180,6 @@ export class SplashDiceRenderer {
         } catch (error) {
           log.warn(`Failed loading fallback splash material "${fallbackConfig.systemName}"`, error);
         }
-      }
-    }
-
-    const availableThemeNames = themeManager
-      .getAvailableThemes()
-      .map((theme) => theme.name)
-      .filter((themeName) => {
-        if (themeName === themeConfig.systemName) {
-          return false;
-        }
-        if (themeName === themeConfig.fallbackTheme) {
-          return false;
-        }
-        return this.materialCache.has(themeName) === false;
-      })
-      .sort(() => Math.random() - 0.5)
-      .slice(0, EXTRA_THEME_POOL_LIMIT);
-
-    for (const themeName of availableThemeNames) {
-      const config = themeManager.getThemeConfig(themeName);
-      if (!config) {
-        continue;
-      }
-      try {
-        await this.loadMaterialForTheme(config);
-      } catch (error) {
-        log.warn(`Failed loading ambient splash material "${config.systemName}"`, error);
       }
     }
 
@@ -404,20 +375,6 @@ export class SplashDiceRenderer {
 
     const currentThemeMaterial =
       (currentThemeName && this.materialCache.get(currentThemeName)) || this.material;
-    const alternateThemeNames = Array.from(this.materialCache.keys()).filter(
-      (themeName) => themeName !== currentThemeName
-    );
-
-    const shouldUseAlternate =
-      alternateThemeNames.length > 0 && Math.random() < CROSS_THEME_SPAWN_CHANCE;
-    if (shouldUseAlternate) {
-      const randomIndex = Math.floor(Math.random() * alternateThemeNames.length);
-      const randomThemeName = alternateThemeNames[randomIndex];
-      const randomThemeMaterial = this.materialCache.get(randomThemeName);
-      if (randomThemeMaterial) {
-        return { material: randomThemeMaterial, themeName: randomThemeName };
-      }
-    }
 
     if (currentThemeMaterial && currentThemeName) {
       return { material: currentThemeMaterial, themeName: currentThemeName };

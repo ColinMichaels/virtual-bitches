@@ -35,6 +35,12 @@ h1, h2, h3, h4, h5, h6 {
   --btn-border: 1px solid rgba(255, 255, 255, 0.22);
   --btn-shadow: 0 10px 24px rgba(10, 35, 48, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
   --btn-focus-ring: 0 0 0 2px rgba(243, 3, 152, 0.42);
+  --btn-primary-gradient: linear-gradient(180deg, #f69ed8 0%, #c33e90 58%, #940059 100%);
+  --btn-text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.68),
+    1px 0 0 rgba(0, 0, 0, 0.45),
+    -1px 0 0 rgba(0, 0, 0, 0.45),
+    0 0 10px rgba(0, 0, 0, 0.38);
 }
 
 /* Main Layout */
@@ -1233,8 +1239,8 @@ button.danger {
   cursor: pointer;
   border-color: rgba(134, 255, 146, 0.72);
   background: linear-gradient(180deg, rgba(67, 98, 145, 0.82) 0%, rgb(87 255 0 / 92%) 100%);
-  color: #05121f;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.44);
+  color: #fff;
+  text-shadow: var(--btn-text-shadow);
   box-shadow:
     0 10px 22px rgba(16, 55, 67, 0.24),
     0 0 20px rgba(118, 255, 156, 0.22),
@@ -1283,10 +1289,10 @@ button.danger:disabled {
 button.primary,
 .btn-primary {
   border-color: rgb(174 131 157 / 92%);
-  background: linear-gradient(180deg, #f69ed8 0%, #c33e90 58%, #940059 100%);
-  color: #000000;
+  background: var(--btn-primary-gradient);
+  color: #fff;
   font-size: 30px;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
+  text-shadow: var(--btn-text-shadow);
   box-shadow:
     0 10px 24px rgba(76, 5, 52, 0.3),
     0 0 28px rgb(171 29 117 / 44%),
@@ -1302,8 +1308,8 @@ button.secondary,
 .btn-secondary {
   border-color: rgba(134, 255, 146, 0.82);
   background: linear-gradient(180deg, rgba(67, 98, 145, 0.82) 0%, rgb(87 255 0 / 92%) 100%);
-  color: #05121f;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.44);
+  color: #fff;
+  text-shadow: var(--btn-text-shadow);
   box-shadow:
     0 10px 22px rgba(16, 55, 67, 0.24),
     0 0 24px rgba(118, 255, 156, 0.28),
@@ -1329,7 +1335,8 @@ button.danger,
 .btn-outline {
   border-color: rgba(128, 190, 255, 0.7);
   background: rgba(39, 74, 125, 0.34);
-  color: #93c8ff;
+  color: #fff;
+  text-shadow: var(--btn-text-shadow);
 }
 
 .btn-sm {
@@ -1570,11 +1577,12 @@ body.splash-active :is(
 
 .splash-subtitle {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 20px;
+  font-size: 28px;
   font-weight: 500;
-  color: #aaa;
+  color: #ffffff;
   margin: 0 0 8px 0;
   letter-spacing: 2px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .splash-tagline {
@@ -1601,6 +1609,7 @@ body.splash-active :is(
   border-radius: 999px;
   background: transparent;
   color: rgba(255, 255, 255, 0.86);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.48);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -1612,8 +1621,14 @@ body.splash-active :is(
 }
 
 .splash-mode-btn.active {
-  background: rgba(233, 69, 96, 0.9);
+  background: var(--btn-primary-gradient);
+  border: 1px solid rgb(174 131 157 / 92%);
   color: #fff;
+  text-shadow: var(--btn-text-shadow);
+  box-shadow:
+    0 8px 18px rgba(76, 5, 52, 0.34),
+    0 0 20px rgb(171 29 117 / 36%),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .splash-multiplayer-options {
@@ -6247,6 +6262,14 @@ body.splash-active :is(
   padding: 15px 20px;
   background: rgba(233, 69, 96, 0.1);
   border-bottom: 1px solid rgba(233, 69, 96, 0.2);
+  gap: 12px;
+}
+
+.updates-header-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 .updates-header h3 {
@@ -6256,20 +6279,43 @@ body.splash-active :is(
   font-family: 'Caprasimo', cursive;
 }
 
+.updates-status {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(221, 230, 244, 0.74);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.updates-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.updates-refresh-btn,
 .updates-close-btn {
-  background: none;
-  border: none;
-  color: #888;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #a9b1c3;
   cursor: pointer;
   padding: 5px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.2s ease;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
+.updates-refresh-btn:hover,
 .updates-close-btn:hover {
-  color: #f30398;
+  color: #f3f7ff;
+  border-color: rgba(243, 3, 152, 0.55);
+  background: rgba(243, 3, 152, 0.14);
 }
 
 .updates-list {
@@ -6332,6 +6378,30 @@ body.splash-active :is(
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 10px;
+}
+
+.update-source {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.update-source-release {
+  background: rgba(78, 167, 255, 0.2);
+  color: #9dd3ff;
+}
+
+.update-source-commit {
+  background: rgba(140, 127, 255, 0.2);
+  color: #c0b4ff;
+}
+
+.update-source-live {
+  background: rgba(87, 255, 0, 0.22);
+  color: #ceff9b;
 }
 
 .update-new-badge {

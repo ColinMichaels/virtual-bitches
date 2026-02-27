@@ -113,6 +113,10 @@ export function getUpdatesFeedUrlCandidates(): string[] {
   return getOverrideUrlCandidates(env.VITE_UPDATES_URL, "updates.json");
 }
 
+export function getCommitUpdatesFeedUrlCandidates(): string[] {
+  return getOverrideUrlCandidates(env.VITE_GIT_UPDATES_URL, "updates.git.json");
+}
+
 export function getBrandLogoUrl(): string {
   return getBrandLogoUrlCandidates()[0];
 }

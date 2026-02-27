@@ -4,7 +4,10 @@
  */
 
 import { audioService } from "../services/audio.js";
-import { getUpdatesFeedUrlCandidates } from "../services/assetUrl.js";
+import {
+  getCommitUpdatesFeedUrlCandidates,
+  getUpdatesFeedUrlCandidates,
+} from "../services/assetUrl.js";
 import { getLocalPlayerId } from "../services/playerIdentity.js";
 import { logger } from "../utils/logger.js";
 import type {
@@ -15,6 +18,9 @@ import type {
 const log = logger.create('UpdatesPanel');
 
 const STORAGE_KEY = "biscuits-last-seen-update";
+const FEED_AUTO_REFRESH_MS = 120000;
+
+type UpdateSource = "release" | "commit" | "live";
 
 export interface GameUpdate {
   id: string;
@@ -23,6 +29,7 @@ export interface GameUpdate {
   content: string;
   version?: string;
   type?: "feature" | "bugfix" | "announcement" | "alert";
+  source?: UpdateSource;
 }
 
 export interface UpdatesFeed {
@@ -33,9 +40,13 @@ export class UpdatesPanel {
   private container: HTMLElement;
   private badge: HTMLElement | null = null;
   private panel: HTMLElement | null = null;
+  private statusEl: HTMLElement | null = null;
   private updates: GameUpdate[] = [];
   private lastSeenId: string | null = null;
   private isExpanded = false;
+  private lastSyncedAt: number | null = null;
+  private isRefreshing = false;
+  private refreshTimerId: number | null = null;
   private readonly localPlayerId = getLocalPlayerId();
   private readonly onDocumentClick = (e: MouseEvent) => {
     const targetNode = e.target;
@@ -60,6 +71,11 @@ export class UpdatesPanel {
     if (!payload) return;
     this.pushRealtimeNotification(payload);
   };
+  private readonly onVisibilityChange = () => {
+    if (!document.hidden) {
+      void this.loadUpdates({ silent: true });
+    }
+  };
 
   constructor() {
     this.lastSeenId = this.getLastSeenUpdate();
@@ -71,13 +87,24 @@ export class UpdatesPanel {
     this.container.innerHTML = `
       <div id="updates-panel" class="updates-panel" style="display: none;">
         <div class="updates-header">
-          <h3>Game Updates</h3>
-          <button id="updates-close-btn" class="updates-close-btn" title="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
+          <div class="updates-header-meta">
+            <h3>Game Updates</h3>
+            <p id="updates-status" class="updates-status">Syncing release notes...</p>
+          </div>
+          <div class="updates-header-actions">
+            <button id="updates-refresh-btn" class="updates-refresh-btn" title="Refresh">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
+                <polyline points="21 3 21 9 15 9"></polyline>
+              </svg>
+            </button>
+            <button id="updates-close-btn" class="updates-close-btn" title="Close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
         </div>
         <div id="updates-list" class="updates-list">
           <div class="updates-loading">Loading updates...</div>
@@ -89,13 +116,16 @@ export class UpdatesPanel {
 
     this.badge = document.querySelector(".updates-badge");
     this.panel = document.getElementById("updates-panel");
+    this.statusEl = document.getElementById("updates-status");
 
     // Setup event handlers
     this.setupEventHandlers();
     this.setupRealtimeEventHandlers();
+    this.startAutoRefresh();
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
 
     // Load updates
-    this.loadUpdates();
+    void this.loadUpdates({ silent: false });
   }
 
   /**
@@ -104,6 +134,7 @@ export class UpdatesPanel {
   private setupEventHandlers(): void {
     const toggleBtn = document.getElementById("updates-toggle-btn");
     const mobileToggleBtn = document.getElementById("mobile-updates-btn");
+    const refreshBtn = document.getElementById("updates-refresh-btn");
     const closeBtn = document.getElementById("updates-close-btn");
 
     if (toggleBtn) {
@@ -132,6 +163,13 @@ export class UpdatesPanel {
       });
     }
 
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", () => {
+        audioService.playSfx("click");
+        void this.loadUpdates({ silent: false });
+      });
+    }
+
     // Close on outside click
     document.addEventListener("click", this.onDocumentClick);
   }
@@ -144,44 +182,183 @@ export class UpdatesPanel {
     );
   }
 
+  private startAutoRefresh(): void {
+    if (this.refreshTimerId !== null) {
+      window.clearInterval(this.refreshTimerId);
+      this.refreshTimerId = null;
+    }
+
+    this.refreshTimerId = window.setInterval(() => {
+      if (document.hidden) {
+        return;
+      }
+      void this.loadUpdates({ silent: true });
+    }, FEED_AUTO_REFRESH_MS);
+  }
+
+  private setStatus(message: string): void {
+    if (!this.statusEl) {
+      return;
+    }
+    this.statusEl.textContent = message;
+  }
+
   /**
-   * Load updates from JSON feed
+   * Load updates from release feed + commit-derived feed.
    */
-  private async loadUpdates(): Promise<void> {
+  private async loadUpdates(options: { silent: boolean }): Promise<void> {
+    if (this.isRefreshing) {
+      return;
+    }
+    this.isRefreshing = true;
+
+    if (!options.silent) {
+      this.setStatus("Refreshing updates...");
+    }
+
     try {
-      const candidates = getUpdatesFeedUrlCandidates();
-      let data: UpdatesFeed | null = null;
-      let lastError: unknown = null;
+      const liveUpdates = this.updates.filter((update) => update.source === "live");
+      const [releaseResult, commitResult] = await Promise.allSettled([
+        this.fetchFeedUpdates(getUpdatesFeedUrlCandidates(), "release"),
+        this.fetchFeedUpdates(getCommitUpdatesFeedUrlCandidates(), "commit"),
+      ]);
 
-      for (const candidate of candidates) {
-        try {
-          const response = await fetch(candidate);
-          if (!response.ok) {
-            throw new Error(`updates_fetch_failed:${response.status}`);
-          }
-          data = (await response.json()) as UpdatesFeed;
-          break;
-        } catch (error) {
-          lastError = error;
-        }
+      const fetchedUpdates: GameUpdate[] = [];
+      let successfulFeeds = 0;
+
+      if (releaseResult.status === "fulfilled") {
+        fetchedUpdates.push(...releaseResult.value);
+        successfulFeeds += 1;
+      }
+      if (commitResult.status === "fulfilled") {
+        fetchedUpdates.push(...commitResult.value);
+        successfulFeeds += 1;
       }
 
-      if (!data) {
-        throw lastError ?? new Error("updates_fetch_failed");
+      if (successfulFeeds === 0) {
+        const releaseError =
+          releaseResult.status === "rejected" ? releaseResult.reason : null;
+        const commitError =
+          commitResult.status === "rejected" ? commitResult.reason : null;
+        throw commitError ?? releaseError ?? new Error("updates_fetch_failed");
       }
-      this.updates = data.updates || [];
 
-      // Sort by date (newest first)
-      this.updates.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      this.updates = this.mergeUpdates([...fetchedUpdates, ...liveUpdates]);
+      this.lastSyncedAt = Date.now();
+      if (this.isExpanded && this.updates.length > 0) {
+        this.markAsSeen(this.updates[0].id);
+      }
 
       this.renderUpdates();
       this.updateBadge();
+      this.setStatus(
+        `Updated ${this.formatDate(new Date(this.lastSyncedAt).toISOString())} • ${this.updates.length} entries`
+      );
 
-      log.debug(`Loaded ${this.updates.length} updates`);
+      log.debug(
+        `Loaded ${this.updates.length} updates (release=${releaseResult.status === "fulfilled"}, commits=${commitResult.status === "fulfilled"})`
+      );
     } catch (error) {
       log.error("Failed to load updates:", error);
+      this.setStatus("Failed to refresh updates.");
       this.renderError();
+    } finally {
+      this.isRefreshing = false;
     }
+  }
+
+  private async fetchFeedUpdates(
+    candidates: string[],
+    source: Exclude<UpdateSource, "live">
+  ): Promise<GameUpdate[]> {
+    let lastError: unknown = null;
+    for (const candidate of candidates) {
+      try {
+        const response = await fetch(candidate, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`updates_fetch_failed:${source}:${response.status}`);
+        }
+
+        const data = (await response.json()) as UpdatesFeed;
+        const updates = Array.isArray(data?.updates) ? data.updates : [];
+        return updates
+          .map((update, index) =>
+            this.normalizeIncomingUpdate(update, source, `${source}-${index}`)
+          )
+          .filter(Boolean) as GameUpdate[];
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError ?? new Error(`updates_fetch_failed:${source}`);
+  }
+
+  private normalizeIncomingUpdate(
+    update: Partial<GameUpdate>,
+    source: Exclude<UpdateSource, "live">,
+    fallbackIdSeed: string
+  ): GameUpdate | null {
+    const title = typeof update.title === "string" ? update.title.trim() : "";
+    const content = typeof update.content === "string" ? update.content.trim() : "";
+    if (!title || !content) {
+      return null;
+    }
+
+    const date =
+      typeof update.date === "string" && !Number.isNaN(Date.parse(update.date))
+        ? update.date
+        : new Date().toISOString();
+
+    const id =
+      typeof update.id === "string" && update.id.trim()
+        ? update.id.trim()
+        : `${source}-${fallbackIdSeed}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return {
+      id,
+      date,
+      title,
+      content,
+      version: update.version,
+      type: this.normalizeUpdateType(update.type as MultiplayerGameUpdateMessage["updateType"]),
+      source,
+    };
+  }
+
+  private mergeUpdates(updates: GameUpdate[]): GameUpdate[] {
+    const deduped = new Map<string, GameUpdate>();
+    updates.forEach((update) => {
+      if (!update.id) {
+        return;
+      }
+      const existing = deduped.get(update.id);
+      if (!existing) {
+        deduped.set(update.id, update);
+        return;
+      }
+
+      const existingTime = Date.parse(existing.date);
+      const nextTime = Date.parse(update.date);
+      if (Number.isNaN(existingTime) || (!Number.isNaN(nextTime) && nextTime > existingTime)) {
+        deduped.set(update.id, update);
+      }
+    });
+
+    return Array.from(deduped.values()).sort((a, b) => {
+      const left = Date.parse(a.date);
+      const right = Date.parse(b.date);
+      if (Number.isNaN(left) && Number.isNaN(right)) {
+        return b.id.localeCompare(a.id);
+      }
+      if (Number.isNaN(left)) {
+        return 1;
+      }
+      if (Number.isNaN(right)) {
+        return -1;
+      }
+      return right - left;
+    });
   }
 
   /**
@@ -204,18 +381,23 @@ export class UpdatesPanel {
       const isNew = !this.lastSeenId || this.isNewerThan(update.id, this.lastSeenId);
       const typeIcon = this.getTypeIcon(update.type);
       const formattedDate = this.formatDate(update.date);
+      const sourceLabel = this.getSourceLabel(update.source);
+      const safeUpdateId = this.escapeHtml(update.id);
+      const safeTitle = this.escapeHtml(update.title);
+      const safeVersion = typeof update.version === "string" ? this.escapeHtml(update.version) : "";
 
       return `
-        <div class="update-item ${isNew ? 'update-new' : ''}" data-update-id="${update.id}">
+        <div class="update-item ${isNew ? 'update-new' : ''}" data-update-id="${safeUpdateId}">
           <div class="update-header">
             <div class="update-meta">
               <span class="update-icon">${typeIcon}</span>
               <span class="update-date">${formattedDate}</span>
-              ${update.version ? `<span class="update-version">v${update.version}</span>` : ''}
+              ${sourceLabel ? `<span class="update-source update-source-${update.source}">${sourceLabel}</span>` : ''}
+              ${safeVersion ? `<span class="update-version">v${safeVersion}</span>` : ''}
               ${isNew ? '<span class="update-new-badge">NEW</span>' : ''}
             </div>
           </div>
-          <h4 class="update-title">${update.title}</h4>
+          <h4 class="update-title">${safeTitle}</h4>
           <div class="update-content">${update.content}</div>
         </div>
       `;
@@ -320,19 +502,19 @@ export class UpdatesPanel {
     }
 
     const normalizedType = this.normalizeUpdateType(payload.updateType);
-    const safeTitle = this.escapeHtml(title);
     const safeContent = `<p>${this.escapeHtml(content)}</p>`;
 
     this.updates.unshift({
       id: updateId,
       date: this.normalizeDateInput(payload.date, timestamp),
-      title: safeTitle,
+      title,
       content: safeContent,
       version: payload.version,
       type: normalizedType,
+      source: "live",
     });
 
-    this.updates.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    this.updates = this.mergeUpdates(this.updates);
     this.renderUpdates();
     this.updateBadge();
 
@@ -358,12 +540,13 @@ export class UpdatesPanel {
     this.updates.unshift({
       id: updateId,
       date: new Date(timestamp).toISOString(),
-      title: this.escapeHtml(title),
+      title,
       content: `<p>${this.escapeHtml(message)}</p>`,
       type: "alert",
+      source: "live",
     });
 
-    this.updates.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    this.updates = this.mergeUpdates(this.updates);
     this.renderUpdates();
     this.updateBadge();
   }
@@ -451,6 +634,19 @@ export class UpdatesPanel {
     }
   }
 
+  private getSourceLabel(source?: UpdateSource): string {
+    switch (source) {
+      case "commit":
+        return "Commit";
+      case "release":
+        return "Release";
+      case "live":
+        return "Live";
+      default:
+        return "";
+    }
+  }
+
   /**
    * Format date string
    */
@@ -475,11 +671,16 @@ export class UpdatesPanel {
    */
   dispose(): void {
     document.removeEventListener("click", this.onDocumentClick);
+    document.removeEventListener("visibilitychange", this.onVisibilityChange);
     document.removeEventListener("multiplayer:update:received", this.onRealtimeUpdate as EventListener);
     document.removeEventListener(
       "multiplayer:notification:received",
       this.onRealtimeNotification as EventListener
     );
+    if (this.refreshTimerId !== null) {
+      window.clearInterval(this.refreshTimerId);
+      this.refreshTimerId = null;
+    }
     this.container.remove();
   }
 }
