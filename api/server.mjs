@@ -120,6 +120,15 @@ const TURN_TIMEOUT_WARNING_MS = normalizeTurnWarningValue(
   TURN_TIMEOUT_MS,
   10000
 );
+const POST_GAME_INACTIVITY_TIMEOUT_MS = normalizeTurnTimeoutValue(
+  process.env.MULTIPLAYER_POST_GAME_INACTIVITY_TIMEOUT_MS,
+  2 * 60 * 1000
+);
+const NEXT_GAME_AUTO_START_DELAY_MS = normalizeTurnTimeoutValue(
+  process.env.MULTIPLAYER_NEXT_GAME_DELAY_MS,
+  60 * 1000
+);
+const NEXT_GAME_COUNTDOWN_SECONDS = 10;
 const MAX_TURN_ROLL_DICE = 64;
 const MAX_TURN_SCORE_SELECTION = 64;
 const TURN_PHASES = {
@@ -164,6 +173,7 @@ const wsSessionClients = new Map();
 const wsClientMeta = new WeakMap();
 const botSessionLoops = new Map();
 const sessionTurnTimeoutLoops = new Map();
+const sessionPostGameLoops = new Map();
 const turnAdvanceMetrics = {
   timeoutAutoAdvanceCount: 0,
   botAutoAdvanceCount: 0,
@@ -415,6 +425,11 @@ async function handleRequest(req, res) {
 
     if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/heartbeat$/.test(pathname)) {
       await handleSessionHeartbeat(req, res, pathname);
+      return;
+    }
+
+    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/queue-next$/.test(pathname)) {
+      await handleQueueParticipantForNextGame(req, res, pathname);
       return;
     }
 
@@ -1070,9 +1085,73 @@ async function handleSessionHeartbeat(req, res, pathname) {
 
   const now = Date.now();
   session.participants[playerId].lastHeartbeatAt = now;
-  markSessionActivity(session, playerId, now);
+  markSessionActivity(session, playerId, now, { countAsPlayerAction: false });
   await persistStore();
   sendJson(res, 200, { ok: true });
+}
+
+async function handleQueueParticipantForNextGame(req, res, pathname) {
+  const sessionId = decodeURIComponent(pathname.split("/")[4]);
+  const session = store.multiplayerSessions[sessionId];
+  if (!session || session.expiresAt <= Date.now()) {
+    sendJson(res, 200, {
+      ok: false,
+      queuedForNextGame: false,
+      reason: "session_expired",
+    });
+    return;
+  }
+
+  const body = await parseJsonBody(req);
+  const playerId = typeof body?.playerId === "string" ? body.playerId : "";
+  const participant = playerId ? session.participants[playerId] : null;
+  if (!playerId || !participant || isBotParticipant(participant)) {
+    sendJson(res, 200, {
+      ok: false,
+      queuedForNextGame: false,
+      reason: "unknown_player",
+    });
+    return;
+  }
+
+  const authCheck = authorizeRequest(req, playerId, sessionId);
+  if (!authCheck.ok) {
+    sendJson(res, 200, {
+      ok: false,
+      queuedForNextGame: false,
+      reason: "unauthorized",
+    });
+    return;
+  }
+
+  if (!areCurrentGameParticipantsComplete(session)) {
+    sendJson(res, 200, {
+      ok: false,
+      queuedForNextGame: false,
+      reason: "round_in_progress",
+    });
+    return;
+  }
+
+  const now = Date.now();
+  participant.lastHeartbeatAt = now;
+  participant.queuedForNextGame = true;
+  participant.isReady = true;
+  markSessionActivity(session, playerId, now);
+  scheduleSessionPostGameLifecycle(session, now);
+  ensureSessionTurnState(session);
+  broadcastSessionState(session, "queue_next_game");
+  reconcileSessionLoops(sessionId);
+  await persistStore();
+
+  sendJson(res, 200, {
+    ok: true,
+    queuedForNextGame: true,
+    session: {
+      ...buildSessionSnapshot(session),
+      serverNow: now,
+    },
+  });
 }
 
 async function handleLeaveSession(req, res, pathname) {
@@ -3158,7 +3237,7 @@ function resolveSessionLastActivityAt(session) {
   return lastActivityAt > 0 ? lastActivityAt : Date.now();
 }
 
-function markSessionActivity(session, playerId, timestamp = Date.now()) {
+function markSessionActivity(session, playerId, timestamp = Date.now(), options = {}) {
   if (!session || typeof session !== "object") {
     return;
   }
@@ -3172,6 +3251,9 @@ function markSessionActivity(session, playerId, timestamp = Date.now()) {
   const activityAt = Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
   session.lastActivityAt = activityAt;
   session.expiresAt = activityAt + MULTIPLAYER_SESSION_IDLE_TTL_MS;
+  if (options.countAsPlayerAction !== false) {
+    markSessionPostGamePlayerAction(session, activityAt);
+  }
 }
 
 function serializeTurnState(turnState) {
@@ -4011,32 +4093,29 @@ function advanceSessionTurn(session, endedByPlayerId, options = {}) {
   turnState.turnExpiresAt = nextActivePlayerId ? timestamp + timeoutMs : null;
   turnState.updatedAt = timestamp;
 
-  const nextGameStarted = !nextActivePlayerId
-    ? maybeStartQueuedNextGame(session, timestamp)
-    : false;
-  const turnStart = nextGameStarted
-    ? buildTurnStartMessage(session, { source: options.source ?? "player" })
-    : nextActivePlayerId
-      ? {
-          type: "turn_start",
-          sessionId: session.sessionId,
-          playerId: turnState.activeTurnPlayerId,
-          round: turnState.round,
-          turnNumber: turnState.turnNumber,
-          phase: normalizeTurnPhase(turnState.phase),
-          gameStartedAt: resolveSessionGameStartedAt(session, timestamp),
-          turnExpiresAt: turnState.turnExpiresAt,
-          turnTimeoutMs: timeoutMs,
-          timestamp,
-          order: [...turnState.order],
-          source: options.source ?? "player",
-        }
-      : null;
+  if (!nextActivePlayerId) {
+    scheduleSessionPostGameLifecycle(session, timestamp);
+  }
+  const turnStart = nextActivePlayerId
+    ? {
+        type: "turn_start",
+        sessionId: session.sessionId,
+        playerId: turnState.activeTurnPlayerId,
+        round: turnState.round,
+        turnNumber: turnState.turnNumber,
+        phase: normalizeTurnPhase(turnState.phase),
+        gameStartedAt: resolveSessionGameStartedAt(session, timestamp),
+        turnExpiresAt: turnState.turnExpiresAt,
+        turnTimeoutMs: timeoutMs,
+        timestamp,
+        order: [...turnState.order],
+        source: options.source ?? "player",
+      }
+    : null;
 
   return {
     turnEnd,
     turnStart,
-    nextGameStarted,
   };
 }
 
@@ -4386,10 +4465,91 @@ function areCurrentGameParticipantsComplete(session) {
     (participant) => participant && !isParticipantQueuedForNextGame(participant)
   );
   if (activeParticipants.length === 0) {
-    return false;
+    return hasQueuedParticipantsForNextGame(session);
   }
 
   return activeParticipants.every((participant) => isParticipantComplete(participant));
+}
+
+function normalizePostGameTimestamp(value) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return Math.floor(value);
+}
+
+function clearSessionPostGameLifecycleState(session) {
+  if (!session || typeof session !== "object") {
+    return false;
+  }
+  let changed = false;
+  if (Object.prototype.hasOwnProperty.call(session, "nextGameStartsAt")) {
+    delete session.nextGameStartsAt;
+    changed = true;
+  }
+  if (Object.prototype.hasOwnProperty.call(session, "postGameActivityAt")) {
+    delete session.postGameActivityAt;
+    changed = true;
+  }
+  if (Object.prototype.hasOwnProperty.call(session, "postGameIdleExpiresAt")) {
+    delete session.postGameIdleExpiresAt;
+    changed = true;
+  }
+  return changed;
+}
+
+function scheduleSessionPostGameLifecycle(session, timestamp = Date.now()) {
+  if (!areCurrentGameParticipantsComplete(session)) {
+    return false;
+  }
+
+  const completedAt = Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
+  const currentNextGameStartsAt = normalizePostGameTimestamp(session?.nextGameStartsAt);
+  const nextGameStartsAt =
+    currentNextGameStartsAt !== null
+      ? currentNextGameStartsAt
+      : completedAt + NEXT_GAME_AUTO_START_DELAY_MS;
+  const currentPostGameActivityAt = normalizePostGameTimestamp(session?.postGameActivityAt);
+  const postGameActivityAt =
+    currentPostGameActivityAt !== null ? currentPostGameActivityAt : completedAt;
+  const currentPostGameIdleExpiresAt = normalizePostGameTimestamp(session?.postGameIdleExpiresAt);
+  const postGameIdleExpiresAt =
+    currentPostGameIdleExpiresAt !== null
+      ? currentPostGameIdleExpiresAt
+      : postGameActivityAt + POST_GAME_INACTIVITY_TIMEOUT_MS;
+
+  let changed = false;
+  if (normalizePostGameTimestamp(session.nextGameStartsAt) !== nextGameStartsAt) {
+    session.nextGameStartsAt = nextGameStartsAt;
+    changed = true;
+  }
+  if (normalizePostGameTimestamp(session.postGameActivityAt) !== postGameActivityAt) {
+    session.postGameActivityAt = postGameActivityAt;
+    changed = true;
+  }
+  if (normalizePostGameTimestamp(session.postGameIdleExpiresAt) !== postGameIdleExpiresAt) {
+    session.postGameIdleExpiresAt = postGameIdleExpiresAt;
+    changed = true;
+  }
+  return changed;
+}
+
+function markSessionPostGamePlayerAction(session, timestamp = Date.now()) {
+  if (!areCurrentGameParticipantsComplete(session)) {
+    return false;
+  }
+  const actionAt = Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
+  const postGameIdleExpiresAt = actionAt + POST_GAME_INACTIVITY_TIMEOUT_MS;
+  let changed = false;
+  if (normalizePostGameTimestamp(session.postGameActivityAt) !== actionAt) {
+    session.postGameActivityAt = actionAt;
+    changed = true;
+  }
+  if (normalizePostGameTimestamp(session.postGameIdleExpiresAt) !== postGameIdleExpiresAt) {
+    session.postGameIdleExpiresAt = postGameIdleExpiresAt;
+    changed = true;
+  }
+  return changed;
 }
 
 function resetSessionForNextGame(session, timestamp = Date.now()) {
@@ -4427,6 +4587,9 @@ function resetSessionForNextGame(session, timestamp = Date.now()) {
     }
   });
 
+  if (clearSessionPostGameLifecycleState(session)) {
+    changed = true;
+  }
   if (!changed) {
     return false;
   }
@@ -4438,24 +4601,14 @@ function resetSessionForNextGame(session, timestamp = Date.now()) {
   return true;
 }
 
-function maybeStartQueuedNextGame(session, timestamp = Date.now()) {
-  if (!hasQueuedParticipantsForNextGame(session)) {
-    return false;
-  }
-  if (!areCurrentGameParticipantsComplete(session)) {
-    return false;
-  }
-  return resetSessionForNextGame(session, timestamp);
-}
-
 function completeSessionRoundWithWinner(session, winnerPlayerId, timestamp = Date.now()) {
   if (!session?.participants || typeof winnerPlayerId !== "string" || !winnerPlayerId) {
-    return { ok: false, nextGameStarted: false };
+    return { ok: false };
   }
 
   const winner = session.participants[winnerPlayerId];
   if (!winner || isParticipantQueuedForNextGame(winner)) {
-    return { ok: false, nextGameStarted: false };
+    return { ok: false };
   }
 
   const completedAt =
@@ -4498,10 +4651,9 @@ function completeSessionRoundWithWinner(session, winnerPlayerId, timestamp = Dat
     turnState.updatedAt = completedAt;
   }
 
-  const nextGameStarted = maybeStartQueuedNextGame(session, completedAt);
+  scheduleSessionPostGameLifecycle(session, completedAt);
   return {
     ok: true,
-    nextGameStarted,
   };
 }
 
@@ -4829,11 +4981,13 @@ function pruneSessionBots(sessionId, session, options = {}) {
 function reconcileSessionLoops(sessionId) {
   reconcileBotLoop(sessionId);
   reconcileTurnTimeoutLoop(sessionId);
+  reconcilePostGameLoop(sessionId);
 }
 
 function stopSessionLoops(sessionId) {
   stopBotLoop(sessionId);
   stopTurnTimeoutLoop(sessionId);
+  stopPostGameLoop(sessionId);
 }
 
 function reconcileBotLoop(sessionId) {
@@ -5274,6 +5428,219 @@ function stopTurnTimeoutLoop(sessionId) {
   sessionTurnTimeoutLoops.delete(sessionId);
 }
 
+function clearPostGameCountdownTimers(loop) {
+  if (!loop || !Array.isArray(loop.countdownTimers) || loop.countdownTimers.length === 0) {
+    return;
+  }
+  loop.countdownTimers.forEach((timer) => {
+    clearTimeout(timer);
+  });
+  loop.countdownTimers = [];
+}
+
+function stopPostGameLoop(sessionId) {
+  const loop = sessionPostGameLoops.get(sessionId);
+  if (!loop) {
+    return;
+  }
+  if (loop.nextGameTimer) {
+    clearTimeout(loop.nextGameTimer);
+  }
+  if (loop.idleTimer) {
+    clearTimeout(loop.idleTimer);
+  }
+  clearPostGameCountdownTimers(loop);
+  sessionPostGameLoops.delete(sessionId);
+}
+
+function dispatchPostGameCountdownNotice(sessionId, expectedNextGameStartsAt, secondsRemaining) {
+  const session = store.multiplayerSessions[sessionId];
+  if (!session || !areCurrentGameParticipantsComplete(session)) {
+    return;
+  }
+  const nextGameStartsAt = normalizePostGameTimestamp(session.nextGameStartsAt);
+  if (nextGameStartsAt === null || nextGameStartsAt !== expectedNextGameStartsAt) {
+    return;
+  }
+  if (!Number.isFinite(secondsRemaining) || secondsRemaining <= 0) {
+    return;
+  }
+
+  const safeSeconds = Math.floor(secondsRemaining);
+  broadcastSystemRoomChannelMessage(sessionId, {
+    topic: "next_game_countdown",
+    title: "Next Game",
+    message: `Next game starts in ${safeSeconds}s`,
+    severity: safeSeconds <= 3 ? "warning" : "info",
+  });
+}
+
+function schedulePostGameCountdownNotices(sessionId, nextGameStartsAt, now = Date.now()) {
+  let loop = sessionPostGameLoops.get(sessionId);
+  if (!loop) {
+    loop = {
+      nextGameTimer: null,
+      nextGameStartsAt: 0,
+      idleTimer: null,
+      idleExpiresAt: 0,
+      countdownTimers: [],
+      countdownStartsAt: 0,
+    };
+    sessionPostGameLoops.set(sessionId, loop);
+  }
+
+  if (loop.countdownStartsAt === nextGameStartsAt && loop.countdownTimers.length > 0) {
+    return;
+  }
+  clearPostGameCountdownTimers(loop);
+  loop.countdownStartsAt = nextGameStartsAt;
+
+  for (let secondsRemaining = NEXT_GAME_COUNTDOWN_SECONDS; secondsRemaining >= 1; secondsRemaining -= 1) {
+    const dispatchAt = nextGameStartsAt - secondsRemaining * 1000;
+    if (dispatchAt <= now) {
+      continue;
+    }
+    const timer = setTimeout(() => {
+      dispatchPostGameCountdownNotice(sessionId, nextGameStartsAt, secondsRemaining);
+    }, dispatchAt - now);
+    loop.countdownTimers.push(timer);
+  }
+}
+
+function handlePostGameInactivityExpiry(sessionId, expectedIdleExpiresAt) {
+  const session = store.multiplayerSessions[sessionId];
+  if (!session || !areCurrentGameParticipantsComplete(session)) {
+    reconcileSessionLoops(sessionId);
+    return;
+  }
+  const idleExpiresAt = normalizePostGameTimestamp(session.postGameIdleExpiresAt);
+  if (idleExpiresAt === null || idleExpiresAt !== expectedIdleExpiresAt) {
+    reconcileSessionLoops(sessionId);
+    return;
+  }
+  if (idleExpiresAt > Date.now()) {
+    reconcileSessionLoops(sessionId);
+    return;
+  }
+
+  expireSession(sessionId, "session_expired");
+  persistStore().catch((error) => {
+    log.warn("Failed to persist store after post-game inactivity expiry", error);
+  });
+}
+
+function handlePostGameNextGameStart(sessionId, expectedNextGameStartsAt) {
+  const session = store.multiplayerSessions[sessionId];
+  if (!session || !areCurrentGameParticipantsComplete(session)) {
+    reconcileSessionLoops(sessionId);
+    return;
+  }
+  const nextGameStartsAt = normalizePostGameTimestamp(session.nextGameStartsAt);
+  if (nextGameStartsAt === null || nextGameStartsAt !== expectedNextGameStartsAt) {
+    reconcileSessionLoops(sessionId);
+    return;
+  }
+  if (nextGameStartsAt > Date.now()) {
+    reconcileSessionLoops(sessionId);
+    return;
+  }
+
+  const restarted = resetSessionForNextGame(session, Date.now());
+  if (!restarted) {
+    reconcileSessionLoops(sessionId);
+    return;
+  }
+
+  broadcastSystemRoomChannelMessage(sessionId, {
+    topic: "next_game_start",
+    title: "Next Game",
+    message: "New round started.",
+    severity: "success",
+  });
+
+  const nextTurnStart = buildTurnStartMessage(session, {
+    source: "post_game_restart",
+  });
+  if (nextTurnStart) {
+    broadcastToSession(sessionId, JSON.stringify(nextTurnStart), null);
+  }
+  broadcastSessionState(session, "post_game_restart");
+  persistStore().catch((error) => {
+    log.warn("Failed to persist store after post-game restart", error);
+  });
+  reconcileSessionLoops(sessionId);
+}
+
+function reconcilePostGameLoop(sessionId) {
+  const session = store.multiplayerSessions[sessionId];
+  if (!session) {
+    stopPostGameLoop(sessionId);
+    return;
+  }
+  if (!areCurrentGameParticipantsComplete(session)) {
+    clearSessionPostGameLifecycleState(session);
+    stopPostGameLoop(sessionId);
+    return;
+  }
+
+  scheduleSessionPostGameLifecycle(session, Date.now());
+  const nextGameStartsAt = normalizePostGameTimestamp(session.nextGameStartsAt);
+  const postGameIdleExpiresAt = normalizePostGameTimestamp(session.postGameIdleExpiresAt);
+  if (nextGameStartsAt === null || postGameIdleExpiresAt === null) {
+    stopPostGameLoop(sessionId);
+    return;
+  }
+
+  const now = Date.now();
+  if (postGameIdleExpiresAt <= now) {
+    handlePostGameInactivityExpiry(sessionId, postGameIdleExpiresAt);
+    return;
+  }
+  if (nextGameStartsAt <= now) {
+    handlePostGameNextGameStart(sessionId, nextGameStartsAt);
+    return;
+  }
+
+  let loop = sessionPostGameLoops.get(sessionId);
+  if (!loop) {
+    loop = {
+      nextGameTimer: null,
+      nextGameStartsAt: 0,
+      idleTimer: null,
+      idleExpiresAt: 0,
+      countdownTimers: [],
+      countdownStartsAt: 0,
+    };
+    sessionPostGameLoops.set(sessionId, loop);
+  }
+
+  if (loop.nextGameTimer && loop.nextGameStartsAt !== nextGameStartsAt) {
+    clearTimeout(loop.nextGameTimer);
+    loop.nextGameTimer = null;
+  }
+  if (!loop.nextGameTimer) {
+    loop.nextGameStartsAt = nextGameStartsAt;
+    loop.nextGameTimer = setTimeout(() => {
+      loop.nextGameTimer = null;
+      handlePostGameNextGameStart(sessionId, nextGameStartsAt);
+    }, Math.max(0, nextGameStartsAt - now));
+  }
+
+  if (loop.idleTimer && loop.idleExpiresAt !== postGameIdleExpiresAt) {
+    clearTimeout(loop.idleTimer);
+    loop.idleTimer = null;
+  }
+  if (!loop.idleTimer) {
+    loop.idleExpiresAt = postGameIdleExpiresAt;
+    loop.idleTimer = setTimeout(() => {
+      loop.idleTimer = null;
+      handlePostGameInactivityExpiry(sessionId, postGameIdleExpiresAt);
+    }, Math.max(0, postGameIdleExpiresAt - now));
+  }
+
+  schedulePostGameCountdownNotices(sessionId, nextGameStartsAt, now);
+}
+
 function dispatchTurnTimeoutWarning(sessionId, expectedTurnKey) {
   const session = store.multiplayerSessions[sessionId];
   if (!session) {
@@ -5709,6 +6076,40 @@ function normalizeRoomChannelTitle(value, channel = "public") {
     return value.trim().replace(/\s+/g, " ").slice(0, 80);
   }
   return channel === "direct" ? "Direct" : "Room";
+}
+
+function broadcastSystemRoomChannelMessage(sessionId, options = {}) {
+  const normalizedSessionId =
+    typeof sessionId === "string" && sessionId.trim().length > 0 ? sessionId.trim() : "";
+  if (!normalizedSessionId) {
+    return;
+  }
+  const normalizedMessage = normalizeRoomChannelMessage(options.message);
+  if (!normalizedMessage) {
+    return;
+  }
+  const normalizedSeverity =
+    options.severity === "success" ||
+    options.severity === "warning" ||
+    options.severity === "error"
+      ? options.severity
+      : "info";
+  const normalizedTopic = normalizeRoomChannelTopic(options.topic);
+  const payload = {
+    type: "room_channel",
+    id: randomUUID(),
+    channel: "public",
+    ...(normalizedTopic ? { topic: normalizedTopic } : {}),
+    sourceRole: "system",
+    title: normalizeRoomChannelTitle(options.title, "public"),
+    message: normalizedMessage,
+    severity: normalizedSeverity,
+    timestamp:
+      typeof options.timestamp === "number" && Number.isFinite(options.timestamp)
+        ? Math.floor(options.timestamp)
+        : Date.now(),
+  };
+  broadcastToSession(normalizedSessionId, JSON.stringify(payload), null);
 }
 
 function containsBlockedRoomChannelTerm(message) {
@@ -6339,6 +6740,7 @@ function handleSocketMessage(client, rawMessage) {
     payload.type === "room_channel"
   ) {
     relayRealtimeSocketMessage(client, session, payload, now);
+    reconcileSessionLoops(client.sessionId);
     return;
   }
 
@@ -6589,6 +6991,7 @@ function handleTurnActionMessage(client, session, payload) {
         winnerParticipant.displayName.trim().length > 0
           ? winnerParticipant.displayName.trim()
           : client.playerId;
+      const winnerScore = normalizeParticipantScore(winnerParticipant?.score);
       broadcastToSession(
         client.sessionId,
         JSON.stringify({
@@ -6603,21 +7006,26 @@ function handleTurnActionMessage(client, session, payload) {
         }),
         null
       );
+      broadcastSystemRoomChannelMessage(client.sessionId, {
+        topic: "round_result",
+        title: "Round Winner",
+        message: `${winnerName} wins with ${winnerScore} point${winnerScore === 1 ? "" : "s"}.`,
+        severity: "success",
+        timestamp,
+      });
+      broadcastSystemRoomChannelMessage(client.sessionId, {
+        topic: "next_game_pending",
+        title: "Next Game",
+        message: `Next game starts in ${Math.max(1, Math.floor(NEXT_GAME_AUTO_START_DELAY_MS / 1000))}s.`,
+        severity: "info",
+        timestamp,
+      });
 
       const winnerTurnEnd = buildTurnEndMessage(session, client.playerId, {
         source: "winner_complete",
       });
       if (winnerTurnEnd) {
         broadcastToSession(client.sessionId, JSON.stringify(winnerTurnEnd), null);
-      }
-
-      if (completedRound.nextGameStarted) {
-        const nextTurnStart = buildTurnStartMessage(session, {
-          source: "winner_next_game",
-        });
-        if (nextTurnStart) {
-          broadcastToSession(client.sessionId, JSON.stringify(nextTurnStart), null);
-        }
       }
     }
   }

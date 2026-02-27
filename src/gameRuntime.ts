@@ -247,6 +247,7 @@ class Game implements GameCallbacks {
   private botMemeAvatarByPlayerId = new Map<string, string>();
   private botMemeAvatarRotationHandle: ReturnType<typeof setInterval> | null = null;
   private botMemeAvatarRefreshInFlight = false;
+  private waitForNextGameRequestInFlight = false;
   private cachedMultiplayerIdentity:
     | {
         value: {
@@ -262,6 +263,7 @@ class Game implements GameCallbacks {
   private deselectBtn: HTMLButtonElement;
   private undoBtn: HTMLButtonElement;
   private newGameBtn: HTMLButtonElement | null = null;
+  private waitNextGameBtn: HTMLButtonElement | null = null;
   private inviteLinkBtn: HTMLButtonElement | null = null;
   private mobileInviteLinkBtn: HTMLButtonElement | null = null;
   private turnActionBannerEl: HTMLElement | null = null;
@@ -484,6 +486,7 @@ class Game implements GameCallbacks {
     this.deselectBtn = document.getElementById("deselect-btn") as HTMLButtonElement;
     this.undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
     this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement | null;
+    this.waitNextGameBtn = document.getElementById("wait-next-game-btn") as HTMLButtonElement | null;
     this.inviteLinkBtn = document.getElementById("invite-link-btn") as HTMLButtonElement | null;
     this.mobileInviteLinkBtn = document.getElementById("mobile-invite-link-btn") as HTMLButtonElement | null;
     this.turnActionBannerEl = this.ensureTurnActionBanner();
@@ -2076,7 +2079,7 @@ class Game implements GameCallbacks {
     return hadRuntimeProgress && previousLocalParticipant.isComplete === true;
   }
 
-  private resetLocalStateForNextMultiplayerGame(): void {
+  private resetLocalStateForNextMultiplayerGame(options?: { notificationMessage?: string | null }): void {
     this.gameOverController.hide();
     this.state = GameFlowController.createNewGame();
     GameFlowController.updateHintMode(this.state, this.diceRow);
@@ -2090,7 +2093,53 @@ class Game implements GameCallbacks {
     this.selectedSeatFocusIndex = -1;
     this.resetLocalGameClockStart();
     this.applyTurnTiming(null);
-    notificationService.show("Next multiplayer game started.", "info", 1800);
+    const notificationMessage = options?.notificationMessage;
+    if (notificationMessage !== null) {
+      notificationService.show(notificationMessage ?? "Next multiplayer game started.", "info", 1800);
+    }
+  }
+
+  private shouldShowWaitForNextGameAction(): boolean {
+    if (this.playMode !== "multiplayer" || this.state.status !== "COMPLETE") {
+      return false;
+    }
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession || activeSession.sessionComplete !== true) {
+      return false;
+    }
+    const localParticipant = this.getSessionParticipantById(activeSession, this.localPlayerId);
+    if (!localParticipant || normalizeQueuedForNextGame(localParticipant.queuedForNextGame)) {
+      return false;
+    }
+    if (!Array.isArray(activeSession.standings) || activeSession.standings.length === 0) {
+      return false;
+    }
+    const winnerPlayerId = activeSession.standings[0]?.playerId;
+    return winnerPlayerId === this.localPlayerId;
+  }
+
+  private async queueForNextMultiplayerGame(): Promise<void> {
+    if (this.waitForNextGameRequestInFlight) {
+      return;
+    }
+    this.waitForNextGameRequestInFlight = true;
+    this.updateUI();
+
+    try {
+      const queuedSession = await this.multiplayerSessionService.queueForNextGame();
+      if (!queuedSession) {
+        notificationService.show("Unable to queue for the next game yet.", "warning", 2200);
+        return;
+      }
+
+      this.resetLocalStateForNextMultiplayerGame({ notificationMessage: null });
+      this.applyMultiplayerSeatState(queuedSession);
+      this.touchMultiplayerTurnSyncActivity();
+      notificationService.show("Waiting for next game...", "info", 2000);
+    } finally {
+      this.waitForNextGameRequestInFlight = false;
+      this.updateUI();
+    }
   }
 
   private applyTurnStateFromSession(session: MultiplayerSessionRecord): void {
@@ -2591,6 +2640,20 @@ class Game implements GameCallbacks {
     if (!message) {
       return;
     }
+    const topic = typeof payload.topic === "string" ? payload.topic.trim().toLowerCase() : "";
+    const countdownMatch = /^next game starts in\s+(\d+)s\.?$/i.exec(message);
+    const countdownSeconds = countdownMatch ? Number.parseInt(countdownMatch[1], 10) : null;
+    const hasCountdownSeconds =
+      typeof countdownSeconds === "number" && Number.isFinite(countdownSeconds);
+    if (
+      topic === "next_game_countdown" &&
+      payload.sourceRole !== "player" &&
+      hasCountdownSeconds &&
+      countdownSeconds >= 1 &&
+      countdownSeconds <= 10
+    ) {
+      audioService.playSfx("click");
+    }
     const sourcePlayerId = this.resolveRealtimeSourcePlayerId(payload);
     const tone =
       payload.severity === "success" ||
@@ -2611,7 +2674,8 @@ class Game implements GameCallbacks {
     const title = typeof payload.title === "string" && payload.title.trim()
       ? payload.title.trim()
       : fallbackTitle;
-    notificationService.show(`${title}: ${message}`, tone, channel === "direct" ? 3600 : 2600);
+    const durationMs = topic === "next_game_countdown" ? 1400 : channel === "direct" ? 3600 : 2600;
+    notificationService.show(`${title}: ${message}`, tone, durationMs);
   }
 
   private handleMultiplayerSessionState(message: MultiplayerSessionStateMessage): void {
@@ -4045,7 +4109,9 @@ class Game implements GameCallbacks {
 
     // Check for game complete
     if (prevState.status !== "COMPLETE" && this.state.status === "COMPLETE") {
-      this.gameOverController.showGameOver(this.state, this.gameStartTime);
+      this.gameOverController.showGameOver(this.state, this.gameStartTime, {
+        showWaitForNextGame: this.shouldShowWaitForNextGameAction(),
+      });
     }
   }
 
@@ -4310,6 +4376,22 @@ class Game implements GameCallbacks {
     notificationService.show("New Game!", "success");
   }
 
+  handleWaitForNextGame(): void {
+    if (this.playMode !== "multiplayer") {
+      notificationService.show("Wait queue is available in multiplayer rooms only.", "warning", 2000);
+      return;
+    }
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession?.sessionId) {
+      notificationService.show("No active multiplayer room found.", "warning", 2000);
+      return;
+    }
+    if (this.waitForNextGameRequestInFlight) {
+      return;
+    }
+    void this.queueForNextMultiplayerGame();
+  }
+
   handleReturnToMainMenu(): void {
     void this.returnToLobby();
   }
@@ -4464,6 +4546,14 @@ class Game implements GameCallbacks {
       this.newGameBtn.title = manualNewGameEnabled
         ? "Start a new game"
         : "Multiplayer game starts are server-controlled";
+    }
+    if (this.waitNextGameBtn) {
+      const showWaitAction = this.shouldShowWaitForNextGameAction();
+      this.waitNextGameBtn.style.display = showWaitAction ? "inline-flex" : "none";
+      this.waitNextGameBtn.disabled = this.waitForNextGameRequestInFlight;
+      this.waitNextGameBtn.textContent = this.waitForNextGameRequestInFlight
+        ? "Joining Queue..."
+        : "Wait for Next Game";
     }
 
     // Update multipurpose action button

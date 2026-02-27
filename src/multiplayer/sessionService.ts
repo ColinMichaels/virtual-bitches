@@ -123,6 +123,47 @@ export class MultiplayerSessionService {
     this.activeSession = null;
   }
 
+  async queueForNextGame(): Promise<MultiplayerSessionRecord | null> {
+    const current = this.activeSession;
+    if (!current) return null;
+
+    const response = await backendApiService.queueMultiplayerForNextGame(
+      current.sessionId,
+      this.playerId
+    );
+    if (!response?.ok) {
+      if (response?.reason === "session_expired") {
+        this.handleSessionExpired("session_expired");
+      } else {
+        log.warn(
+          `Failed to queue for next multiplayer game: ${current.sessionId} (${response?.reason ?? "unknown"})`
+        );
+      }
+      return null;
+    }
+
+    if (response.session) {
+      const synced = this.syncSessionState({
+        sessionId: response.session.sessionId,
+        roomCode: response.session.roomCode,
+        participants: response.session.participants,
+        standings: response.session.standings,
+        turnState: response.session.turnState ?? null,
+        sessionComplete: response.session.sessionComplete,
+        completedAt: response.session.completedAt ?? null,
+        gameStartedAt: response.session.gameStartedAt,
+        expiresAt: response.session.expiresAt,
+        serverNow: response.session.serverNow,
+        gameDifficulty: response.session.gameDifficulty,
+      });
+      if (synced) {
+        return synced;
+      }
+    }
+
+    return this.activeSession;
+  }
+
   async refreshSessionAuth(): Promise<MultiplayerSessionRecord | null> {
     const current = this.activeSession;
     if (!current) return null;

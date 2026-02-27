@@ -10,6 +10,7 @@ const assertAdminMonitor = process.env.E2E_ASSERT_ADMIN_MONITOR === "1";
 const assertStorageCutover = process.env.E2E_ASSERT_STORAGE_CUTOVER === "1";
 const adminToken = process.env.E2E_ADMIN_TOKEN?.trim() ?? "";
 const roomExpiryWaitMs = Number(process.env.E2E_ROOM_EXPIRY_WAIT_MS ?? 9000);
+const queueLifecycleWaitMs = Number(process.env.E2E_QUEUE_LIFECYCLE_WAIT_MS ?? 12000);
 const expectedStorageBackend = normalizeOptionalString(process.env.E2E_EXPECT_STORAGE_BACKEND).toLowerCase();
 const expectedFirestorePrefix = normalizeOptionalString(process.env.E2E_EXPECT_FIRESTORE_PREFIX);
 const expectedStoreSections = getStoreSections();
@@ -55,6 +56,7 @@ async function run() {
 
   const runSuffix = randomUUID().slice(0, 8);
   await runRoomLifecycleChecks(runSuffix);
+  await runWinnerQueueLifecycleChecks(runSuffix);
   hostPlayerId = `e2e-host-${runSuffix}`;
   guestPlayerId = `e2e-guest-${runSuffix}`;
 
@@ -657,6 +659,111 @@ async function runRoomLifecycleChecks(runSuffix) {
   }
 
   log("Room lifecycle checks passed.");
+}
+
+async function runWinnerQueueLifecycleChecks(runSuffix) {
+  log("Running winner queue lifecycle checks...");
+
+  const queueHostPlayerId = `e2e-queue-host-${runSuffix}`;
+  const queueGuestPlayerId = `e2e-queue-guest-${runSuffix}`;
+  const created = await apiRequest("/multiplayer/sessions", {
+    method: "POST",
+    body: {
+      playerId: queueHostPlayerId,
+      displayName: "E2E Queue Host",
+      botCount: 0,
+    },
+  });
+  assert(typeof created?.sessionId === "string", "queue lifecycle create session returned no sessionId");
+  assert(created?.auth?.accessToken, "queue lifecycle create session returned no access token");
+
+  const queueSessionId = created.sessionId;
+  let hostAccessToken = created.auth.accessToken;
+
+  try {
+    const joined = await apiRequest(
+      `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/join`,
+      {
+        method: "POST",
+        body: {
+          playerId: queueGuestPlayerId,
+          displayName: "E2E Queue Guest",
+        },
+      }
+    );
+    assert(Array.isArray(joined?.participants), "queue lifecycle join missing participants[]");
+
+    await apiRequest(`/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/leave`, {
+      method: "POST",
+      body: { playerId: queueGuestPlayerId },
+    });
+
+    const queued = await apiRequest(
+      `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/queue-next`,
+      {
+        method: "POST",
+        accessToken: hostAccessToken,
+        body: { playerId: queueHostPlayerId },
+      }
+    );
+    assert(queued?.ok === true, "queue lifecycle queue-next did not return ok=true");
+    assert(
+      queued?.queuedForNextGame === true,
+      "queue lifecycle queue-next did not mark queuedForNextGame=true"
+    );
+    const queuedHost = Array.isArray(queued?.session?.participants)
+      ? queued.session.participants.find(
+          (participant) => participant?.playerId === queueHostPlayerId
+        )
+      : null;
+    assert(queuedHost, "queue lifecycle response missing host participant snapshot");
+    assert(
+      queuedHost?.queuedForNextGame === true,
+      "queue lifecycle host participant missing queuedForNextGame=true after queue-next"
+    );
+
+    const deadline = Date.now() + Math.max(5000, queueLifecycleWaitMs);
+    let restarted = null;
+    while (Date.now() < deadline) {
+      const refreshed = await apiRequest(
+        `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/auth/refresh`,
+        {
+          method: "POST",
+          accessToken: hostAccessToken,
+          body: { playerId: queueHostPlayerId },
+        }
+      );
+      if (typeof refreshed?.auth?.accessToken === "string" && refreshed.auth.accessToken.length > 0) {
+        hostAccessToken = refreshed.auth.accessToken;
+      }
+
+      const refreshedHost = Array.isArray(refreshed?.participants)
+        ? refreshed.participants.find((participant) => participant?.playerId === queueHostPlayerId)
+        : null;
+      const hostReadyForFreshRound =
+        refreshedHost &&
+        refreshedHost.queuedForNextGame !== true &&
+        refreshedHost.isComplete !== true &&
+        Number(refreshedHost.score ?? 0) === 0 &&
+        Number(refreshedHost.remainingDice ?? -1) === 15;
+      const turnReady =
+        refreshed?.sessionComplete !== true &&
+        typeof refreshed?.turnState?.activeTurnPlayerId === "string" &&
+        refreshed.turnState.activeTurnPlayerId === queueHostPlayerId;
+      if (hostReadyForFreshRound && turnReady) {
+        restarted = refreshed;
+        break;
+      }
+
+      await waitMs(250);
+    }
+
+    assert(restarted, "queue lifecycle did not auto-start a fresh round within expected wait window");
+    log("Winner queue lifecycle checks passed.");
+  } finally {
+    await safeLeave(queueSessionId, queueGuestPlayerId);
+    await safeLeave(queueSessionId, queueHostPlayerId);
+  }
 }
 
 async function runAdminMonitorChecks(cachedStorage = null) {

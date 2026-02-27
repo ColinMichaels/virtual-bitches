@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-27 (camera assist + updates commit-link + multiplayer room channels)
+**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-27 (camera assist + updates commit-link + multiplayer room channels + winner queue lifecycle)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -130,6 +130,27 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - [ ] Replace temporary `window.prompt(...)` compose flow with in-game chat/whisper modal UI.
   - [ ] Add block/unblock controls in Profile/Settings and sync with `blockedPlayerIds`.
   - [ ] Add API/WebSocket integration test coverage for moderation rejection codes (`room_channel_*`).
+
+#### Multiplayer Post-Round Queue + Lifecycle (2026-02-27)
+- **Status**: 🟡 Core lifecycle and queue flow complete; UX polish/testing follow-up pending
+- **Completed**:
+  - ✅ Winner-only end-game action added: `Wait for Next Game` (winner can re-seat and queue from modal).
+  - ✅ Added queue intent endpoint: `POST /api/multiplayer/sessions/:sessionId/queue-next`.
+  - ✅ Added post-round lifecycle server timers:
+    - auto-start next game after 60s (configurable)
+    - room expiry after 2m post-round inactivity (configurable)
+  - ✅ Added room-wide broadcasts for:
+    - round winner + score
+    - next-game pending message
+    - 10-second next-game countdown
+    - next-game started
+  - ✅ Added client-side countdown notification + short beep/click cue handling.
+  - ✅ Added queue-next client/service test coverage (`backendApi` + `sessionService`).
+  - ✅ Added local API e2e smoke coverage for winner queue lifecycle (`queue-next` -> auto-restart round).
+- **Follow-up**:
+  - [ ] Add dedicated audio SFX asset for countdown (replace temporary click fallback).
+  - [ ] Add focused regression for inactivity-expiry timer edge cases (already covered for restart path in e2e smoke).
+  - [ ] Add HUD countdown timer UI (not only notifications) for next-game start clarity.
 
 ### Multiplayer Room Lifecycle, Recovery UX, and Tutorial Quality Pass (2026-02-26)
 - **Status**: ✅ Foundation COMPLETE, follow-up polish tasks queued

@@ -1,6 +1,14 @@
 {
   "updates": [
     {
+      "id": "feature-multiplayer-next-game-queue-2026-02-27",
+      "date": "2026-02-27",
+      "title": "🏁 Multiplayer Round Queue + Auto-Restart",
+      "content": "<p>Multiplayer round flow now has winner queueing and automated next-game lifecycle timing.</p><p><strong>What Changed:</strong></p><ul style=\"margin: 10px 0; padding-left: 20px;\"><li>Winning player now gets a <strong>Wait for Next Game</strong> action in the end-game menu</li><li>Winner queue action re-seats the player and marks them ready for the next round</li><li>Round winner and score are broadcast to the room channel</li><li>Next game auto-starts after 60 seconds with final 10-second countdown notices</li><li>Rooms now expire after 2 minutes of no post-round player activity</li></ul><p>This keeps multiplayer rooms moving without manual restarts while making winner intent explicit.</p>",
+      "version": "1.0.0",
+      "type": "feature"
+    },
+    {
       "id": "feature-multiplayer-room-channel-2026-02-27",
       "date": "2026-02-27",
       "title": "💬 Multiplayer Room Chat + Whispers",

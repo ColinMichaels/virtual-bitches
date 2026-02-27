@@ -252,6 +252,37 @@ await test("lists multiplayer rooms with bounded limit", async () => {
   );
 });
 
+await test("queues multiplayer player for next game", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    jsonResponse({
+      ok: true,
+      queuedForNextGame: true,
+      session: {
+        sessionId: "session-queue",
+        roomCode: "ROOMQ1",
+        createdAt: Date.now(),
+      },
+    });
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.queueMultiplayerForNextGame("session/queue", "player-alpha");
+  assert(result !== null, "Expected queue-for-next response");
+  assertEqual(result?.ok, true, "Expected queue-for-next success");
+  assertEqual(fetchCalls.length, 1, "Expected one queue-for-next call");
+  assertEqual(
+    fetchCalls[0].url,
+    "https://api.example.com/api/multiplayer/sessions/session%2Fqueue/queue-next",
+    "Expected encoded queue-next endpoint"
+  );
+  assertEqual(fetchCalls[0].init?.method, "POST", "Expected POST method");
+});
+
 await test("returns typed room_full reason when multiplayer join is rejected", async () => {
   authSessionService.clear();
   fetchCalls.length = 0;

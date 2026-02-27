@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-02-27T16:26:51.130Z",
+  "generatedAt": "2026-02-27T16:47:52.617Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-3224403",
+      "date": "2026-02-27T16:28:39.000Z",
+      "title": "Add multiplayer room chat and whisper functionality",
+      "content": "<p>Add multiplayer room chat and whisper functionality</p><p><strong>Commit:</strong> <code>3224403</code></p><p>- Introduced support for public room chat and direct whispers (`room_channel`).</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "32244037aae21e05581bbf645209edd66f5758d7",
+        "shortHash": "3224403",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/32244037aae21e05581bbf645209edd66f5758d7"
+      }
+    },
     {
       "id": "git-38acc7d",
       "date": "2026-02-27T15:46:53.000Z",
@@ -547,20 +561,6 @@
         "hash": "dc3197d3d813021f6be90476389e2a23b0eb53cb",
         "shortHash": "dc3197d",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/dc3197d3d813021f6be90476389e2a23b0eb53cb"
-      }
-    },
-    {
-      "id": "git-8896db1",
-      "date": "2026-02-26T20:57:41.000Z",
-      "title": "Introduce turn transition recovery and resync improvements",
-      "content": "<p>Introduce turn transition recovery and resync improvements</p><p><strong>Commit:</strong> <code>8896db1</code></p><p>- Added methods for managing turn transition recovery (`clearPendingTurnTransitionSyncRecovery`, `scheduleTurnTransitionSyncRecovery`) to address stale or missing turn sync states.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "8896db142f8d7f9aebcf824f037cac80e3ebc1b1",
-        "shortHash": "8896db1",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8896db142f8d7f9aebcf824f037cac80e3ebc1b1"
       }
     }
   ]
