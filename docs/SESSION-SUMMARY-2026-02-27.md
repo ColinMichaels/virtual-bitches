@@ -1,10 +1,33 @@
 # BISCUITS - Session Summary
 **Date:** February 27, 2026  
-**Focus:** Camera-assist UX, keyboard camera flow, release-note linkability, multiplayer room-channel messaging, and roadmap cleanup
+**Focus:** Camera-assist UX, release-note linkability, multiplayer room/channel reliability, and lobby UX hardening
 
 ---
 
 ## Delivered
+
+### Multiplayer Lobby Overlay + Room Browser Refresh
+- Converted splash multiplayer options into an overlay panel so controls remain centered and visible across viewport sizes.
+- Kept `Join Game` fixed in modal footer (desktop + mobile), with disabled state until room/code selection is valid.
+- Reworked available rooms into card-grid layout with clearer hierarchy and stronger text treatment.
+- Added room-card difficulty badges and palette mapping:
+  - easy -> success/green
+  - normal -> warning/yellow
+  - hard -> error/red
+- Added room filters and pagination (search, type, difficulty, minimum players) with conditional pagination visibility.
+- Added loading/no-results placeholders so filter changes do not collapse layout or cause jumpy modal height.
+- Added create-room separation with private-room toggle and conditional room-name/player-limit inputs.
+- Moved join-bot seeding controls to lower advanced section to reduce top-of-panel clutter.
+- Updated multiplayer modal controls:
+  - close uses standard modal `X`
+  - refresh uses compact shared icon button
+
+### Multiplayer Difficulty + Lifecycle Reliability
+- Extended multiplayer room/session difficulty handling to support `easy`, `normal`, and `hard` room-level play.
+- Enforced room-selected difficulty when joining existing multiplayer rooms.
+- Updated queue seeding/replenishment to maintain baseline public room availability across difficulty tiers.
+- Removed redundant clock label copy and ensured multiplayer timer display resets from each new game start.
+- Tightened stale session/player cleanup paths and bot timeout auto-disconnect behavior.
 
 ### Camera and Turn-Focus UX
 - Added explicit `+`/`=` forward and `-` backward cycling for gameplay focus.
@@ -22,11 +45,17 @@
 - Refreshed `docs/TODO.md` project status line to current version context.
 - Added a concise finish-up shortlist for next iteration planning.
 - Marked commit-link release-note tasks as complete.
+- Added explicit lobby/difficulty pass documentation and follow-up testing tasks.
 - Refined splash onboarding UX:
   - removed persistent splash `Replay Tutorial` button
   - kept tutorial replay entry at top of `How To Play` modal
   - added splash language switcher with confirm-before-switch + reload behavior
   - applied flagged/branded language selector styling for improved readability (splash + settings)
+
+### Notification UX
+- Updated floating notifications to support wrapped content instead of clipping.
+- Added optional secondary/detail line rendering with smaller typography for contextual follow-up info.
+- Updated notification stacking to use measured toast height so multiline notifications do not overlap.
 
 ### Multiplayer Messaging + Moderation Foundation
 - Added player room-channel messaging flow (`public` + `direct`) over multiplayer websocket transport.

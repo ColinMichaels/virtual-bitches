@@ -347,6 +347,7 @@ await test("queueForNextGame syncs updated session state", async () => {
   const service = new MultiplayerSessionService("player-alpha");
   const originalJoin = backendApiService.joinMultiplayerSession.bind(backendApiService);
   const originalQueue = backendApiService.queueMultiplayerForNextGame.bind(backendApiService);
+  const expectedNextGameStartsAt = Date.now() + 60000;
 
   (backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession })
     .joinMultiplayerSession = async () => ({
@@ -374,34 +375,38 @@ await test("queueForNextGame syncs updated session state", async () => {
     backendApiService as {
       queueMultiplayerForNextGame: typeof backendApiService.queueMultiplayerForNextGame;
     }
-  ).queueMultiplayerForNextGame = async () => ({
-    ok: true,
-    queuedForNextGame: true,
-    session: {
-      sessionId: "session-queue",
-      roomCode: "ROOM2",
-      createdAt: Date.now(),
-      participants: [
-        {
-          playerId: "player-alpha",
-          displayName: "Alpha",
-          score: 0,
-          remainingDice: 6,
-          isComplete: false,
-          isReady: true,
-          queuedForNextGame: true,
-          joinedAt: Date.now(),
-          lastHeartbeatAt: Date.now(),
-        },
-      ],
-      standings: [],
-      sessionComplete: true,
-      completedAt: Date.now(),
-      gameStartedAt: Date.now(),
-      expiresAt: Date.now() + 120000,
-      serverNow: Date.now(),
-    },
-  });
+  ).queueMultiplayerForNextGame = async () => {
+    return {
+      ok: true,
+      queuedForNextGame: true,
+      session: {
+        sessionId: "session-queue",
+        roomCode: "ROOM2",
+        createdAt: Date.now(),
+        participants: [
+          {
+            playerId: "player-alpha",
+            displayName: "Alpha",
+            score: 0,
+            remainingDice: 6,
+            isComplete: false,
+            isReady: true,
+            queuedForNextGame: true,
+            joinedAt: Date.now(),
+            lastHeartbeatAt: Date.now(),
+          },
+        ],
+        standings: [],
+        sessionComplete: true,
+        completedAt: Date.now(),
+        gameStartedAt: Date.now(),
+        nextGameStartsAt: expectedNextGameStartsAt,
+        nextGameAutoStartDelayMs: 60000,
+        expiresAt: Date.now() + 120000,
+        serverNow: Date.now(),
+      },
+    };
+  };
 
   try {
     const joined = await service.joinSession("session-queue");
@@ -414,6 +419,16 @@ await test("queueForNextGame syncs updated session state", async () => {
       queued?.participants?.[0]?.queuedForNextGame,
       true,
       "Expected local participant queued-for-next flag"
+    );
+    assertEqual(
+      queued?.nextGameStartsAt,
+      expectedNextGameStartsAt,
+      "Expected queued state next-game start timestamp sync"
+    );
+    assertEqual(
+      queued?.nextGameAutoStartDelayMs,
+      60000,
+      "Expected queued state next-game delay sync"
     );
   } finally {
     service.dispose();

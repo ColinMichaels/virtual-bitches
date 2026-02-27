@@ -28,6 +28,7 @@ export class HUD {
   private isDropdownOpen: boolean = false;
   private onModeChange: ((difficulty: GameDifficulty) => void) | null = null;
   private gameStartAtMs = Date.now();
+  private roundCountdownDeadlineAtMs: number | null = null;
   private turnDeadlineAtMs: number | null = null;
   private currentVariant: GameState["mode"]["variant"] = "classic";
   private multiplayerStandings: MultiplayerHudStandingEntry[] = [];
@@ -141,6 +142,14 @@ export class HUD {
 
   setGameClockStart(startAtMs: number): void {
     this.gameStartAtMs = Number.isFinite(startAtMs) ? startAtMs : Date.now();
+    this.tick();
+  }
+
+  setRoundCountdownDeadline(deadlineAtMs: number | null): void {
+    this.roundCountdownDeadlineAtMs =
+      typeof deadlineAtMs === "number" && Number.isFinite(deadlineAtMs) && deadlineAtMs > 0
+        ? Math.floor(deadlineAtMs)
+        : null;
     this.tick();
   }
 
@@ -264,13 +273,38 @@ export class HUD {
 
   tick(nowMs: number = Date.now()): void {
     const elapsedMs = Math.max(0, nowMs - this.gameStartAtMs);
-    if (this.currentVariant === "timeAttack") {
+    const roundCountdownDeadlineAtMs = this.roundCountdownDeadlineAtMs;
+    const hasRoundCountdown =
+      typeof roundCountdownDeadlineAtMs === "number" &&
+      Number.isFinite(roundCountdownDeadlineAtMs) &&
+      roundCountdownDeadlineAtMs > 0;
+    if (hasRoundCountdown) {
+      const remainingMs = Math.max(0, roundCountdownDeadlineAtMs - nowMs);
+      this.elapsedTimeEl.textContent = this.formatClock(remainingMs);
+      this.elapsedTimeEl.classList.remove("is-time-attack");
+      this.elapsedTimeEl.classList.add("is-round-countdown");
+      this.elapsedTimeEl.classList.toggle(
+        "is-round-countdown-warning",
+        remainingMs <= 15000 && remainingMs > 5000
+      );
+      this.elapsedTimeEl.classList.toggle("is-round-countdown-critical", remainingMs <= 5000);
+    } else if (this.currentVariant === "timeAttack") {
       const remainingMs = Math.max(0, TIME_ATTACK_DURATION_MS - elapsedMs);
       this.elapsedTimeEl.textContent = this.formatClock(remainingMs);
       this.elapsedTimeEl.classList.add("is-time-attack");
+      this.elapsedTimeEl.classList.remove(
+        "is-round-countdown",
+        "is-round-countdown-warning",
+        "is-round-countdown-critical"
+      );
     } else {
       this.elapsedTimeEl.textContent = this.formatClock(elapsedMs);
       this.elapsedTimeEl.classList.remove("is-time-attack");
+      this.elapsedTimeEl.classList.remove(
+        "is-round-countdown",
+        "is-round-countdown-warning",
+        "is-round-countdown-critical"
+      );
     }
 
     if (!this.turnDeadlineAtMs) {

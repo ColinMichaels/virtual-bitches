@@ -161,6 +161,8 @@ export class MultiplayerSessionService {
         sessionComplete: response.session.sessionComplete,
         completedAt: response.session.completedAt ?? null,
         gameStartedAt: response.session.gameStartedAt,
+        nextGameStartsAt: response.session.nextGameStartsAt,
+        nextGameAutoStartDelayMs: response.session.nextGameAutoStartDelayMs,
         expiresAt: response.session.expiresAt,
         serverNow: response.session.serverNow,
         gameDifficulty: response.session.gameDifficulty,
@@ -199,6 +201,8 @@ export class MultiplayerSessionService {
     sessionComplete?: boolean;
     completedAt?: number | null;
     gameStartedAt?: number;
+    nextGameStartsAt?: number;
+    nextGameAutoStartDelayMs?: number;
     expiresAt?: number;
     serverNow?: number;
     gameDifficulty?: MultiplayerGameDifficulty;
@@ -241,6 +245,18 @@ export class MultiplayerSessionService {
     }
     if (typeof update.gameStartedAt === "number" && Number.isFinite(update.gameStartedAt)) {
       nextSession.gameStartedAt = Math.floor(update.gameStartedAt);
+    }
+    if (typeof update.nextGameStartsAt === "number" && Number.isFinite(update.nextGameStartsAt)) {
+      nextSession.nextGameStartsAt = Math.floor(update.nextGameStartsAt);
+    }
+    if (
+      typeof update.nextGameAutoStartDelayMs === "number" &&
+      Number.isFinite(update.nextGameAutoStartDelayMs)
+    ) {
+      nextSession.nextGameAutoStartDelayMs = Math.max(
+        5000,
+        Math.floor(update.nextGameAutoStartDelayMs)
+      );
     }
     if (typeof update.expiresAt === "number" && Number.isFinite(update.expiresAt)) {
       nextSession.expiresAt = Math.floor(update.expiresAt);
