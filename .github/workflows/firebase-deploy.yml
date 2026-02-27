@@ -196,16 +196,25 @@ jobs:
           fi
 
           CDN_REQUIRE_PUBLIC_READ="$(printf '%s' "${CDN_REQUIRE_PUBLIC_READ_ENV_VAR:-0}" | tr '[:upper:]' '[:lower:]')"
-          if [ -z "${ASSET_BASE_URL:-}" ]; then
-            if [ "$CDN_REQUIRE_PUBLIC_READ" = "1" ] || [ "$CDN_REQUIRE_PUBLIC_READ" = "true" ] || [ "$CDN_REQUIRE_PUBLIC_READ" = "yes" ] || [ "$CDN_REQUIRE_PUBLIC_READ" = "on" ]; then
-              NORMALIZED_BUCKET="${FB_STORAGE_BUCKET#gs://}"
-              NORMALIZED_BUCKET="${NORMALIZED_BUCKET%/}"
-              ASSET_BASE_URL="https://storage.googleapis.com/${NORMALIZED_BUCKET}/"
-            else
-              ASSET_BASE_URL=""
-              echo "No VITE_ASSET_BASE_URL configured; defaulting frontend to Hosting-local assets (private CDN mode)."
-            fi
+          CDN_PUBLIC_MODE="0"
+          if [ "$CDN_REQUIRE_PUBLIC_READ" = "1" ] || [ "$CDN_REQUIRE_PUBLIC_READ" = "true" ] || [ "$CDN_REQUIRE_PUBLIC_READ" = "yes" ] || [ "$CDN_REQUIRE_PUBLIC_READ" = "on" ]; then
+            CDN_PUBLIC_MODE="1"
           fi
+
+          NORMALIZED_BUCKET="${FB_STORAGE_BUCKET#gs://}"
+          NORMALIZED_BUCKET="${NORMALIZED_BUCKET%/}"
+
+          # Canonical asset URL policy:
+          # - Public CDN mode: always use storage.googleapis.com/<resolved-storage-bucket>/
+          # - Private mode: always use Hosting-local asset paths
+          if [ "$CDN_PUBLIC_MODE" = "1" ]; then
+            ASSET_BASE_URL="https://storage.googleapis.com/${NORMALIZED_BUCKET}/"
+            echo "Asset base URL set from resolved storage bucket: $ASSET_BASE_URL"
+          else
+            ASSET_BASE_URL=""
+            echo "Private CDN mode enabled; frontend will use Hosting-local assets."
+          fi
+
           if [ -n "${ASSET_BASE_URL:-}" ] && [ "${ASSET_BASE_URL%/}" = "$ASSET_BASE_URL" ]; then
             ASSET_BASE_URL="${ASSET_BASE_URL}/"
           fi

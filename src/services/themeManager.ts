@@ -21,7 +21,11 @@
  */
 
 import { logger } from '../utils/logger.js';
-import { getThemeAssetBase, getThemeConfigUrl } from "./assetUrl.js";
+import {
+  getThemeAssetBase,
+  getThemeAssetBaseCandidates,
+  getThemeConfigUrlCandidates,
+} from "./assetUrl.js";
 
 // Create module-specific logger
 const log = logger.create('ThemeManager');
@@ -162,6 +166,7 @@ class ThemeManager {
   private static instance: ThemeManager;
   private currentTheme: string = 'diceOfRolling';
   private availableThemes: Map<string, ThemeConfig> = new Map();
+  private themeAssetBases: Map<string, string> = new Map();
   private listeners: Set<ThemeChangeListener> = new Set();
   private initialized = false;
 
@@ -188,6 +193,8 @@ class ThemeManager {
     if (this.initialized) return;
 
     log.info('Initializing...');
+    this.availableThemes.clear();
+    this.themeAssetBases.clear();
 
     // Load all available themes in parallel
     const loadPromises = AVAILABLE_THEMES.map(themeName =>
@@ -200,8 +207,15 @@ class ThemeManager {
     results.forEach((result, index) => {
       const themeName = AVAILABLE_THEMES[index];
       if (result.status === 'fulfilled' && result.value) {
-        this.availableThemes.set(themeName, result.value);
-        log.debug(`Loaded theme: ${result.value.name} (${themeName})`);
+        this.availableThemes.set(themeName, result.value.config);
+        this.themeAssetBases.set(themeName, result.value.assetBase);
+        log.debug(`Loaded theme: ${result.value.config.name} (${themeName})`);
+
+        const preferredConfigUrl = getThemeConfigUrlCandidates(themeName)[0];
+        const preferredAssetBase = this.extractAssetBaseFromConfigUrl(preferredConfigUrl);
+        if (preferredAssetBase && preferredAssetBase !== result.value.assetBase) {
+          log.warn(`Theme "${themeName}" fell back to local assets: ${result.value.assetBase}`);
+        }
       } else {
         log.warn(`Failed to load theme ${themeName}:`,
           result.status === 'rejected' ? result.reason : 'Unknown error');
@@ -233,41 +247,64 @@ class ThemeManager {
    * Load a single theme configuration with retry logic
    *
    * @param themeName - Name of theme to load
-   * @returns Theme configuration or null if load fails
+   * @returns Theme configuration and resolved asset base, or null if load fails
    */
-  private async loadThemeConfig(themeName: string): Promise<ThemeConfig | null> {
+  private async loadThemeConfig(
+    themeName: string
+  ): Promise<{ config: ThemeConfig; assetBase: string } | null> {
+    const configUrls = getThemeConfigUrlCandidates(themeName);
+    let lastError: unknown = null;
+
     for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
-      try {
-        const configPath = getThemeConfigUrl(themeName);
-        const response = await fetch(configPath);
+      for (const configUrl of configUrls) {
+        try {
+          const response = await fetch(configUrl);
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const config: ThemeConfig = await response.json();
+
+          // Basic validation
+          if (!this.validateThemeConfig(config)) {
+            throw new Error('Invalid theme configuration structure');
+          }
+
+          const assetBase = this.extractAssetBaseFromConfigUrl(configUrl)
+            ?? getThemeAssetBaseCandidates(themeName)[0]
+            ?? getThemeAssetBase(themeName);
+
+          return { config, assetBase };
+        } catch (error) {
+          lastError = error;
         }
-
-        const config: ThemeConfig = await response.json();
-
-        // Basic validation
-        if (!this.validateThemeConfig(config)) {
-          throw new Error('Invalid theme configuration structure');
-        }
-
-        return config;
-      } catch (error) {
-        const isLastAttempt = attempt === MAX_RETRY_ATTEMPTS - 1;
-
-        if (isLastAttempt) {
-          log.error(`Failed to load theme ${themeName} after ${MAX_RETRY_ATTEMPTS} attempts:`, error);
-          return null;
-        }
-
-        // Wait before retry
-        log.debug(`Retry loading ${themeName} (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS})`);
-        await this.delay(RETRY_DELAY_MS);
       }
+
+      const isLastAttempt = attempt === MAX_RETRY_ATTEMPTS - 1;
+      if (isLastAttempt) {
+        log.error(`Failed to load theme ${themeName} after ${MAX_RETRY_ATTEMPTS} attempts:`, lastError);
+        return null;
+      }
+
+      // Wait before retry
+      log.debug(`Retry loading ${themeName} (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS})`);
+      await this.delay(RETRY_DELAY_MS);
     }
 
     return null;
+  }
+
+  private extractAssetBaseFromConfigUrl(configUrl: string): string | null {
+    const sanitized = configUrl.split("#")[0]?.split("?")[0];
+    if (!sanitized) {
+      return null;
+    }
+    const suffix = "/theme.config.json";
+    if (!sanitized.endsWith(suffix)) {
+      return null;
+    }
+    return sanitized.slice(0, -suffix.length);
   }
 
   /**
@@ -377,7 +414,7 @@ class ThemeManager {
    * @returns Path to current theme folder
    */
   getCurrentThemePath(): string {
-    return getThemeAssetBase(this.currentTheme);
+    return this.getThemePath(this.currentTheme);
   }
 
   /**
@@ -387,7 +424,7 @@ class ThemeManager {
    * @returns Path to theme folder
    */
   getThemePath(themeName: string): string {
-    return getThemeAssetBase(themeName);
+    return this.themeAssetBases.get(themeName) ?? getThemeAssetBase(themeName);
   }
 
   /**

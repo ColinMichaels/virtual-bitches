@@ -5,7 +5,7 @@
 
 import { marked } from "marked";
 import { audioService } from "../services/audio.js";
-import { getRulesMarkdownUrl } from "../services/assetUrl.js";
+import { getRulesMarkdownUrlCandidates } from "../services/assetUrl.js";
 import { logger } from "../utils/logger.js";
 import { modalManager } from "./modalManager.js";
 
@@ -48,10 +48,26 @@ export class RulesModal {
 
   private async loadRules(): Promise<void> {
     try {
-      const response = await fetch(getRulesMarkdownUrl());
-      const markdown = await response.text();
-      this.rulesContent = await marked.parse(markdown);
-      this.renderRules();
+      const candidates = getRulesMarkdownUrlCandidates();
+      let lastError: unknown = null;
+
+      for (const candidate of candidates) {
+        try {
+          const response = await fetch(candidate);
+          if (!response.ok) {
+            throw new Error(`rules_fetch_failed:${response.status}`);
+          }
+
+          const markdown = await response.text();
+          this.rulesContent = await marked.parse(markdown);
+          this.renderRules();
+          return;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      throw lastError ?? new Error("rules_fetch_failed");
     } catch (error) {
       log.error("Failed to load rules:", error);
       this.rulesContent = "<p>Failed to load rules. Please try again.</p>";
