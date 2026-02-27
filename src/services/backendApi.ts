@@ -426,14 +426,22 @@ export class BackendApiService {
 
   async getGlobalLeaderboard(limit: number = 200): Promise<GlobalLeaderboardEntry[] | null> {
     const bounded = Math.max(1, Math.min(200, Math.floor(limit)));
-    const response = await this.request<{ entries: GlobalLeaderboardEntry[] }>(
+    const response = await this.request<
+      { entries: GlobalLeaderboardEntry[] } | GlobalLeaderboardEntry[]
+    >(
       `/leaderboard/global?limit=${bounded}`,
       {
         method: "GET",
         authMode: "none",
       }
     );
-    return response?.entries ?? null;
+    if (Array.isArray(response)) {
+      return response;
+    }
+    if (response && Array.isArray(response.entries)) {
+      return response.entries;
+    }
+    return null;
   }
 
   async getAuthenticatedUserProfile(): Promise<AuthenticatedUserProfile | null> {
@@ -565,11 +573,29 @@ export class BackendApiService {
     }
 
     const contentType = response.headers.get("content-type") ?? "";
-    if (!contentType.includes("application/json")) {
-      return null;
+    if (contentType.includes("application/json")) {
+      return (await response.json()) as T;
     }
 
-    return (await response.json()) as T;
+    const rawBody = (await response.text()).trim();
+    if (rawBody) {
+      if (looksLikeJson(rawBody)) {
+        try {
+          return JSON.parse(rawBody) as T;
+        } catch {
+          // Fall through to warning below for easier diagnosis.
+        }
+      }
+      log.warn(
+        `API request returned non-JSON payload: ${method} ${path} (${response.status}) [content-type=${contentType || "none"}] ${normalizeLogSnippet(rawBody)}`
+      );
+    } else {
+      log.warn(
+        `API request returned empty payload: ${method} ${path} (${response.status}) [content-type=${contentType || "none"}]`
+      );
+    }
+
+    return null;
   }
 
   private async parseJoinSessionResponse(
@@ -726,6 +752,15 @@ async function readErrorSummary(response: Response): Promise<string> {
 
 function isExpectedNotFound(method: string, path: string): boolean {
   return method === "GET" && /^\/players\/[^/]+\/profile$/.test(path);
+}
+
+function looksLikeJson(rawBody: string): boolean {
+  const first = rawBody.trim().charAt(0);
+  return first === "{" || first === "[";
+}
+
+function normalizeLogSnippet(rawBody: string): string {
+  return rawBody.replace(/\s+/g, " ").slice(0, 220);
 }
 
 export const backendApiService = new BackendApiService();
