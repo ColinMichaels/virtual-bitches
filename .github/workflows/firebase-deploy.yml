@@ -621,12 +621,14 @@ jobs:
 
       - name: Smoke Test CDN Assets
         env:
+          FIREBASE_PROJECT_ID: ${{ steps.target-assets.outputs.project_id }}
           ASSET_BASE_URL_FALLBACK: ${{ steps.target-assets.outputs.asset_base_url }}
           CDN_VERIFY_RETRIES: ${{ vars.CDN_VERIFY_RETRIES || '8' }}
           CDN_VERIFY_DELAY_MS: ${{ vars.CDN_VERIFY_DELAY_MS || '3000' }}
           CDN_VERIFY_TIMEOUT_MS: ${{ vars.CDN_VERIFY_TIMEOUT_MS || '15000' }}
           CDN_REQUIRE_PUBLIC_READ: ${{ vars.CDN_REQUIRE_PUBLIC_READ || '0' }}
           CDN_AUTOCONFIGURE_PUBLIC_READ: ${{ vars.CDN_AUTOCONFIGURE_PUBLIC_READ || '0' }}
+          CDN_AUTOCONFIGURE_CORS: ${{ vars.CDN_AUTOCONFIGURE_CORS || '1' }}
         run: |
           set -euo pipefail
           ASSET_BASE_URL="${CDN_RESOLVED_ASSET_BASE_URL:-${ASSET_BASE_URL_FALLBACK:-}}"
@@ -639,6 +641,7 @@ jobs:
           }
           CDN_REQUIRE_PUBLIC_READ_NORM="$(normalize_flag "${CDN_REQUIRE_PUBLIC_READ:-0}")"
           CDN_AUTOCONFIGURE_PUBLIC_READ_NORM="$(normalize_flag "${CDN_AUTOCONFIGURE_PUBLIC_READ:-0}")"
+          CDN_AUTOCONFIGURE_CORS_NORM="$(normalize_flag "${CDN_AUTOCONFIGURE_CORS:-1}")"
           echo "CDN smoke flags: require_public_read='${CDN_REQUIRE_PUBLIC_READ:-}' (norm=${CDN_REQUIRE_PUBLIC_READ_NORM}), autoconfigure_public_read='${CDN_AUTOCONFIGURE_PUBLIC_READ:-}' (norm=${CDN_AUTOCONFIGURE_PUBLIC_READ_NORM})"
           BUCKET_NAME="${CDN_RESOLVED_BUCKET:-}"
           if [ -z "${BUCKET_NAME:-}" ]; then
@@ -656,10 +659,49 @@ jobs:
               --role="roles/storage.objectViewer" \
               --quiet
           fi
+          if [ "${CDN_REQUIRE_PUBLIC_READ_NORM}" = "1" ] && [ "${CDN_AUTOCONFIGURE_CORS_NORM}" = "1" ]; then
+            if [ -z "${BUCKET_NAME:-}" ]; then
+              echo "Unable to determine bucket name for CORS configuration."
+              exit 1
+            fi
+            if [ -z "${FIREBASE_PROJECT_ID:-}" ]; then
+              echo "Missing FIREBASE_PROJECT_ID for CORS configuration."
+              exit 1
+            fi
+            CORS_FILE="${RUNNER_TEMP}/cdn-cors.json"
+            cat > "$CORS_FILE" <<EOF
+          [
+            {
+              "origin": [
+                "https://${FIREBASE_PROJECT_ID}.web.app",
+                "https://${FIREBASE_PROJECT_ID}.firebaseapp.com",
+                "http://localhost:5173",
+                "http://127.0.0.1:5173"
+              ],
+              "method": ["GET", "HEAD", "OPTIONS"],
+              "responseHeader": ["Content-Type", "Cache-Control", "ETag"],
+              "maxAgeSeconds": 3600
+            }
+          ]
+          EOF
+            echo "Applying CORS policy to gs://${BUCKET_NAME}"
+            gcloud storage buckets update "gs://${BUCKET_NAME}" --cors-file="$CORS_FILE"
+          fi
           if [ "${ASSET_BASE_URL%/}" = "$ASSET_BASE_URL" ]; then
             ASSET_BASE_URL="${ASSET_BASE_URL}/"
           fi
           if [ "${CDN_REQUIRE_PUBLIC_READ_NORM}" = "1" ]; then
+            CORS_HEADER="$(curl -sI \
+              -H "Origin: https://${FIREBASE_PROJECT_ID}.web.app" \
+              "${ASSET_BASE_URL}assets/themes/default/theme.config.json" \
+              | tr -d '\r' \
+              | awk -F': ' 'tolower($1)=="access-control-allow-origin"{print $2; exit}')"
+            if [ -z "${CORS_HEADER:-}" ]; then
+              echo "Missing Access-Control-Allow-Origin header on CDN asset response."
+              echo "Verify bucket CORS policy allows origin https://${FIREBASE_PROJECT_ID}.web.app"
+              exit 1
+            fi
+            echo "CDN CORS probe passed: access-control-allow-origin=${CORS_HEADER}"
             echo "CDN smoke verification mode: public-http"
             echo "CDN smoke verification base URL: ${ASSET_BASE_URL}"
             node scripts/check-cdn-assets.mjs \
