@@ -85,6 +85,33 @@ await test("requests player profile with encoded id", async () => {
   );
 });
 
+await test("does not attach session auth header to player profile requests", async () => {
+  authSessionService.clear();
+  authSessionService.setTokens({
+    accessToken: "session-token",
+    refreshToken: "refresh-token",
+    expiresAt: Date.now() + 60_000,
+  });
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    jsonResponse({
+      playerId: "firebase-user",
+      settings: {},
+      upgradeProgression: {},
+      updatedAt: Date.now(),
+    });
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  await api.getPlayerProfile("firebase-user");
+  assertEqual(fetchCalls.length, 1, "Expected one profile fetch call");
+  const headers = (fetchCalls[0].init?.headers ?? {}) as Record<string, string>;
+  assertEqual(headers.authorization, undefined, "Expected no session authorization header");
+});
+
 await test("posts log batch payload", async () => {
   authSessionService.clear();
   fetchCalls.length = 0;
@@ -408,7 +435,7 @@ await test("retries once on 401 after token refresh", async () => {
 
   fetchCalls.length = 0;
   fetchResponder = (url) => {
-    if (url.endsWith("/players/player-1/profile") && fetchCalls.length === 1) {
+    if (url.endsWith("/multiplayer/sessions") && fetchCalls.length === 1) {
       return jsonResponse({ error: "unauthorized" }, 401);
     }
     if (url.endsWith("/auth/token/refresh")) {
@@ -419,10 +446,10 @@ await test("retries once on 401 after token refresh", async () => {
       });
     }
     return jsonResponse({
-      playerId: "player-1",
-      settings: {},
-      upgradeProgression: {},
+      sessionId: "session-1",
+      roomCode: "ROOM1",
       updatedAt: Date.now(),
+      createdAt: Date.now(),
     });
   };
 
@@ -430,7 +457,7 @@ await test("retries once on 401 after token refresh", async () => {
     baseUrl: "https://api.example.com/api",
     fetchImpl: mockFetch,
   });
-  const result = await api.getPlayerProfile("player-1");
+  const result = await api.createMultiplayerSession({ playerId: "player-1" });
 
   assert(result !== null, "Expected successful response after refresh");
   assertEqual(fetchCalls.length, 3, "Expected request + refresh + retry");

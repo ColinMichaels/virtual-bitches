@@ -8,6 +8,7 @@ const log = logger.create("MultiplayerNetwork");
 const READY_STATE_CONNECTING = 0;
 const READY_STATE_OPEN = 1;
 const READY_STATE_CLOSED = 3;
+const AUTH_RECOVERY_COOLDOWN_MS = 3000;
 
 export interface WebSocketLike {
   readonly readyState: number;
@@ -404,8 +405,11 @@ export class MultiplayerNetworkService {
   private manuallyDisconnected = false;
   private bridgeEnabled = false;
   private authRecoveryInFlight = false;
+  private socketOpenedSinceConnect = false;
+  private lastAuthRecoveryAttemptAt = 0;
 
   private readonly onSocketOpen = () => {
+    this.socketOpenedSinceConnect = true;
     this.resetReconnectBackoff();
     log.info("WebSocket connected");
     this.eventTarget.dispatchEvent(
@@ -547,11 +551,18 @@ export class MultiplayerNetworkService {
       })
     );
 
-    if (!this.manuallyDisconnected && isAuthExpiredCloseCode(closeCode)) {
+    const shouldRecoverFromAuthExpiry =
+      !this.manuallyDisconnected &&
+      (isAuthExpiredCloseCode(closeCode) ||
+        this.shouldRecoverFromHandshakeAuthFailure(closeCode));
+
+    if (shouldRecoverFromAuthExpiry) {
       this.eventTarget.dispatchEvent(
         createCustomEvent("multiplayer:authExpired", {
           code: closeCode,
-          reason: closeReason || "auth_expired",
+          reason:
+            closeReason ||
+            (isAuthExpiredCloseCode(closeCode) ? "auth_expired" : "auth_handshake_failed"),
         })
       );
       void this.recoverFromAuthExpiry();
@@ -777,6 +788,7 @@ export class MultiplayerNetworkService {
 
     this.manuallyDisconnected = false;
     this.clearReconnectTimer();
+    this.socketOpenedSinceConnect = false;
 
     const socket = this.webSocketFactory(this.wsUrl);
     this.socket = socket;
@@ -870,7 +882,21 @@ export class MultiplayerNetworkService {
   }
 
   private async recoverFromAuthExpiry(): Promise<void> {
-    if (this.authRecoveryInFlight || !this.onAuthExpired) {
+    if (this.authRecoveryInFlight) {
+      return;
+    }
+    if (!this.onAuthExpired) {
+      if (this.autoReconnect) {
+        this.scheduleReconnect();
+      }
+      return;
+    }
+
+    const now = Date.now();
+    if (
+      this.lastAuthRecoveryAttemptAt > 0 &&
+      now - this.lastAuthRecoveryAttemptAt < AUTH_RECOVERY_COOLDOWN_MS
+    ) {
       if (this.autoReconnect) {
         this.scheduleReconnect();
       }
@@ -878,6 +904,7 @@ export class MultiplayerNetworkService {
     }
 
     this.authRecoveryInFlight = true;
+    this.lastAuthRecoveryAttemptAt = now;
     try {
       const refreshedWsUrl = await this.onAuthExpired();
       if (!refreshedWsUrl) {
@@ -911,6 +938,32 @@ export class MultiplayerNetworkService {
   private resetReconnectBackoff(): void {
     this.reconnectAttemptCount = 0;
     this.nextReconnectDelayMs = this.reconnectDelayMs;
+  }
+
+  private shouldRecoverFromHandshakeAuthFailure(closeCode: number): boolean {
+    if (closeCode !== 1006) {
+      return false;
+    }
+    if (this.socketOpenedSinceConnect) {
+      return false;
+    }
+    if (!this.onAuthExpired) {
+      return false;
+    }
+    if (!this.wsUrl || !this.wsUrl.includes("token=")) {
+      return false;
+    }
+    if (this.authRecoveryInFlight) {
+      return false;
+    }
+    const now = Date.now();
+    if (
+      this.lastAuthRecoveryAttemptAt > 0 &&
+      now - this.lastAuthRecoveryAttemptAt < AUTH_RECOVERY_COOLDOWN_MS
+    ) {
+      return false;
+    }
+    return true;
   }
 }
 
