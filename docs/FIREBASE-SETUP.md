@@ -175,6 +175,7 @@ Recommended setup (GitHub Environments):
   - `CDN_VERIFY_TIMEOUT_MS` (optional; default `15000`)
   - `CDN_REQUIRE_PUBLIC_READ` (optional; default `0`)
   - `CDN_AUTOCONFIGURE_PUBLIC_READ` (optional; default `0`, only used for public mode)
+  - `CDN_AUTOCONFIGURE_CORS` (optional; default `1` in public mode, applies Storage bucket CORS for `https://<project>.web.app`, `https://<project>.firebaseapp.com`, and local dev origins)
   - `API_STORE_BACKEND` (recommended: `firestore`)
   - `API_FIRESTORE_PREFIX` (optional; default `api_v1`)
   - `FIREBASE_AUTH_MODE` (recommended: `admin` for production)

@@ -103,6 +103,7 @@ Optional GitHub Environment variables for CDN smoke checks:
 - `CDN_VERIFY_TIMEOUT_MS` (default: `15000`)
 - `CDN_REQUIRE_PUBLIC_READ` (default: `0`; when `0`, CI verifies object existence via `gcloud` instead of public HTTP)
 - `CDN_AUTOCONFIGURE_PUBLIC_READ` (default: `0`; only used when `CDN_REQUIRE_PUBLIC_READ=1` to apply public object-viewer IAM)
+- `CDN_AUTOCONFIGURE_CORS` (default: `1`; only used when `CDN_REQUIRE_PUBLIC_READ=1` to apply bucket CORS for Hosting/local-dev origins)
 
 Manual verification command:
 
@@ -138,6 +139,15 @@ If CDN verification fails with HTTP `403`:
 - In CI public mode, set `CDN_AUTOCONFIGURE_PUBLIC_READ=1` so deploy applies:
   - `roles/storage.objectViewer` to member `allUsers`
 - If your org policy blocks public buckets, set `CDN_REQUIRE_PUBLIC_READ=0` and use an authenticated/private asset strategy instead.
+
+If browser fetches fail with CORS (`No 'Access-Control-Allow-Origin' header`) while CDN URLs return `200`:
+
+- Bucket CORS is missing/misconfigured for your Hosting origin.
+- In CI public mode, keep `CDN_AUTOCONFIGURE_CORS=1` so deploy applies CORS for:
+  - `https://<project-id>.web.app`
+  - `https://<project-id>.firebaseapp.com`
+  - `http://localhost:5173`
+  - `http://127.0.0.1:5173`
 
 Private mode recommendation:
 
