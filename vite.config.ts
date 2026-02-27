@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import { resolve } from "path";
 import { readFileSync } from "fs";
 import { viteStaticCopy } from "vite-plugin-static-copy";
@@ -18,7 +18,9 @@ import { viteStaticCopy } from "vite-plugin-static-copy";
  * texture loaders due to side effects. This is a known limitation.
  */
 export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
   const isProduction = mode === "production";
+  const apiProxyTarget = env.VITE_API_PROXY_TARGET?.trim() || "http://localhost:3000";
   const facebookShareMetaTemplate = readFileSync(
     resolve(__dirname, "src/social/share/facebook-share-meta.template.html"),
     "utf8"
@@ -96,6 +98,14 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       exclude: ["@babylonjs/core", "@babylonjs/loaders"],
+    },
+    server: {
+      proxy: {
+        "/api": {
+          target: apiProxyTarget,
+          changeOrigin: true,
+        },
+      },
     },
     resolve: {
       alias: {

@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-02-27T12:37:27.598Z",
+  "generatedAt": "2026-02-27T12:46:04.449Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-730d6b0",
+      "date": "2026-02-27T12:38:19.000Z",
+      "title": "Update global leaderboard fetch logic and improve API payload handling",
+      "content": "<p>Update global leaderboard fetch logic and improve API payload handling</p><p><strong>Commit:</strong> <code>730d6b0</code></p><p>- Added support for legacy array-based responses in `getGlobalLeaderboard`.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "730d6b0432a50702d68e4d4f2dcc128775aa70c0",
+        "shortHash": "730d6b0",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/730d6b0432a50702d68e4d4f2dcc128775aa70c0"
+      }
+    },
     {
       "id": "git-094c065",
       "date": "2026-02-27T05:23:32.000Z",
@@ -547,20 +561,6 @@
         "hash": "7fdf4bc52e1d0070362afea8d49dc56e7cd93fc3",
         "shortHash": "7fdf4bc",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/7fdf4bc52e1d0070362afea8d49dc56e7cd93fc3"
-      }
-    },
-    {
-      "id": "git-849d39d",
-      "date": "2026-02-26T16:17:17.000Z",
-      "title": "Add public room inventory and participant reconciling to multiplayer service",
-      "content": "<p>Add public room inventory and participant reconciling to multiplayer service</p><p><strong>Commit:</strong> <code>849d39d</code></p><p>- Implemented public room slot management (`default` and `overflow`) with join limits.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "849d39de934907a34f79d7eee90ece54b16f5549",
-        "shortHash": "849d39d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/849d39de934907a34f79d7eee90ece54b16f5549"
       }
     }
   ]

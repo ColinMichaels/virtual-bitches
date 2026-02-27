@@ -179,6 +179,13 @@ export class LeaderboardService {
       return this.accountProfile;
     }
 
+    await firebaseAuthService.initialize();
+    const user = firebaseAuthService.getCurrentUserProfile();
+    if (!user || user.isAnonymous) {
+      this.accountProfile = null;
+      return null;
+    }
+
     const profile = await backendApiService.getAuthenticatedUserProfile();
     this.accountProfile = profile;
     return profile;
