@@ -63,6 +63,7 @@ import {
   type MultiplayerTurnPlan,
 } from "./multiplayer/turnPlanner.js";
 import { resolveSessionExpiryOutcome } from "./multiplayer/sessionExpiryFlow.js";
+import { botMemeAvatarService } from "./services/botMemeAvatarService.js";
 
 const log = logger.create('Game');
 
@@ -211,6 +212,9 @@ class Game implements GameCallbacks {
   private lastTurnPlanPreview = "";
   private lastSessionComplete = false;
   private localAvatarUrl: string | undefined;
+  private botMemeAvatarByPlayerId = new Map<string, string>();
+  private botMemeAvatarRotationHandle: ReturnType<typeof setInterval> | null = null;
+  private botMemeAvatarRefreshInFlight = false;
   private cachedMultiplayerIdentity:
     | {
         value: {
@@ -1262,6 +1266,7 @@ class Game implements GameCallbacks {
 
   private applyMultiplayerSeatState(session: MultiplayerSessionRecord): void {
     const seatedParticipants = this.computeSeatedParticipants(session);
+    this.syncBotMemeAvatarState(seatedParticipants);
     const participantBySeat = new Map<number, SeatedMultiplayerParticipant>();
     const previousParticipantIds = new Set(this.participantSeatById.keys());
     this.participantSeatById.clear();
@@ -1354,12 +1359,167 @@ class Game implements GameCallbacks {
     this.updateUI();
   }
 
+  private syncBotMemeAvatarState(seatedParticipants: SeatedMultiplayerParticipant[]): void {
+    if (this.playMode !== "multiplayer" || !botMemeAvatarService.isEnabled()) {
+      this.stopBotMemeAvatarRotation();
+      this.botMemeAvatarByPlayerId.clear();
+      return;
+    }
+
+    const botParticipants = seatedParticipants.filter((participant) => participant.isBot);
+    const activeBotIds = new Set(botParticipants.map((participant) => participant.playerId));
+    this.botMemeAvatarByPlayerId.forEach((_, playerId) => {
+      if (!activeBotIds.has(playerId)) {
+        this.botMemeAvatarByPlayerId.delete(playerId);
+      }
+    });
+
+    if (botParticipants.length === 0) {
+      this.stopBotMemeAvatarRotation();
+      return;
+    }
+
+    this.ensureBotMemeAvatarRotation();
+    if (botParticipants.some((participant) => !this.botMemeAvatarByPlayerId.has(participant.playerId))) {
+      void this.refreshBotMemeAvatars(botParticipants, "seed");
+    }
+  }
+
+  private resolveSeatAvatarUrl(
+    playerId: string,
+    avatarUrl: string | undefined,
+    isBot: boolean
+  ): string | undefined {
+    if (!isBot || !botMemeAvatarService.isEnabled()) {
+      return avatarUrl;
+    }
+    return this.botMemeAvatarByPlayerId.get(playerId) ?? avatarUrl;
+  }
+
+  private ensureBotMemeAvatarRotation(): void {
+    if (this.botMemeAvatarRotationHandle) {
+      return;
+    }
+    const rotationMs = botMemeAvatarService.getRotationIntervalMs();
+    if (!Number.isFinite(rotationMs) || rotationMs <= 0) {
+      return;
+    }
+    this.botMemeAvatarRotationHandle = setInterval(() => {
+      void this.rotateBotMemeAvatar();
+    }, rotationMs);
+  }
+
+  private stopBotMemeAvatarRotation(): void {
+    if (!this.botMemeAvatarRotationHandle) {
+      return;
+    }
+    clearInterval(this.botMemeAvatarRotationHandle);
+    this.botMemeAvatarRotationHandle = null;
+  }
+
+  private async rotateBotMemeAvatar(): Promise<void> {
+    if (this.playMode !== "multiplayer" || !botMemeAvatarService.isEnabled()) {
+      this.stopBotMemeAvatarRotation();
+      return;
+    }
+
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession) {
+      this.stopBotMemeAvatarRotation();
+      return;
+    }
+
+    const botParticipants = this.computeSeatedParticipants(activeSession).filter(
+      (participant) => participant.isBot
+    );
+    if (botParticipants.length === 0) {
+      this.stopBotMemeAvatarRotation();
+      return;
+    }
+
+    await this.refreshBotMemeAvatars(botParticipants, "rotate");
+  }
+
+  private async refreshBotMemeAvatars(
+    botParticipants: SeatedMultiplayerParticipant[],
+    mode: "seed" | "rotate"
+  ): Promise<void> {
+    if (this.botMemeAvatarRefreshInFlight || botParticipants.length === 0) {
+      return;
+    }
+
+    this.botMemeAvatarRefreshInFlight = true;
+    try {
+      let targets: SeatedMultiplayerParticipant[] = [];
+      if (mode === "seed") {
+        targets = botParticipants.filter(
+          (participant) => !this.botMemeAvatarByPlayerId.has(participant.playerId)
+        );
+      } else {
+        const randomIndex = Math.floor(Math.random() * botParticipants.length);
+        const randomBot = botParticipants[randomIndex];
+        if (randomBot) {
+          targets = [randomBot];
+        }
+      }
+      if (targets.length === 0) {
+        return;
+      }
+
+      let changed = false;
+      const occupiedUrls = new Set<string>();
+      botParticipants.forEach((participant) => {
+        const currentUrl = this.botMemeAvatarByPlayerId.get(participant.playerId) ?? participant.avatarUrl;
+        if (currentUrl) {
+          occupiedUrls.add(currentUrl);
+        }
+      });
+
+      for (const target of targets) {
+        const currentUrl = this.botMemeAvatarByPlayerId.get(target.playerId) ?? target.avatarUrl;
+        if (currentUrl) {
+          occupiedUrls.delete(currentUrl);
+        }
+
+        const nextUrl = await botMemeAvatarService.getMemeAvatarUrl({
+          excludeUrls: occupiedUrls,
+        });
+
+        if (currentUrl) {
+          occupiedUrls.add(currentUrl);
+        }
+        if (!nextUrl || nextUrl === currentUrl) {
+          continue;
+        }
+
+        this.botMemeAvatarByPlayerId.set(target.playerId, nextUrl);
+        occupiedUrls.add(nextUrl);
+        changed = true;
+      }
+
+      if (!changed) {
+        return;
+      }
+
+      const activeSession = this.multiplayerSessionService.getActiveSession();
+      if (activeSession) {
+        this.applyMultiplayerSeatState(activeSession);
+      }
+    } catch (error) {
+      log.debug("Unable to refresh bot meme avatars", error);
+    } finally {
+      this.botMemeAvatarRefreshInFlight = false;
+    }
+  }
+
   private applySoloSeatState(): void {
     this.participantSeatById.clear();
     this.participantIdBySeat.clear();
     this.participantLabelById.clear();
     this.nudgeCooldownByPlayerId.clear();
     this.multiplayerTurnPlan = null;
+    this.stopBotMemeAvatarRotation();
+    this.botMemeAvatarByPlayerId.clear();
 
     const seatCount = Math.max(1, this.scene.playerSeats.length || 8);
     const currentSeatIndex = this.scene.currentPlayerSeat;
@@ -1401,7 +1561,11 @@ class Game implements GameCallbacks {
     seated.push({
       playerId: this.localPlayerId,
       displayName: localParticipant?.displayName ?? "You",
-      avatarUrl: localParticipant?.avatarUrl ?? this.localAvatarUrl,
+      avatarUrl: this.resolveSeatAvatarUrl(
+        this.localPlayerId,
+        localParticipant?.avatarUrl ?? this.localAvatarUrl,
+        false
+      ),
       providerId: localParticipant?.providerId,
       seatIndex: currentSeatIndex,
       isBot: false,
@@ -1420,7 +1584,11 @@ class Game implements GameCallbacks {
       seated.push({
         playerId: participant.playerId,
         displayName: participant.displayName,
-        avatarUrl: participant.avatarUrl,
+        avatarUrl: this.resolveSeatAvatarUrl(
+          participant.playerId,
+          participant.avatarUrl,
+          participant.isBot
+        ),
         providerId: participant.providerId,
         seatIndex: availableSeats[index],
         isBot: participant.isBot,
@@ -2761,6 +2929,8 @@ class Game implements GameCallbacks {
   private continueSoloAfterSessionExpiry(reason: string): void {
     log.info("Continuing game in solo mode after multiplayer expiry", { reason });
     this.stopTurnSyncWatchdog();
+    this.stopBotMemeAvatarRotation();
+    this.botMemeAvatarByPlayerId.clear();
     this.multiplayerNetwork?.dispose();
     this.multiplayerNetwork = undefined;
     this.multiplayerSessionService.dispose();
@@ -2797,6 +2967,8 @@ class Game implements GameCallbacks {
     this.multiplayerNetwork?.dispose();
     this.multiplayerNetwork = undefined;
     this.stopTurnSyncWatchdog();
+    this.stopBotMemeAvatarRotation();
+    this.botMemeAvatarByPlayerId.clear();
     if (this.hudClockHandle) {
       clearInterval(this.hudClockHandle);
       this.hudClockHandle = null;
