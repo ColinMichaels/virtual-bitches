@@ -74,6 +74,16 @@ const DIE_COLORS: Color3[] = [
   Color3.FromHexString("#8a82b0"), // Brighter purple (was #6b5688)
 ];
 
+// Distinct 2D row tint colors by die kind so higher-face dice are easy to scan.
+const DIE_ROW_KIND_COLORS: Record<DieKind, string> = {
+  d4: "#f58f8f",
+  d6: "#f2f2f2",
+  d8: "#66c7ff",
+  d10: "#ffc766",
+  d12: "#d39bff",
+  d20: "#75efc5",
+};
+
 // Animation constants
 const ANIMATION_DURATION_FRAMES = 80;
 const ANIMATION_SPEED = 0.45;
@@ -674,9 +684,8 @@ export class DiceRenderer {
     instance.isPickable = true; // Enable clicking for selection
     log.debug(`Cloned mesh for ${die.def.kind}:`, die.id);
 
-    // For now, just use white material directly - no custom colors per die
-    // Store white color for UI purposes
-    const hexColor = "#ffffff";
+    // Store a per-kind tint for the 2D dice row UI.
+    const hexColor = DIE_ROW_KIND_COLORS[die.def.kind] ?? "#ffffff";
     this.dieColors.set(die.id, hexColor);
 
     // Check if this die type should use fallback theme material

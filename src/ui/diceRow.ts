@@ -112,6 +112,8 @@ export class DiceRow {
     // Create the die element
     const el = document.createElement("div");
     el.className = `die-2d ${die.def.kind} ${selected ? "selected" : ""}`;
+    const shape = document.createElement("div");
+    shape.className = "die-shape";
 
     // Get the die's color from the 3D renderer
     const dieColor = this.diceRenderer.getDieColor(die.id);
@@ -133,14 +135,14 @@ export class DiceRow {
       }
 
       // Set background image with stretched texture
-      el.style.backgroundImage = `url(${textureUrl})`;
-      el.style.backgroundSize = '6000%';
-      el.style.backgroundPosition = 'center';
+      shape.style.backgroundImage = `url(${textureUrl})`;
+      shape.style.backgroundSize = '6000%';
+      shape.style.backgroundPosition = 'center';
 
       // Add color tint overlay using background-blend-mode
       if (dieColor) {
-        el.style.backgroundColor = dieColor;
-        el.style.backgroundBlendMode = 'multiply';
+        shape.style.backgroundColor = dieColor;
+        shape.style.backgroundBlendMode = 'multiply';
       }
     }
 
@@ -155,6 +157,7 @@ export class DiceRow {
     const score = scoreDie(die);
     points.textContent = `+${score}`;
 
+    el.appendChild(shape);
     el.appendChild(topValue);
     el.appendChild(points);
 

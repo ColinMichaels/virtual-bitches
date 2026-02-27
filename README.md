@@ -4,8 +4,10 @@ A push-your-luck dice game where low score wins, friendships are tested, and you
 
 ## Play Now
 
-- Firebase (primary): https://biscuits-488600.web.app
+- Firebase (production): https://biscuits-488600.web.app
+- Firebase (dev/staging): https://biscuits-488600.web.app
 - GitHub Pages (fallback): https://colinmichaels.github.io/virtual-bitches/
+- Feedback form: https://biscuits-488600.web.app/feedback
 
 [![Alpha Warning - We Need Testers](https://storage.googleapis.com/biscuits-488600.firebasestorage.app/assets/ads/betahelp_ad.png)](https://biscuits-488600.web.app)
 
@@ -15,6 +17,7 @@ We want testers for gameplay feel, multiplayer sync, and mobile UX hardening.
 
 - Break things: room joins, reconnects, turn rotation, session expiry flow.
 - Stress things: theme switching, audio/settings, long multiplayer sessions.
+- Drop quick feedback (no bug template needed): https://biscuits-488600.web.app/feedback
 - Report bugs and weird behavior in GitHub Issues with steps/screenshots:
   https://github.com/colinmichaels/virtual-bitches/issues
 
