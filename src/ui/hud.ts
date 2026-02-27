@@ -1,6 +1,6 @@
 import { GameState, GameDifficulty } from "../engine/types.js";
 import { getDiceCounts } from "../engine/rules.js";
-import { getDifficultyName } from "../engine/modes.js";
+import { t } from "../i18n/index.js";
 
 const TIME_ATTACK_DURATION_MS = 5 * 60 * 1000;
 
@@ -108,7 +108,9 @@ export class HUD {
             label:
               typeof entry.label === "string" && entry.label.trim().length > 0
                 ? entry.label.trim().slice(0, 20)
-                : `Player ${entry.playerId.slice(0, 4)}`,
+                : t("shell.multiplayer.playerFallback", {
+                    id: entry.playerId.slice(0, 4),
+                  }),
             score:
               typeof entry.score === "number" && Number.isFinite(entry.score)
                 ? Math.max(0, Math.floor(entry.score))
@@ -171,10 +173,10 @@ export class HUD {
     }
 
     const defaultLabels = {
-      ok: "Sync Live",
-      syncing: "Resyncing...",
-      stale: "Sync Stale",
-      error: "Resync Failed",
+      ok: t("shell.turnSync.ok"),
+      syncing: t("shell.turnSync.syncing"),
+      stale: t("shell.turnSync.stale"),
+      error: t("shell.turnSync.error"),
     };
 
     this.turnSyncIndicatorEl.style.display = "inline";
@@ -214,11 +216,10 @@ export class HUD {
     this.scoreEl.textContent = state.score.toString();
 
     // Update mode display
-    const difficultyName = getDifficultyName(state.mode.difficulty);
-    // Update button text (keep the first child text node, preserve SVG)
-    const textNode = this.modeDisplayEl.childNodes[0];
-    if (textNode) {
-      textNode.textContent = difficultyName + ' ';
+    const difficultyName = this.getDifficultyLabel(state.mode.difficulty);
+    const labelNode = this.modeDisplayEl.querySelector<HTMLElement>("#mode-display-label");
+    if (labelNode) {
+      labelNode.textContent = difficultyName;
     }
 
     // Add color classes for different modes
@@ -244,7 +245,7 @@ export class HUD {
     this.poolListEl.innerHTML = "";
 
     if (counts.size === 0) {
-      this.poolListEl.innerHTML = '<div style="opacity:0.5;font-size:11px;">All scored</div>';
+      this.poolListEl.innerHTML = `<div style="opacity:0.5;font-size:11px;">${t("shell.hud.allScored")}</div>`;
     } else {
       counts.forEach((count, kind) => {
         const div = document.createElement("div");
@@ -284,9 +285,9 @@ export class HUD {
     );
     const turnLabel = activeTurnEntry
       ? activeTurnEntry.isCurrentPlayer
-        ? "Your Turn"
-        : `${activeTurnEntry.label} Turn`
-      : "Turn";
+        ? t("shell.turnLabel.yourTurn")
+        : t("shell.turnLabel.playerTurn", { player: activeTurnEntry.label })
+      : t("shell.turnLabel.default");
     this.turnTimerEl.style.display = "inline";
     this.turnTimerEl.textContent = `${turnLabel} ${this.formatClock(remainingMs)}`;
     this.turnTimerEl.classList.toggle("is-self-turn", activeTurnEntry?.isCurrentPlayer === true);
@@ -323,6 +324,18 @@ export class HUD {
       20: "⭓",  // Icosahedron (circle with dot)
     };
     return shapes[sides] || "●";
+  }
+
+  private getDifficultyLabel(difficulty: GameDifficulty): string {
+    switch (difficulty) {
+      case "easy":
+        return t("difficulty.easy");
+      case "hard":
+        return t("difficulty.hard");
+      case "normal":
+      default:
+        return t("difficulty.normal");
+    }
   }
 
   private renderMultiplayerStandings(): void {
@@ -362,7 +375,11 @@ export class HUD {
 
       const meta = document.createElement("span");
       meta.className = "multiplayer-scoreboard__meta";
-      meta.textContent = entry.isComplete ? "DONE" : entry.isBot ? "BOT" : "LIVE";
+      meta.textContent = entry.isComplete
+        ? t("shell.multiplayer.meta.done")
+        : entry.isBot
+          ? t("shell.multiplayer.meta.bot")
+          : t("shell.multiplayer.meta.live");
 
       const score = document.createElement("span");
       score.className = "multiplayer-scoreboard__score";

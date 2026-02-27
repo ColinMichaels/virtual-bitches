@@ -1,5 +1,6 @@
 import { logger } from "../utils/logger.js";
 import { gameBrand } from "../config/brand.js";
+import { t } from "../i18n/index.js";
 
 const log = logger.create('PWA');
 
@@ -156,12 +157,12 @@ class PWAService {
     banner.innerHTML = `
       <div class="pwa-banner-content">
         <div class="pwa-banner-text">
-          <strong>Install ${gameBrand.productName}</strong>
-          <p>Add to home screen for quick access and offline play</p>
+          <strong>${t("pwa.install.title", { productName: gameBrand.productName })}</strong>
+          <p>${t("pwa.install.subtitle")}</p>
         </div>
         <div class="pwa-banner-actions">
-          <button id="pwa-install-btn" class="btn btn-primary primary">Install</button>
-          <button id="pwa-dismiss-btn" class="btn btn-secondary secondary">Not Now</button>
+          <button id="pwa-install-btn" class="btn btn-primary primary">${t("pwa.install.installButton")}</button>
+          <button id="pwa-dismiss-btn" class="btn btn-secondary secondary">${t("pwa.install.dismissButton")}</button>
         </div>
       </div>
     `;
@@ -197,9 +198,9 @@ class PWAService {
     notification.className = 'pwa-update-notification';
     notification.innerHTML = `
       <div class="pwa-update-content">
-        <strong>Update Available</strong>
-        <p>A new version of ${gameBrand.productName} is ready</p>
-        <button id="pwa-update-btn" class="btn btn-primary primary">Reload</button>
+        <strong>${t("pwa.update.title")}</strong>
+        <p>${t("pwa.update.subtitle", { productName: gameBrand.productName })}</p>
+        <button id="pwa-update-btn" class="btn btn-primary primary">${t("pwa.update.reloadButton")}</button>
       </div>
     `;
 

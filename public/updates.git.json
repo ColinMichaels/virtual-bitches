@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-02-27T17:05:46.741Z",
+  "generatedAt": "2026-02-27T17:40:34.720Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-ba6a5ad",
+      "date": "2026-02-27T17:10:52.000Z",
+      "title": "Centralize branding configuration and integrate runtime brand metadata application",
+      "content": "<p>Centralize branding configuration and integrate runtime brand metadata application</p><p><strong>Commit:</strong> <code>ba6a5ad</code></p><p>- Introduced `gameBrand` configuration with typed branding fields (`productName`, `ogTitle`, `ogDescription`, etc.).</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "ba6a5adf375692d485182a9a54578a1a57a0ec0f",
+        "shortHash": "ba6a5ad",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/ba6a5adf375692d485182a9a54578a1a57a0ec0f"
+      }
+    },
     {
       "id": "git-9beabb4",
       "date": "2026-02-27T16:55:23.000Z",
@@ -547,20 +561,6 @@
         "hash": "185811fc2816b2d5d7b8ba7694bab4275d0e0457",
         "shortHash": "185811f",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/185811fc2816b2d5d7b8ba7694bab4275d0e0457"
-      }
-    },
-    {
-      "id": "git-a2be08b",
-      "date": "2026-02-26T22:00:39.000Z",
-      "title": "Remove Google Sign-In button and related logic from leaderboard UI",
-      "content": "<p>Remove Google Sign-In button and related logic from leaderboard UI</p><p><strong>Commit:</strong> <code>a2be08b</code></p><p>- Eliminated the display and handling of Google Sign-In button in the global leaderboard UI.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "a2be08b3692a76880391929ce60dcdec0f73e47a",
-        "shortHash": "a2be08b",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a2be08b3692a76880391929ce60dcdec0f73e47a"
       }
     }
   ]

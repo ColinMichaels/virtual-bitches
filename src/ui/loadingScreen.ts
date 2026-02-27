@@ -5,6 +5,7 @@
  */
 
 import { gameBrand } from "../config/brand.js";
+import { t } from "../i18n/index.js";
 
 export interface LoadingTask {
   name: string;
@@ -30,8 +31,8 @@ export class LoadingScreen {
         <div class="loading-spinner">
           <div class="dice-icon">🎲</div>
         </div>
-        <h2 class="loading-title">Loading ${gameBrand.productName}</h2>
-        <div class="loading-status">Initializing...</div>
+        <h2 class="loading-title">${t("loading.title", { productName: gameBrand.productName })}</h2>
+        <div class="loading-status">${t("loading.initializing")}</div>
         <div class="loading-progress-container">
           <div class="loading-progress-bar"></div>
         </div>

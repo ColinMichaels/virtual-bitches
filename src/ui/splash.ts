@@ -10,6 +10,7 @@ import type { SplashBackground3D } from "./splashBackground3d.js";
 import { getLocalPlayerId } from "../services/playerIdentity.js";
 import { getBrandLogoUrl } from "../services/assetUrl.js";
 import { gameBrand } from "../config/brand.js";
+import { t } from "../i18n/index.js";
 
 const log = logger.create("SplashScreen");
 
@@ -63,9 +64,9 @@ export class SplashScreen {
         <div class="splash-logo-wrap">
           <img class="splash-logo" src="${this.logoUrl}" alt="${this.gameTitle}" />
         </div>
-        <p class="splash-subtitle">Push Your Luck Dice Game</p>
-        <p class="splash-tagline">Roll • Select • Score Low to Win</p>
-        <div class="splash-mode-picker" role="radiogroup" aria-label="Play mode">
+        <p class="splash-subtitle">${t("splash.subtitle")}</p>
+        <p class="splash-tagline">${t("splash.tagline")}</p>
+        <div class="splash-mode-picker" role="radiogroup" aria-label="${t("splash.playModeAria")}">
           <button
             type="button"
             class="splash-mode-btn active"
@@ -73,7 +74,7 @@ export class SplashScreen {
             role="radio"
             aria-checked="true"
           >
-            Solo
+            ${t("splash.mode.solo")}
           </button>
           <button
             type="button"
@@ -82,41 +83,41 @@ export class SplashScreen {
             role="radio"
             aria-checked="false"
           >
-            Multiplayer
+            ${t("splash.mode.multiplayer")}
           </button>
         </div>
         <div id="splash-multiplayer-options" class="splash-multiplayer-options" style="display: none;">
-          <label for="splash-bot-count">Create Room Bots</label>
+          <label for="splash-bot-count">${t("splash.multiplayer.createRoomBots")}</label>
           <select id="splash-bot-count">
-            <option value="0">0 (human-only)</option>
-            <option value="1" selected>1 bot</option>
-            <option value="2">2 bots</option>
-            <option value="3">3 bots</option>
+            <option value="0">${t("splash.multiplayer.botOption.none")}</option>
+            <option value="1" selected>${t("splash.multiplayer.botOption.1")}</option>
+            <option value="2">${t("splash.multiplayer.botOption.2")}</option>
+            <option value="3">${t("splash.multiplayer.botOption.3")}</option>
           </select>
           <div class="splash-bot-seed-toggle">
             <label for="splash-seed-join-bots">
               <input id="splash-seed-join-bots" type="checkbox" />
-              Seed bots when joining rooms (testing)
+              ${t("splash.multiplayer.seedBotsOnJoin")}
             </label>
           </div>
-          <label for="splash-join-bot-count">Join Room Bot Seed Count</label>
+          <label for="splash-join-bot-count">${t("splash.multiplayer.joinBotSeedCount")}</label>
           <select id="splash-join-bot-count" disabled>
-            <option value="1" selected>1 bot</option>
-            <option value="2">2 bots</option>
-            <option value="3">3 bots</option>
-            <option value="4">4 bots</option>
+            <option value="1" selected>${t("splash.multiplayer.botOption.1")}</option>
+            <option value="2">${t("splash.multiplayer.botOption.2")}</option>
+            <option value="3">${t("splash.multiplayer.botOption.3")}</option>
+            <option value="4">${t("splash.multiplayer.botOption.4")}</option>
           </select>
           <p class="splash-join-bot-seed-note">
-            Join seeding applies only when joining an existing room.
+            ${t("splash.multiplayer.joinBotSeedNote")}
           </p>
-          <label for="splash-room-select">Join Existing Room</label>
+          <label for="splash-room-select">${t("splash.multiplayer.joinExistingRoom")}</label>
           <div class="splash-room-picker">
             <select id="splash-room-select">
-              <option value="">Create Private Room</option>
+              <option value="">${t("splash.multiplayer.createPrivateRoom")}</option>
             </select>
-            <button type="button" id="splash-room-refresh" class="btn btn-secondary secondary">Refresh</button>
+            <button type="button" id="splash-room-refresh" class="btn btn-secondary secondary">${t("splash.multiplayer.refreshRooms")}</button>
           </div>
-          <label for="splash-room-code">Join By Invite Code</label>
+          <label for="splash-room-code">${t("splash.multiplayer.joinByInviteCode")}</label>
           <div class="splash-room-code-actions">
             <input
               id="splash-room-code"
@@ -125,22 +126,22 @@ export class SplashScreen {
               autocapitalize="characters"
               autocomplete="off"
               spellcheck="false"
-              placeholder="Enter room code"
+              placeholder="${t("splash.multiplayer.roomCodePlaceholder")}"
               maxlength="8"
               aria-describedby="splash-room-code-error"
             />
-            <button type="button" id="splash-room-code-join" class="btn btn-primary primary">Join Code</button>
+            <button type="button" id="splash-room-code-join" class="btn btn-primary primary">${t("splash.multiplayer.joinCode")}</button>
           </div>
           <p id="splash-room-code-error" class="splash-room-code-error" style="display: none;"></p>
-          <p id="splash-room-status">No active public rooms found. Starting creates a private room.</p>
-          <p>Pick a public lobby, or create a private room and invite others with your share link.</p>
+          <p id="splash-room-status">${t("splash.multiplayer.status.noActivePublicRooms")}</p>
+          <p>${t("splash.multiplayer.pickLobbyHint")}</p>
         </div>
         <div class="splash-buttons">
-          <button id="start-game-btn" class="btn btn-primary primary splash-btn">Start Game</button>
-          <button id="splash-replay-tutorial-btn" class="btn btn-secondary secondary splash-btn">Replay Tutorial</button>
-          <button id="splash-rules-btn" class="btn btn-secondary splash-btn">How to Play</button>
-          <button id="splash-leaderboard-btn" class="btn btn-secondary splash-btn">Leaderboard</button>
-          <button id="splash-settings-btn" class="btn btn-secondary splash-btn">Settings</button>
+          <button id="start-game-btn" class="btn btn-primary primary splash-btn">${t("splash.button.startGame")}</button>
+          <button id="splash-replay-tutorial-btn" class="btn btn-secondary secondary splash-btn">${t("splash.button.replayTutorial")}</button>
+          <button id="splash-rules-btn" class="btn btn-secondary splash-btn">${t("splash.button.howToPlay")}</button>
+          <button id="splash-leaderboard-btn" class="btn btn-secondary splash-btn">${t("splash.button.leaderboard")}</button>
+          <button id="splash-settings-btn" class="btn btn-secondary splash-btn">${t("splash.button.settings")}</button>
         </div>
       </div>
     `;
@@ -324,7 +325,7 @@ export class SplashScreen {
 
     this.backgroundLoadPromise = (async () => {
       try {
-        onStatus?.("Loading floating dice...");
+        onStatus?.(t("main.boot.loadingFloatingDice"));
         const module = await import("./splashBackground3d.js");
         this.background3d = new module.SplashBackground3D(this.canvas);
         await this.background3d.initialize(onStatus);
@@ -394,19 +395,24 @@ export class SplashScreen {
       return;
     }
     if (this.roomListLoading) {
-      statusEl.textContent = "Refreshing rooms...";
+      statusEl.textContent = t("splash.multiplayer.status.refreshingRooms");
       return;
     }
     if (this.privateRoomCode) {
       const roomCodeValidationError = this.getRoomCodeValidationError(this.privateRoomCode);
       if (roomCodeValidationError) {
-        statusEl.textContent = "Invite code must be 4-8 letters or numbers.";
+        statusEl.textContent = t("splash.multiplayer.status.inviteCodeValidation");
         return;
       }
       const joinSeedNote = this.getJoinBotSeedStatusNote();
       statusEl.textContent = joinSeedNote
-        ? `Joining private room ${this.privateRoomCode}. ${joinSeedNote}`
-        : `Joining private room ${this.privateRoomCode}.`;
+        ? t("splash.multiplayer.status.joiningPrivateWithNote", {
+            roomCode: this.privateRoomCode,
+            note: joinSeedNote,
+          })
+        : t("splash.multiplayer.status.joiningPrivate", {
+            roomCode: this.privateRoomCode,
+          });
       return;
     }
     if (this.selectedRoomSessionId) {
@@ -421,22 +427,35 @@ export class SplashScreen {
           typeof selected.availableHumanSlots === "number" && Number.isFinite(selected.availableHumanSlots)
             ? Math.max(0, Math.floor(selected.availableHumanSlots))
             : Math.max(0, maxPlayers - selected.humanCount);
-        const joinability = availableSlots > 0 ? `${availableSlots} open seat(s)` : "Room is currently full";
+        const joinability =
+          availableSlots > 0
+            ? t("splash.multiplayer.joinability.openSeats", { count: availableSlots })
+            : t("splash.multiplayer.joinability.full");
         statusEl.textContent =
           availableSlots > 0
-            ? `Joining room ${selected.roomCode} (${joinability}). Expires in ~${expiresInMinutes}m without activity.${this.getJoinBotSeedStatusNote(true)}`
-            : `Joining room ${selected.roomCode} (${joinability}). Select "Create Private Room" to start your own room now.`;
+            ? t("splash.multiplayer.status.joiningRoomOpen", {
+                roomCode: selected.roomCode,
+                joinability,
+                expiresMinutes: expiresInMinutes,
+                note: this.getJoinBotSeedStatusNote(true),
+              })
+            : t("splash.multiplayer.status.joiningRoomFull", {
+                roomCode: selected.roomCode,
+                joinability,
+              });
         return;
       }
     }
     if (this.roomList.length === 0) {
-      statusEl.textContent = "No active public rooms found. Starting creates a private room.";
+      statusEl.textContent = t("splash.multiplayer.status.noActivePublicRooms");
       return;
     }
     const joinSeedNote = this.getJoinBotSeedStatusNote();
     statusEl.textContent = joinSeedNote
-      ? `Select a public room to join, or choose Create Private Room at any time. ${joinSeedNote}`
-      : "Select a public room to join, or choose Create Private Room at any time.";
+      ? t("splash.multiplayer.status.selectPublicRoomWithNote", {
+          note: joinSeedNote,
+        })
+      : t("splash.multiplayer.status.selectPublicRoom");
   }
 
   private async refreshRoomList(force: boolean): Promise<void> {
@@ -471,7 +490,7 @@ export class SplashScreen {
       roomSelect.innerHTML = "";
       const createOption = document.createElement("option");
       createOption.value = "";
-      createOption.textContent = "Create Private Room";
+      createOption.textContent = t("splash.multiplayer.createPrivateRoom");
       roomSelect.appendChild(createOption);
 
       this.roomList.forEach((room) => {
@@ -487,12 +506,20 @@ export class SplashScreen {
             : Math.max(0, maxPlayers - room.humanCount);
         const roomFlavor =
           room.roomType === "public_default"
-            ? "Lobby"
+            ? t("splash.multiplayer.roomFlavor.lobby")
             : room.roomType === "public_overflow"
-              ? "Overflow"
-              : "Custom";
-        const sessionState = room.sessionComplete ? "complete" : `${room.activeHumanCount} active`;
-        option.textContent = `${room.roomCode} • ${roomFlavor} • ${room.humanCount}/${maxPlayers} players • ${sessionState} • ${availableSlots} open`;
+              ? t("splash.multiplayer.roomFlavor.overflow")
+              : t("splash.multiplayer.roomFlavor.custom");
+        const sessionState = room.sessionComplete
+          ? t("splash.multiplayer.roomState.complete")
+          : t("splash.multiplayer.roomState.active", { count: room.activeHumanCount });
+        option.textContent = t("splash.multiplayer.roomOptionLabel", {
+          roomCode: room.roomCode,
+          roomFlavor,
+          players: `${room.humanCount}/${maxPlayers}`,
+          sessionState,
+          openSeats: availableSlots,
+        });
         roomSelect.appendChild(option);
       });
 
@@ -511,7 +538,7 @@ export class SplashScreen {
         roomSelect.innerHTML = "";
         const createOption = document.createElement("option");
         createOption.value = "";
-        createOption.textContent = "Create Private Room";
+        createOption.textContent = t("splash.multiplayer.createPrivateRoom");
         roomSelect.appendChild(createOption);
         roomSelect.value = "";
       }
@@ -533,7 +560,7 @@ export class SplashScreen {
       return null;
     }
     if (roomCode.length < 4) {
-      return "Invite code must be 4-8 letters or numbers.";
+      return t("splash.multiplayer.status.inviteCodeValidation");
     }
     return null;
   }
@@ -596,15 +623,15 @@ export class SplashScreen {
 
   private getRoomCodeJoinFailureMessage(reason: string | undefined): string {
     if (reason === "room_not_found") {
-      return "No room found for that invite code.";
+      return t("splash.multiplayer.joinFailure.roomNotFound");
     }
     if (reason === "room_full") {
-      return "That room is full right now.";
+      return t("splash.multiplayer.joinFailure.roomFull");
     }
     if (reason === "session_expired") {
-      return "That room has expired.";
+      return t("splash.multiplayer.joinFailure.sessionExpired");
     }
-    return "Unable to join with that invite code right now.";
+    return t("splash.multiplayer.joinFailure.default");
   }
 
   private async handleJoinCodeQuickAction(
@@ -623,7 +650,7 @@ export class SplashScreen {
     const targetRoomCode = this.privateRoomCode;
     const localPlayerId = getLocalPlayerId();
     this.roomCodeJoinInFlight = true;
-    this.setRoomCodeFeedback("Checking invite code...", "info");
+    this.setRoomCodeFeedback(t("splash.multiplayer.joinCodeChecking"), "info");
 
     let joinedSessionId: string | null = null;
     try {
@@ -643,7 +670,7 @@ export class SplashScreen {
 
       joinedSessionId = joinResult.session.sessionId;
       this.setRoomCodeFeedback(
-        `Room ${joinResult.session.roomCode} found. Joining...`,
+        t("splash.multiplayer.joinCodeFound", { roomCode: joinResult.session.roomCode }),
         "success"
       );
       const started = await attemptStart({
@@ -657,12 +684,12 @@ export class SplashScreen {
       });
 
       if (!started) {
-        this.setRoomCodeFeedback("Unable to start game. Try again.", "error");
+        this.setRoomCodeFeedback(t("splash.multiplayer.joinCodeUnableStart"), "error");
         await backendApiService.leaveMultiplayerSession(joinedSessionId, localPlayerId);
       }
     } catch (error) {
       log.warn("Invite-code join precheck failed", error);
-      this.setRoomCodeFeedback("Unable to validate invite code right now.", "error");
+      this.setRoomCodeFeedback(t("splash.multiplayer.joinCodeUnableValidate"), "error");
     } finally {
       this.roomCodeJoinInFlight = false;
       this.updateRoomCodeValidationUi();
@@ -690,7 +717,7 @@ export class SplashScreen {
     if (!joinSeedCount) {
       return "";
     }
-    const prefix = withLeadingSpace ? " " : "";
-    return `${prefix}Join seeding: +${joinSeedCount} bot${joinSeedCount === 1 ? "" : "s"}.`;
+    const note = t("splash.multiplayer.joinSeedStatus", { count: joinSeedCount });
+    return withLeadingSpace ? ` ${note}` : note;
   }
 }

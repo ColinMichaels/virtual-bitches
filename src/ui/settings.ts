@@ -30,6 +30,7 @@ import {
   type AdminRoleRecord,
   type AdminUserRole,
 } from "../services/adminApi.js";
+import { getLocale, setLocale, t, type LocaleCode } from "../i18n/index.js";
 import { logger } from "../utils/logger.js";
 import { confirmAction } from "./confirmModal.js";
 import { modalManager } from "./modalManager.js";
@@ -82,19 +83,19 @@ export class SettingsModal {
     this.container.innerHTML = `
       <div class="settings-backdrop"></div>
       <div class="settings-content">
-        <h2>Settings</h2>
+        <h2>${t("settings.title")}</h2>
 
-        <div class="settings-tabs" role="tablist" aria-label="Settings sections">
-          <button class="settings-tab-btn active" type="button" data-tab="game">Game</button>
-          <button class="settings-tab-btn" type="button" data-tab="graphics">Graphics</button>
-          <button class="settings-tab-btn" type="button" data-tab="audio">Audio</button>
-          <button class="settings-tab-btn" type="button" data-tab="account">Account</button>
+        <div class="settings-tabs" role="tablist" aria-label="${t("settings.tabs.aria")}">
+          <button class="settings-tab-btn active" type="button" data-tab="game">${t("settings.tabs.game")}</button>
+          <button class="settings-tab-btn" type="button" data-tab="graphics">${t("settings.tabs.graphics")}</button>
+          <button class="settings-tab-btn" type="button" data-tab="audio">${t("settings.tabs.audio")}</button>
+          <button class="settings-tab-btn" type="button" data-tab="account">${t("settings.tabs.account")}</button>
         </div>
 
         <div class="settings-tab-panel is-active" data-tab-panel="game">
           <div class="settings-section">
-            <h3>Accessibility (Chaos Effects)</h3>
-            <p class="setting-description">Reduce disruptive camera effects when needed</p>
+            <h3>${t("settings.section.accessibility.title")}</h3>
+            <p class="setting-description">${t("settings.section.accessibility.description")}</p>
 
             <div class="setting-row">
               <label>
@@ -103,7 +104,7 @@ export class SettingsModal {
                   id="reduce-chaos-camera-effects"
                   ${this.settings.controls.reduceChaosCameraEffects ? "checked" : ""}
                 >
-                Reduce camera attack effects
+                ${t("settings.controls.reduceChaos")}
               </label>
             </div>
 
@@ -114,30 +115,38 @@ export class SettingsModal {
                   id="allow-control-inversion"
                   ${this.settings.controls.allowChaosControlInversion ? "checked" : ""}
                 >
-                Allow control inversion during drunk attacks
+                ${t("settings.controls.allowControlInversion")}
               </label>
             </div>
 
             <div class="setting-row">
-              <label for="mobile-dice-layout">Mobile Dice Layout</label>
+              <label for="mobile-dice-layout">${t("settings.controls.mobileDiceLayout.label")}</label>
               <select id="mobile-dice-layout">
-                <option value="wrapped" ${this.settings.controls.mobileDiceLayout === "wrapped" ? "selected" : ""}>Wrapped Grid</option>
-                <option value="single-row" ${this.settings.controls.mobileDiceLayout === "single-row" ? "selected" : ""}>Single Row</option>
-                <option value="perimeter" ${this.settings.controls.mobileDiceLayout === "perimeter" ? "selected" : ""}>Perimeter</option>
+                <option value="wrapped" ${this.settings.controls.mobileDiceLayout === "wrapped" ? "selected" : ""}>${t("settings.controls.mobileDiceLayout.wrapped")}</option>
+                <option value="single-row" ${this.settings.controls.mobileDiceLayout === "single-row" ? "selected" : ""}>${t("settings.controls.mobileDiceLayout.singleRow")}</option>
+                <option value="perimeter" ${this.settings.controls.mobileDiceLayout === "perimeter" ? "selected" : ""}>${t("settings.controls.mobileDiceLayout.perimeter")}</option>
               </select>
             </div>
           </div>
 
           <div class="settings-section">
-            <h3>Game Mode</h3>
-            <p class="setting-description">Changes apply to new games only</p>
+            <h3>${t("settings.section.gameMode.title")}</h3>
+            <p class="setting-description">${t("settings.section.gameMode.description")}</p>
 
             <div class="setting-row">
-              <label for="game-difficulty">Difficulty</label>
+              <label for="game-language">${t("settings.controls.language.label")}</label>
+              <select id="game-language">
+                <option value="en-US" ${getLocale() === "en-US" ? "selected" : ""}>${t("settings.controls.language.option.enUS")}</option>
+                <option value="es-ES" ${getLocale() === "es-ES" ? "selected" : ""}>${t("settings.controls.language.option.esES")}</option>
+              </select>
+            </div>
+
+            <div class="setting-row">
+              <label for="game-difficulty">${t("settings.controls.difficulty.label")}</label>
               <select id="game-difficulty">
-                <option value="easy" ${this.settings.game.difficulty === "easy" ? "selected" : ""}>Easy (Hints + More Help)</option>
-                <option value="normal" ${this.settings.game.difficulty === "normal" ? "selected" : ""}>Normal (Standard Rules)</option>
-                <option value="hard" ${this.settings.game.difficulty === "hard" ? "selected" : ""}>Hard (No Hints, Strict)</option>
+                <option value="easy" ${this.settings.game.difficulty === "easy" ? "selected" : ""}>${t("settings.controls.difficulty.easy")}</option>
+                <option value="normal" ${this.settings.game.difficulty === "normal" ? "selected" : ""}>${t("settings.controls.difficulty.normal")}</option>
+                <option value="hard" ${this.settings.game.difficulty === "hard" ? "selected" : ""}>${t("settings.controls.difficulty.hard")}</option>
               </select>
             </div>
 
@@ -153,7 +162,7 @@ export class SettingsModal {
                   ${this.settings.game.difficulty === "easy" && this.settings.game.cameraAssistEnabled ? "checked" : ""}
                   ${this.settings.game.difficulty === "easy" ? "" : "disabled"}
                 >
-                Camera assist (auto zoom and return after scoring)
+                ${t("settings.controls.cameraAssist")}
               </label>
             </div>
 
@@ -163,34 +172,34 @@ export class SettingsModal {
           </div>
 
           <div class="settings-section">
-            <h3>Game Variants</h3>
-            <p class="setting-description">Customize your dice pool</p>
+            <h3>${t("settings.section.gameVariants.title")}</h3>
+            <p class="setting-description">${t("settings.section.gameVariants.description")}</p>
 
             <div class="setting-row">
               <label>
                 <input type="checkbox" id="variant-d20" ${this.settings.game.addD20 ? "checked" : ""}>
-                Add d20 (removes 1 d6)
+                ${t("settings.controls.variant.addD20")}
               </label>
             </div>
 
             <div class="setting-row">
               <label>
                 <input type="checkbox" id="variant-d4" ${this.settings.game.addD4 ? "checked" : ""}>
-                Add d4 (removes 1 d6)
+                ${t("settings.controls.variant.addD4")}
               </label>
             </div>
 
             <div class="setting-row">
               <label>
                 <input type="checkbox" id="variant-2nd-d10" ${this.settings.game.add2ndD10 ? "checked" : ""}>
-                Add 2nd d10 (removes 1 d6)
+                ${t("settings.controls.variant.add2ndD10")}
               </label>
             </div>
 
             <div class="setting-row">
               <label>
                 <input type="checkbox" id="variant-d100" ${this.settings.game.d100Mode ? "checked" : ""}>
-                d100 Mode (requires 2nd d10)
+                ${t("settings.controls.variant.d100")}
               </label>
             </div>
           </div>
@@ -198,36 +207,36 @@ export class SettingsModal {
 
         <div class="settings-tab-panel" data-tab-panel="graphics">
           <div class="settings-section">
-            <h3>Display</h3>
+            <h3>${t("settings.section.display.title")}</h3>
 
             <div class="setting-row">
-              <label for="graphics-quality">Graphics Quality</label>
+              <label for="graphics-quality">${t("settings.controls.graphicsQuality.label")}</label>
               <select id="graphics-quality">
-                <option value="low" ${this.settings.display.graphicsQuality === "low" ? "selected" : ""}>Low</option>
-                <option value="medium" ${this.settings.display.graphicsQuality === "medium" ? "selected" : ""}>Medium</option>
-                <option value="high" ${this.settings.display.graphicsQuality === "high" ? "selected" : ""}>High</option>
+                <option value="low" ${this.settings.display.graphicsQuality === "low" ? "selected" : ""}>${t("settings.controls.graphicsQuality.low")}</option>
+                <option value="medium" ${this.settings.display.graphicsQuality === "medium" ? "selected" : ""}>${t("settings.controls.graphicsQuality.medium")}</option>
+                <option value="high" ${this.settings.display.graphicsQuality === "high" ? "selected" : ""}>${t("settings.controls.graphicsQuality.high")}</option>
               </select>
             </div>
 
             <div class="setting-row">
               <label>
                 <input type="checkbox" id="shadows-enabled" ${this.settings.display.shadowsEnabled ? "checked" : ""}>
-                Enable Shadows
+                ${t("settings.controls.shadowsEnabled")}
               </label>
             </div>
           </div>
 
           <div class="settings-section">
-            <h3>Visual Settings</h3>
-            <p class="setting-description">Adjust table contrast for better dice visibility</p>
+            <h3>${t("settings.section.visual.title")}</h3>
+            <p class="setting-description">${t("settings.section.visual.description")}</p>
 
             <div class="setting-row">
-              <label for="table-contrast">Table Contrast</label>
+              <label for="table-contrast">${t("settings.controls.tableContrast.label")}</label>
               <select id="table-contrast">
-                <option value="low" ${this.settings.display.visual.tableContrast === "low" ? "selected" : ""}>Low (Brighter Table)</option>
-                <option value="normal" ${this.settings.display.visual.tableContrast === "normal" ? "selected" : ""}>Normal (Balanced)</option>
-                <option value="high" ${this.settings.display.visual.tableContrast === "high" ? "selected" : ""}>High (Good Readability)</option>
-                <option value="maximum" ${this.settings.display.visual.tableContrast === "maximum" ? "selected" : ""}>Maximum (Best Readability)</option>
+                <option value="low" ${this.settings.display.visual.tableContrast === "low" ? "selected" : ""}>${t("settings.controls.tableContrast.low")}</option>
+                <option value="normal" ${this.settings.display.visual.tableContrast === "normal" ? "selected" : ""}>${t("settings.controls.tableContrast.normal")}</option>
+                <option value="high" ${this.settings.display.visual.tableContrast === "high" ? "selected" : ""}>${t("settings.controls.tableContrast.high")}</option>
+                <option value="maximum" ${this.settings.display.visual.tableContrast === "maximum" ? "selected" : ""}>${t("settings.controls.tableContrast.maximum")}</option>
               </select>
             </div>
           </div>
@@ -237,22 +246,22 @@ export class SettingsModal {
 
         <div class="settings-tab-panel" data-tab-panel="audio">
           <div class="settings-section">
-            <h3>Audio</h3>
+            <h3>${t("settings.section.audio.title")}</h3>
 
             <div class="setting-row">
-              <label for="master-volume">Master Volume</label>
+              <label for="master-volume">${t("settings.controls.masterVolume")}</label>
               <input type="range" id="master-volume" min="0" max="100" value="${this.settings.audio.masterVolume * 100}">
               <span id="master-volume-value">${Math.round(this.settings.audio.masterVolume * 100)}%</span>
             </div>
 
             <div class="setting-row" id="audio-sfx-volume-row">
-              <label for="sfx-volume">Sound Effects</label>
+              <label for="sfx-volume">${t("settings.controls.soundEffects")}</label>
               <input type="range" id="sfx-volume" min="0" max="100" value="${this.settings.audio.sfxVolume * 100}">
               <span id="sfx-volume-value">${Math.round(this.settings.audio.sfxVolume * 100)}%</span>
             </div>
 
             <div class="setting-row" id="audio-music-volume-row">
-              <label for="music-volume">Music</label>
+              <label for="music-volume">${t("settings.controls.music")}</label>
               <input type="range" id="music-volume" min="0" max="100" value="${this.settings.audio.musicVolume * 100}">
               <span id="music-volume-value">${Math.round(this.settings.audio.musicVolume * 100)}%</span>
             </div>
@@ -260,21 +269,21 @@ export class SettingsModal {
             <div class="setting-row" id="audio-sfx-toggle-row">
               <label>
                 <input type="checkbox" id="sfx-enabled" ${this.settings.audio.sfxEnabled ? "checked" : ""}>
-                Enable Sound Effects
+                ${t("settings.controls.enableSoundEffects")}
               </label>
             </div>
 
             <div class="setting-row" id="audio-music-toggle-row">
               <label>
                 <input type="checkbox" id="music-enabled" ${this.settings.audio.musicEnabled ? "checked" : ""}>
-                Enable Music
+                ${t("settings.controls.enableMusic")}
               </label>
             </div>
 
             <div class="setting-row" ${hapticsService.isSupported() ? "" : 'style="display:none;"'}>
               <label>
                 <input type="checkbox" id="haptics-enabled" ${this.settings.haptics !== false ? "checked" : ""}>
-                Enable Haptic Feedback
+                ${t("settings.controls.enableHaptics")}
               </label>
             </div>
           </div>
@@ -282,22 +291,22 @@ export class SettingsModal {
 
         <div class="settings-tab-panel" data-tab-panel="account">
           <div class="settings-section">
-            <h3>Account</h3>
+            <h3>${t("settings.section.account.title")}</h3>
             <p class="setting-description">
-              Manage sign-in status and leaderboard identity from one place.
+              ${t("settings.section.account.description")}
             </p>
             <div id="settings-account-panel" class="settings-account-panel">
-              <p class="settings-account-loading">Loading account details...</p>
+              <p class="settings-account-loading">${t("settings.account.loading")}</p>
             </div>
           </div>
         </div>
 
         <div class="settings-buttons">
-          <button id="settings-return-lobby" class="btn btn-secondary">Main Menu</button>
-          <button id="settings-how-to-play" class="btn btn-outline">How to Play</button>
-          <button id="settings-close" class="btn btn-primary primary">Close</button>
-          <button id="settings-new-game" class="btn btn-danger danger">New Game</button>
-          <button id="settings-reset" class="btn btn-secondary">Reset to Defaults</button>
+          <button id="settings-return-lobby" class="btn btn-secondary">${t("settings.buttons.mainMenu")}</button>
+          <button id="settings-how-to-play" class="btn btn-outline">${t("settings.buttons.howToPlay")}</button>
+          <button id="settings-close" class="btn btn-primary primary">${t("settings.buttons.close")}</button>
+          <button id="settings-new-game" class="btn btn-danger danger">${t("settings.buttons.newGame")}</button>
+          <button id="settings-reset" class="btn btn-secondary">${t("settings.buttons.resetDefaults")}</button>
         </div>
       </div>
     `;
@@ -412,12 +421,16 @@ export class SettingsModal {
 
       // User feedback - show confirmation notification
       const labels = {
-        low: "Low Contrast (Brighter Table)",
-        normal: "Normal Contrast (Balanced)",
-        high: "High Contrast (Darker Table)",
-        maximum: "Maximum Contrast (Darkest Table)",
+        low: t("settings.controls.tableContrast.low"),
+        normal: t("settings.controls.tableContrast.normal"),
+        high: t("settings.controls.tableContrast.high"),
+        maximum: t("settings.controls.tableContrast.maximum"),
       };
-      notificationService.show(`Table contrast: ${labels[value]}`, "info", 2000);
+      notificationService.show(
+        t("settings.notification.tableContrast", { value: labels[value] }),
+        "info",
+        2000
+      );
 
       // Briefly hide settings modal so user can see the table change
       this.container.style.opacity = "0";
@@ -438,8 +451,8 @@ export class SettingsModal {
       settingsService.updateControls({ reduceChaosCameraEffects: reduceChaosEffects.checked });
       notificationService.show(
         reduceChaosEffects.checked
-          ? "Chaos camera effects reduced"
-          : "Chaos camera effects restored",
+          ? t("settings.notification.chaosEffectsReduced")
+          : t("settings.notification.chaosEffectsRestored"),
         "info",
         2000
       );
@@ -455,8 +468,8 @@ export class SettingsModal {
       });
       notificationService.show(
         allowControlInversion.checked
-          ? "Control inversion enabled for drunk attacks"
-          : "Control inversion blocked by accessibility setting",
+          ? t("settings.notification.controlInversionEnabled")
+          : t("settings.notification.controlInversionBlocked"),
         "info",
         2200
       );
@@ -468,6 +481,21 @@ export class SettingsModal {
       settingsService.updateControls({
         mobileDiceLayout: mobileDiceLayout.value as "wrapped" | "single-row" | "perimeter",
       });
+      audioService.playSfx("click");
+    });
+
+    const gameLanguage = document.getElementById("game-language") as HTMLSelectElement;
+    gameLanguage.addEventListener("change", () => {
+      const nextLocale = gameLanguage.value as LocaleCode;
+      setLocale(nextLocale);
+      this.updateDifficultyInfo();
+      notificationService.show(
+        t("settings.notification.language.changed", {
+          locale: this.getLocaleLabel(nextLocale),
+        }),
+        "info",
+        2000
+      );
       audioService.playSfx("click");
     });
 
@@ -485,8 +513,8 @@ export class SettingsModal {
       });
       notificationService.show(
         cameraAssistEnabled.checked
-          ? "Camera assist enabled for Easy mode."
-          : "Camera assist disabled.",
+          ? t("settings.notification.cameraAssist.enabled")
+          : t("settings.notification.cameraAssist.disabled"),
         "info",
         1800
       );
@@ -498,10 +526,10 @@ export class SettingsModal {
     gameDifficulty.addEventListener("change", async () => {
       if (this.isGameInProgress()) {
         const confirmed = await confirmAction({
-          title: "Start New Game?",
-          message: "Changing difficulty will start a new game. Your current progress will be lost.",
-          confirmLabel: "Continue",
-          cancelLabel: "Keep Current Game",
+          title: t("settings.confirm.startNewGame.title"),
+          message: t("settings.confirm.startNewGame.message"),
+          confirmLabel: t("settings.confirm.startNewGame.confirm"),
+          cancelLabel: t("settings.confirm.startNewGame.cancel"),
           tone: "danger",
         });
         if (!confirmed) {
@@ -529,10 +557,10 @@ export class SettingsModal {
     variantD20.addEventListener("change", async () => {
       if (this.isGameInProgress()) {
         const confirmed = await confirmAction({
-          title: "Start New Game?",
-          message: "Changing dice variants will start a new game. Your current progress will be lost.",
-          confirmLabel: "Continue",
-          cancelLabel: "Keep Current Game",
+          title: t("settings.confirm.startNewGame.title"),
+          message: t("settings.confirm.startNewGame.variantsMessage"),
+          confirmLabel: t("settings.confirm.startNewGame.confirm"),
+          cancelLabel: t("settings.confirm.startNewGame.cancel"),
           tone: "danger",
         });
         if (!confirmed) {
@@ -552,10 +580,10 @@ export class SettingsModal {
     variantD4.addEventListener("change", async () => {
       if (this.isGameInProgress()) {
         const confirmed = await confirmAction({
-          title: "Start New Game?",
-          message: "Changing dice variants will start a new game. Your current progress will be lost.",
-          confirmLabel: "Continue",
-          cancelLabel: "Keep Current Game",
+          title: t("settings.confirm.startNewGame.title"),
+          message: t("settings.confirm.startNewGame.variantsMessage"),
+          confirmLabel: t("settings.confirm.startNewGame.confirm"),
+          cancelLabel: t("settings.confirm.startNewGame.cancel"),
           tone: "danger",
         });
         if (!confirmed) {
@@ -575,10 +603,10 @@ export class SettingsModal {
     variant2ndD10.addEventListener("change", async () => {
       if (this.isGameInProgress()) {
         const confirmed = await confirmAction({
-          title: "Start New Game?",
-          message: "Changing dice variants will start a new game. Your current progress will be lost.",
-          confirmLabel: "Continue",
-          cancelLabel: "Keep Current Game",
+          title: t("settings.confirm.startNewGame.title"),
+          message: t("settings.confirm.startNewGame.variantsMessage"),
+          confirmLabel: t("settings.confirm.startNewGame.confirm"),
+          cancelLabel: t("settings.confirm.startNewGame.cancel"),
           tone: "danger",
         });
         if (!confirmed) {
@@ -602,10 +630,10 @@ export class SettingsModal {
     variantD100.addEventListener("change", async () => {
       if (this.isGameInProgress()) {
         const confirmed = await confirmAction({
-          title: "Start New Game?",
-          message: "Changing dice variants will start a new game. Your current progress will be lost.",
-          confirmLabel: "Continue",
-          cancelLabel: "Keep Current Game",
+          title: t("settings.confirm.startNewGame.title"),
+          message: t("settings.confirm.startNewGame.variantsMessage"),
+          confirmLabel: t("settings.confirm.startNewGame.confirm"),
+          cancelLabel: t("settings.confirm.startNewGame.cancel"),
           tone: "danger",
         });
         if (!confirmed) {
@@ -637,10 +665,10 @@ export class SettingsModal {
     document.getElementById("settings-return-lobby")?.addEventListener("click", async () => {
       audioService.playSfx("click");
       const confirmed = await confirmAction({
-        title: "Return To Lobby?",
-        message: "Leave this game and return to the main menu?",
-        confirmLabel: "Return To Lobby",
-        cancelLabel: "Stay In Game",
+        title: t("settings.confirm.returnLobby.title"),
+        message: t("settings.confirm.returnLobby.message"),
+        confirmLabel: t("settings.confirm.returnLobby.confirm"),
+        cancelLabel: t("settings.confirm.returnLobby.cancel"),
         tone: "danger",
       });
       if (!confirmed) {
@@ -662,10 +690,10 @@ export class SettingsModal {
     document.getElementById("settings-new-game")?.addEventListener("click", async () => {
       audioService.playSfx("click");
       const confirmed = await confirmAction({
-        title: "Start New Game?",
-        message: "Your current progress will be lost.",
-        confirmLabel: "Start New Game",
-        cancelLabel: "Cancel",
+        title: t("settings.confirm.newGameButton.title"),
+        message: t("settings.confirm.newGameButton.message"),
+        confirmLabel: t("settings.confirm.newGameButton.confirm"),
+        cancelLabel: t("settings.confirm.newGameButton.cancel"),
         tone: "danger",
       });
       if (!confirmed) {
@@ -681,10 +709,10 @@ export class SettingsModal {
     document.getElementById("settings-reset")?.addEventListener("click", async () => {
       audioService.playSfx("click");
       const confirmed = await confirmAction({
-        title: "Reset Settings?",
-        message: "Reset all settings to defaults?",
-        confirmLabel: "Reset Settings",
-        cancelLabel: "Cancel",
+        title: t("settings.confirm.reset.title"),
+        message: t("settings.confirm.reset.message"),
+        confirmLabel: t("settings.confirm.reset.confirm"),
+        cancelLabel: t("settings.confirm.reset.cancel"),
         tone: "danger",
       });
       if (!confirmed) {
@@ -752,7 +780,7 @@ export class SettingsModal {
     if (!panel) return;
 
     const renderVersion = ++this.accountRenderVersion;
-    panel.innerHTML = `<p class="settings-account-loading">Loading account details...</p>`;
+    panel.innerHTML = `<p class="settings-account-loading">${t("settings.account.loading")}</p>`;
 
     try {
       await firebaseAuthService.initialize();
@@ -775,7 +803,7 @@ export class SettingsModal {
         accountProfile?.displayName?.trim() ||
         firebaseProfile?.displayName?.trim() ||
         accountProfile?.leaderboardName?.trim() ||
-        "Guest Player";
+        t("settings.account.guestPlayer");
       const email = accountProfile?.email?.trim() || firebaseProfile?.email?.trim() || "";
       const provider = accountProfile?.provider?.trim() || (isAuthenticated ? "google" : "guest");
       const providerId = accountProfile?.providerId?.trim() || firebaseProfile?.providerId?.trim() || "";
@@ -785,19 +813,19 @@ export class SettingsModal {
       const accountAdminRole = this.normalizeAdminRoleValue(accountProfile?.admin?.role);
       const authLabel = authConfigured
         ? isAuthenticated
-          ? "Signed In"
-          : "Guest Mode"
-        : "Auth Not Configured";
+          ? t("settings.account.auth.signedIn")
+          : t("settings.account.auth.guestMode")
+        : t("settings.account.auth.notConfigured");
       const syncIndicator = this.getSyncIndicatorState();
       const adminConsoleMarkup = this.isAdminMonitorEnabled()
         ? `
           <div class="settings-account-admin-launch">
             <div class="settings-account-admin-launch-info">
-              <strong>Admin Console</strong>
-              <span>Live room monitor, roles, audit trail, and storage diagnostics.</span>
+              <strong>${t("settings.admin.console.title")}</strong>
+              <span>${t("settings.admin.launch.description")}</span>
             </div>
             <button type="button" class="btn btn-secondary settings-account-btn" data-action="settings-open-admin-console">
-              Open Admin Console
+              ${t("settings.admin.launch.button")}
             </button>
           </div>
         `
@@ -809,7 +837,9 @@ export class SettingsModal {
             <div class="settings-account-avatar">
               ${
                 photoUrl
-                  ? `<img class="settings-account-avatar-image" src="${escapeAttribute(photoUrl)}" alt="${escapeAttribute(displayName)} profile photo" referrerpolicy="no-referrer" />`
+                  ? `<img class="settings-account-avatar-image" src="${escapeAttribute(photoUrl)}" alt="${escapeAttribute(
+                      t("settings.account.avatar.alt", { name: displayName })
+                    )}" referrerpolicy="no-referrer" />`
                   : `<span>${escapeHtml(this.getAvatarInitial(displayName))}</span>`
               }
             </div>
@@ -817,11 +847,15 @@ export class SettingsModal {
               <div class="settings-account-name">${escapeHtml(displayName)}</div>
               <div class="settings-account-badge">${escapeHtml(authLabel)}</div>
               ${email ? `<div class="settings-account-email">${escapeHtml(email)}</div>` : ""}
-              <div class="settings-account-provider">Provider: ${escapeHtml(providerLabel)}</div>
+              <div class="settings-account-provider">${escapeHtml(
+                t("settings.account.provider", { provider: providerLabel })
+              )}</div>
               ${
                 this.isAdminMonitorEnabled()
-                  ? `<div class="settings-account-provider">Admin Role: ${escapeHtml(
-                      accountAdminRole ?? "none"
+                  ? `<div class="settings-account-provider">${escapeHtml(
+                      t("settings.account.adminRole", {
+                        role: accountAdminRole ?? t("settings.account.none"),
+                      })
                     )}</div>`
                   : ""
               }
@@ -838,53 +872,61 @@ export class SettingsModal {
           <div class="settings-account-actions">
             ${
               authConfigured && !isAuthenticated
-                ? '<button type="button" class="btn btn-primary settings-account-btn" data-action="settings-signin">Sign In with Google</button>'
+                ? `<button type="button" class="btn btn-primary settings-account-btn" data-action="settings-signin">${t(
+                    "settings.account.action.signIn"
+                  )}</button>`
                 : ""
             }
             ${
               isAuthenticated
-                ? '<button type="button" class="btn btn-danger settings-account-btn" data-action="settings-signout">Sign Out</button>'
+                ? `<button type="button" class="btn btn-danger settings-account-btn" data-action="settings-signout">${t(
+                    "settings.account.action.signOut"
+                  )}</button>`
                 : ""
             }
-            <button type="button" class="btn btn-secondary settings-account-btn" data-action="settings-refresh">Refresh</button>
+            <button type="button" class="btn btn-secondary settings-account-btn" data-action="settings-refresh">${t(
+              "settings.account.action.refresh"
+            )}</button>
           </div>
         </div>
 
         ${
           isAuthenticated
             ? `<div class="settings-account-name-row">
-                <label for="settings-leaderboard-name">Leaderboard Name</label>
+                <label for="settings-leaderboard-name">${t("settings.account.leaderboardName.label")}</label>
                 <div class="settings-account-name-inputs">
                   <input
                     id="settings-leaderboard-name"
                     type="text"
                     maxlength="24"
-                    placeholder="Your public leaderboard name"
+                    placeholder="${escapeAttribute(t("settings.account.leaderboardName.placeholder"))}"
                     value="${escapeAttribute(leaderboardName)}"
                   />
-                  <button type="button" class="btn btn-primary settings-account-btn" data-action="settings-save-name">Save</button>
+                  <button type="button" class="btn btn-primary settings-account-btn" data-action="settings-save-name">${t(
+                    "settings.account.leaderboardName.save"
+                  )}</button>
                 </div>
               </div>`
             : `<p class="setting-description settings-account-help">
-                Sign in to set your leaderboard name and submit global scores.
+                ${t("settings.account.help.signInForLeaderboard")}
               </p>`
         }
 
         <div class="settings-account-stats-grid">
           <div class="settings-account-stat">
-            <span>Games</span>
+            <span>${t("settings.account.stats.games")}</span>
             <strong>${stats.totalGames}</strong>
           </div>
           <div class="settings-account-stat">
-            <span>Best</span>
+            <span>${t("settings.account.stats.best")}</span>
             <strong>${stats.totalGames > 0 ? stats.bestScore : "-"}</strong>
           </div>
           <div class="settings-account-stat">
-            <span>Average</span>
+            <span>${t("settings.account.stats.average")}</span>
             <strong>${stats.totalGames > 0 ? stats.averageScore : "-"}</strong>
           </div>
           <div class="settings-account-stat">
-            <span>Play Time</span>
+            <span>${t("settings.account.stats.playTime")}</span>
             <strong>${this.formatDuration(stats.totalPlayTime)}</strong>
           </div>
         </div>
@@ -899,7 +941,7 @@ export class SettingsModal {
       }
       log.warn("Failed to refresh account settings panel", error);
       panel.innerHTML = `
-        <p class="settings-account-loading">Unable to load account details right now.</p>
+        <p class="settings-account-loading">${t("settings.account.error.loadFailed")}</p>
       `;
     }
   }
@@ -1028,7 +1070,11 @@ export class SettingsModal {
               return;
             }
             const roleLabel = result.roleRecord.role ?? "none";
-            notificationService.show(`Updated ${targetUid} role to ${roleLabel}`, "success", 1800);
+            notificationService.show(
+              t("settings.admin.notification.roleUpdated", { uid: targetUid, role: roleLabel }),
+              "success",
+              1800
+            );
           })
           .finally(() => {
             this.savingAdminRole = false;
@@ -1051,10 +1097,10 @@ export class SettingsModal {
         this.savingAdminMutation = true;
         audioService.playSfx("click");
         void confirmAction({
-          title: "Expire Room?",
-          message: `Force close room ${sessionId}? Connected players will be disconnected.`,
-          confirmLabel: "Expire Room",
-          cancelLabel: "Cancel",
+          title: t("settings.admin.confirm.expireRoom.title"),
+          message: t("settings.admin.confirm.expireRoom.message", { sessionId }),
+          confirmLabel: t("settings.admin.confirm.expireRoom.confirm"),
+          cancelLabel: t("settings.admin.confirm.cancel"),
           tone: "danger",
         })
           .then((confirmed) => {
@@ -1077,7 +1123,7 @@ export class SettingsModal {
               );
               return;
             }
-            notificationService.show("Room expired", "success", 1800);
+            notificationService.show(t("settings.admin.notification.roomExpired"), "success", 1800);
           })
           .finally(() => {
             this.savingAdminMutation = false;
@@ -1105,10 +1151,10 @@ export class SettingsModal {
         this.savingAdminMutation = true;
         audioService.playSfx("click");
         void confirmAction({
-          title: "Remove Player?",
-          message: `Remove ${playerId} from room ${sessionId}?`,
-          confirmLabel: "Remove Player",
-          cancelLabel: "Cancel",
+          title: t("settings.admin.confirm.removePlayer.title"),
+          message: t("settings.admin.confirm.removePlayer.message", { playerId, sessionId }),
+          confirmLabel: t("settings.admin.confirm.removePlayer.confirm"),
+          cancelLabel: t("settings.admin.confirm.cancel"),
           tone: "danger",
         })
           .then((confirmed) => {
@@ -1131,7 +1177,7 @@ export class SettingsModal {
               );
               return;
             }
-            notificationService.show("Player removed from room", "success", 1800);
+            notificationService.show(t("settings.admin.notification.playerRemoved"), "success", 1800);
           })
           .finally(() => {
             this.savingAdminMutation = false;
@@ -1149,18 +1195,18 @@ export class SettingsModal {
       <div class="settings-admin-modal-backdrop"></div>
       <div class="settings-admin-modal-content">
         <div class="settings-admin-modal-header">
-          <h2>Admin Console</h2>
+          <h2>${t("settings.admin.console.title")}</h2>
           <div class="settings-admin-modal-actions">
             <button type="button" class="btn btn-secondary settings-account-btn" data-action="settings-admin-refresh">
-              Refresh
+              ${t("settings.admin.action.refresh")}
             </button>
             <button type="button" class="btn btn-primary settings-account-btn" data-action="settings-admin-close">
-              Close
+              ${t("settings.buttons.close")}
             </button>
           </div>
         </div>
         <div id="settings-admin-modal-body" class="settings-admin-modal-body">
-          <p class="settings-account-loading">Loading admin console...</p>
+          <p class="settings-account-loading">${t("settings.account.loadingAdmin")}</p>
         </div>
       </div>
     `;
@@ -1242,7 +1288,7 @@ export class SettingsModal {
     }
 
     const renderVersion = ++this.adminModalRenderVersion;
-    panel.innerHTML = `<p class="settings-account-loading">Loading admin console...</p>`;
+    panel.innerHTML = `<p class="settings-account-loading">${t("settings.account.loadingAdmin")}</p>`;
 
     try {
       await firebaseAuthService.initialize();
@@ -1339,7 +1385,7 @@ export class SettingsModal {
       }
       log.warn("Failed to refresh admin monitor panel", error);
       panel.innerHTML = `
-        <p class="settings-account-loading">Unable to load admin console right now.</p>
+        <p class="settings-account-loading">${t("settings.admin.error.loadFailed")}</p>
       `;
     }
   }
@@ -1368,42 +1414,44 @@ export class SettingsModal {
     const currentRole = this.normalizeAdminRoleValue(options.currentRole);
     const canOperate = currentRole === "owner" || currentRole === "operator";
     const statusText = overview
-      ? `Connected (${this.formatAdminAccessMode(overview.accessMode)})`
+      ? t("settings.admin.status.connected", {
+          mode: this.formatAdminAccessMode(overview.accessMode),
+        })
       : this.getAdminMonitorFailureMessage(reason, status);
     const statusTone = overview ? "ok" : reason === "network_error" ? "warn" : "error";
     const metricsMarkup = overview
       ? `
         <div class="settings-admin-metrics-grid">
           <div class="settings-admin-metric">
-            <span>Active Rooms</span>
+            <span>${t("settings.admin.metrics.activeRooms")}</span>
             <strong>${overview.metrics.activeSessionCount}</strong>
           </div>
           <div class="settings-admin-metric">
-            <span>Humans</span>
+            <span>${t("settings.admin.metrics.humans")}</span>
             <strong>${overview.metrics.humanCount}</strong>
           </div>
           <div class="settings-admin-metric">
-            <span>Bots</span>
+            <span>${t("settings.admin.metrics.bots")}</span>
             <strong>${overview.metrics.botCount}</strong>
           </div>
           <div class="settings-admin-metric">
-            <span>Public Base</span>
+            <span>${t("settings.admin.metrics.publicBase")}</span>
             <strong>${overview.metrics.publicDefaultCount}</strong>
           </div>
           <div class="settings-admin-metric">
-            <span>Overflow</span>
+            <span>${t("settings.admin.metrics.overflow")}</span>
             <strong>${overview.metrics.publicOverflowCount}</strong>
           </div>
           <div class="settings-admin-metric">
-            <span>Private</span>
+            <span>${t("settings.admin.metrics.private")}</span>
             <strong>${overview.metrics.privateRoomCount}</strong>
           </div>
           <div class="settings-admin-metric">
-            <span>Timeout Auto</span>
+            <span>${t("settings.admin.metrics.timeoutAuto")}</span>
             <strong>${Math.max(0, Math.floor(overview.metrics.turnTimeoutAutoAdvanceCount ?? 0))}</strong>
           </div>
           <div class="settings-admin-metric">
-            <span>Bot Auto</span>
+            <span>${t("settings.admin.metrics.botAuto")}</span>
             <strong>${Math.max(0, Math.floor(overview.metrics.botTurnAutoAdvanceCount ?? 0))}</strong>
           </div>
         </div>
@@ -1413,18 +1461,20 @@ export class SettingsModal {
       ? this.renderAdminRoomListMarkup(overview, now, canOperate)
       : `
         <p class="settings-admin-empty">
-          Monitor data is unavailable right now. Configure token access or retry.
+          ${t("settings.admin.monitor.unavailable")}
         </p>
       `;
     const roleLine = currentRole
-      ? `Role: ${currentRole}${options.roleSource ? ` (${options.roleSource})` : ""}`
-      : "Role: none";
+      ? t("settings.admin.role.current", {
+          role: `${currentRole}${options.roleSource ? ` (${options.roleSource})` : ""}`,
+        })
+      : t("settings.admin.role.none");
     const roleManagerMarkup =
       currentRole === "owner"
         ? this.renderAdminRoleManagerMarkup(options.roleRecords, options.roleReason, options.roleStatus)
         : currentRole
-          ? `<p class="settings-admin-empty">Role manager requires owner access.</p>`
-          : `<p class="settings-admin-empty">Sign in with an admin role to manage endpoint access.</p>`;
+          ? `<p class="settings-admin-empty">${t("settings.admin.role.ownerRequired")}</p>`
+          : `<p class="settings-admin-empty">${t("settings.admin.role.signInRequired")}</p>`;
     const auditMarkup = this.renderAdminAuditMarkup(
       options.auditEntries,
       options.auditReason,
@@ -1440,7 +1490,7 @@ export class SettingsModal {
     return `
       <div class="settings-admin-monitor">
         <div class="settings-admin-header">
-          <div class="settings-admin-title">Admin Monitor</div>
+          <div class="settings-admin-title">${t("settings.admin.monitor.title")}</div>
           <div class="settings-admin-status settings-admin-status--${statusTone}">
             ${escapeHtml(statusText)}
           </div>
@@ -1448,25 +1498,25 @@ export class SettingsModal {
         <div class="settings-admin-role">${escapeHtml(roleLine)}</div>
         <div class="settings-admin-actions">
           <button type="button" class="btn btn-secondary settings-account-btn" data-action="settings-admin-refresh">
-            Refresh Monitor
+            ${t("settings.admin.action.refreshMonitor")}
           </button>
         </div>
         <div class="settings-admin-token-row">
-          <label for="settings-admin-token">Admin Token</label>
+          <label for="settings-admin-token">${t("settings.admin.token.label")}</label>
           <div class="settings-account-name-inputs">
             <input
               id="settings-admin-token"
               type="password"
-              placeholder="Optional for open mode"
+              placeholder="${escapeAttribute(t("settings.admin.token.placeholder"))}"
               autocomplete="off"
               spellcheck="false"
               value="${escapeAttribute(tokenValue)}"
             />
             <button type="button" class="btn btn-primary settings-account-btn" data-action="settings-admin-save-token">
-              Save
+              ${t("settings.admin.action.save")}
             </button>
             <button type="button" class="btn btn-outline settings-account-btn" data-action="settings-admin-clear-token">
-              Clear
+              ${t("settings.admin.action.clear")}
             </button>
           </div>
         </div>
@@ -1494,7 +1544,7 @@ export class SettingsModal {
     if (!roleRecords.length) {
       return `
         <p class="settings-admin-empty">
-          No known users yet. Ask users to sign in once before assigning roles.
+          ${t("settings.admin.role.noKnownUsers")}
         </p>
       `;
     }
@@ -1512,10 +1562,10 @@ export class SettingsModal {
             </div>
             <div class="settings-admin-role-controls">
               <select data-admin-role-select ${locked ? "disabled" : ""}>
-                <option value="" ${normalizedRole === null ? "selected" : ""}>none</option>
-                <option value="viewer" ${normalizedRole === "viewer" ? "selected" : ""}>viewer</option>
-                <option value="operator" ${normalizedRole === "operator" ? "selected" : ""}>operator</option>
-                <option value="owner" ${normalizedRole === "owner" ? "selected" : ""}>owner</option>
+                <option value="" ${normalizedRole === null ? "selected" : ""}>${t("settings.account.none")}</option>
+                <option value="viewer" ${normalizedRole === "viewer" ? "selected" : ""}>${t("settings.admin.role.viewer")}</option>
+                <option value="operator" ${normalizedRole === "operator" ? "selected" : ""}>${t("settings.admin.role.operator")}</option>
+                <option value="owner" ${normalizedRole === "owner" ? "selected" : ""}>${t("settings.admin.role.owner")}</option>
               </select>
               <button
                 type="button"
@@ -1523,7 +1573,7 @@ export class SettingsModal {
                 data-action="settings-admin-save-role"
                 ${locked ? "disabled" : ""}
               >
-                ${locked ? "Locked" : "Apply"}
+                ${locked ? t("settings.admin.role.locked") : t("settings.admin.role.apply")}
               </button>
             </div>
           </div>
@@ -1533,7 +1583,7 @@ export class SettingsModal {
 
     return `
       <div class="settings-admin-role-manager">
-        <div class="settings-admin-role-manager-title">Role Management</div>
+        <div class="settings-admin-role-manager-title">${t("settings.admin.role.managementTitle")}</div>
         ${rows}
       </div>
     `;
@@ -1547,7 +1597,7 @@ export class SettingsModal {
     if (!overview.rooms.length) {
       return `
         <p class="settings-admin-empty">
-          No active rooms currently.
+          ${t("settings.admin.room.noneActive")}
         </p>
       `;
     }
@@ -1559,8 +1609,12 @@ export class SettingsModal {
           ? room.participants.find((participant) => participant.playerId === activeTurnPlayerId)
           : null;
         const activeTurnLabel =
-          activeTurnPlayer?.displayName?.trim() || activeTurnPlayerId || "No active player";
-        const phaseLabel = room.turnState ? this.formatAdminTurnPhase(room.turnState.phase) : "Waiting";
+          activeTurnPlayer?.displayName?.trim() ||
+          activeTurnPlayerId ||
+          t("settings.admin.room.noActivePlayer");
+        const phaseLabel = room.turnState
+          ? this.formatAdminTurnPhase(room.turnState.phase)
+          : t("settings.admin.turnPhase.waiting");
         const secondsToTurnExpire =
           room.turnState && typeof room.turnState.turnExpiresAt === "number"
             ? Math.max(0, Math.ceil((room.turnState.turnExpiresAt - now) / 1000))
@@ -1578,13 +1632,13 @@ export class SettingsModal {
         const adminActionsMarkup = canOperate
           ? `
             <div class="settings-admin-room-actions">
-              <button
+                <button
                 type="button"
                 class="btn btn-danger settings-account-btn"
                 data-action="settings-admin-expire-room"
                 data-session-id="${escapeAttribute(room.sessionId)}"
               >
-                Expire Room
+                ${t("settings.admin.action.expireRoom")}
               </button>
               ${
                 removablePlayers.length > 0
@@ -1599,11 +1653,11 @@ export class SettingsModal {
                         data-action="settings-admin-remove-player"
                         data-session-id="${escapeAttribute(room.sessionId)}"
                       >
-                        Remove Player
+                        ${t("settings.admin.action.removePlayer")}
                       </button>
                     </div>
                   `
-                  : `<div class="settings-admin-empty">No human players to remove.</div>`
+                  : `<div class="settings-admin-empty">${t("settings.admin.room.noHumanPlayers")}</div>`
               }
             </div>
           `
@@ -1616,12 +1670,24 @@ export class SettingsModal {
               <div class="settings-admin-room-type">${escapeHtml(roomTypeLabel)}</div>
             </div>
             <div class="settings-admin-room-meta">
-              Humans ${room.humanCount}/${room.maxHumanCount} • Ready ${room.readyHumanCount} • Bots ${room.botCount} • Connected ${room.connectedSocketCount}
+              ${escapeHtml(
+                t("settings.admin.room.meta", {
+                  humans: `${room.humanCount}/${room.maxHumanCount}`,
+                  ready: room.readyHumanCount,
+                  bots: room.botCount,
+                  connected: room.connectedSocketCount,
+                })
+              )}
             </div>
             <div class="settings-admin-room-turn">
               <strong>${escapeHtml(activeTurnLabel)}</strong> • ${escapeHtml(phaseLabel)}
-              ${secondsToTurnExpire === null ? "" : ` • turn ${secondsToTurnExpire}s`}
-              • idle ${Math.floor(room.idleMs / 1000)}s • room ${secondsToSessionExpire}s
+              ${
+                secondsToTurnExpire === null
+                  ? ""
+                  : ` • ${escapeHtml(t("settings.admin.room.turnSeconds", { seconds: secondsToTurnExpire }))}`
+              }
+              • ${escapeHtml(t("settings.admin.room.idleSeconds", { seconds: Math.floor(room.idleMs / 1000) }))}
+              • ${escapeHtml(t("settings.admin.room.roomSeconds", { seconds: secondsToSessionExpire }))}
             </div>
             ${adminActionsMarkup}
           </div>
@@ -1645,9 +1711,13 @@ export class SettingsModal {
     if (!storage || !sections) {
       return `
         <div class="settings-admin-storage">
-          <div class="settings-admin-storage-title">Persistence</div>
+          <div class="settings-admin-storage-title">${t("settings.admin.storage.title")}</div>
           <p class="settings-admin-empty">
-            Storage summary unavailable: ${escapeHtml(this.getAdminMonitorFailureMessage(reason, status))}
+            ${escapeHtml(
+              t("settings.admin.storage.unavailable", {
+                reason: this.getAdminMonitorFailureMessage(reason, status),
+              })
+            )}
           </p>
         </div>
       `;
@@ -1665,10 +1735,14 @@ export class SettingsModal {
 
     return `
       <div class="settings-admin-storage">
-        <div class="settings-admin-storage-title">Persistence</div>
+        <div class="settings-admin-storage-title">${t("settings.admin.storage.title")}</div>
         <div class="settings-admin-storage-meta">
-          Backend: ${escapeHtml(backendLabel)}
-          ${prefixLabel ? ` • Prefix: ${escapeHtml(prefixLabel)}` : ""}
+          ${escapeHtml(t("settings.admin.storage.backend", { backend: backendLabel }))}
+          ${
+            prefixLabel
+              ? ` • ${escapeHtml(t("settings.admin.storage.prefix", { prefix: prefixLabel }))}`
+              : ""
+          }
         </div>
         <div class="settings-admin-storage-sections">
           ${sectionMarkup}
@@ -1685,9 +1759,13 @@ export class SettingsModal {
     if (!auditEntries) {
       return `
         <div class="settings-admin-audit-list">
-          <div class="settings-admin-audit-title">Audit Trail</div>
+          <div class="settings-admin-audit-title">${t("settings.admin.audit.title")}</div>
           <p class="settings-admin-empty">
-            Audit log unavailable: ${escapeHtml(this.getAdminMonitorFailureMessage(reason, status))}
+            ${escapeHtml(
+              t("settings.admin.audit.unavailable", {
+                reason: this.getAdminMonitorFailureMessage(reason, status),
+              })
+            )}
           </p>
         </div>
       `;
@@ -1695,8 +1773,8 @@ export class SettingsModal {
     if (!auditEntries.length) {
       return `
         <div class="settings-admin-audit-list">
-          <div class="settings-admin-audit-title">Audit Trail</div>
-          <p class="settings-admin-empty">No admin actions recorded yet.</p>
+          <div class="settings-admin-audit-title">${t("settings.admin.audit.title")}</div>
+          <p class="settings-admin-empty">${t("settings.admin.audit.noActions")}</p>
         </div>
       `;
     }
@@ -1707,7 +1785,7 @@ export class SettingsModal {
           entry.actor.uid?.trim() ||
           entry.actor.email?.trim() ||
           entry.actor.authType?.trim() ||
-          "unknown";
+          t("settings.admin.audit.unknownActor");
         const targetLabel =
           entry.target.sessionId?.trim() ||
           entry.target.playerId?.trim() ||
@@ -1732,7 +1810,7 @@ export class SettingsModal {
       .join("");
     return `
       <div class="settings-admin-audit-list">
-        <div class="settings-admin-audit-title">Audit Trail</div>
+        <div class="settings-admin-audit-title">${t("settings.admin.audit.title")}</div>
         ${rows}
       </div>
     `;
@@ -1741,49 +1819,49 @@ export class SettingsModal {
   private getAdminMonitorFailureMessage(reason?: string, status?: number): string {
     switch (reason) {
       case "missing_admin_auth":
-        return "Sign in or provide admin token";
+        return t("settings.admin.failure.missingAdminAuth");
       case "missing_admin_token":
-        return "Admin token required by API";
+        return t("settings.admin.failure.missingAdminToken");
       case "invalid_admin_token":
-        return "Admin token rejected";
+        return t("settings.admin.failure.invalidAdminToken");
       case "missing_admin_role":
-        return "Role value is required";
+        return t("settings.admin.failure.missingAdminRole");
       case "invalid_session_id":
-        return "Invalid session ID";
+        return t("settings.admin.failure.invalidSessionId");
       case "invalid_player_id":
-        return "Invalid player ID";
+        return t("settings.admin.failure.invalidPlayerId");
       case "unknown_session":
-        return "Session not found";
+        return t("settings.admin.failure.unknownSession");
       case "unknown_player":
-        return "Player not found in room";
+        return t("settings.admin.failure.unknownPlayer");
       case "admin_role_required":
-        return "Admin role is required";
+        return t("settings.admin.failure.adminRoleRequired");
       case "admin_role_forbidden":
-        return "Your role does not have permission";
+        return t("settings.admin.failure.adminRoleForbidden");
       case "bootstrap_owner_locked":
-        return "Bootstrap owner role is locked";
+        return t("settings.admin.failure.bootstrapOwnerLocked");
       case "missing_authorization_header":
       case "invalid_bearer_header":
       case "invalid_auth":
       case "anonymous_not_allowed":
-        return "Sign in to access admin endpoints";
+        return t("settings.admin.failure.signInRequired");
       case "invalid_admin_payload":
-        return "Admin response shape was invalid";
+        return t("settings.admin.failure.invalidPayload");
       case "admin_disabled":
-        return "Admin monitoring is disabled on server";
+        return t("settings.admin.failure.adminDisabled");
       case "network_error":
-        return "Monitor request failed (network)";
+        return t("settings.admin.failure.network");
       default: {
         if (status === 401) {
-          return "Unauthorized (check auth token/role)";
+          return t("settings.admin.failure.http401");
         }
         if (status === 403) {
-          return "Admin access denied";
+          return t("settings.admin.failure.http403");
         }
         if (status && Number.isFinite(status)) {
-          return `Monitor request failed (HTTP ${status})`;
+          return t("settings.admin.failure.httpGeneric", { status });
         }
-        return "Monitor unavailable";
+        return t("settings.admin.failure.unavailable");
       }
     }
   }
@@ -1791,28 +1869,28 @@ export class SettingsModal {
   private formatAdminAccessMode(mode: string | undefined): string {
     switch (mode) {
       case "open":
-        return "open mode";
+        return t("settings.admin.accessMode.open");
       case "token":
-        return "token mode";
+        return t("settings.admin.accessMode.token");
       case "role":
-        return "role mode";
+        return t("settings.admin.accessMode.role");
       case "hybrid":
-        return "hybrid mode";
+        return t("settings.admin.accessMode.hybrid");
       case "disabled":
-        return "disabled";
+        return t("settings.admin.accessMode.disabled");
       default:
-        return "unknown";
+        return t("settings.admin.accessMode.unknown");
     }
   }
 
   private formatAdminAuditAction(action: string): string {
     switch (action) {
       case "role_upsert":
-        return "Role Updated";
+        return t("settings.admin.audit.action.roleUpsert");
       case "session_expire":
-        return "Room Expired";
+        return t("settings.admin.audit.action.sessionExpire");
       case "participant_remove":
-        return "Player Removed";
+        return t("settings.admin.audit.action.participantRemove");
       default:
         return action
           .split("_")
@@ -1824,7 +1902,7 @@ export class SettingsModal {
 
   private formatAdminAuditTimestamp(timestamp: number): string {
     if (!Number.isFinite(timestamp)) {
-      return "Unknown time";
+      return t("settings.admin.audit.unknownTime");
     }
     try {
       return new Date(timestamp).toLocaleString(undefined, {
@@ -1835,7 +1913,7 @@ export class SettingsModal {
         second: "2-digit",
       });
     } catch {
-      return "Unknown time";
+      return t("settings.admin.audit.unknownTime");
     }
   }
 
@@ -1865,24 +1943,24 @@ export class SettingsModal {
   private formatAdminRoomType(roomType: string): string {
     switch (roomType) {
       case "public_default":
-        return "Public Base";
+        return t("settings.admin.room.type.publicBase");
       case "public_overflow":
-        return "Public Overflow";
+        return t("settings.admin.room.type.publicOverflow");
       default:
-        return "Private";
+        return t("settings.admin.room.type.private");
     }
   }
 
   private formatAdminTurnPhase(phase: string): string {
     switch (phase) {
       case "await_roll":
-        return "Await Roll";
+        return t("settings.admin.turnPhase.awaitRoll");
       case "await_score":
-        return "Await Score";
+        return t("settings.admin.turnPhase.awaitScore");
       case "ready_to_end":
-        return "Ready To End";
+        return t("settings.admin.turnPhase.readyToEnd");
       default:
-        return "Waiting";
+        return t("settings.admin.turnPhase.waiting");
     }
   }
 
@@ -1953,33 +2031,36 @@ export class SettingsModal {
 
     if (!isNavigatorOnline()) {
       return {
-        label: "Offline",
+        label: t("settings.sync.offline.label"),
         tone: "offline",
-        title: "Offline: local progress is cached and will sync when connection returns.",
+        title: t("settings.sync.offline.title"),
       };
     }
 
     if (dataSync.state === "syncing" || leaderboardSync.state === "syncing") {
       return {
-        label: "Syncing",
+        label: t("settings.sync.syncing.label"),
         tone: "syncing",
-        title: "Sync in progress.",
+        title: t("settings.sync.syncing.title"),
       };
     }
 
     if (dataSync.state === "error" || leaderboardSync.state === "error") {
       return {
-        label: "Retrying",
+        label: t("settings.sync.error.label"),
         tone: "error",
-        title: "A recent sync attempt failed. The app will retry automatically.",
+        title: t("settings.sync.error.title"),
       };
     }
 
     if (pendingCount > 0 || dataSync.profileDirty) {
       return {
-        label: pendingCount > 0 ? `Pending ${pendingCount}` : "Pending",
+        label:
+          pendingCount > 0
+            ? t("settings.sync.pending.withCount", { count: pendingCount })
+            : t("settings.sync.pending.label"),
         tone: "pending",
-        title: "There are local changes waiting to sync.",
+        title: t("settings.sync.pending.title"),
       };
     }
 
@@ -1990,13 +2071,13 @@ export class SettingsModal {
     );
     const suffix =
       latestSuccessAt > 0
-        ? ` Last update ${formatRelativeSyncTime(latestSuccessAt)}.`
+        ? t("settings.sync.upToDate.suffix", { relative: formatRelativeSyncTime(latestSuccessAt) })
         : "";
 
     return {
-      label: "Up to date",
+      label: t("settings.sync.upToDate.label"),
       tone: "ok",
-      title: `All local data is synced.${suffix}`,
+      title: `${t("settings.sync.upToDate.title")}${suffix}`,
     };
   }
 
@@ -2042,6 +2123,7 @@ export class SettingsModal {
       this.settings.controls.allowChaosControlInversion;
     (document.getElementById("mobile-dice-layout") as HTMLSelectElement).value =
       this.settings.controls.mobileDiceLayout;
+    (document.getElementById("game-language") as HTMLSelectElement).value = getLocale();
 
     (document.getElementById("variant-d20") as HTMLInputElement).checked = this.settings.game.addD20;
     (document.getElementById("variant-d4") as HTMLInputElement).checked = this.settings.game.addD4;
@@ -2065,9 +2147,9 @@ export class SettingsModal {
       .value as GameDifficulty;
 
     const descriptions = {
-      easy: "✨ Shows hints highlighting best scoring choices and enables optional camera assist.",
-      normal: "🎲 Standard BISCUITS rules. No hints or special assistance.",
-      hard: "🔥 Coming soon: Stricter rules and no hints. For experienced players only.",
+      easy: t("settings.difficulty.info.easy"),
+      normal: t("settings.difficulty.info.normal"),
+      hard: t("settings.difficulty.info.hard"),
     };
 
     infoText.textContent = descriptions[difficulty];
@@ -2088,8 +2170,18 @@ export class SettingsModal {
 
     if (info) {
       info.textContent = isEasy
-        ? "Camera assist is available in Easy mode. Disable it if you prefer manual camera control."
-        : "Camera assist is disabled outside Easy mode.";
+        ? t("settings.cameraAssist.info.easy")
+        : t("settings.cameraAssist.info.nonEasy");
+    }
+  }
+
+  private getLocaleLabel(locale: LocaleCode): string {
+    switch (locale) {
+      case "es-ES":
+        return t("settings.controls.language.option.esES");
+      case "en-US":
+      default:
+        return t("settings.controls.language.option.enUS");
     }
   }
 
@@ -2212,25 +2304,25 @@ function escapeAttribute(value: string): string {
 function formatRelativeSyncTime(timestamp: number): string {
   const deltaMs = Date.now() - timestamp;
   if (!Number.isFinite(deltaMs) || deltaMs < 0) {
-    return "just now";
+    return t("settings.sync.relative.justNow");
   }
   if (deltaMs < 10_000) {
-    return "just now";
+    return t("settings.sync.relative.justNow");
   }
   const seconds = Math.floor(deltaMs / 1000);
   if (seconds < 60) {
-    return `${seconds}s ago`;
+    return t("settings.sync.relative.secondsAgo", { value: seconds });
   }
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) {
-    return `${minutes}m ago`;
+    return t("settings.sync.relative.minutesAgo", { value: minutes });
   }
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
-    return `${hours}h ago`;
+    return t("settings.sync.relative.hoursAgo", { value: hours });
   }
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t("settings.sync.relative.daysAgo", { value: days });
 }
 
 function isNavigatorOnline(): boolean {
