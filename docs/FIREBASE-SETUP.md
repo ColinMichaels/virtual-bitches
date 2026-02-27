@@ -19,7 +19,7 @@ cp .env.firebase.example .env.local
 Required keys:
 - `VITE_API_BASE_URL`
 - `VITE_WS_URL`
-- `VITE_ASSET_BASE_URL` (optional CDN/storage origin for runtime assets)
+- `VITE_ASSET_BASE_URL` (optional local/manual runtime override; CI deploy now derives asset base from `VITE_FIREBASE_STORAGE_BUCKET` + `CDN_REQUIRE_PUBLIC_READ`)
 - `VITE_OG_IMAGE_URL` (optional social share image override; defaults to current BISCUITS CDN ad image)
 - `VITE_FIREBASE_API_KEY`
 - `VITE_FIREBASE_AUTH_DOMAIN`
@@ -159,7 +159,6 @@ Recommended setup (GitHub Environments):
   - `FIREBASE_PROJECT_ID` (or fallback `VITE_FIREBASE_PROJECT_ID`)
   - `VITE_API_BASE_URL`
   - `VITE_WS_URL`
-  - `VITE_ASSET_BASE_URL` (optional; when omitted CI defaults to Hosting-local assets in private mode, or `https://storage.googleapis.com/<VITE_FIREBASE_STORAGE_BUCKET>/` in public-CDN mode)
   - `VITE_FIREBASE_API_KEY`
   - `VITE_FIREBASE_AUTH_DOMAIN`
   - `VITE_FIREBASE_PROJECT_ID`
@@ -176,6 +175,9 @@ Recommended setup (GitHub Environments):
   - `CDN_REQUIRE_PUBLIC_READ` (optional; default `0`)
   - `CDN_AUTOCONFIGURE_PUBLIC_READ` (optional; default `0`, only used for public mode)
   - `CDN_AUTOCONFIGURE_CORS` (optional; default `1` in public mode, applies Storage bucket CORS for `https://<project>.web.app`, `https://<project>.firebaseapp.com`, and local dev origins)
+  - CI derives `VITE_ASSET_BASE_URL` automatically:
+    - `CDN_REQUIRE_PUBLIC_READ=1` -> `https://storage.googleapis.com/<VITE_FIREBASE_STORAGE_BUCKET>/`
+    - `CDN_REQUIRE_PUBLIC_READ=0` -> Hosting-local asset paths
   - `API_STORE_BACKEND` (recommended: `firestore`)
   - `API_FIRESTORE_PREFIX` (optional; default `api_v1`)
   - `FIREBASE_AUTH_MODE` (recommended: `admin` for production)
@@ -206,8 +208,6 @@ Branch-specific frontend env secrets:
 - `VITE_API_BASE_URL_DEV`
 - `VITE_WS_URL_PROD`
 - `VITE_WS_URL_DEV`
-- `VITE_ASSET_BASE_URL_PROD` (optional)
-- `VITE_ASSET_BASE_URL_DEV` (optional)
 - `VITE_FIREBASE_API_KEY_PROD`
 - `VITE_FIREBASE_API_KEY_DEV`
 - `VITE_FIREBASE_AUTH_DOMAIN_PROD`

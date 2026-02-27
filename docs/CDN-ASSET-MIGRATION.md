@@ -62,7 +62,7 @@ gcloud storage cp public/updates.json gs://$BUCKET/updates.json
 
 ## 3) Configure app env
 
-Set these in `.env.local` / GitHub environment vars:
+Set these in `.env.local` (or for manual non-CI builds):
 
 ```bash
 VITE_ASSET_BASE_URL=https://storage.googleapis.com/<your-bucket>/
@@ -72,7 +72,10 @@ VITE_RULES_URL=https://storage.googleapis.com/<your-bucket>/rules.md
 VITE_UPDATES_URL=https://storage.googleapis.com/<your-bucket>/updates.json
 ```
 
-`VITE_ASSET_BASE_URL` is the main switch. The other URLs are optional overrides.
+`VITE_ASSET_BASE_URL` is the main switch for runtime asset resolution. The other URLs are optional overrides.
+
+For GitHub Actions deploys, `VITE_ASSET_BASE_URL` is computed by CI from
+`VITE_FIREBASE_STORAGE_BUCKET` + `CDN_REQUIRE_PUBLIC_READ` to avoid stale-path drift.
 
 ## 4) Optional: Add Cloud CDN in front of bucket (recommended)
 

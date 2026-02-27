@@ -58,14 +58,6 @@ function getLocalAssetBaseUrl(): string {
   return buildDefaultBasePath();
 }
 
-export function getAssetBaseUrl(): string {
-  const configured = getConfiguredAssetBaseUrl();
-  if (configured) {
-    return configured;
-  }
-  return getLocalAssetBaseUrl();
-}
-
 export function getAssetUrlCandidates(assetPath: string): string[] {
   const normalizedPath = normalizeAssetPath(assetPath);
   const configuredBase = getConfiguredAssetBaseUrl();
@@ -97,10 +89,6 @@ export function getThemeAssetBaseCandidates(themeName: string): string[] {
   return getAssetUrlCandidates(`assets/themes/${themeName}`);
 }
 
-export function getThemeConfigUrl(themeName: string): string {
-  return getThemeConfigUrlCandidates(themeName)[0];
-}
-
 export function getThemeConfigUrlCandidates(themeName: string): string[] {
   return getAssetUrlCandidates(`assets/themes/${themeName}/theme.config.json`);
 }
@@ -117,16 +105,8 @@ function getOverrideUrlCandidates(overrideUrl: string | undefined, fallbackAsset
   return dedupeUrls([resolveAssetUrl(override), ...fallbackCandidates]);
 }
 
-export function getRulesMarkdownUrl(): string {
-  return getRulesMarkdownUrlCandidates()[0];
-}
-
 export function getRulesMarkdownUrlCandidates(): string[] {
   return getOverrideUrlCandidates(env.VITE_RULES_URL, "rules.md");
-}
-
-export function getUpdatesFeedUrl(): string {
-  return getUpdatesFeedUrlCandidates()[0];
 }
 
 export function getUpdatesFeedUrlCandidates(): string[] {
@@ -139,10 +119,6 @@ export function getBrandLogoUrl(): string {
 
 export function getBrandLogoUrlCandidates(): string[] {
   return getOverrideUrlCandidates(env.VITE_BRAND_LOGO_URL, "assets/logos/Biscuits_logo.png");
-}
-
-export function getGameMusicUrl(): string {
-  return getGameMusicUrlCandidates()[0];
 }
 
 export function getGameMusicUrlCandidates(): string[] {
