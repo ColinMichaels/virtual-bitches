@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-02-27T04:30:02.240Z",
+  "generatedAt": "2026-02-27T04:48:54.288Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-2864348",
+      "date": "2026-02-27T04:30:51.000Z",
+      "title": "Add camera assist feature and improve keyboard focus navigation",
+      "content": "<p>Add camera assist feature and improve keyboard focus navigation</p><p><strong>Commit:</strong> <code>2864348</code></p><p>- Introduced camera assist toggle for Easy mode with automated camera movements after scoring.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "2864348c91f81208c9c06924ea56ddad0297bb00",
+        "shortHash": "2864348",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/2864348c91f81208c9c06924ea56ddad0297bb00"
+      }
+    },
     {
       "id": "git-da062cc",
       "date": "2026-02-27T04:26:22.000Z",
@@ -547,20 +561,6 @@
         "hash": "9b4f1109091669708c31bb4114a59b75b87792a9",
         "shortHash": "9b4f110",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9b4f1109091669708c31bb4114a59b75b87792a9"
-      }
-    },
-    {
-      "id": "git-188c46d",
-      "date": "2026-02-26T11:48:02.000Z",
-      "title": "Add brand assets (logo, background music) and enhance UI styling",
-      "content": "<p>Add brand assets (logo, background music) and enhance UI styling</p><p><strong>Commit:</strong> <code>188c46d</code></p><p>- Introduced `Biscuits_logo.png` for branding, used on splash screens and HUD.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "188c46dcde8c44aafa45e0066315a21e679296e0",
-        "shortHash": "188c46d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/188c46dcde8c44aafa45e0066315a21e679296e0"
       }
     }
   ]

@@ -3499,6 +3499,9 @@ class Game implements GameCallbacks {
       return;
     }
 
+    // Rolling should always reset any temporary die/player focus camera back to gameplay overview.
+    this.scene.returnCameraToDefaultOverview(true);
+
     if (this.isMultiplayerTurnEnforced()) {
       this.awaitingMultiplayerRoll = true;
       notificationService.show("Rolling...", "info", 900);
