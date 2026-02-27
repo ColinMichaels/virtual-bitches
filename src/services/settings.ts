@@ -47,6 +47,7 @@ export interface CameraSettings {
 export interface GameSettings {
   showTutorial: boolean;
   confirmBeforeNewGame: boolean;
+  cameraAssistEnabled: boolean;
   addD20: boolean;
   addD4: boolean;
   add2ndD10: boolean;
@@ -97,6 +98,7 @@ const DEFAULT_SETTINGS: Settings = {
   game: {
     showTutorial: true,
     confirmBeforeNewGame: false,
+    cameraAssistEnabled: true,
     addD20: false,
     addD4: false,
     add2ndD10: false,

@@ -8,8 +8,8 @@
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow: hidden;
-  background: #1a1a2e;
-  color: #eee;
+  background: var(--ui-app-bg, #1a1a2e);
+  color: var(--ui-text-primary, #eee);
 }
 
 html,
@@ -61,6 +61,56 @@ h1, h2, h3, h4, h5, h6 {
     1px 0 0 rgba(0, 0, 0, 0.45),
     -1px 0 0 rgba(0, 0, 0, 0.45),
     0 0 10px rgba(0, 0, 0, 0.38);
+  --gradient-danger: linear-gradient(180deg, #f56666 0%, #cf3b3b 100%);
+  --color-danger-border: rgba(255, 149, 149, 0.75);
+  --btn-danger-gradient: var(--gradient-danger);
+  --btn-danger-border: var(--color-danger-border);
+  --btn-outline-bg: rgba(var(--color-primary-rgb), 0.16);
+  --btn-outline-border: rgba(var(--color-primary-rgb), 0.55);
+  --btn-outline-text: #fff;
+  --btn-text-color: #fff;
+
+  --ui-app-bg: #1a1a2e;
+  --ui-text-primary: #f3f7ff;
+  --ui-text-secondary: rgba(232, 239, 255, 0.86);
+  --ui-text-muted: rgba(214, 225, 244, 0.72);
+  --ui-text-dim: rgba(171, 184, 207, 0.68);
+
+  --ui-surface-overlay: rgba(0, 0, 0, 0.8);
+  --ui-surface-elevated: rgba(26, 26, 46, 0.95);
+  --ui-surface-elevated-strong: rgba(9, 15, 30, 0.96);
+  --ui-surface-panel: rgba(0, 0, 0, 0.3);
+  --ui-surface-panel-hover: rgba(0, 0, 0, 0.4);
+  --ui-surface-card: rgba(255, 255, 255, 0.05);
+  --ui-surface-card-strong: rgba(255, 255, 255, 0.1);
+
+  --ui-border-soft: rgba(255, 255, 255, 0.12);
+  --ui-border-medium: rgba(255, 255, 255, 0.2);
+  --ui-border-strong: rgba(255, 255, 255, 0.28);
+  --ui-border-accent: rgba(var(--color-primary-rgb), 0.48);
+  --ui-shadow-panel: 0 16px 42px rgba(0, 0, 0, 0.45);
+  --ui-shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.28);
+  --ui-focus-ring: 0 0 0 3px rgba(var(--color-primary-rgb), 0.24);
+
+  --control-bg: rgba(0, 0, 0, 0.34);
+  --control-bg-hover: rgba(0, 0, 0, 0.42);
+  --control-border: rgba(255, 255, 255, 0.2);
+  --control-border-hover: rgba(var(--color-primary-rgb), 0.5);
+  --control-border-focus: var(--color-primary);
+  --control-text-color: var(--ui-text-primary);
+  --control-placeholder: rgba(255, 255, 255, 0.56);
+  --control-radius: 8px;
+  --control-padding-y: 8px;
+  --control-padding-x: 12px;
+
+  --status-info: #8ecbff;
+  --status-success: #8fffb5;
+  --status-warning: #ffd27a;
+  --status-error: #ff8f8f;
+  --status-info-rgb: 142, 203, 255;
+  --status-success-rgb: 143, 255, 181;
+  --status-warning-rgb: 255, 210, 122;
+  --status-error-rgb: 255, 143, 143;
 }
 
 /* Main Layout */
@@ -1230,9 +1280,9 @@ button {
   padding: 10px 16px;
   font-size: 14px;
   font-weight: 600;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--control-radius);
+  border: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-card);
   color: inherit;
   cursor: pointer;
   transition:
@@ -1259,7 +1309,7 @@ button.danger {
   cursor: pointer;
   border-color: var(--color-secondary-border-soft);
   background: var(--btn-secondary-gradient);
-  color: #fff;
+  color: var(--btn-text-color);
   text-shadow: var(--btn-text-shadow);
   box-shadow:
     0 10px 22px rgba(16, 55, 67, 0.24),
@@ -1310,7 +1360,7 @@ button.primary,
 .btn-primary {
   border-color: var(--color-primary-border);
   background: var(--btn-primary-gradient);
-  color: #fff;
+  color: var(--btn-text-color);
   font-size: 30px;
   text-shadow: var(--btn-text-shadow);
   box-shadow:
@@ -1328,7 +1378,7 @@ button.secondary,
 .btn-secondary {
   border-color: var(--color-secondary-border);
   background: var(--btn-secondary-gradient);
-  color: #fff;
+  color: var(--btn-text-color);
   text-shadow: var(--btn-text-shadow);
   box-shadow:
     0 10px 22px rgba(16, 55, 67, 0.24),
@@ -1347,21 +1397,93 @@ button.secondary:hover:not(:disabled),
 
 button.danger,
 .btn-danger {
-  border-color: rgba(255, 149, 149, 0.75);
-  background: linear-gradient(180deg, #f56666 0%, #cf3b3b 100%);
-  color: #fff;
+  border-color: var(--btn-danger-border);
+  background: var(--btn-danger-gradient);
+  color: var(--btn-text-color);
 }
 
 .btn-outline {
-  border-color: rgba(128, 190, 255, 0.7);
-  background: rgba(39, 74, 125, 0.34);
-  color: #fff;
+  border-color: var(--btn-outline-border);
+  background: var(--btn-outline-bg);
+  color: var(--btn-outline-text);
   text-shadow: var(--btn-text-shadow);
 }
 
 .btn-sm {
   padding: 8px 12px;
   font-size: 13px;
+}
+
+/* Unified control skin for selects/inputs used across modals/panels */
+:where(
+  .setting-row select,
+  .splash-multiplayer-options select,
+  .splash-room-picker select,
+  .splash-multiplayer-options input:not([type="checkbox"]),
+  .settings-account-name-inputs input,
+  .global-name-row input,
+  .profile-name-row input,
+  .settings-admin-remove-row select,
+  .settings-admin-role-controls select,
+  .theme-dropdown,
+  .debug-theme-select
+) {
+  border-radius: var(--control-radius);
+  border: 1px solid var(--control-border);
+  background: var(--control-bg);
+  color: var(--control-text-color);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+:where(
+  .setting-row select,
+  .splash-multiplayer-options select,
+  .splash-room-picker select,
+  .splash-multiplayer-options input:not([type="checkbox"]),
+  .settings-account-name-inputs input,
+  .global-name-row input,
+  .profile-name-row input,
+  .settings-admin-remove-row select,
+  .settings-admin-role-controls select,
+  .theme-dropdown,
+  .debug-theme-select
+):hover {
+  border-color: var(--control-border-hover);
+  background: var(--control-bg-hover);
+}
+
+:where(
+  .setting-row select,
+  .splash-multiplayer-options select,
+  .splash-room-picker select,
+  .splash-multiplayer-options input:not([type="checkbox"]),
+  .settings-account-name-inputs input,
+  .global-name-row input,
+  .profile-name-row input,
+  .settings-admin-remove-row select,
+  .settings-admin-role-controls select,
+  .theme-dropdown,
+  .debug-theme-select
+):focus-visible {
+  outline: none;
+  border-color: var(--control-border-focus);
+  box-shadow: var(--ui-focus-ring), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+:where(
+  .splash-multiplayer-options input:not([type="checkbox"]),
+  .settings-account-name-inputs input,
+  .global-name-row input,
+  .profile-name-row input
+)::placeholder {
+  color: var(--control-placeholder);
+}
+
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+  accent-color: var(--color-primary);
 }
 
 /* Game Over Screen */
@@ -1663,16 +1785,14 @@ body.splash-active :is(
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--ui-text-secondary);
 }
 
 .splash-multiplayer-options select,
 .splash-multiplayer-options input {
   min-width: 180px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(8, 10, 20, 0.75);
-  color: #fff;
+  border-radius: var(--control-radius);
+  color: var(--control-text-color);
   font-size: 14px;
   padding: 8px 12px;
 }
@@ -1735,20 +1855,20 @@ body.splash-active :is(
 }
 
 .splash-room-code-error.is-info {
-  color: rgba(174, 214, 255, 0.92);
+  color: rgba(var(--status-info-rgb), 0.92);
 }
 
 .splash-room-code-error.is-success {
-  color: rgba(159, 244, 190, 0.95);
+  color: rgba(var(--status-success-rgb), 0.95);
 }
 
 .splash-room-code-error.is-error {
-  color: rgba(255, 152, 152, 0.96);
+  color: rgba(var(--status-error-rgb), 0.96);
 }
 
 .splash-multiplayer-options input[aria-invalid="true"] {
-  border-color: rgba(255, 122, 122, 0.9);
-  box-shadow: 0 0 0 1px rgba(255, 122, 122, 0.35);
+  border-color: rgba(var(--status-error-rgb), 0.9);
+  box-shadow: 0 0 0 1px rgba(var(--status-error-rgb), 0.35);
 }
 
 .splash-room-picker button {
@@ -1760,7 +1880,7 @@ body.splash-active :is(
 .splash-multiplayer-options p {
   margin: 0;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--ui-text-dim);
 }
 
 .splash-buttons {
@@ -1806,14 +1926,14 @@ body.splash-active :is(
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.8);
+  background: var(--ui-surface-overlay);
   backdrop-filter: blur(5px);
 }
 
 .modal-content {
   position: relative;
   z-index: 1;
-  background: rgba(26, 26, 46, 0.95);
+  background: var(--ui-surface-elevated);
   padding: 40px;
   border-radius: 12px;
   max-width: 600px;
@@ -1823,7 +1943,8 @@ body.splash-active :is(
     calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 20px)
   );
   overflow-y: auto;
-  box-shadow: 0 10px 50px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--ui-border-soft);
+  box-shadow: var(--ui-shadow-panel);
 }
 
 .modal-header {
@@ -1836,14 +1957,14 @@ body.splash-active :is(
 .modal-header h2 {
   font-size: 28px;
   margin: 0;
-  color: #eee;
+  color: var(--ui-text-primary);
 }
 
 .modal-close {
   background: none;
   border: none;
   box-shadow: none;
-  color: #999;
+  color: var(--ui-text-dim);
   font-size: 36px;
   font-weight: 400;
   cursor: pointer;
@@ -1858,7 +1979,7 @@ body.splash-active :is(
 }
 
 .modal-close:hover {
-  color: #fff;
+  color: var(--ui-text-primary);
 }
 
 /* Rules Modal Specific Styles */
@@ -2051,14 +2172,14 @@ body.splash-active :is(
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.8);
+  background: var(--ui-surface-overlay);
   backdrop-filter: blur(5px);
 }
 
 .settings-content {
   position: relative;
   z-index: 1;
-  background: rgba(26, 26, 46, 0.95);
+  background: var(--ui-surface-elevated);
   padding: 40px;
   border-radius: 12px;
   max-width: 600px;
@@ -2068,7 +2189,8 @@ body.splash-active :is(
     calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 20px)
   );
   overflow-y: auto;
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--ui-border-soft);
+  box-shadow: var(--ui-shadow-panel);
 }
 
 #settings-admin-modal {
@@ -2105,9 +2227,9 @@ body.splash-active :is(
   gap: 10px;
   border-radius: 14px;
   padding: 16px;
-  background: rgba(9, 15, 30, 0.96);
-  border: 1px solid rgba(176, 206, 255, 0.24);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  background: var(--ui-surface-elevated-strong);
+  border: 1px solid var(--ui-border-medium);
+  box-shadow: var(--ui-shadow-panel);
 }
 
 .settings-admin-modal-header {
@@ -2121,7 +2243,7 @@ body.splash-active :is(
 .settings-admin-modal-header h2 {
   margin: 0;
   font-size: 22px;
-  color: #e9f1ff;
+  color: var(--ui-text-primary);
 }
 
 .settings-admin-modal-actions {
@@ -2162,13 +2284,13 @@ body.splash-active :is(
 }
 
 .settings-tab-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--ui-surface-card-strong);
 }
 
 .settings-tab-btn.active {
-  background: rgba(74, 158, 255, 0.34);
-  border-color: rgba(139, 191, 255, 0.82);
-  color: #fff;
+  background: rgba(var(--color-primary-rgb), 0.24);
+  border-color: var(--ui-border-accent);
+  color: var(--ui-text-primary);
 }
 
 .settings-tab-panel {
@@ -2185,15 +2307,15 @@ body.splash-active :is(
 
 .settings-section h3 {
   margin: 0 0 16px 0;
-  color: #fff;
+  color: var(--ui-text-primary);
   font-size: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid var(--ui-border-medium);
   padding-bottom: 8px;
 }
 
 .setting-description {
   margin: -8px 0 16px 0;
-  color: #aaa;
+  color: var(--ui-text-dim);
   font-size: 13px;
   font-style: italic;
 }
@@ -2207,7 +2329,7 @@ body.splash-active :is(
 
 .setting-row label {
   flex: 1;
-  color: #ddd;
+  color: var(--ui-text-secondary);
   font-size: 14px;
 }
 
@@ -2225,10 +2347,8 @@ body.splash-active :is(
 .setting-row select {
   flex: 1;
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  color: #fff;
+  border-radius: var(--control-radius);
+  color: var(--control-text-color);
   font-size: 14px;
   cursor: pointer;
 }
@@ -2236,7 +2356,7 @@ body.splash-active :is(
 .setting-row span {
   min-width: 50px;
   text-align: right;
-  color: #aaa;
+  color: var(--ui-text-dim);
   font-size: 14px;
 }
 
@@ -2247,7 +2367,7 @@ body.splash-active :is(
   gap: 10px;
   margin-top: 24px;
   padding-top: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--ui-border-soft);
 }
 
 .settings-buttons .btn {
@@ -2263,7 +2383,7 @@ body.splash-active :is(
 }
 
 .settings-account-loading {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--ui-text-muted);
   margin: 0;
 }
 
@@ -2274,8 +2394,8 @@ body.splash-active :is(
   gap: 12px;
   padding: 12px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-panel);
 }
 
 .settings-account-summary {
@@ -2294,9 +2414,9 @@ body.splash-active :is(
   justify-content: center;
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: var(--ui-text-primary);
   background: linear-gradient(135deg, rgba(74, 158, 255, 0.9), rgba(124, 93, 250, 0.8));
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid var(--ui-border-medium);
 }
 
 .settings-account-avatar-image {
@@ -2309,7 +2429,7 @@ body.splash-active :is(
 .settings-account-name {
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: var(--ui-text-primary);
 }
 
 .settings-account-badge {
@@ -2322,7 +2442,7 @@ body.splash-active :is(
 .settings-account-email,
 .settings-account-provider {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--ui-text-muted);
 }
 
 .sync-indicator {
@@ -2333,36 +2453,36 @@ body.splash-active :is(
   padding: 2px 0;
   font-size: 10px;
   letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--ui-text-dim);
 }
 
 .sync-indicator-dot {
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: rgba(136, 194, 160, 0.8);
-  box-shadow: 0 0 0 1px rgba(136, 194, 160, 0.24);
+  background: rgba(var(--status-success-rgb), 0.82);
+  box-shadow: 0 0 0 1px rgba(var(--status-success-rgb), 0.26);
 }
 
 .sync-indicator--ok .sync-indicator-dot {
-  background: rgba(136, 194, 160, 0.86);
-  box-shadow: 0 0 0 1px rgba(136, 194, 160, 0.24);
+  background: rgba(var(--status-success-rgb), 0.9);
+  box-shadow: 0 0 0 1px rgba(var(--status-success-rgb), 0.26);
 }
 
 .sync-indicator--syncing .sync-indicator-dot {
-  background: rgba(134, 168, 205, 0.9);
-  box-shadow: 0 0 0 1px rgba(134, 168, 205, 0.24);
+  background: rgba(var(--status-info-rgb), 0.9);
+  box-shadow: 0 0 0 1px rgba(var(--status-info-rgb), 0.24);
 }
 
 .sync-indicator--pending .sync-indicator-dot {
-  background: rgba(195, 176, 123, 0.9);
-  box-shadow: 0 0 0 1px rgba(195, 176, 123, 0.24);
+  background: rgba(var(--status-warning-rgb), 0.9);
+  box-shadow: 0 0 0 1px rgba(var(--status-warning-rgb), 0.24);
 }
 
 .sync-indicator--offline .sync-indicator-dot,
 .sync-indicator--error .sync-indicator-dot {
-  background: rgba(187, 145, 145, 0.9);
-  box-shadow: 0 0 0 1px rgba(187, 145, 145, 0.24);
+  background: rgba(var(--status-error-rgb), 0.9);
+  box-shadow: 0 0 0 1px rgba(var(--status-error-rgb), 0.24);
 }
 
 .settings-account-actions {
@@ -2388,7 +2508,7 @@ body.splash-active :is(
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--ui-text-muted);
 }
 
 .settings-account-name-inputs {
@@ -2399,16 +2519,14 @@ body.splash-active :is(
 .settings-account-name-inputs input {
   flex: 1;
   min-width: 0;
-  border-radius: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(0, 0, 0, 0.3);
-  color: #fff;
+  border-radius: var(--control-radius);
+  color: var(--control-text-color);
   padding: 9px 10px;
   font-size: 13px;
 }
 
 .settings-account-name-inputs input::placeholder {
-  color: rgba(255, 255, 255, 0.48);
+  color: var(--control-placeholder);
 }
 
 .settings-account-help {
@@ -2428,8 +2546,8 @@ body.splash-active :is(
   gap: 10px;
   padding: 10px;
   border-radius: 8px;
-  border: 1px solid rgba(160, 198, 255, 0.22);
-  background: rgba(33, 53, 86, 0.35);
+  border: 1px solid rgba(var(--status-info-rgb), 0.34);
+  background: rgba(var(--status-info-rgb), 0.14);
 }
 
 .settings-account-admin-launch-info {
@@ -2442,19 +2560,19 @@ body.splash-active :is(
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #e3eeff;
+  color: var(--ui-text-primary);
 }
 
 .settings-account-admin-launch-info span {
   font-size: 12px;
-  color: rgba(217, 230, 255, 0.78);
+  color: var(--ui-text-muted);
 }
 
 .settings-account-stat {
   padding: 10px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--ui-surface-card);
+  border: 1px solid var(--ui-border-soft);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -2462,13 +2580,13 @@ body.splash-active :is(
 
 .settings-account-stat span {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--ui-text-dim);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .settings-account-stat strong {
-  color: #fff;
+  color: var(--ui-text-primary);
   font-size: 18px;
 }
 
@@ -2478,8 +2596,8 @@ body.splash-active :is(
   gap: 10px;
   padding: 12px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(7, 10, 20, 0.65);
+  border: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-panel);
 }
 
 .settings-admin-header {
@@ -2495,7 +2613,7 @@ body.splash-active :is(
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(216, 228, 255, 0.9);
+  color: var(--ui-text-secondary);
 }
 
 .settings-admin-status {
@@ -2509,18 +2627,18 @@ body.splash-active :is(
 }
 
 .settings-admin-status--ok {
-  background: rgba(109, 178, 138, 0.2);
-  color: rgba(178, 233, 203, 0.95);
+  background: rgba(var(--status-success-rgb), 0.2);
+  color: rgba(var(--status-success-rgb), 0.95);
 }
 
 .settings-admin-status--warn {
-  background: rgba(198, 164, 105, 0.2);
-  color: rgba(244, 220, 169, 0.95);
+  background: rgba(var(--status-warning-rgb), 0.2);
+  color: rgba(var(--status-warning-rgb), 0.95);
 }
 
 .settings-admin-status--error {
-  background: rgba(184, 108, 108, 0.2);
-  color: rgba(248, 187, 187, 0.95);
+  background: rgba(var(--status-error-rgb), 0.2);
+  color: rgba(var(--status-error-rgb), 0.95);
 }
 
 .settings-admin-actions {
@@ -2539,7 +2657,7 @@ body.splash-active :is(
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.66);
+  color: var(--ui-text-dim);
 }
 
 .settings-admin-metrics-grid {
@@ -2554,20 +2672,20 @@ body.splash-active :is(
   gap: 4px;
   padding: 8px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-card);
 }
 
 .settings-admin-metric span {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--ui-text-dim);
 }
 
 .settings-admin-metric strong {
   font-size: 15px;
-  color: #fff;
+  color: var(--ui-text-primary);
 }
 
 .settings-admin-room-list {
@@ -2585,8 +2703,8 @@ body.splash-active :is(
   gap: 4px;
   padding: 8px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-card);
 }
 
 .settings-admin-room-top {
@@ -2597,7 +2715,7 @@ body.splash-active :is(
 }
 
 .settings-admin-room-code {
-  color: #fff;
+  color: var(--ui-text-primary);
   font-weight: 700;
   font-family: "Courier New", monospace;
   letter-spacing: 0.05em;
@@ -2607,17 +2725,17 @@ body.splash-active :is(
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(176, 210, 255, 0.9);
+  color: rgba(var(--status-info-rgb), 0.9);
 }
 
 .settings-admin-room-meta,
 .settings-admin-room-turn {
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--ui-text-muted);
   font-size: 12px;
 }
 
 .settings-admin-room-turn strong {
-  color: #fff;
+  color: var(--ui-text-primary);
 }
 
 .settings-admin-room-actions {
@@ -2626,7 +2744,7 @@ body.splash-active :is(
   gap: 8px;
   margin-top: 4px;
   padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--ui-border-soft);
 }
 
 .settings-admin-remove-row {
@@ -2638,23 +2756,21 @@ body.splash-active :is(
 .settings-admin-remove-row select {
   flex: 1;
   min-height: 34px;
-  border-radius: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(0, 0, 0, 0.32);
-  color: #fff;
+  border-radius: var(--control-radius);
+  color: var(--control-text-color);
   padding: 0 10px;
   font-size: 12px;
 }
 
 .settings-admin-empty {
   margin: 0;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--ui-text-dim);
   font-size: 12px;
 }
 
 .settings-admin-role {
   font-size: 12px;
-  color: rgba(205, 222, 255, 0.84);
+  color: var(--ui-text-secondary);
 }
 
 .settings-admin-role-manager {
@@ -2662,7 +2778,7 @@ body.splash-active :is(
   flex-direction: column;
   gap: 8px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: 1px solid var(--ui-border-soft);
   max-height: 240px;
   overflow-y: auto;
   padding-right: 2px;
@@ -2673,7 +2789,7 @@ body.splash-active :is(
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(228, 236, 255, 0.86);
+  color: var(--ui-text-secondary);
 }
 
 .settings-admin-role-row {
@@ -2683,8 +2799,8 @@ body.splash-active :is(
   gap: 8px;
   padding: 8px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-card);
 }
 
 .settings-admin-role-user {
@@ -2696,13 +2812,13 @@ body.splash-active :is(
 
 .settings-admin-role-user strong {
   font-size: 12px;
-  color: #fff;
+  color: var(--ui-text-primary);
   font-weight: 700;
 }
 
 .settings-admin-role-user span {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--ui-text-dim);
   font-family: "Courier New", monospace;
   overflow-wrap: anywhere;
 }
@@ -2715,10 +2831,8 @@ body.splash-active :is(
 
 .settings-admin-role-controls select {
   min-height: 34px;
-  border-radius: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(0, 0, 0, 0.32);
-  color: #fff;
+  border-radius: var(--control-radius);
+  color: var(--control-text-color);
   padding: 0 10px;
   font-size: 12px;
 }
@@ -2728,7 +2842,7 @@ body.splash-active :is(
   flex-direction: column;
   gap: 7px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: 1px solid var(--ui-border-soft);
 }
 
 .settings-admin-storage-title {
@@ -2736,12 +2850,12 @@ body.splash-active :is(
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(228, 236, 255, 0.86);
+  color: var(--ui-text-secondary);
 }
 
 .settings-admin-storage-meta {
   font-size: 12px;
-  color: rgba(217, 233, 255, 0.78);
+  color: var(--ui-text-muted);
 }
 
 .settings-admin-storage-sections {
@@ -2755,11 +2869,11 @@ body.splash-active :is(
   align-items: center;
   padding: 4px 7px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-card);
   font-size: 10px;
   letter-spacing: 0.03em;
-  color: rgba(226, 239, 255, 0.9);
+  color: var(--ui-text-secondary);
 }
 
 .settings-admin-audit-list {
@@ -2767,7 +2881,7 @@ body.splash-active :is(
   flex-direction: column;
   gap: 8px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: 1px solid var(--ui-border-soft);
   max-height: 220px;
   overflow-y: auto;
   padding-right: 2px;
@@ -2778,7 +2892,7 @@ body.splash-active :is(
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(228, 236, 255, 0.86);
+  color: var(--ui-text-secondary);
 }
 
 .settings-admin-audit-row {
@@ -2787,8 +2901,8 @@ body.splash-active :is(
   gap: 5px;
   padding: 8px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-card);
 }
 
 .settings-admin-audit-main {
@@ -2799,12 +2913,12 @@ body.splash-active :is(
 
 .settings-admin-audit-main strong {
   font-size: 12px;
-  color: #fff;
+  color: var(--ui-text-primary);
 }
 
 .settings-admin-audit-main span {
   font-size: 12px;
-  color: rgba(231, 239, 255, 0.8);
+  color: var(--ui-text-secondary);
 }
 
 .settings-admin-audit-meta {
@@ -2813,7 +2927,7 @@ body.splash-active :is(
   justify-content: space-between;
   gap: 10px;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--ui-text-dim);
   font-family: "Courier New", monospace;
   overflow-wrap: anywhere;
 }
@@ -3124,19 +3238,19 @@ body.splash-active :is(
 }
 
 .notification-info {
-  color: #66b3ff;
+  color: var(--status-info);
 }
 
 .notification-success {
-  color: #5dff5d;
+  color: var(--status-success);
 }
 
 .notification-warning {
-  color: #ffd700;
+  color: var(--status-warning);
 }
 
 .notification-error {
-  color: #ff5555;
+  color: var(--status-error);
 }
 
 /* Mobile-responsive notifications */
@@ -3390,19 +3504,19 @@ body.splash-active :is(
   margin-bottom: 16px;
   padding: 12px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-panel);
 }
 
 .global-auth-title {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--ui-text-dim);
 }
 
 .global-auth-user {
-  color: #fff;
+  color: var(--ui-text-primary);
   font-size: 16px;
   font-weight: 700;
 }
@@ -3434,19 +3548,19 @@ body.splash-active :is(
   margin-bottom: 14px;
   padding: 12px;
   border-radius: 8px;
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--ui-border-medium);
+  background: var(--ui-surface-card);
 }
 
 .global-name-setup h4 {
-  color: #fff;
+  color: var(--ui-text-primary);
   margin: 0 0 6px;
   font-size: 14px;
 }
 
 .global-name-setup p {
   margin: 0 0 10px;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--ui-text-muted);
   font-size: 12px;
 }
 
@@ -3458,16 +3572,14 @@ body.splash-active :is(
 .global-name-row input {
   flex: 1;
   min-width: 0;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(0, 0, 0, 0.35);
-  color: #fff;
+  border-radius: var(--control-radius);
+  color: var(--control-text-color);
   padding: 8px 10px;
   font-size: 13px;
 }
 
 .global-name-row input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--control-placeholder);
 }
 
 .auth-gate-modal-content {
@@ -3482,7 +3594,7 @@ body.splash-active :is(
 
 .auth-gate-content p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--ui-text-secondary);
   font-size: 14px;
   line-height: 1.4;
 }
@@ -3511,7 +3623,7 @@ body.splash-active :is(
 
 .confirm-modal-message {
   margin: 0;
-  color: rgba(255, 255, 255, 0.84);
+  color: var(--ui-text-secondary);
   font-size: 14px;
   line-height: 1.45;
   white-space: pre-line;
@@ -3531,8 +3643,8 @@ body.splash-active :is(
 }
 
 .btn-confirm-accept.is-danger {
-  border-color: rgba(255, 149, 149, 0.75);
-  background: linear-gradient(180deg, #f56666 0%, #cf3b3b 100%);
+  border-color: var(--btn-danger-border);
+  background: var(--btn-danger-gradient);
 }
 
 .session-expiry-modal-content {
@@ -3547,7 +3659,7 @@ body.splash-active :is(
 
 .session-expiry-content p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--ui-text-secondary);
   font-size: 14px;
   line-height: 1.4;
 }
@@ -3578,7 +3690,7 @@ body.splash-active :is(
 .profile-loading,
 .profile-error {
   text-align: center;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--ui-text-muted);
   padding: 24px 12px;
 }
 
@@ -3589,8 +3701,8 @@ body.splash-active :is(
   align-items: center;
   padding: 14px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-panel);
 }
 
 .profile-avatar {
@@ -3603,7 +3715,7 @@ body.splash-active :is(
   justify-content: center;
   font-size: 22px;
   font-weight: 700;
-  color: #fff;
+  color: var(--ui-text-primary);
   background: linear-gradient(135deg, rgba(74, 158, 255, 0.9), rgba(124, 93, 250, 0.8));
 }
 
@@ -3623,7 +3735,7 @@ body.splash-active :is(
 .profile-name {
   font-size: 20px;
   font-weight: 700;
-  color: #fff;
+  color: var(--ui-text-primary);
 }
 
 .profile-subtitle {
@@ -3635,7 +3747,7 @@ body.splash-active :is(
 
 .profile-email,
 .profile-provider {
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--ui-text-muted);
   font-size: 13px;
 }
 
@@ -3655,19 +3767,19 @@ body.splash-active :is(
 .profile-name-setup {
   padding: 12px;
   border-radius: 10px;
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--ui-border-medium);
+  background: var(--ui-surface-card);
 }
 
 .profile-name-setup h3 {
   margin: 0 0 6px;
   font-size: 14px;
-  color: #fff;
+  color: var(--ui-text-primary);
 }
 
 .profile-name-setup p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--ui-text-muted);
   font-size: 12px;
 }
 
@@ -3680,22 +3792,20 @@ body.splash-active :is(
 .profile-name-row input {
   flex: 1;
   min-width: 0;
-  border-radius: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  background: rgba(0, 0, 0, 0.3);
-  color: #fff;
+  border-radius: var(--control-radius);
+  color: var(--control-text-color);
   padding: 8px 10px;
   font-size: 13px;
 }
 
 .profile-name-row input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--control-placeholder);
 }
 
 .profile-stats h3,
 .profile-top-scores h3 {
   margin: 0 0 10px;
-  color: #fff;
+  color: var(--ui-text-primary);
   font-size: 16px;
 }
 
@@ -3708,20 +3818,20 @@ body.splash-active :is(
 .profile-stat-card {
   padding: 10px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--ui-surface-card);
+  border: 1px solid var(--ui-border-soft);
 }
 
 .profile-stat-label {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--ui-text-dim);
 }
 
 .profile-stat-value {
   margin-top: 4px;
-  color: #fff;
+  color: var(--ui-text-primary);
   font-size: 20px;
   font-weight: 700;
 }
@@ -3739,12 +3849,12 @@ body.splash-active :is(
   align-items: center;
   padding: 10px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-card);
 }
 
 .profile-score-rank {
-  color: rgba(255, 255, 255, 0.74);
+  color: var(--ui-text-muted);
   font-weight: 700;
 }
 
@@ -3755,13 +3865,13 @@ body.splash-active :is(
 }
 
 .profile-score-meta {
-  color: rgba(255, 255, 255, 0.74);
+  color: var(--ui-text-muted);
   font-size: 12px;
 }
 
 .profile-empty {
   margin: 0;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--ui-text-muted);
   font-size: 13px;
 }
 
@@ -3786,8 +3896,8 @@ body.splash-active :is(
   gap: 12px;
   padding: 12px 14px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--ui-surface-card);
+  border: 1px solid var(--ui-border-soft);
 }
 
 .chaos-token-box {
@@ -3800,7 +3910,7 @@ body.splash-active :is(
   font-size: 12px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--ui-text-muted);
 }
 
 .chaos-token-value {
@@ -3818,9 +3928,9 @@ body.splash-active :is(
 .chaos-mini-btn {
   padding: 8px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  border: 1px solid var(--ui-border-medium);
+  background: var(--ui-surface-card-strong);
+  color: var(--ui-text-primary);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -3840,7 +3950,7 @@ body.splash-active :is(
 
 .chaos-mini-btn.ghost {
   background: rgba(255, 255, 255, 0.02);
-  color: rgba(255, 255, 255, 0.86);
+  color: var(--ui-text-secondary);
 }
 
 .chaos-upgrade-grid {
@@ -3855,8 +3965,8 @@ body.splash-active :is(
   gap: 10px;
   padding: 12px;
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--ui-surface-panel);
+  border: 1px solid var(--ui-border-soft);
 }
 
 .chaos-upgrade-card-header {
@@ -3868,7 +3978,7 @@ body.splash-active :is(
 
 .chaos-upgrade-card-header h3 {
   font-size: 18px;
-  color: #fff;
+  color: var(--ui-text-primary);
 }
 
 .chaos-upgrade-current-level {
@@ -3877,7 +3987,7 @@ body.splash-active :is(
   padding: 4px 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.14);
-  color: #fff;
+  color: var(--ui-text-primary);
 }
 
 .chaos-upgrade-stats {
@@ -3885,7 +3995,7 @@ body.splash-active :is(
   flex-wrap: wrap;
   gap: 10px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.76);
+  color: var(--ui-text-secondary);
 }
 
 .chaos-upgrade-xp-track {
@@ -5341,7 +5451,7 @@ body.splash-active :is(
 .theme-switcher-header h3 {
   margin: 0 0 15px 0;
   font-size: 18px;
-  color: #eee;
+  color: var(--ui-text-primary);
 }
 
 .theme-dropdown-container {
@@ -5352,10 +5462,8 @@ body.splash-active :is(
 .debug-theme-select {
   width: 100%;
   padding: 12px 15px;
-  background: rgba(0, 0, 0, 0.4);
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: #eee;
+  border-radius: var(--control-radius);
+  color: var(--control-text-color);
   font-size: 14px;
   font-family: inherit;
   cursor: pointer;
@@ -5365,20 +5473,19 @@ body.splash-active :is(
 
 .theme-dropdown:hover,
 .debug-theme-select:hover {
-  background: rgba(0, 0, 0, 0.5);
-  border-color: rgba(var(--color-primary-rgb), 0.5);
+  border-color: var(--control-border-hover);
 }
 
 .theme-dropdown:focus,
 .debug-theme-select:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.2);
+  border-color: var(--control-border-focus);
+  box-shadow: var(--ui-focus-ring);
 }
 
 .theme-dropdown option,
 .debug-theme-select option {
-  background: #1a1a2e;
-  color: #eee;
+  background: var(--ui-app-bg);
+  color: var(--ui-text-primary);
   padding: 10px;
 }
 
@@ -6227,7 +6334,7 @@ body.splash-active :is(
   top: -5px;
   right: -5px;
   background: var(--gradient-primary-accent);
-  color: white;
+  color: var(--ui-text-primary);
   font-size: 11px;
   font-weight: bold;
   min-width: 20px;
@@ -6256,10 +6363,10 @@ body.splash-active :is(
   right: 0;
   width: 360px;
   max-height: 500px;
-  background: rgba(26, 26, 46, 0.98);
-  border: 2px solid rgba(var(--color-primary-rgb), 0.3);
+  background: var(--ui-surface-elevated);
+  border: 1px solid var(--ui-border-accent);
   border-radius: 8px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--ui-shadow-panel);
   overflow: hidden;
   animation: slideDown 0.3s ease;
 }
@@ -6280,8 +6387,8 @@ body.splash-active :is(
   justify-content: space-between;
   align-items: center;
   padding: 15px 20px;
-  background: rgba(var(--color-primary-rgb), 0.1);
-  border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.2);
+  background: rgba(var(--color-primary-rgb), 0.12);
+  border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.24);
   gap: 12px;
 }
 
@@ -6295,14 +6402,14 @@ body.splash-active :is(
 .updates-header h3 {
   margin: 0;
   font-size: 18px;
-  color: #eee;
+  color: var(--ui-text-primary);
   font-family: 'Caprasimo', cursive;
 }
 
 .updates-status {
   margin: 0;
   font-size: 11px;
-  color: rgba(221, 230, 244, 0.74);
+  color: var(--ui-text-muted);
   letter-spacing: 0.03em;
   white-space: nowrap;
   overflow: hidden;
@@ -6317,9 +6424,9 @@ body.splash-active :is(
 
 .updates-refresh-btn,
 .updates-close-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #a9b1c3;
+  background: var(--ui-surface-card);
+  border: 1px solid var(--ui-border-soft);
+  color: var(--ui-text-dim);
   cursor: pointer;
   padding: 5px;
   width: 30px;
@@ -6333,7 +6440,7 @@ body.splash-active :is(
 
 .updates-refresh-btn:hover,
 .updates-close-btn:hover {
-  color: #f3f7ff;
+  color: var(--ui-text-primary);
   border-color: rgba(var(--color-primary-rgb), 0.55);
   background: rgba(var(--color-primary-rgb), 0.14);
 }
@@ -6349,12 +6456,12 @@ body.splash-active :is(
 .updates-error {
   text-align: center;
   padding: 40px 20px;
-  color: #888;
+  color: var(--ui-text-dim);
 }
 
 .update-item {
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--ui-surface-panel);
+  border: 1px solid var(--ui-border-soft);
   border-radius: 6px;
   padding: 15px;
   margin-bottom: 10px;
@@ -6362,7 +6469,7 @@ body.splash-active :is(
 }
 
 .update-item:hover {
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--ui-surface-panel-hover);
   border-color: rgba(var(--color-primary-rgb), 0.3);
 }
 

@@ -144,6 +144,22 @@ export class SettingsModal {
             <div class="setting-row difficulty-info">
               <p id="difficulty-info-text" class="setting-description"></p>
             </div>
+
+            <div class="setting-row">
+              <label>
+                <input
+                  type="checkbox"
+                  id="camera-assist-enabled"
+                  ${this.settings.game.difficulty === "easy" && this.settings.game.cameraAssistEnabled ? "checked" : ""}
+                  ${this.settings.game.difficulty === "easy" ? "" : "disabled"}
+                >
+                Camera assist (auto zoom and return after scoring)
+              </label>
+            </div>
+
+            <div class="setting-row difficulty-info">
+              <p id="camera-assist-info-text" class="setting-description"></p>
+            </div>
           </div>
 
           <div class="settings-section">
@@ -452,6 +468,28 @@ export class SettingsModal {
       settingsService.updateControls({
         mobileDiceLayout: mobileDiceLayout.value as "wrapped" | "single-row" | "perimeter",
       });
+      audioService.playSfx("click");
+    });
+
+    const cameraAssistEnabled = document.getElementById("camera-assist-enabled") as HTMLInputElement;
+    cameraAssistEnabled.addEventListener("change", () => {
+      const difficulty = (document.getElementById("game-difficulty") as HTMLSelectElement)
+        .value as GameDifficulty;
+      if (difficulty !== "easy") {
+        this.updateCameraAssistControlState(difficulty);
+        return;
+      }
+
+      settingsService.updateGame({
+        cameraAssistEnabled: cameraAssistEnabled.checked,
+      });
+      notificationService.show(
+        cameraAssistEnabled.checked
+          ? "Camera assist enabled for Easy mode."
+          : "Camera assist disabled.",
+        "info",
+        1800
+      );
       audioService.playSfx("click");
     });
 
@@ -2027,12 +2065,32 @@ export class SettingsModal {
       .value as GameDifficulty;
 
     const descriptions = {
-      easy: "✨ Shows hints highlighting best scoring choices. Future updates will add undo/redo options.",
+      easy: "✨ Shows hints highlighting best scoring choices and enables optional camera assist.",
       normal: "🎲 Standard BISCUITS rules. No hints or special assistance.",
       hard: "🔥 Coming soon: Stricter rules and no hints. For experienced players only.",
     };
 
     infoText.textContent = descriptions[difficulty];
+    this.updateCameraAssistControlState(difficulty);
+  }
+
+  private updateCameraAssistControlState(difficulty: GameDifficulty): void {
+    const toggle = document.getElementById("camera-assist-enabled") as HTMLInputElement | null;
+    const info = document.getElementById("camera-assist-info-text") as HTMLElement | null;
+    if (!toggle) {
+      return;
+    }
+
+    const isEasy = difficulty === "easy";
+    const storedEnabled = settingsService.getSettings().game.cameraAssistEnabled !== false;
+    toggle.disabled = !isEasy;
+    toggle.checked = isEasy && storedEnabled;
+
+    if (info) {
+      info.textContent = isEasy
+        ? "Camera assist is available in Easy mode. Disable it if you prefer manual camera control."
+        : "Camera assist is disabled outside Easy mode.";
+    }
   }
 
   private getAvatarInitial(displayName: string): string {

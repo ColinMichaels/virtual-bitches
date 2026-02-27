@@ -185,6 +185,7 @@ class Game implements GameCallbacks {
   private multiplayerSessionService: MultiplayerSessionService;
   private gameStartTime: number;
   private selectedDieIndex = 0; // For keyboard navigation
+  private selectedSeatFocusIndex = -1; // For waiting/spectator keyboard camera cycling
   private inputController: InputController;
   private gameOverController: GameOverController;
   private readonly localPlayerId = getLocalPlayerId();
@@ -1846,9 +1847,14 @@ class Game implements GameCallbacks {
 
   private updateTurnSeatHighlight(activePlayerId: string | null): void {
     if (!activePlayerId) {
+      this.selectedSeatFocusIndex = -1;
       this.scene.playerSeatRenderer.highlightSeat(this.scene.currentPlayerSeat);
       this.scene.setActiveTurnSeat(this.scene.currentPlayerSeat);
       return;
+    }
+
+    if (activePlayerId === this.localPlayerId) {
+      this.selectedSeatFocusIndex = -1;
     }
 
     const seatIndex = this.participantSeatById.get(activePlayerId);
@@ -3054,6 +3060,95 @@ class Game implements GameCallbacks {
     this.selectedDieIndex = index;
   }
 
+  focusCameraOnDie(dieId: string): void {
+    if (this.state.status !== "ROLLED") {
+      return;
+    }
+    const mesh = this.diceRenderer.getMesh(dieId);
+    if (!mesh) {
+      return;
+    }
+    const focusTarget = mesh.getAbsolutePosition().clone();
+    this.scene.focusCameraOnWorldPointTopDown(focusTarget, true);
+  }
+
+  canCyclePlayerFocus(): boolean {
+    if (!this.isWaitingForRemoteTurn()) {
+      return false;
+    }
+    return this.getCyclableRemoteSeatIndices().length > 0;
+  }
+
+  cyclePlayerFocus(direction: 1 | -1): void {
+    const seatIndices = this.getCyclableRemoteSeatIndices();
+    if (seatIndices.length === 0) {
+      return;
+    }
+
+    let currentCursor = seatIndices.indexOf(this.selectedSeatFocusIndex);
+    if (currentCursor === -1) {
+      const activeSeatIndex = this.getActiveTurnSeatIndex();
+      if (typeof activeSeatIndex === "number") {
+        const activeCursor = seatIndices.indexOf(activeSeatIndex);
+        currentCursor = activeCursor >= 0 ? activeCursor : direction > 0 ? -1 : 0;
+      } else {
+        currentCursor = direction > 0 ? -1 : 0;
+      }
+    }
+
+    const nextCursor = (currentCursor + direction + seatIndices.length) % seatIndices.length;
+    const seatIndex = seatIndices[nextCursor];
+    this.selectedSeatFocusIndex = seatIndex;
+    this.focusCameraOnSeat(seatIndex);
+  }
+
+  private focusCameraOnSeat(seatIndex: number): void {
+    const headAnchor = this.scene.playerSeatRenderer.getSeatHeadAnchorPosition(seatIndex);
+    if (headAnchor) {
+      this.scene.focusCameraOnPlayerSeat(headAnchor, true);
+      return;
+    }
+
+    const seat = this.scene.playerSeats[seatIndex];
+    if (!seat) {
+      return;
+    }
+    this.scene.focusCameraOnPlayerSeat(seat.position.clone(), true);
+  }
+
+  private getCyclableRemoteSeatIndices(): number[] {
+    const remoteSeats = Array.from(this.participantIdBySeat.entries())
+      .filter(([, playerId]) => playerId !== this.localPlayerId)
+      .map(([seatIndex]) => seatIndex)
+      .sort((left, right) => left - right);
+    if (remoteSeats.length > 0) {
+      return remoteSeats;
+    }
+
+    const activeSeat = this.getActiveTurnSeatIndex();
+    if (typeof activeSeat === "number" && activeSeat !== this.scene.currentPlayerSeat) {
+      return [activeSeat];
+    }
+    return [];
+  }
+
+  private getActiveTurnSeatIndex(): number | null {
+    if (!this.activeTurnPlayerId) {
+      return null;
+    }
+    const seatIndex = this.participantSeatById.get(this.activeTurnPlayerId);
+    return typeof seatIndex === "number" ? seatIndex : null;
+  }
+
+  private isWaitingForRemoteTurn(): boolean {
+    return this.isMultiplayerTurnEnforced() && (!this.activeTurnPlayerId || !this.isLocalPlayersTurn());
+  }
+
+  private isCameraAssistEnabledForCurrentMode(): boolean {
+    const settings = settingsService.getSettings();
+    return settings.game.difficulty === "easy" && settings.game.cameraAssistEnabled !== false;
+  }
+
   private openTutorialAudioSettings(): void {
     this.openTutorialSettingsTab("audio");
   }
@@ -3104,7 +3199,10 @@ class Game implements GameCallbacks {
       // Show notification about keyboard controls on first use
       const hasSeenKeyboardHint = sessionStorage.getItem("keyboardHintShown");
       if (!hasSeenKeyboardHint) {
-        notificationService.show("← → to navigate, Enter to select, X to deselect | N=New Game, D=Debug", "info");
+        notificationService.show(
+          "← → or +/- to cycle focus, Enter to select die, X to deselect | N=New Game, D=Debug",
+          "info"
+        );
         sessionStorage.setItem("keyboardHintShown", "true");
       }
     }
@@ -3225,6 +3323,9 @@ class Game implements GameCallbacks {
         audioService.playSfx("select");
         hapticsService.select();
         this.dispatch({ t: "TOGGLE_SELECT", dieId });
+        if (this.state.selected.has(dieId) && this.isCameraAssistEnabledForCurrentMode()) {
+          this.focusCameraOnDie(dieId);
+        }
 
         // Notify tutorial of select action
         if (tutorialModal.isActive()) {
@@ -3460,6 +3561,9 @@ class Game implements GameCallbacks {
     this.diceRenderer.animateScore(this.state.dice, selected, () => {
       this.animating = false;
       this.updateUI();
+      if (this.isCameraAssistEnabledForCurrentMode()) {
+        this.scene.returnCameraToDefaultOverview(true);
+      }
 
       // Show score notification
       if (points === 0) {

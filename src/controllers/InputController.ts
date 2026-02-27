@@ -35,6 +35,9 @@ export interface GameCallbacks {
   isPaused: () => boolean;
   getSelectedDieIndex: () => number;
   setSelectedDieIndex: (index: number) => void;
+  focusCameraOnDie: (dieId: string) => void;
+  canCyclePlayerFocus: () => boolean;
+  cyclePlayerFocus: (direction: 1 | -1) => void;
 }
 
 export class InputController {
@@ -470,6 +473,20 @@ export class InputController {
     const animating = this.callbacks.isAnimating();
     const paused = this.callbacks.isPaused();
     const code = this.controlInversionService.remapKeyCode(e.code);
+    const key = e.key;
+    const isPlusOrEqualsKey =
+      code === "NumpadAdd" ||
+      code === "Equal" ||
+      key === "+" ||
+      key === "=";
+    const isMinusKey = code === "Minus" || code === "NumpadSubtract" || key === "-";
+    const shouldCycleBackward = code === "ArrowLeft" || isMinusKey;
+    const shouldCycleForward = code === "ArrowRight" || isPlusOrEqualsKey;
+    const cycleDirection: 1 | -1 | null = shouldCycleForward
+      ? 1
+      : shouldCycleBackward
+        ? -1
+        : null;
     const isModalOpen = this.isAnyModalOpen();
     const isTextEntryActive = this.isTextEntryTarget(e.target);
 
@@ -514,23 +531,32 @@ export class InputController {
     if (state.status === "ROLLED" && !animating && !paused) {
       const activeDice = state.dice.filter((d) => d.inPlay && !d.scored);
 
-      if (activeDice.length === 0) return;
+      if (cycleDirection !== null && this.callbacks.canCyclePlayerFocus()) {
+        e.preventDefault();
+        this.callbacks.cyclePlayerFocus(cycleDirection);
+        return;
+      }
 
-      if (code === "ArrowLeft" || code === "ArrowRight") {
+      if (cycleDirection !== null) {
+        if (activeDice.length === 0) return;
         e.preventDefault();
 
         let selectedDieIndex = this.callbacks.getSelectedDieIndex();
 
-        if (code === "ArrowLeft") {
+        if (cycleDirection < 0) {
           selectedDieIndex = (selectedDieIndex - 1 + activeDice.length) % activeDice.length;
         } else {
           selectedDieIndex = (selectedDieIndex + 1) % activeDice.length;
         }
 
         this.callbacks.setSelectedDieIndex(selectedDieIndex);
-        this.callbacks.highlightFocusedDie(activeDice[selectedDieIndex].id);
+        const focusedDieId = activeDice[selectedDieIndex].id;
+        this.callbacks.highlightFocusedDie(focusedDieId);
+        this.callbacks.focusCameraOnDie(focusedDieId);
         return;
       }
+
+      if (activeDice.length === 0) return;
 
       // Enter key - toggle selection of focused die
       if (code === "Enter") {
@@ -542,6 +568,12 @@ export class InputController {
         }
         return;
       }
+    }
+
+    if (!animating && !paused && cycleDirection !== null && this.callbacks.canCyclePlayerFocus()) {
+      e.preventDefault();
+      this.callbacks.cyclePlayerFocus(cycleDirection);
+      return;
     }
 
     // 'X' key - deselect all (when dice are selected)
