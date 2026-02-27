@@ -1,8 +1,21 @@
 {
-  "generatedAt": "2026-02-27T03:36:04.519Z",
+  "generatedAt": "2026-02-27T03:46:35.451Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-c62534d",
+      "date": "2026-02-27T03:37:50.000Z",
+      "title": "Add `updates:generate` script and integrate it into build and development workflows",
+      "content": "<p>Add `updates:generate` script and integrate it into build and development workflows</p><p><strong>Commit:</strong> <code>c62534d</code></p><p>- Introduced `scripts/generate-updates-from-git.mjs` to generate JSON data from commit history.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "c62534de4a46d3cf634a31c454e4d58650e8e19e",
+        "shortHash": "c62534d"
+      }
+    },
     {
       "id": "git-bf2b6eb",
       "date": "2026-02-27T03:19:32.000Z",
@@ -508,19 +521,6 @@
       "commit": {
         "hash": "9acca463b08846b7dd0bc63f44c2c924d5a97375",
         "shortHash": "9acca46"
-      }
-    },
-    {
-      "id": "git-86e77ec",
-      "date": "2026-02-26T11:15:45.000Z",
-      "title": "Add multiplayer session service reliability tests",
-      "content": "<p>Add multiplayer session service reliability tests</p><p><strong>Commit:</strong> <code>86e77ec</code></p><p>- Added tests for heartbeat expiry dispatch, session clearing, and recovery scenarios in `MultiplayerSessionService`.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "86e77ecebbf7fe51a2bf5501ef6024f7b1aeb0ab",
-        "shortHash": "86e77ec"
       }
     }
   ]
