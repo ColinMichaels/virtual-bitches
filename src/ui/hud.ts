@@ -20,6 +20,7 @@ export class HUD {
   private elapsedTimeEl: HTMLElement;
   private turnTimerEl: HTMLElement;
   private turnSyncIndicatorEl: HTMLElement | null;
+  private localWaitStatusEl: HTMLElement | null;
   private poolListEl: HTMLElement;
   private modeDisplayEl: HTMLElement;
   private modeDropdownEl: HTMLElement;
@@ -38,6 +39,7 @@ export class HUD {
     this.elapsedTimeEl = document.getElementById("elapsed-time")!;
     this.turnTimerEl = document.getElementById("turn-timer")!;
     this.turnSyncIndicatorEl = document.getElementById("turn-sync-indicator");
+    this.localWaitStatusEl = document.getElementById("local-wait-status");
     this.poolListEl = document.getElementById("pool-list")!;
     this.modeDisplayEl = document.getElementById("mode-display")!;
     this.modeDropdownEl = document.getElementById("mode-dropdown")!;
@@ -187,6 +189,21 @@ export class HUD {
       typeof message === "string" && message.trim().length > 0
         ? message.trim().slice(0, 40)
         : defaultLabels[status];
+  }
+
+  setLocalWaitStatus(label: string | null): void {
+    if (!this.localWaitStatusEl) {
+      return;
+    }
+    const normalized = typeof label === "string" ? label.trim() : "";
+    if (!normalized) {
+      this.localWaitStatusEl.style.display = "none";
+      this.localWaitStatusEl.textContent = "";
+      return;
+    }
+
+    this.localWaitStatusEl.style.display = "inline";
+    this.localWaitStatusEl.textContent = normalized.slice(0, 20);
   }
 
   update(state: GameState) {

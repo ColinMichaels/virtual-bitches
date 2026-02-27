@@ -15,6 +15,7 @@ Environment variables:
 - `API_STORE_BACKEND` (`file` or `firestore`, default: `firestore` in production, `file` otherwise)
 - `API_ALLOW_FILE_STORE_IN_PRODUCTION` (`1` to override safety check; default: disabled)
 - `API_FIRESTORE_PREFIX` (Firestore collection prefix, default: `api_v1`)
+- `API_DEPLOY_PRESERVE_DB` (deploy helper flag, default: `1`; keeps Firestore backend pinned during deploy)
 - `TURN_TIMEOUT_MS` (active turn timeout window, default: `45000`)
 - `TURN_TIMEOUT_WARNING_MS` (pre-timeout warning lead, default: `10000`)
 - `FIREBASE_PROJECT_ID` (recommended for Firebase token audience validation)
@@ -38,6 +39,25 @@ Storage backends:
 - `firestore` backend (`API_STORE_BACKEND=firestore`): Firestore collections with prefix `API_FIRESTORE_PREFIX`
 
 SQL files define the intended longer-term relational schema.
+
+## Cloud Run Deploy Safety
+
+Use the root deploy helper:
+
+```bash
+npm run cloudrun:deploy:api
+```
+
+Defaults:
+
+- `API_DEPLOY_PRESERVE_DB=1` (default) sets `API_STORE_BACKEND=firestore` so redeploys do not reset API data.
+- `API_FIRESTORE_PREFIX=api_v1` (override if needed to keep your existing collection namespace).
+
+If you intentionally want non-persistent file storage in production (not recommended), explicitly disable preservation and opt in:
+
+```bash
+API_DEPLOY_PRESERVE_DB=0 API_STORE_BACKEND=file API_ALLOW_FILE_STORE_IN_PRODUCTION=1 npm run cloudrun:deploy:api
+```
 
 ## Endpoints
 
@@ -187,10 +207,10 @@ npm run api:migrate:firestore:verify
 Useful flags:
 
 ```bash
-node api/scripts/migrate-file-store-to-firestore.mjs --mode replace --prefix api_v1 --project <project-id>
+API_MIGRATION_ALLOW_REPLACE=1 node api/scripts/migrate-file-store-to-firestore.mjs --mode replace --allow-replace --prefix api_v1 --project <project-id>
 ```
 
 Notes:
 - `merge` mode keeps existing Firestore records and overlays source file values.
-- `replace` mode makes Firestore match the source store snapshot exactly.
+- `replace` mode makes Firestore match the source store snapshot exactly, and now requires explicit opt-in (`API_MIGRATION_ALLOW_REPLACE=1` or `--allow-replace`).
 - Expired access/refresh tokens and sessions are pruned by default during migration.

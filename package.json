@@ -39,7 +39,7 @@
     "firebase:deploy:hosting": "npm run build:prod && npx firebase-tools deploy --only hosting",
     "firebase:deploy:firestore": "npx firebase-tools deploy --only firestore:rules,firestore:indexes",
     "firebase:deploy": "npm run build:prod && npx firebase-tools deploy --only hosting,firestore",
-    "cloudrun:deploy:api": "gcloud run deploy biscuits-api --source api --region us-central1 --allow-unauthenticated",
+    "cloudrun:deploy:api": "node scripts/deploy-cloudrun-api.mjs",
     "deploy": "npm run build && npx gh-pages -d dist"
   },
   "dependencies": {

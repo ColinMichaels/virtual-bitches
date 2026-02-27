@@ -186,6 +186,7 @@ const TURN_SYNC_STALE_MS = 12000;
 const TURN_SYNC_REQUEST_COOLDOWN_MS = 7000;
 const TURN_SYNC_STALE_RECOVERY_MS = 4500;
 const MULTIPLAYER_IDENTITY_CACHE_MS = 30000;
+const TURN_SELECTION_SYNC_DEBOUNCE_MS = 80;
 
 class Game implements GameCallbacks {
   private state: GameState;
@@ -233,6 +234,8 @@ class Game implements GameCallbacks {
   private lastTurnSyncActivityAt = 0;
   private lastTurnSyncRequestAt = 0;
   private pendingTurnTransitionSyncHandle: ReturnType<typeof setTimeout> | null = null;
+  private selectionSyncDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private selectionSyncRollServerId: string | null = null;
   private participantSeatById = new Map<string, number>();
   private participantIdBySeat = new Map<number, string>();
   private participantLabelById = new Map<string, string>();
@@ -257,6 +260,7 @@ class Game implements GameCallbacks {
   private actionBtn: HTMLButtonElement;
   private deselectBtn: HTMLButtonElement;
   private undoBtn: HTMLButtonElement;
+  private newGameBtn: HTMLButtonElement | null = null;
   private inviteLinkBtn: HTMLButtonElement | null = null;
   private mobileInviteLinkBtn: HTMLButtonElement | null = null;
   private turnActionBannerEl: HTMLElement | null = null;
@@ -473,6 +477,7 @@ class Game implements GameCallbacks {
     this.actionBtn = document.getElementById("action-btn") as HTMLButtonElement;
     this.deselectBtn = document.getElementById("deselect-btn") as HTMLButtonElement;
     this.undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
+    this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement | null;
     this.inviteLinkBtn = document.getElementById("invite-link-btn") as HTMLButtonElement | null;
     this.mobileInviteLinkBtn = document.getElementById("mobile-invite-link-btn") as HTMLButtonElement | null;
     this.turnActionBannerEl = this.ensureTurnActionBanner();
@@ -1387,6 +1392,10 @@ class Game implements GameCallbacks {
   private applyMultiplayerSeatState(session: MultiplayerSessionRecord): void {
     this.applyMultiplayerClockFromServer(session);
     const seatedParticipants = this.computeSeatedParticipants(session);
+    const localSeatState = seatedParticipants.find(
+      (participant) => participant.playerId === this.localPlayerId
+    );
+    this.hud.setLocalWaitStatus(localSeatState?.queuedForNextGame ? "Waiting" : null);
     this.syncBotMemeAvatarState(seatedParticipants);
     const participantBySeat = new Map<number, SeatedMultiplayerParticipant>();
     const previousParticipantIds = new Set(this.participantSeatById.keys());
@@ -1668,6 +1677,7 @@ class Game implements GameCallbacks {
   }
 
   private applySoloSeatState(): void {
+    this.clearSelectionSyncDebounce();
     this.participantSeatById.clear();
     this.participantIdBySeat.clear();
     this.participantLabelById.clear();
@@ -1696,6 +1706,7 @@ class Game implements GameCallbacks {
     this.hud.setMultiplayerStandings([], null);
     this.hud.setMultiplayerActiveTurn(null);
     this.hud.setTurnSyncStatus(null);
+    this.hud.setLocalWaitStatus(null);
   }
 
   private computeSeatedParticipants(session: MultiplayerSessionRecord): SeatedMultiplayerParticipant[] {
@@ -2201,7 +2212,7 @@ class Game implements GameCallbacks {
     if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
       return;
     }
-    this.diceRenderer.clearSpectatorRollingPreview(this.buildSpectatorPreviewKey(targetPlayerId));
+    this.diceRenderer.cancelSpectatorPreview(this.buildSpectatorPreviewKey(targetPlayerId));
   }
 
   private getParticipantLabel(playerId: string): string {
@@ -2469,7 +2480,15 @@ class Game implements GameCallbacks {
     if (syncedSession.sessionComplete === true && !this.lastSessionComplete) {
       this.lastSessionComplete = true;
       this.scene.triggerVictoryLighting(3200);
-      notificationService.show("Session complete. Final standings locked.", "success", 2600);
+      const winnerPlayerId =
+        Array.isArray(syncedSession.standings) && syncedSession.standings.length > 0
+          ? syncedSession.standings[0]?.playerId
+          : null;
+      const winnerLabel =
+        typeof winnerPlayerId === "string" && winnerPlayerId.length > 0
+          ? this.getParticipantLabel(winnerPlayerId)
+          : "Winner";
+      notificationService.show(`${winnerLabel} wins the round.`, "success", 2800);
     } else if (syncedSession.sessionComplete !== true) {
       this.lastSessionComplete = false;
     }
@@ -2480,6 +2499,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.clearSelectionSyncDebounce();
     this.applyMultiplayerClockFromServer(message);
     this.touchMultiplayerTurnSyncActivity();
     this.clearPendingTurnTransitionSyncRecovery();
@@ -2525,6 +2545,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.clearSelectionSyncDebounce();
     this.syncServerClockOffset(message.timestamp);
     this.touchMultiplayerTurnSyncActivity();
     const previousActiveTurnPlayerId = this.activeTurnPlayerId;
@@ -2602,6 +2623,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.clearSelectionSyncDebounce();
     this.syncServerClockOffset(message.timestamp);
     this.touchMultiplayerTurnSyncActivity();
     this.applyTurnTiming(null);
@@ -2669,6 +2691,17 @@ class Game implements GameCallbacks {
       );
     }
 
+    if (message.action === "select") {
+      const selection = Array.isArray(message.select?.selectedDiceIds)
+        ? message.select?.selectedDiceIds ?? []
+        : [];
+      const selectedDiceIds = selection.filter(
+        (dieId): dieId is string => typeof dieId === "string" && dieId.trim().length > 0
+      );
+      this.diceRenderer.updateSpectatorSelectionPreview(spectatorPreviewKey, selectedDiceIds);
+      return;
+    }
+
     if (message.action === "score") {
       const scoreSelection = Array.isArray(message.score?.selectedDiceIds)
         ? message.score?.selectedDiceIds ?? []
@@ -2692,6 +2725,7 @@ class Game implements GameCallbacks {
           },
         });
       }
+      this.clearSpectatorRollingPreviewForPlayer(message.playerId);
     }
 
     const actionLabel = message.action === "score" ? "Scored" : "Rolled";
@@ -2911,6 +2945,7 @@ class Game implements GameCallbacks {
       return;
     }
 
+    this.clearSelectionSyncDebounce();
     if (!this.multiplayerNetwork?.isConnected()) {
       notificationService.show("Unable to end turn while disconnected.", "warning", 1800);
       return;
@@ -2931,19 +2966,22 @@ class Game implements GameCallbacks {
   }
 
   private emitTurnAction(
-    action: "roll" | "score",
-    details?: Pick<MultiplayerTurnActionMessage, "roll" | "score">
+    action: "roll" | "score" | "select",
+    details?: Pick<MultiplayerTurnActionMessage, "roll" | "score" | "select">,
+    options?: { suppressFailureNotice?: boolean }
   ): boolean {
     if (!this.isMultiplayerTurnEnforced()) {
       return true;
     }
 
     if (!this.multiplayerNetwork?.isConnected()) {
-      notificationService.show(
-        `Unable to ${action} while disconnected.`,
-        "warning",
-        1800
-      );
+      if (!options?.suppressFailureNotice) {
+        notificationService.show(
+          `Unable to ${action} while disconnected.`,
+          "warning",
+          1800
+        );
+      }
       return false;
     }
 
@@ -2957,12 +2995,48 @@ class Game implements GameCallbacks {
       timestamp: Date.now(),
     });
     if (!sent) {
-      notificationService.show(`Failed to sync ${action} action.`, "warning", 1800);
+      if (!options?.suppressFailureNotice) {
+        notificationService.show(`Failed to sync ${action} action.`, "warning", 1800);
+      }
       return false;
     }
 
     this.touchMultiplayerTurnSyncActivity();
     return true;
+  }
+
+  private clearSelectionSyncDebounce(): void {
+    if (this.selectionSyncDebounceHandle) {
+      clearTimeout(this.selectionSyncDebounceHandle);
+      this.selectionSyncDebounceHandle = null;
+    }
+    this.selectionSyncRollServerId = null;
+  }
+
+  private scheduleSelectionSyncDebounced(): void {
+    if (!this.isMultiplayerTurnEnforced() || !this.activeRollServerId) {
+      return;
+    }
+
+    this.selectionSyncRollServerId = this.activeRollServerId;
+    if (this.selectionSyncDebounceHandle) {
+      clearTimeout(this.selectionSyncDebounceHandle);
+    }
+    this.selectionSyncDebounceHandle = window.setTimeout(() => {
+      this.selectionSyncDebounceHandle = null;
+      this.flushSelectionSyncDebounced();
+    }, TURN_SELECTION_SYNC_DEBOUNCE_MS);
+  }
+
+  private flushSelectionSyncDebounced(): void {
+    const rollServerId = this.selectionSyncRollServerId ?? this.activeRollServerId;
+    this.selectionSyncRollServerId = null;
+    if (!this.isMultiplayerTurnEnforced() || !rollServerId || this.state.status !== "ROLLED") {
+      return;
+    }
+
+    const selectPayload = this.buildSelectTurnPayload(this.state.selected, rollServerId);
+    this.emitTurnAction("select", { select: selectPayload }, { suppressFailureNotice: true });
   }
 
   private buildRollTurnPayload(): {
@@ -3087,6 +3161,19 @@ class Game implements GameCallbacks {
       points,
       rollServerId,
       projectedTotalScore: this.state.score + points,
+    };
+  }
+
+  private buildSelectTurnPayload(
+    selected: Set<string>,
+    rollServerId: string
+  ): {
+    selectedDiceIds: string[];
+    rollServerId: string;
+  } {
+    return {
+      selectedDiceIds: [...selected],
+      rollServerId,
     };
   }
 
@@ -3233,6 +3320,7 @@ class Game implements GameCallbacks {
 
   private continueSoloAfterSessionExpiry(reason: string): void {
     log.info("Continuing game in solo mode after multiplayer expiry", { reason });
+    this.clearSelectionSyncDebounce();
     this.stopTurnSyncWatchdog();
     this.stopBotMemeAvatarRotation();
     this.botMemeAvatarByPlayerId.clear();
@@ -3261,6 +3349,7 @@ class Game implements GameCallbacks {
     if (this.lobbyRedirectInProgress) {
       return;
     }
+    this.clearSelectionSyncDebounce();
     this.lobbyRedirectInProgress = true;
     this.sessionExpiryPromptActive = false;
     try {
@@ -3349,6 +3438,13 @@ class Game implements GameCallbacks {
 
   isPaused(): boolean {
     return this.paused;
+  }
+
+  canManualNewGame(): boolean {
+    if (this.playMode !== "multiplayer") {
+      return true;
+    }
+    return !this.multiplayerSessionService.getActiveSession();
   }
 
   getSelectedDieIndex(): number {
@@ -3498,8 +3594,11 @@ class Game implements GameCallbacks {
       // Show notification about keyboard controls on first use
       const hasSeenKeyboardHint = sessionStorage.getItem("keyboardHintShown");
       if (!hasSeenKeyboardHint) {
+        const keyboardHint = this.canManualNewGame()
+          ? "← → or +/- to cycle focus, Enter to select die, X to deselect | N=New Game, D=Debug"
+          : "← → or +/- to cycle focus, Enter to select die, X to deselect | D=Debug";
         notificationService.show(
-          "← → or +/- to cycle focus, Enter to select die, X to deselect | N=New Game, D=Debug",
+          keyboardHint,
           "info"
         );
         sessionStorage.setItem("keyboardHintShown", "true");
@@ -3508,6 +3607,16 @@ class Game implements GameCallbacks {
   }
 
   private async handleModeChange(difficulty: GameDifficulty): Promise<void> {
+    if (!this.canManualNewGame()) {
+      notificationService.show(
+        "Difficulty changes are disabled while in a multiplayer room.",
+        "warning",
+        2400
+      );
+      this.updateUI();
+      return;
+    }
+
     const isInProgress = GameFlowController.isGameInProgress(this.state);
     let allowGameReset = true;
     if (isInProgress) {
@@ -3621,6 +3730,7 @@ class Game implements GameCallbacks {
         audioService.playSfx("select");
         hapticsService.select();
         this.dispatch({ t: "TOGGLE_SELECT", dieId });
+        this.scheduleSelectionSyncDebounced();
         if (this.state.selected.has(dieId) && this.isCameraAssistEnabledForCurrentMode()) {
           this.focusCameraOnDie(dieId);
         }
@@ -3677,6 +3787,8 @@ class Game implements GameCallbacks {
       this.dispatch({ t: "TOGGLE_SELECT", dieId });
       this.diceRenderer.setSelected(dieId, false);
     });
+
+    this.scheduleSelectionSyncDebounced();
 
     notificationService.show("Deselected All", "info");
   }
@@ -3791,6 +3903,7 @@ class Game implements GameCallbacks {
     }
 
     if (this.animating || this.state.status !== "READY") return;
+    this.clearSelectionSyncDebounce();
     this.activeRollServerId = null;
     const rollPayload = this.buildRollTurnPayload();
     if (!this.emitTurnAction("roll", { roll: rollPayload })) {
@@ -3836,6 +3949,8 @@ class Game implements GameCallbacks {
       return;
     }
     const selected = new Set(this.state.selected);
+    const activePlayableBeforeScore = this.getActivePlayableDiceCount();
+    const selectedCount = selected.size;
 
     // Calculate points for notification
     const scoredDice = this.state.dice.filter((d) => selected.has(d.id));
@@ -3846,6 +3961,7 @@ class Game implements GameCallbacks {
         return;
       }
 
+      this.clearSelectionSyncDebounce();
       const scorePayload = this.buildScoreTurnPayload(selected, points, this.activeRollServerId);
       if (!this.emitTurnAction("score", { score: scorePayload })) {
         return;
@@ -3879,7 +3995,14 @@ class Game implements GameCallbacks {
       : undefined);
 
     this.dispatch({ t: "SCORE_SELECTED" });
-    this.emitTurnEnd();
+    const completedAllDiceThisScore =
+      activePlayableBeforeScore > 0 && selectedCount >= activePlayableBeforeScore;
+    const shouldEmitTurnEnd = !(
+      this.isMultiplayerTurnEnforced() && completedAllDiceThisScore
+    );
+    if (shouldEmitTurnEnd) {
+      this.emitTurnEnd();
+    }
 
     // Notify tutorial of score action
     if (tutorialModal.isActive()) {
@@ -3888,6 +4011,14 @@ class Game implements GameCallbacks {
   }
 
   handleNewGame(): void {
+    if (!this.canManualNewGame()) {
+      notificationService.show(
+        "Multiplayer game starts are server-controlled.",
+        "warning",
+        2200
+      );
+      return;
+    }
     this.gameOverController.hide();
     this.state = GameFlowController.createNewGame();
     GameFlowController.resetForNewGame(this.diceRenderer);
@@ -3903,6 +4034,15 @@ class Game implements GameCallbacks {
   }
 
   startNewGame(): void {
+    if (!this.canManualNewGame()) {
+      notificationService.show(
+        "Multiplayer game starts are server-controlled.",
+        "warning",
+        2200
+      );
+      return;
+    }
+
     // Unpause if paused
     if (this.paused) {
       this.paused = false;
@@ -4037,6 +4177,13 @@ class Game implements GameCallbacks {
     const isTurnLocked =
       this.isMultiplayerTurnEnforced() &&
       (!this.activeTurnPlayerId || !this.isLocalPlayersTurn());
+    const manualNewGameEnabled = this.canManualNewGame();
+    if (this.newGameBtn) {
+      this.newGameBtn.disabled = !manualNewGameEnabled;
+      this.newGameBtn.title = manualNewGameEnabled
+        ? "Start a new game"
+        : "Multiplayer game starts are server-controlled";
+    }
 
     // Update multipurpose action button
     if (this.state.status === "READY") {

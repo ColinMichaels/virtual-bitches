@@ -27,6 +27,7 @@ export interface GameCallbacks {
   handleNewGame: () => void;
   handleReturnToMainMenu: () => void;
   startNewGame: () => void;
+  canManualNewGame: () => boolean;
   togglePause: () => void;
   handleDieClick: (dieId: string) => void;
   highlightFocusedDie: (dieId: string) => void;
@@ -138,6 +139,9 @@ export class InputController {
 
     // New game button
     this.newGameBtn.addEventListener("click", () => {
+      if (!this.callbacks.canManualNewGame()) {
+        return;
+      }
       audioService.playSfx("click");
       hapticsService.buttonPress();
       this.callbacks.handleNewGame();
@@ -585,6 +589,9 @@ export class InputController {
 
     // 'N' key - new game
     if (code === "KeyN" && !animating) {
+      if (!this.callbacks.canManualNewGame()) {
+        return;
+      }
       e.preventDefault();
       audioService.playSfx("click");
       hapticsService.buttonPress();
