@@ -872,6 +872,7 @@ async function handleCreateSession(req, res) {
       isReady: false,
       score: 0,
       remainingDice: DEFAULT_PARTICIPANT_DICE_COUNT,
+      queuedForNextGame: false,
       isComplete: false,
       completedAt: null,
     },
@@ -953,6 +954,11 @@ async function handleJoinSessionByTarget(req, res, target) {
 
   const existingParticipant = session.participants[playerId];
   const isReturningParticipant = Boolean(existingParticipant && !isBotParticipant(existingParticipant));
+  const shouldQueueForNextGame =
+    !isReturningParticipant && shouldQueueParticipantForNextGame(session);
+  const queuedForNextGame = isReturningParticipant
+    ? normalizeQueuedForNextGame(existingParticipant?.queuedForNextGame)
+    : shouldQueueForNextGame;
   if (!isReturningParticipant && getHumanParticipantCount(session) >= MAX_MULTIPLAYER_HUMAN_PLAYERS) {
     sendJson(res, 409, { error: "Room is full", reason: "room_full" });
     return;
@@ -970,6 +976,7 @@ async function handleJoinSessionByTarget(req, res, target) {
     isReady: false,
     score: normalizeParticipantScore(existingParticipant?.score),
     remainingDice: normalizeParticipantRemainingDice(existingParticipant?.remainingDice),
+    queuedForNextGame,
     isComplete: existingParticipant?.isComplete === true,
     completedAt: normalizeParticipantCompletedAt(existingParticipant?.completedAt),
   };
@@ -1512,6 +1519,7 @@ function buildAdminRoomDiagnostic(sessionId, session, now = Date.now()) {
       isComplete: participant.isComplete,
       score: participant.score,
       remainingDice: participant.remainingDice,
+      queuedForNextGame: participant.queuedForNextGame === true,
       lastHeartbeatAt: participant.lastHeartbeatAt,
       connected: connectedPlayerIds.has(participant.playerId),
     })),
@@ -2511,9 +2519,13 @@ function buildSessionSnapshot(session) {
   const participants = serializeSessionParticipants(session);
   const standings = buildSessionStandings(session);
   const humanCount = participants.filter((participant) => !isBotParticipant(participant)).length;
+  const activeGameParticipants = participants.filter(
+    (participant) => participant.queuedForNextGame !== true
+  );
   const roomKind = getSessionRoomKind(session);
   const sessionComplete =
-    standings.length > 0 && standings.every((participant) => participant.isComplete === true);
+    activeGameParticipants.length > 0 &&
+    activeGameParticipants.every((participant) => participant.isComplete === true);
   return {
     sessionId: session.sessionId,
     roomCode: session.roomCode,
@@ -2556,6 +2568,7 @@ function buildRoomListing(session, now = Date.now()) {
 
   const participants = serializeSessionParticipants(session);
   const humans = participants.filter((participant) => !isBotParticipant(participant));
+  const activeGameHumans = humans.filter((participant) => participant.queuedForNextGame !== true);
   const activeHumanCount = humans.filter((participant) =>
     isRoomParticipantActive(session.sessionId, participant, now)
   ).length;
@@ -2563,7 +2576,8 @@ function buildRoomListing(session, now = Date.now()) {
   const botCount = participants.filter((participant) => isBotParticipant(participant)).length;
   const lastActivityAt = resolveSessionLastActivityAt(session);
   const sessionComplete =
-    humans.length > 0 && humans.every((participant) => participant?.isComplete === true);
+    activeGameHumans.length > 0 &&
+    activeGameHumans.every((participant) => participant?.isComplete === true);
   const roomKind = getSessionRoomKind(session);
   const availableHumanSlots = Math.max(0, MAX_MULTIPLAYER_HUMAN_PLAYERS - humans.length);
 
@@ -2648,7 +2662,9 @@ function buildPublicOverflowRoomCode() {
 
 function isSessionCompleteForHumans(session) {
   const participants = serializeSessionParticipants(session);
-  const humans = participants.filter((participant) => !isBotParticipant(participant));
+  const humans = participants.filter(
+    (participant) => !isBotParticipant(participant) && participant.queuedForNextGame !== true
+  );
   return humans.length > 0 && humans.every((participant) => participant?.isComplete === true);
 }
 
@@ -3322,6 +3338,7 @@ function serializeSessionParticipants(session) {
     .map((participant) => {
       const remainingDice = normalizeParticipantRemainingDice(participant.remainingDice);
       const isComplete = participant.isComplete === true || remainingDice === 0;
+      const queuedForNextGame = isParticipantQueuedForNextGame(participant);
       return {
         playerId: participant.playerId,
         displayName:
@@ -3339,6 +3356,7 @@ function serializeSessionParticipants(session) {
         isReady: participant.isBot ? true : participant.isReady === true,
         score: normalizeParticipantScore(participant.score),
         remainingDice,
+        queuedForNextGame,
         isComplete,
         completedAt: isComplete
           ? normalizeParticipantCompletedAt(participant.completedAt)
@@ -3361,6 +3379,7 @@ function serializeParticipantsInJoinOrder(session) {
     .filter((participant) => participant && typeof participant.playerId === "string")
     .map((participant) => ({
       playerId: participant.playerId,
+      queuedForNextGame: isParticipantQueuedForNextGame(participant),
       isComplete: isParticipantComplete(participant),
       joinedAt:
         typeof participant.joinedAt === "number" && Number.isFinite(participant.joinedAt)
@@ -3377,7 +3396,9 @@ function serializeParticipantsInJoinOrder(session) {
 }
 
 function buildSessionStandings(session) {
-  const serializedParticipants = serializeSessionParticipants(session);
+  const serializedParticipants = serializeSessionParticipants(session).filter(
+    (participant) => participant.queuedForNextGame !== true
+  );
   return [...serializedParticipants]
     .sort((left, right) => {
       const completeDelta = Number(right.isComplete === true) - Number(left.isComplete === true);
@@ -3448,6 +3469,7 @@ function ensureSessionTurnState(session) {
     (participant) =>
       participant &&
       !participant.isComplete &&
+      participant.queuedForNextGame !== true &&
       (!keepCompletedActivePlayer || participant.playerId !== currentActiveTurnPlayerId)
   );
   if (keepCompletedActivePlayer) {
@@ -3721,25 +3743,31 @@ function advanceSessionTurn(session, endedByPlayerId, options = {}) {
   turnState.turnExpiresAt = nextActivePlayerId ? timestamp + timeoutMs : null;
   turnState.updatedAt = timestamp;
 
-  const turnStart = nextActivePlayerId
-    ? {
-        type: "turn_start",
-        sessionId: session.sessionId,
-        playerId: turnState.activeTurnPlayerId,
-        round: turnState.round,
-        turnNumber: turnState.turnNumber,
-        phase: normalizeTurnPhase(turnState.phase),
-        turnExpiresAt: turnState.turnExpiresAt,
-        turnTimeoutMs: timeoutMs,
-        timestamp,
-        order: [...turnState.order],
-        source: options.source ?? "player",
-      }
-    : null;
+  const nextGameStarted = !nextActivePlayerId
+    ? maybeStartQueuedNextGame(session, timestamp)
+    : false;
+  const turnStart = nextGameStarted
+    ? buildTurnStartMessage(session, { source: options.source ?? "player" })
+    : nextActivePlayerId
+      ? {
+          type: "turn_start",
+          sessionId: session.sessionId,
+          playerId: turnState.activeTurnPlayerId,
+          round: turnState.round,
+          turnNumber: turnState.turnNumber,
+          phase: normalizeTurnPhase(turnState.phase),
+          turnExpiresAt: turnState.turnExpiresAt,
+          turnTimeoutMs: timeoutMs,
+          timestamp,
+          order: [...turnState.order],
+          source: options.source ?? "player",
+        }
+      : null;
 
   return {
     turnEnd,
     turnStart,
+    nextGameStarted,
   };
 }
 
@@ -3956,6 +3984,20 @@ function isBotParticipant(participant) {
   return Boolean(participant?.isBot);
 }
 
+function normalizeQueuedForNextGame(value) {
+  return value === true;
+}
+
+function isParticipantQueuedForNextGame(participant) {
+  if (!participant || typeof participant !== "object") {
+    return false;
+  }
+  if (isBotParticipant(participant)) {
+    return false;
+  }
+  return normalizeQueuedForNextGame(participant.queuedForNextGame);
+}
+
 function normalizeBotProfile(value) {
   if (typeof value !== "string") {
     return "balanced";
@@ -4013,6 +4055,129 @@ function isParticipantComplete(participant) {
   return normalizeParticipantRemainingDice(participant.remainingDice) === 0;
 }
 
+function isSessionGameInProgress(session) {
+  if (!session || typeof session !== "object") {
+    return false;
+  }
+
+  const turnState = session.turnState ?? null;
+  const phase = normalizeTurnPhase(turnState?.phase);
+  const round =
+    Number.isFinite(turnState?.round) && turnState.round > 0
+      ? Math.floor(turnState.round)
+      : 1;
+  const turnNumber =
+    Number.isFinite(turnState?.turnNumber) && turnState.turnNumber > 0
+      ? Math.floor(turnState.turnNumber)
+      : 1;
+
+  if (phase !== TURN_PHASES.awaitRoll) {
+    return true;
+  }
+  if (round > 1 || turnNumber > 1) {
+    return true;
+  }
+
+  return Object.values(session.participants ?? {}).some((participant) => {
+    if (
+      !participant ||
+      typeof participant !== "object" ||
+      isParticipantQueuedForNextGame(participant)
+    ) {
+      return false;
+    }
+    return (
+      normalizeParticipantScore(participant.score) > 0 ||
+      normalizeParticipantRemainingDice(participant.remainingDice) <
+        DEFAULT_PARTICIPANT_DICE_COUNT ||
+      isParticipantComplete(participant)
+    );
+  });
+}
+
+function shouldQueueParticipantForNextGame(session) {
+  return isSessionGameInProgress(session);
+}
+
+function hasQueuedParticipantsForNextGame(session) {
+  if (!session?.participants) {
+    return false;
+  }
+  return Object.values(session.participants).some((participant) =>
+    isParticipantQueuedForNextGame(participant)
+  );
+}
+
+function areCurrentGameParticipantsComplete(session) {
+  if (!session?.participants) {
+    return false;
+  }
+
+  const activeParticipants = Object.values(session.participants).filter(
+    (participant) => participant && !isParticipantQueuedForNextGame(participant)
+  );
+  if (activeParticipants.length === 0) {
+    return false;
+  }
+
+  return activeParticipants.every((participant) => isParticipantComplete(participant));
+}
+
+function resetSessionForNextGame(session, timestamp = Date.now()) {
+  if (!session?.participants) {
+    return false;
+  }
+
+  const now = Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
+  let changed = false;
+
+  Object.values(session.participants).forEach((participant) => {
+    if (!participant || typeof participant !== "object") {
+      return;
+    }
+    if (isParticipantQueuedForNextGame(participant)) {
+      changed = true;
+    }
+    if (
+      normalizeParticipantScore(participant.score) !== 0 ||
+      normalizeParticipantRemainingDice(participant.remainingDice) !==
+        DEFAULT_PARTICIPANT_DICE_COUNT ||
+      participant.isComplete === true ||
+      normalizeParticipantCompletedAt(participant.completedAt) !== null
+    ) {
+      changed = true;
+    }
+
+    participant.score = 0;
+    participant.remainingDice = DEFAULT_PARTICIPANT_DICE_COUNT;
+    participant.queuedForNextGame = false;
+    participant.isComplete = false;
+    participant.completedAt = null;
+    if (isBotParticipant(participant)) {
+      participant.isReady = true;
+    }
+  });
+
+  if (!changed) {
+    return false;
+  }
+
+  session.turnState = null;
+  ensureSessionTurnState(session);
+  markSessionActivity(session, "", now);
+  return true;
+}
+
+function maybeStartQueuedNextGame(session, timestamp = Date.now()) {
+  if (!hasQueuedParticipantsForNextGame(session)) {
+    return false;
+  }
+  if (!areCurrentGameParticipantsComplete(session)) {
+    return false;
+  }
+  return resetSessionForNextGame(session, timestamp);
+}
+
 function applyParticipantScoreUpdate(participant, scoreSummary, rollDiceCount) {
   const safeRollDiceCount =
     Number.isFinite(rollDiceCount) && rollDiceCount > 0 ? Math.floor(rollDiceCount) : 0;
@@ -4062,7 +4227,10 @@ function areAllHumansReady(session) {
   }
 
   const humans = Object.values(session.participants).filter(
-    (participant) => participant && !isBotParticipant(participant)
+    (participant) =>
+      participant &&
+      !isBotParticipant(participant) &&
+      !isParticipantQueuedForNextGame(participant)
   );
   const activeHumans = humans.filter((participant) => !isParticipantComplete(participant));
   if (activeHumans.length <= 1) {
@@ -4159,6 +4327,7 @@ function addBotsToSession(session, requestedBotCount, now = Date.now()) {
       isReady: true,
       score: 0,
       remainingDice: DEFAULT_PARTICIPANT_DICE_COUNT,
+      queuedForNextGame: false,
       isComplete: false,
       completedAt: null,
     };

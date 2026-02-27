@@ -52,6 +52,7 @@ export interface MultiplayerSessionParticipant {
   isReady?: boolean;
   score?: number;
   remainingDice?: number;
+  queuedForNextGame?: boolean;
   isComplete?: boolean;
   completedAt?: number | null;
 }
@@ -68,6 +69,7 @@ export interface MultiplayerSessionStanding {
   isReady?: boolean;
   score?: number;
   remainingDice?: number;
+  queuedForNextGame?: boolean;
   isComplete?: boolean;
   completedAt?: number | null;
   placement: number;
