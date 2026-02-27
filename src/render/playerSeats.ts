@@ -19,7 +19,15 @@ import { PlayerSeat } from "./octagonGeometry.js";
 const SCORE_ZONE_DISTANCE_FACTOR = 0.46;
 const CHAT_BUBBLE_DEFAULT_DURATION_MS = 2400;
 const CHAT_BUBBLE_MIN_DURATION_MS = 900;
-const CHAT_BUBBLE_MAX_DURATION_MS = 8000;
+const CHAT_BUBBLE_MAX_DURATION_MS = 10000;
+const AVATAR_PANEL_SIZE = 1.92;
+const AVATAR_PANEL_HEIGHT = 2.36;
+const AVATAR_HEAD_ANCHOR_OFFSET = 0.96;
+const TURN_MARKER_BASE_HEIGHT = 4.52;
+const ACTIVE_SEAT_FLOAT_AMPLITUDE = 0.16;
+const ACTIVE_SEAT_FLOAT_SPEED = 0.0048;
+const ACTIVE_SEAT_PULSE_SPEED = 0.0072;
+const ACTIVE_SEAT_SURGE_SPEED = 0.0106;
 
 type SeatChatBubbleTone = "info" | "success" | "warning" | "error";
 
@@ -27,6 +35,11 @@ export interface SeatChatBubbleOptions {
   tone?: SeatChatBubbleTone;
   durationMs?: number;
   isBot?: boolean;
+}
+
+interface SeatChatBubbleVisual {
+  root: Mesh;
+  textTexture: DynamicTexture;
 }
 
 /**
@@ -54,10 +67,9 @@ export class PlayerSeatRenderer {
   private seatHeadMeshes: Map<number, Mesh> = new Map();
   private namePlateMeshes: Map<number, Mesh> = new Map();
   private scoreBadgeMeshes: Map<number, Mesh> = new Map();
-  private chatBubbleMeshes: Map<number, Mesh> = new Map();
+  private chatBubbleMeshes: Map<number, SeatChatBubbleVisual> = new Map();
   private scoreZoneMeshes: Map<number, Mesh> = new Map();
   private turnMarkerMeshes: Map<number, Mesh> = new Map();
-  private turnBadgeMeshes: Map<number, Mesh> = new Map();
   private seatStates: Map<number, SeatState> = new Map();
   private seatAvatarTextures: Map<number, { url?: string; texture: Texture | null }> = new Map();
   private scorePulseTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
@@ -119,37 +131,28 @@ export class PlayerSeatRenderer {
     pedestal.position = seat.position.clone();
     pedestal.position.y -= 0.5;
 
-    const avatar = MeshBuilder.CreateCylinder(
+    const avatar = MeshBuilder.CreatePlane(
       `seat-avatar-${seat.index}`,
-      { height: 2.5, diameterTop: 0.8, diameterBottom: 1.2 },
+      { width: AVATAR_PANEL_SIZE, height: AVATAR_PANEL_SIZE },
       this.scene
     );
-    avatar.position = new Vector3(0, 1.5, 0);
+    avatar.position = new Vector3(0, AVATAR_PANEL_HEIGHT, 0);
+    avatar.billboardMode = Mesh.BILLBOARDMODE_Y;
     avatar.parent = pedestal;
-
-    const head = MeshBuilder.CreateSphere(
-      `seat-head-${seat.index}`,
-      { diameter: 1.0 },
-      this.scene
-    );
-    head.position = new Vector3(0, 3.0, 0);
-    head.parent = pedestal;
 
     const pedestalMat = new StandardMaterial(`pedestal-mat-${seat.index}`, this.scene);
     const avatarMat = new StandardMaterial(`avatar-mat-${seat.index}`, this.scene);
-    const headMat = new StandardMaterial(`head-mat-${seat.index}`, this.scene);
+    avatarMat.backFaceCulling = true; // Show profile image on front face only.
     pedestal.material = pedestalMat;
     avatar.material = avatarMat;
-    head.material = headMat;
 
     this.addClickInteraction(pedestal, seat.index);
     this.addClickInteraction(avatar, seat.index);
-    this.addClickInteraction(head, seat.index);
 
     pedestal.rotation.y = seat.angle + Math.PI;
     this.seatMeshes.set(seat.index, pedestal);
     this.seatAvatarMeshes.set(seat.index, avatar);
-    this.seatHeadMeshes.set(seat.index, head);
+    this.seatHeadMeshes.set(seat.index, avatar);
     this.seatAvatarTextures.set(seat.index, { url: undefined, texture: null });
   }
 
@@ -257,10 +260,10 @@ export class PlayerSeatRenderer {
     const pedestal = this.seatMeshes.get(seat.index);
     const bubble = MeshBuilder.CreatePlane(
       `seat-chat-bubble-${seat.index}`,
-      { width: 3.8, height: 1.35 },
+      { width: 3.8, height: 1.25 },
       this.scene
     );
-    bubble.position = new Vector3(0, 6.65, 0);
+    bubble.position = new Vector3(0, 5.92, 0);
     if (pedestal) {
       bubble.parent = pedestal;
     }
@@ -270,11 +273,10 @@ export class PlayerSeatRenderer {
 
     const texture = new DynamicTexture(
       `seat-chat-bubble-texture-${seat.index}`,
-      { width: 640, height: 224 },
+      { width: 768, height: 256 },
       this.scene,
       false
     );
-
     const material = new StandardMaterial(`seat-chat-bubble-mat-${seat.index}`, this.scene);
     material.diffuseTexture = texture;
     material.emissiveTexture = texture;
@@ -282,7 +284,10 @@ export class PlayerSeatRenderer {
     material.useAlphaFromDiffuseTexture = true;
     bubble.material = material;
 
-    this.chatBubbleMeshes.set(seat.index, bubble);
+    this.chatBubbleMeshes.set(seat.index, {
+      root: bubble,
+      textTexture: texture,
+    });
   }
 
   /**
@@ -332,7 +337,7 @@ export class PlayerSeatRenderer {
       return null;
     }
     const headPosition = head.getAbsolutePosition();
-    return new Vector3(headPosition.x, headPosition.y + 0.42, headPosition.z);
+    return new Vector3(headPosition.x, headPosition.y + AVATAR_HEAD_ANCHOR_OFFSET, headPosition.z);
   }
 
   /**
@@ -364,8 +369,8 @@ export class PlayerSeatRenderer {
   }
 
   showSeatChatBubble(seatIndex: number, message: string, options: SeatChatBubbleOptions = {}): void {
-    const bubble = this.chatBubbleMeshes.get(seatIndex);
-    if (!bubble) {
+    const bubbleVisual = this.chatBubbleMeshes.get(seatIndex);
+    if (!bubbleVisual) {
       return;
     }
 
@@ -378,15 +383,17 @@ export class PlayerSeatRenderer {
     const state = this.seatStates.get(seatIndex);
     const tone: SeatChatBubbleTone = options.tone ?? "info";
     const isBot = options.isBot ?? state?.isBot === true;
-    this.drawChatBubble(bubble, normalizedMessage, tone, isBot);
-    bubble.isVisible = true;
+    this.drawChatBubble(bubbleVisual, normalizedMessage, tone, isBot);
+    bubbleVisual.root.isVisible = true;
 
     const existingTimer = this.chatBubbleHideTimers.get(seatIndex);
     if (existingTimer) {
       clearTimeout(existingTimer);
     }
 
-    const durationRaw = Number.isFinite(options.durationMs) ? Math.floor(options.durationMs as number) : CHAT_BUBBLE_DEFAULT_DURATION_MS;
+    const durationRaw = Number.isFinite(options.durationMs)
+      ? Math.floor(options.durationMs as number)
+      : CHAT_BUBBLE_DEFAULT_DURATION_MS;
     const durationMs = Math.max(CHAT_BUBBLE_MIN_DURATION_MS, Math.min(CHAT_BUBBLE_MAX_DURATION_MS, durationRaw));
     const hideTimer = setTimeout(() => {
       this.chatBubbleHideTimers.delete(seatIndex);
@@ -402,9 +409,9 @@ export class PlayerSeatRenderer {
       this.chatBubbleHideTimers.delete(seatIndex);
     }
 
-    const bubble = this.chatBubbleMeshes.get(seatIndex);
-    if (bubble) {
-      bubble.isVisible = false;
+    const bubbleVisual = this.chatBubbleMeshes.get(seatIndex);
+    if (bubbleVisual) {
+      bubbleVisual.root.isVisible = false;
     }
   }
 
@@ -417,50 +424,24 @@ export class PlayerSeatRenderer {
       return;
     }
 
-    const marker = MeshBuilder.CreateTorus(
+    const marker = MeshBuilder.CreateSphere(
       `seat-turn-marker-${seat.index}`,
-      { diameter: 1.7, thickness: 0.13, tessellation: 24 },
+      { diameter: 0.92, segments: 20 },
       this.scene
     );
-    marker.position = new Vector3(0, 3.95, 0);
-    marker.rotation.x = Math.PI / 2;
+    marker.position = new Vector3(0, TURN_MARKER_BASE_HEIGHT, 0);
     marker.parent = pedestal;
     marker.isPickable = false;
 
     const markerMat = new StandardMaterial(`seat-turn-marker-mat-${seat.index}`, this.scene);
-    markerMat.diffuseColor = new Color3(0.95, 0.74, 0.3);
-    markerMat.emissiveColor = new Color3(0.32, 0.22, 0.08);
-    markerMat.alpha = 0.95;
+    markerMat.diffuseColor = new Color3(0.34, 1.0, 0.5);
+    markerMat.emissiveColor = new Color3(0.2, 0.76, 0.32);
+    markerMat.specularColor = new Color3(0.2, 0.35, 0.2);
+    markerMat.alpha = 0.58;
     marker.material = markerMat;
     marker.isVisible = false;
 
     this.turnMarkerMeshes.set(seat.index, marker);
-
-    const badge = MeshBuilder.CreatePlane(
-      `seat-turn-badge-${seat.index}`,
-      { width: 2.6, height: 0.62 },
-      this.scene
-    );
-    badge.position = new Vector3(0, 5.18, 0);
-    badge.parent = pedestal;
-    badge.isPickable = false;
-    badge.billboardMode = Mesh.BILLBOARDMODE_ALL;
-    badge.isVisible = false;
-
-    const badgeTexture = new DynamicTexture(
-      `seat-turn-badge-texture-${seat.index}`,
-      { width: 448, height: 112 },
-      this.scene,
-      false
-    );
-    const badgeMaterial = new StandardMaterial(`seat-turn-badge-mat-${seat.index}`, this.scene);
-    badgeMaterial.diffuseTexture = badgeTexture;
-    badgeMaterial.emissiveTexture = badgeTexture;
-    badgeMaterial.backFaceCulling = false;
-    badgeMaterial.useAlphaFromDiffuseTexture = true;
-    badge.material = badgeMaterial;
-    this.drawTurnBadge(badgeTexture);
-    this.turnBadgeMeshes.set(seat.index, badge);
   }
 
   /**
@@ -517,7 +498,6 @@ export class PlayerSeatRenderer {
     const scoreBadge = this.scoreBadgeMeshes.get(seatIndex);
     const scoreZone = this.scoreZoneMeshes.get(seatIndex);
     const turnMarker = this.turnMarkerMeshes.get(seatIndex);
-    const turnBadge = this.turnBadgeMeshes.get(seatIndex);
     if (!pedestal || !namePlate || !scoreBadge || !scoreZone) {
       return;
     }
@@ -544,21 +524,21 @@ export class PlayerSeatRenderer {
     );
 
     pedestal.scaling = new Vector3(1, 1, 1);
+    avatarMesh.scaling = new Vector3(1, 1, 1);
+    avatarMesh.position.y = AVATAR_PANEL_HEIGHT;
     scoreZone.scaling = new Vector3(1, 1, 1);
     namePlate.scaling = new Vector3(1, 1, 1);
+    namePlate.position.y = 4.5;
+    scoreBadge.position.y = 5.4;
     if (turnMarker) {
       turnMarker.isVisible = false;
       turnMarker.scaling = new Vector3(1, 1, 1);
-      turnMarker.position.y = 3.95;
+      turnMarker.position.y = TURN_MARKER_BASE_HEIGHT;
       const markerMat = turnMarker.material as StandardMaterial | null;
       if (markerMat) {
-        markerMat.emissiveColor = new Color3(0.32, 0.22, 0.08);
+        markerMat.emissiveColor = new Color3(0.2, 0.76, 0.32);
+        markerMat.alpha = 0.58;
       }
-    }
-    if (turnBadge) {
-      turnBadge.isVisible = false;
-      turnBadge.scaling = new Vector3(1, 1, 1);
-      turnBadge.position.y = 5.18;
     }
 
     if (isCurrentPlayer) {
@@ -650,16 +630,12 @@ export class PlayerSeatRenderer {
       if (turnMarker) {
         turnMarker.isVisible = true;
       }
-      if (turnBadge) {
-        turnBadge.isVisible = true;
-      }
-    } else if (isHighlightedSeat && turnMarker) {
-      turnMarker.isVisible = true;
     }
 
     if (!isOccupied) {
       this.hideSeatChatBubble(seatIndex);
     }
+
   }
 
   private applySeatAvatarTexture(
@@ -700,6 +676,10 @@ export class PlayerSeatRenderer {
             texture?.dispose();
             return;
           }
+          if (!texture) {
+            return;
+          }
+          this.fitTextureToAvatarSurface(texture);
           headMaterial.diffuseTexture = texture;
           headMaterial.useAlphaFromDiffuseTexture = false;
         },
@@ -716,6 +696,9 @@ export class PlayerSeatRenderer {
       );
       texture.wrapU = Texture.CLAMP_ADDRESSMODE;
       texture.wrapV = Texture.CLAMP_ADDRESSMODE;
+      if (texture) {
+        this.fitTextureToAvatarSurface(texture);
+      }
     } catch {
       this.seatAvatarTextures.set(seatIndex, { url: undefined, texture: null });
       headMaterial.diffuseTexture = null;
@@ -726,6 +709,35 @@ export class PlayerSeatRenderer {
     headMaterial.diffuseTexture = texture;
     headMaterial.useAlphaFromDiffuseTexture = false;
     return true;
+  }
+
+  /**
+   * Fit a profile image to a square avatar panel using centered crop.
+   */
+  private fitTextureToAvatarSurface(texture: Texture): void {
+    const textureSize = texture.getSize();
+    const width = textureSize.width;
+    const height = textureSize.height;
+    if (!width || !height) {
+      texture.uScale = 1;
+      texture.vScale = 1;
+      texture.uOffset = 0;
+      texture.vOffset = 0;
+      return;
+    }
+
+    const textureAspect = width / height;
+    const targetAspect = 1; // square panel
+
+    if (textureAspect > targetAspect) {
+      texture.uScale = targetAspect / textureAspect;
+      texture.vScale = 1;
+    } else {
+      texture.uScale = 1;
+      texture.vScale = textureAspect / targetAspect;
+    }
+    texture.uOffset = 0.5 - texture.uScale * 0.5;
+    texture.vOffset = 0.5 - texture.vScale * 0.5;
   }
 
   private drawNamePlate(
@@ -860,95 +872,107 @@ export class PlayerSeatRenderer {
       return;
     }
 
+    const state = this.seatStates.get(this.activeTurnSeatIndex);
+    if (!state || !(state.occupied || state.isCurrentPlayer)) {
+      return;
+    }
+
+    const now = Date.now();
+    const pulse = (Math.sin(now * ACTIVE_SEAT_PULSE_SPEED) + 1) / 2;
+    const surge = Math.max(
+      0,
+      Math.sin(now * ACTIVE_SEAT_SURGE_SPEED + this.activeTurnSeatIndex * 0.65)
+    );
+    const floatOffset =
+      Math.sin(now * ACTIVE_SEAT_FLOAT_SPEED + this.activeTurnSeatIndex * 0.5) *
+      ACTIVE_SEAT_FLOAT_AMPLITUDE;
+
+    const pedestal = this.seatMeshes.get(this.activeTurnSeatIndex);
+    if (pedestal) {
+      const baseScale = 1.14;
+      const scaleBoost = pulse * 0.06 + surge * 0.06;
+      const scale = baseScale + scaleBoost;
+      pedestal.scaling.set(scale, scale + scaleBoost * 0.35, scale);
+
+      const pedestalMat = pedestal.material as StandardMaterial | null;
+      if (pedestalMat) {
+        const power = 0.26 + pulse * 0.22 + surge * 0.2;
+        pedestalMat.emissiveColor = pedestalMat.diffuseColor.scale(power);
+      }
+    }
+
+    const avatar = this.seatAvatarMeshes.get(this.activeTurnSeatIndex);
+    if (avatar) {
+      avatar.position.y = AVATAR_PANEL_HEIGHT + floatOffset;
+      const avatarScale = 1 + pulse * 0.1 + surge * 0.08;
+      avatar.scaling.set(avatarScale, avatarScale, avatarScale);
+
+      const avatarMat = avatar.material as StandardMaterial | null;
+      if (avatarMat) {
+        const power = 0.34 + pulse * 0.24 + surge * 0.24;
+        avatarMat.emissiveColor = avatarMat.diffuseColor.scale(power);
+      }
+    }
+
+    const namePlate = this.namePlateMeshes.get(this.activeTurnSeatIndex);
+    if (namePlate) {
+      namePlate.position.y = 4.5 + floatOffset * 0.42;
+    }
+    const scoreBadge = this.scoreBadgeMeshes.get(this.activeTurnSeatIndex);
+    if (scoreBadge) {
+      scoreBadge.position.y = 5.4 + floatOffset * 0.52;
+    }
+
     const marker = this.turnMarkerMeshes.get(this.activeTurnSeatIndex);
     if (!marker || !marker.isVisible) {
       return;
     }
-    const badge = this.turnBadgeMeshes.get(this.activeTurnSeatIndex);
-    const pulse = (Math.sin(Date.now() * 0.006) + 1) / 2;
-    const markerScale = 1 + pulse * 0.14;
+    const markerScale = 1 + pulse * 0.24 + surge * 0.14;
     marker.scaling.set(markerScale, markerScale, markerScale);
-    marker.position.y = 3.95 + pulse * 0.2;
+    marker.position.y = TURN_MARKER_BASE_HEIGHT + floatOffset * 0.75 + pulse * 0.22;
 
     const markerMat = marker.material as StandardMaterial | null;
     if (markerMat) {
-      markerMat.emissiveColor.r = 0.26 + pulse * 0.36;
-      markerMat.emissiveColor.g = 0.2 + pulse * 0.16;
-      markerMat.emissiveColor.b = 0.08;
+      markerMat.emissiveColor.r = 0.2 + pulse * 0.2 + surge * 0.16;
+      markerMat.emissiveColor.g = 0.76 + pulse * 0.2 + surge * 0.2;
+      markerMat.emissiveColor.b = 0.32 + pulse * 0.16 + surge * 0.12;
+      markerMat.alpha = 0.46 + pulse * 0.24 + surge * 0.16;
     }
-
-    if (!badge || !badge.isVisible) {
-      return;
-    }
-    const badgeScale = 1 + pulse * 0.05;
-    badge.scaling.set(badgeScale, badgeScale, badgeScale);
-    badge.position.y = 5.18 + pulse * 0.22;
-  }
-
-  private drawTurnBadge(texture: DynamicTexture): void {
-    const ctx = texture.getContext() as CanvasRenderingContext2D;
-    const width = 448;
-    const height = 112;
-    ctx.clearRect(0, 0, width, height);
-
-    this.drawRoundedRect(ctx, 12, 8, width - 24, height - 16, 20);
-    ctx.fillStyle = "#a76d16";
-    ctx.fill();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "#ffd995";
-    ctx.stroke();
-
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = "bold 50px Arial";
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText("TURN", width / 2, height / 2 + 2);
-    texture.update();
   }
 
   private drawChatBubble(
-    bubble: Mesh,
+    bubbleVisual: SeatChatBubbleVisual,
     message: string,
     tone: SeatChatBubbleTone,
     isBot: boolean
   ): void {
-    const texture = (bubble.material as StandardMaterial).diffuseTexture as DynamicTexture;
-    if (!texture) {
-      return;
-    }
-
+    const texture = bubbleVisual.textTexture;
     const ctx = texture.getContext() as CanvasRenderingContext2D;
-    const width = 640;
-    const height = 224;
+    const width = 768;
+    const height = 256;
     const palette = this.resolveChatBubblePalette(tone, isBot);
 
     ctx.clearRect(0, 0, width, height);
 
-    this.drawRoundedRect(ctx, 18, 14, width - 36, 156, 20);
+    this.drawRoundedRect(ctx, 24, 20, width - 48, height - 40, 24);
     ctx.fillStyle = palette.fill;
+    ctx.globalAlpha = 0.9;
     ctx.fill();
-    ctx.lineWidth = 4;
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 5;
     ctx.strokeStyle = palette.stroke;
     ctx.stroke();
 
-    ctx.beginPath();
-    ctx.moveTo(width / 2 - 24, 168);
-    ctx.lineTo(width / 2 + 24, 168);
-    ctx.lineTo(width / 2, 208);
-    ctx.closePath();
-    ctx.fillStyle = palette.fill;
-    ctx.fill();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = palette.stroke;
-    ctx.stroke();
-
-    const lines = this.wrapChatBubbleText(message, 2, 31);
-    ctx.fillStyle = palette.text;
+    const lines = this.wrapChatBubbleText(message, 2, 30);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = "bold 36px Arial";
+    ctx.font = "bold 44px Arial";
+    ctx.lineWidth = 7;
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.48)";
+    ctx.fillStyle = palette.text;
     lines.forEach((line, lineIndex) => {
-      const y = lines.length > 1 ? 74 + lineIndex * 44 : 86;
+      const y = height / 2 - ((lines.length - 1) * 44) / 2 + lineIndex * 44;
+      ctx.strokeText(line, width / 2, y);
       ctx.fillText(line, width / 2, y);
     });
 
@@ -992,25 +1016,6 @@ export class PlayerSeatRenderer {
     return capped;
   }
 
-  private resolveChatBubblePalette(
-    tone: SeatChatBubbleTone,
-    isBot: boolean
-  ): { fill: string; stroke: string; text: string } {
-    if (tone === "error") {
-      return { fill: "#822c2c", stroke: "#eaa8a8", text: "#ffffff" };
-    }
-    if (tone === "warning") {
-      return { fill: "#7d5921", stroke: "#f3d188", text: "#ffffff" };
-    }
-    if (tone === "success") {
-      return { fill: "#246f3b", stroke: "#a9f0c0", text: "#ffffff" };
-    }
-    if (isBot) {
-      return { fill: "#6a4023", stroke: "#e3b88f", text: "#ffffff" };
-    }
-    return { fill: "#2f4f76", stroke: "#a8c8f0", text: "#ffffff" };
-  }
-
   private drawRoundedRect(
     ctx: CanvasRenderingContext2D,
     x: number,
@@ -1031,6 +1036,25 @@ export class PlayerSeatRenderer {
     ctx.lineTo(x, y + r);
     ctx.quadraticCurveTo(x, y, x + r, y);
     ctx.closePath();
+  }
+
+  private resolveChatBubblePalette(
+    tone: SeatChatBubbleTone,
+    isBot: boolean
+  ): { fill: string; stroke: string; text: string } {
+    if (tone === "error") {
+      return { fill: "#822c2c", stroke: "#eaa8a8", text: "#ffffff" };
+    }
+    if (tone === "warning") {
+      return { fill: "#7d5921", stroke: "#f3d188", text: "#ffffff" };
+    }
+    if (tone === "success") {
+      return { fill: "#246f3b", stroke: "#a9f0c0", text: "#ffffff" };
+    }
+    if (isBot) {
+      return { fill: "#6a4023", stroke: "#e3b88f", text: "#ffffff" };
+    }
+    return { fill: "#2f4f76", stroke: "#a8c8f0", text: "#ffffff" };
   }
 
   /**
@@ -1065,10 +1089,9 @@ export class PlayerSeatRenderer {
     this.seatMeshes.forEach((mesh) => mesh.dispose());
     this.namePlateMeshes.forEach((mesh) => mesh.dispose());
     this.scoreBadgeMeshes.forEach((mesh) => mesh.dispose());
-    this.chatBubbleMeshes.forEach((mesh) => mesh.dispose());
+    this.chatBubbleMeshes.forEach((bubbleVisual) => bubbleVisual.root.dispose());
     this.scoreZoneMeshes.forEach((mesh) => mesh.dispose());
     this.turnMarkerMeshes.forEach((mesh) => mesh.dispose());
-    this.turnBadgeMeshes.forEach((mesh) => mesh.dispose());
     this.seatAvatarTextures.forEach((entry) => {
       entry.texture?.dispose();
     });
@@ -1080,7 +1103,6 @@ export class PlayerSeatRenderer {
     this.chatBubbleMeshes.clear();
     this.scoreZoneMeshes.clear();
     this.turnMarkerMeshes.clear();
-    this.turnBadgeMeshes.clear();
     this.seatAvatarTextures.clear();
     this.scorePulseTimers.clear();
     this.chatBubbleHideTimers.clear();

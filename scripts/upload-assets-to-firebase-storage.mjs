@@ -72,6 +72,17 @@ async function run() {
         `${bucketUri}/updates.json`,
       ],
     ],
+    [
+      "gcloud",
+      [
+        "storage",
+        "cp",
+        ...(shouldApplyCacheControl ? [`--cache-control=${contentCacheControl}`] : []),
+        ...(dryRun ? ["--dry-run"] : []),
+        path.join(projectRoot, "public", "updates.git.json"),
+        `${bucketUri}/updates.git.json`,
+      ],
+    ],
   ];
 
   console.log(
