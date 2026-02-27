@@ -2121,10 +2121,16 @@ body.splash-active :is(
   position: relative;
   z-index: 1;
   width: min(960px, 100%);
+  height: min(
+    820px,
+    calc(
+      100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px
+    )
+  );
   max-height: calc(
     100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px
   );
-  overflow-y: auto;
+  overflow: hidden;
   margin: 0;
   padding: 20px 22px;
   border-radius: 16px;
@@ -2134,10 +2140,34 @@ body.splash-active :is(
   box-shadow:
     0 24px 56px rgba(0, 0, 0, 0.56),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  gap: 12px;
+  text-align: left;
+}
+
+.splash-multiplayer-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  text-align: left;
+  padding-right: 4px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.splash-multiplayer-footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(7, 14, 28, 0) 0%, rgba(7, 14, 28, 0.96) 54%);
 }
 
 .splash-multiplayer-header {
@@ -2378,10 +2408,11 @@ body.splash-active :is(
 
 .splash-room-card-empty {
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   border-style: dashed;
   cursor: default;
   background: rgba(8, 18, 36, 0.58);
+  text-align: center;
 }
 
 .splash-room-card-empty p {
@@ -2559,11 +2590,15 @@ body.splash-active :is(
 .splash-multiplayer-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .splash-multiplayer-actions .btn {
   min-width: 160px;
+}
+
+.splash-multiplayer-join-tooltip {
+  display: inline-flex;
 }
 
 .splash-buttons {
@@ -5480,6 +5515,9 @@ body.splash-active :is(
 
   .splash-multiplayer-options {
     width: 100%;
+    height: calc(
+      100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px
+    );
     max-height: calc(
       100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px
     );
@@ -5502,6 +5540,10 @@ body.splash-active :is(
 
   .splash-room-grid {
     grid-template-columns: 1fr;
+  }
+
+  .splash-room-card-placeholder {
+    display: none;
   }
 
   .splash-room-filters {
@@ -5533,6 +5575,10 @@ body.splash-active :is(
   .splash-multiplayer-actions .btn {
     width: 100%;
     min-width: 0;
+  }
+
+  .splash-multiplayer-join-tooltip {
+    width: 100%;
   }
 
   .splash-private-config-grid {
