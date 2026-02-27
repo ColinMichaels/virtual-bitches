@@ -83,13 +83,21 @@ Lower total score wins.
 | --- | --- |
 | Roll / Score | <kbd>Space</kbd> or Action Button |
 | Select / Deselect focused die | <kbd>Enter</kbd> |
-| Move die focus | <kbd>Left</kbd> / <kbd>Right</kbd> |
+| Cycle focus backward | <kbd>Left</kbd> or <kbd>-</kbd> |
+| Cycle focus forward | <kbd>Right</kbd> or <kbd>+</kbd> / <kbd>=</kbd> |
 | Deselect all | <kbd>X</kbd> |
 | Pause / Settings | <kbd>Esc</kbd> |
 | Start new game | <kbd>N</kbd> |
 | Camera controls panel | <kbd>C</kbd> |
 | Chaos upgrades menu | <kbd>U</kbd> |
 | Debug view | <kbd>D</kbd> |
+
+### Camera Assist And Focus
+
+- Camera Assist is available in <strong>Easy</strong> mode only (toggle in <strong>Settings -> Game</strong>).
+- When enabled, selecting dice can auto-focus camera for clearer reads.
+- Camera returns to the default overview when you <strong>score</strong> and when you <strong>start a roll</strong>.
+- In multiplayer wait states, focus cycling (<kbd>Left</kbd>/<kbd>Right</kbd> or <kbd>-</kbd>/<kbd>+</kbd>/<kbd>=</kbd>) targets player seats so you can look around the table.
 
 ### Mouse / Touch
 

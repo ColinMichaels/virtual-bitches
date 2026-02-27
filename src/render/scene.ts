@@ -43,11 +43,12 @@ const ACTIVE_PLAYER_SPOT_INNER_ANGLE_RATIO = 0.28;
 const CAMERA_MIN_RADIUS = 7;
 const CAMERA_MAX_RADIUS = 85;
 const CAMERA_MAX_BETA = Math.PI / 1.95;
-const DIE_FOCUS_CAMERA_RADIUS = 8.8;
+const DIE_FOCUS_CAMERA_RADIUS = 9.2;
 const DIE_FOCUS_CAMERA_BETA = 0.16;
 const DIE_FOCUS_TARGET_Y_OFFSET = 0.2;
 const DIE_FOCUS_CAMERA_TRANSITION_SECONDS = 0.38;
-const PLAYER_FOCUS_CAMERA_RADIUS = 21.5;
+const DIE_FOCUS_CAMERA_SPEED_RATIO = 0.98; // 2% slower for a less abrupt assist move
+const PLAYER_FOCUS_CAMERA_RADIUS = 24;
 const PLAYER_FOCUS_CAMERA_BETA = 0.6;
 const PLAYER_FOCUS_TARGET_Y_OFFSET = 0.4;
 const PLAYER_FOCUS_CAMERA_TRANSITION_SECONDS = 0.48;
@@ -842,7 +843,11 @@ export class GameScene {
 
     // Always animate die-focus camera moves so panning/zooming feels intentional,
     // even when saved-camera smooth transitions are disabled in settings.
-    this.animateCameraTo(focusPosition, DIE_FOCUS_CAMERA_TRANSITION_SECONDS);
+    this.animateCameraTo(
+      focusPosition,
+      DIE_FOCUS_CAMERA_TRANSITION_SECONDS,
+      DIE_FOCUS_CAMERA_SPEED_RATIO
+    );
   }
 
   /**
@@ -996,9 +1001,14 @@ export class GameScene {
   /**
    * Animate camera properties to target position using Babylon Animations
    */
-  private animateCameraTo(position: CameraPosition, durationSeconds: number = 0.75) {
+  private animateCameraTo(
+    position: CameraPosition,
+    durationSeconds: number = 0.75,
+    speedRatio: number = 1
+  ) {
     const fps = 60;
     const frameCount = Math.max(1, Math.round(durationSeconds * fps));
+    const safeSpeedRatio = Number.isFinite(speedRatio) && speedRatio > 0 ? speedRatio : 1;
 
     // Helper to create animation
     const createAnim = (property: string) => {
@@ -1040,7 +1050,7 @@ export class GameScene {
     try {
       this.camera.animations = [alphaAnim, betaAnim, radiusAnim, targetX, targetY, targetZ];
       this.scene.stopAnimation(this.camera);
-      this.scene.beginAnimation(this.camera, 0, frameCount, false);
+      this.scene.beginAnimation(this.camera, 0, frameCount, false, safeSpeedRatio);
     } catch (error) {
       // Re-throw for upstream fallback
       throw error;

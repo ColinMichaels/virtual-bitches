@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v0.1.0-alpha • Last Updated: 2026-02-27 (CDN deploy hardening + social share metadata alignment pass)
+**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-27 (camera assist + updates commit-link pass)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -92,11 +92,26 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 - **Status**: 🟡 New
 - **Scope**: Splash-theme consistency + updates/release-note pipeline hardening.
 - **Tasks**:
+  - [x] Release notes: include commit links in generated git updates and render clickable links in `Game Updates` panel (`scripts/generate-updates-from-git.mjs`, `src/ui/updates.ts`).
+  - [x] Release notes: expose PR link metadata when PR number is detectable from commit subject/body.
   - [ ] Splash dice: reload geometry templates when theme changes if `meshFile` differs from currently loaded mesh source (`src/render/splashDice.ts`).
   - [ ] Splash dice: add texture load timeout/error fallback so failed texture fetch does not leave `createMaterial()` waiting indefinitely (`src/render/splashDice.ts`).
   - [ ] Release-notes generator: gracefully handle environments without `.git` history (fallback to empty updates file and warning) so `build/dev` do not hard fail (`scripts/generate-updates-from-git.mjs`).
   - [ ] Release-notes quality: optional commit message filtering/grouping for tester-facing notes (exclude chore-only/internal infra commits by default).
   - [ ] Cleanup: refresh stale inline comment in splash theme-change path ("fresh random cross-theme assignment") to match current behavior (`src/render/splashDice.ts`).
+
+#### Finish-Up Shortlist (Review Break • 2026-02-27)
+- **Status**: 🟡 Active
+- **Goal**: Close high-value polish/stability items before next feature wave.
+- **Top items**:
+  - [ ] Complete CSS ecosystem audit for full themeability pass (buttons, inputs, sliders, badges, panel surfaces, state colors) and remove remaining hard-coded one-off colors.
+    - Progress (2026-02-27): tokenized major UI surfaces including buttons/controls, settings tabs/account, dice focus + hint states, leaderboard accents, updates labels/links, debug sliders, and key rules/alpha/camera text accents.
+    - Remaining: sweep modal overlays/panel edge cases, mobile menu action accents, and legacy one-off color/shadow values in less-used UI paths.
+  - [ ] Finalize splash theme parity behavior so selected theme reliably controls splash dice mesh/material set.
+  - [ ] Add explicit release-notes fallback behavior for non-git environments and test it in CI/local zip deployment flows.
+  - [ ] Add regression tests for recent control/camera changes (`+/-` cycling, waiting-turn seat focus, easy-only camera assist behavior).
+  - [ ] Create first-pass Player Emote System TODO spec (replace temporary seat text usage with structured emote/vo line system).
+  - [ ] Run focused device QA pass (iPhone + Android + iPad) for settings, updates panel links, and camera focus flows.
 
 ### Multiplayer Room Lifecycle, Recovery UX, and Tutorial Quality Pass (2026-02-26)
 - **Status**: ✅ Foundation COMPLETE, follow-up polish tasks queued
