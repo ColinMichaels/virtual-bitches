@@ -2810,6 +2810,21 @@ async function waitForTurnAutoAdvanceForPlayer({
       lastHeartbeatPingAt = now;
       return;
     }
+    if (isTransientQueueRefreshFailure(heartbeat)) {
+      const reason = String(heartbeat?.body?.reason ?? "unknown");
+      log(
+        `Timeout strike heartbeat transient failure status=${heartbeat.status} reason=${reason}; attempting auth refresh recovery.`
+      );
+      const recovered = await refreshSessionAuthWithRecovery({
+        sessionId,
+        playerId: hostPlayerId,
+        displayName: hostDisplayName,
+        accessToken: token,
+      });
+      token = recovered.accessToken;
+      lastHeartbeatPingAt = now;
+      return;
+    }
     throw new Error(
       `timeout strike heartbeat failed status=${heartbeat.status} body=${JSON.stringify(heartbeat.body)}`
     );
@@ -2966,6 +2981,10 @@ function isRoomFullJoinFailure(result) {
 function isTransientQueueRefreshFailure(result) {
   if (!result) {
     return false;
+  }
+
+  if (result.body?.reason === "session_expired") {
+    return true;
   }
 
   if (result.status === 429 || (result.status >= 500 && result.status <= 504)) {
