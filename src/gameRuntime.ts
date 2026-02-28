@@ -79,6 +79,7 @@ export interface MultiplayerBootstrapOptions {
   joinBotCount?: number;
   gameDifficulty?: MultiplayerGameDifficulty;
   sessionId?: string;
+  autoSeatReady?: boolean;
 }
 
 interface GameSessionBootstrapOptions {
@@ -255,6 +256,7 @@ class Game implements GameCallbacks {
   private botMemeAvatarRefreshInFlight = false;
   private waitForNextGameRequestInFlight = false;
   private participantStateUpdateInFlight = false;
+  private autoSeatReadySyncInFlight = false;
   private cachedMultiplayerIdentity:
     | {
         value: {
@@ -316,6 +318,9 @@ class Game implements GameCallbacks {
   constructor(sessionBootstrap: GameSessionBootstrapOptions) {
     this.playMode = sessionBootstrap.playMode;
     this.multiplayerOptions = sessionBootstrap.multiplayer ?? {};
+    if (this.playMode === "multiplayer" && this.multiplayerOptions.autoSeatReady !== false) {
+      this.multiplayerOptions.autoSeatReady = true;
+    }
 
     // Initialize game state from URL or create new game
     this.state = GameFlowController.initializeGameState();
@@ -1554,6 +1559,7 @@ class Game implements GameCallbacks {
 
     this.updateInviteLinkControlVisibility();
     log.info(`Joined multiplayer session via API scaffold: ${session.sessionId}`);
+    void this.ensureAutoSeatReadyForSession(session.sessionId);
     window.setTimeout(() => {
       const activeSessionId = this.multiplayerSessionService.getActiveSession()?.sessionId;
       if (activeSessionId !== session.sessionId) {
@@ -2212,6 +2218,78 @@ class Game implements GameCallbacks {
       isReady: localParticipant.isSeated !== false && localParticipant.isReady === true,
       queuedForNextGame: normalizeQueuedForNextGame(localParticipant.queuedForNextGame),
     };
+  }
+
+  private isAutoSeatReadyEnabled(): boolean {
+    return (
+      this.playMode === "multiplayer" &&
+      environment.features.multiplayerAutoSeatReady &&
+      this.multiplayerOptions.autoSeatReady !== false
+    );
+  }
+
+  private async ensureAutoSeatReadyForSession(sessionId: string): Promise<void> {
+    if (!this.isAutoSeatReadyEnabled() || this.autoSeatReadySyncInFlight) {
+      return;
+    }
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession?.sessionId || activeSession.sessionId !== sessionId) {
+      return;
+    }
+
+    const localParticipant = this.getSessionParticipantById(activeSession, this.localPlayerId);
+    if (!localParticipant || localParticipant.isBot) {
+      return;
+    }
+    if (localParticipant.isSeated === true && localParticipant.isReady === true) {
+      return;
+    }
+
+    this.autoSeatReadySyncInFlight = true;
+    try {
+      let latestSession: MultiplayerSessionRecord | null = activeSession;
+
+      if (localParticipant.isSeated !== true) {
+        latestSession = await this.multiplayerSessionService.updateParticipantState("sit");
+        if (!latestSession) {
+          log.warn(`Auto seat failed for session ${sessionId}`);
+          return;
+        }
+      }
+
+      const refreshedSession = latestSession ?? this.multiplayerSessionService.getActiveSession();
+      if (!refreshedSession || refreshedSession.sessionId !== sessionId) {
+        return;
+      }
+
+      const refreshedLocalParticipant = this.getSessionParticipantById(
+        refreshedSession,
+        this.localPlayerId
+      );
+      if (
+        !refreshedLocalParticipant ||
+        refreshedLocalParticipant.isBot ||
+        refreshedLocalParticipant.isSeated !== true
+      ) {
+        return;
+      }
+
+      if (refreshedLocalParticipant.isReady !== true) {
+        latestSession = await this.multiplayerSessionService.updateParticipantState("ready");
+        if (!latestSession) {
+          log.warn(`Auto ready failed for session ${sessionId}`);
+          return;
+        }
+      }
+
+      const nextSession = latestSession ?? this.multiplayerSessionService.getActiveSession();
+      if (nextSession?.sessionId === sessionId) {
+        this.applyMultiplayerSeatState(nextSession);
+        this.touchMultiplayerTurnSyncActivity();
+      }
+    } finally {
+      this.autoSeatReadySyncInFlight = false;
+    }
   }
 
   private async updateLocalParticipantState(
@@ -3395,6 +3473,20 @@ class Game implements GameCallbacks {
   }
 
   private canLocalPlayerTakeTurnAction(): boolean {
+    if (this.playMode === "multiplayer") {
+      const localSeatState = this.getLocalMultiplayerSeatState();
+      if (localSeatState && !localSeatState.isSeated) {
+        this.hud.setTurnSyncStatus("ok", "Sit To Play");
+        notificationService.show("Sit down to join the multiplayer game.", "info", 1800);
+        return false;
+      }
+      if (localSeatState && !localSeatState.isReady) {
+        this.hud.setTurnSyncStatus("ok", "Ready Up");
+        notificationService.show("Tap Ready Up before taking a turn.", "info", 1800);
+        return false;
+      }
+    }
+
     if (!this.isMultiplayerTurnEnforced()) {
       return true;
     }
@@ -4433,6 +4525,10 @@ class Game implements GameCallbacks {
 
     if (this.playMode === "multiplayer") {
       const localSeatState = this.getLocalMultiplayerSeatState();
+      if (localSeatState && !localSeatState.isSeated) {
+        void this.updateLocalParticipantState("sit");
+        return;
+      }
       if (localSeatState && localSeatState.isSeated && !localSeatState.isReady) {
         void this.updateLocalParticipantState("ready");
         return;
@@ -4780,6 +4876,13 @@ class Game implements GameCallbacks {
       return false;
     }
 
+    if (this.playMode === "multiplayer") {
+      const localSeatState = this.getLocalMultiplayerSeatState();
+      if (localSeatState && (!localSeatState.isSeated || !localSeatState.isReady)) {
+        return false;
+      }
+    }
+
     if (!this.isMultiplayerTurnEnforced()) {
       return true;
     }
@@ -4802,6 +4905,23 @@ class Game implements GameCallbacks {
       bannerEl.removeAttribute("data-tone");
       bannerEl.textContent = "";
     };
+
+    const localSeatState = this.getLocalMultiplayerSeatState();
+    if (this.playMode === "multiplayer" && localSeatState) {
+      if (!localSeatState.isSeated) {
+        bannerEl.textContent = "Observer mode: tap Sit Down to join";
+        bannerEl.dataset.tone = "info";
+        bannerEl.classList.add("is-visible");
+        bannerEl.classList.remove("is-urgent");
+        return;
+      }
+      if (!localSeatState.isReady) {
+        bannerEl.textContent = "Tap Ready Up to enter the turn queue";
+        bannerEl.dataset.tone = "action";
+        bannerEl.classList.add("is-visible", "is-urgent");
+        return;
+      }
+    }
 
     if (!this.isMultiplayerTurnEnforced() || this.state.status === "COMPLETE") {
       hideBanner();
@@ -4893,6 +5013,10 @@ class Game implements GameCallbacks {
     }
 
     const localSeatState = this.getLocalMultiplayerSeatState();
+    const needsSitAction =
+      this.playMode === "multiplayer" &&
+      localSeatState !== null &&
+      !localSeatState.isSeated;
     const needsReadyAction =
       this.playMode === "multiplayer" &&
       localSeatState !== null &&
@@ -4901,7 +5025,11 @@ class Game implements GameCallbacks {
     const hasSelection = this.state.selected.size > 0;
 
     // Update multipurpose action button
-    if (needsReadyAction) {
+    if (needsSitAction) {
+      this.actionBtn.textContent = "Sit Down";
+      this.actionBtn.disabled = this.animating || this.paused || this.participantStateUpdateInFlight;
+      this.actionBtn.className = "btn btn-primary primary";
+    } else if (needsReadyAction) {
       this.actionBtn.textContent = "Ready Up";
       this.actionBtn.disabled = this.animating || this.paused || this.participantStateUpdateInFlight;
       this.actionBtn.className = "btn btn-primary primary";

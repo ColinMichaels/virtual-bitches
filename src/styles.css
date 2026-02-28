@@ -2561,6 +2561,24 @@ body.splash-active :is(
   letter-spacing: 0.04em;
 }
 
+.splash-auto-seat-ready-toggle {
+  display: flex;
+}
+
+.splash-auto-seat-ready-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: none;
+  letter-spacing: 0.04em;
+}
+
+.splash-auto-seat-ready-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
 .splash-room-code-actions {
   display: flex;
   gap: 8px;

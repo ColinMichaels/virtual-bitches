@@ -42,6 +42,10 @@ export const enUS = {
   "splash.multiplayer.joinBotSeedCount": "Join seed bot count",
   "splash.multiplayer.joinBotSeedNote":
     "Only used when entering a room code that creates a new private room.",
+  "splash.multiplayer.autoSeatReadyToggle": "Auto sit + ready on join (temporary)",
+  "splash.multiplayer.autoSeatReadyNote":
+    "Stability helper: automatically seats and readies you after joining a multiplayer room.",
+  "splash.multiplayer.autoSeatReadyDisabledNote": "Disabled by deployment config.",
   "splash.multiplayer.joinExistingRoom": "Join an existing room",
   "splash.multiplayer.createRoomSection": "Create a private room",
   "splash.multiplayer.roomsLoading": "Loading active rooms...",

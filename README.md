@@ -32,6 +32,10 @@ npm run dev
 
 Open `http://localhost:5173`.
 
+## Config Reference
+
+- Environment variables + GitHub deploy secrets/vars: [docs/ENVIRONMENT-REFERENCE.md](docs/ENVIRONMENT-REFERENCE.md)
+
 ## Rules (Short Version)
 
 - Objective: score all 15 dice with the lowest total.

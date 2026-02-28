@@ -44,6 +44,11 @@ export const esES: TranslationDictionary = {
   "splash.multiplayer.joinBotSeedCount": "Cantidad de bots al sembrar",
   "splash.multiplayer.joinBotSeedNote":
     "Solo se usa al ingresar un codigo que cree una sala privada nueva.",
+  "splash.multiplayer.autoSeatReadyToggle": "Auto sentar + listo al unirse (temporal)",
+  "splash.multiplayer.autoSeatReadyNote":
+    "Ayuda temporal de estabilidad: te sienta y marca listo automaticamente al unirte a una sala multijugador.",
+  "splash.multiplayer.autoSeatReadyDisabledNote":
+    "Desactivado por configuracion de despliegue.",
   "splash.multiplayer.joinExistingRoom": "Unirse a una sala existente",
   "splash.multiplayer.createRoomSection": "Crear una sala privada",
   "splash.multiplayer.roomsLoading": "Cargando salas activas...",

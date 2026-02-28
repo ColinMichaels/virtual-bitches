@@ -14,6 +14,7 @@ export interface Environment {
     leaderboard: boolean;
     multiplayer: boolean;
     analytics: boolean;
+    multiplayerAutoSeatReady: boolean;
   };
   storage: {
     prefix: string; // localStorage key prefix
