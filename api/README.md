@@ -273,6 +273,18 @@ Notes:
 - local harness (`npm run test:e2e:api:local`) enables it by default with a deterministic test term.
 - local harness defaults `E2E_ASSERT_ROOM_EXPIRY=1` only when short TTL mode is enabled (`E2E_SHORT_TTLS!=0`); otherwise it defaults to `0` to match long-lived production TTLs.
 
+Optional timeout-strike observer/lounge assertion segment:
+
+```bash
+E2E_ASSERT_TIMEOUT_STRIKE_OBSERVER=1 npm run test:e2e:api
+```
+
+Notes:
+- enabled by default for deployed smoke (`E2E_ASSERT_TIMEOUT_STRIKE_OBSERVER!=0`).
+- distributed Cloud Run runs can surface repeated transient `session_expired`; smoke marks timeout-strike as inconclusive by default after retry.
+- set `E2E_FAIL_ON_TRANSIENT_TIMEOUT_STRIKE_SESSION_EXPIRED=1` to fail hard on that transient path.
+- set `E2E_FAIL_ON_TRANSIENT_QUEUE_SESSION_EXPIRED=1` to fail hard for the queue lifecycle inconclusive path.
+
 Baseline smoke also validates:
 - player score batch write + read-back sync (`/players/:playerId/scores/batch` + `/players/:playerId/scores`)
 - `GET /auth/me` authorized and unauthorized behavior when `E2E_FIREBASE_ID_TOKEN` is provided

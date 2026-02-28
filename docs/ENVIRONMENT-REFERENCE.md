@@ -141,6 +141,12 @@ Optional but recommended:
 | `MULTIPLAYER_CHAT_TERMS_MAX_MANAGED` | integer like `2048` | Max in-API managed moderation terms |
 | `MULTIPLAYER_CHAT_TERMS_MAX_REMOTE` | integer like `4096` | Max remote moderation terms per refresh |
 | `E2E_QUEUE_LIFECYCLE_WAIT_MS` | integer ms like `90000` | CI smoke tolerance |
+| `E2E_ASSERT_TIMEOUT_STRIKE_OBSERVER` | `0` or `1` | Toggle dedicated timeout-strike observer/lounge smoke segment (`1` default; set `0` to disable) |
+| `E2E_TIMEOUT_STRIKE_WAIT_BUFFER_MS` | integer ms like `7000` | Extra timeout-strike auto-advance wait buffer |
+| `E2E_TIMEOUT_STRIKE_POLL_INTERVAL_MS` | integer ms like `250` | Timeout-strike polling cadence |
+| `E2E_TIMEOUT_STRIKE_HEARTBEAT_INTERVAL_MS` | integer ms like `5000` | Timeout-strike heartbeat cadence while waiting for turn expiry |
+| `E2E_FAIL_ON_TRANSIENT_QUEUE_SESSION_EXPIRED` | `0` or `1` | Fail hard when queue lifecycle hits repeated transient `session_expired` (`0` default marks inconclusive) |
+| `E2E_FAIL_ON_TRANSIENT_TIMEOUT_STRIKE_SESSION_EXPIRED` | `0` or `1` | Fail hard when timeout-strike smoke hits repeated transient `session_expired` (`0` default marks inconclusive) |
 | `E2E_ASSERT_ADMIN_MONITOR` | `0` or `1` | Toggle admin monitor smoke segment (overview/rooms/metrics/audit/roles + admin mutations) |
 | `E2E_ASSERT_ADMIN_MODERATION_TERMS` | `0` or `1` | Toggle admin moderation-term smoke segment (`/api/admin/moderation/terms*`) |
 | `E2E_ASSERT_MULTIPLAYER_MODERATION` | `0` or `1` | Toggle moderation smoke segment (`kick/ban`, `room_banned`, `interaction_blocked`) |

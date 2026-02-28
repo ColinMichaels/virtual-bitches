@@ -1,6 +1,14 @@
 {
   "updates": [
     {
+      "id": "feature-multiplayer-timeout-observer-clock-2026-02-28",
+      "date": "2026-02-28",
+      "title": "⏱️ Multiplayer Timeout + Observer Lounge Update",
+      "content": "<p>Multiplayer turn flow and round timing were tightened up to prevent stalled tables and confusing timer behavior.</p><p><strong>What Changed:</strong></p><ul style=\"margin: 10px 0; padding-left: 20px;\"><li>Difficulty-based turn timeouts now apply in multiplayer: <strong>Easy 40s</strong>, <strong>Normal 30s</strong>, <strong>Hard 15s</strong></li><li>Players who timeout twice in the same round are moved to <strong>observer/lounge</strong> so active gameplay can continue</li><li>If a timed-out player already selected dice, that selection is auto-scored before the turn advances</li><li>Round clock now shows <strong>elapsed time during active rounds</strong>, and only switches to countdown when a real next-game schedule exists</li><li>Rooms with no seated players now clean themselves up after a short idle window</li></ul><p>Result: fewer deadlocks, clearer timing, and smoother round transitions.</p>",
+      "version": "1.0.0",
+      "type": "feature"
+    },
+    {
       "id": "feature-private-room-flow-refresh-2026-02-28",
       "date": "2026-02-28",
       "title": "🚪 Private Room Flow Refresh",
