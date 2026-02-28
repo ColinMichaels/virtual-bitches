@@ -45,7 +45,11 @@ const ROOM_CHANNEL_BAD_TERMS = parseDelimitedEnvSet(
 const log = logger.create("Server");
 const SHORT_SESSION_TTL_REQUESTED = process.env.ALLOW_SHORT_SESSION_TTLS === "1";
 const ALLOW_SHORT_SESSION_TTLS = SHORT_SESSION_TTL_REQUESTED && NODE_ENV !== "production";
-const SESSION_IDLE_TTL_MIN_MS = ALLOW_SHORT_SESSION_TTLS ? 2000 : 60 * 1000;
+const SESSION_IDLE_TTL_MIN_MS = ALLOW_SHORT_SESSION_TTLS
+  ? 2000
+  : NODE_ENV === "production"
+    ? 5 * 60 * 1000
+    : 60 * 1000;
 
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -124,7 +128,7 @@ const BOT_ROLL_DICE_SIDES = [8, 12, 10, 6, 6, 6, 20, 6, 4, 6, 6, 6, 10, 6, 6];
 const TURN_TIMEOUT_MS = normalizeTurnTimeoutValue(process.env.TURN_TIMEOUT_MS, 45000);
 const MULTIPLAYER_PARTICIPANT_STALE_MS = normalizeTurnTimeoutValue(
   process.env.MULTIPLAYER_PARTICIPANT_STALE_MS,
-  45000
+  2 * 60 * 1000
 );
 const MULTIPLAYER_CLEANUP_INTERVAL_MS = normalizeTurnTimeoutValue(
   process.env.MULTIPLAYER_CLEANUP_INTERVAL_MS,
@@ -254,6 +258,7 @@ server.listen(PORT, () => {
   log.info(`Health endpoint: http://localhost:${PORT}/api/health`);
   log.info(`WebSocket endpoint: ws://localhost:${PORT}/?session=<id>&playerId=<id>&token=<token>`);
   log.info(`Multiplayer session idle TTL: ${MULTIPLAYER_SESSION_IDLE_TTL_MS}ms`);
+  log.info(`Multiplayer participant stale timeout: ${MULTIPLAYER_PARTICIPANT_STALE_MS}ms`);
   if (SHORT_SESSION_TTL_REQUESTED && NODE_ENV === "production") {
     log.warn("Ignoring ALLOW_SHORT_SESSION_TTLS in production");
   }
@@ -340,6 +345,14 @@ async function handleRequest(req, res) {
         playerScoreEntries: Object.keys(store.playerScores).length,
         sessions: Object.keys(store.multiplayerSessions).length,
         leaderboardEntries: Object.keys(store.leaderboardScores).length,
+        multiplayer: {
+          sessionIdleTtlMs: MULTIPLAYER_SESSION_IDLE_TTL_MS,
+          sessionIdleTtlMinMs: SESSION_IDLE_TTL_MIN_MS,
+          participantStaleMs: MULTIPLAYER_PARTICIPANT_STALE_MS,
+          cleanupIntervalMs: MULTIPLAYER_CLEANUP_INTERVAL_MS,
+          turnTimeoutMs: TURN_TIMEOUT_MS,
+          nextGameAutoStartDelayMs: NEXT_GAME_AUTO_START_DELAY_MS,
+        },
         storage: buildStoreDiagnostics(),
       });
       return;
@@ -1216,10 +1229,7 @@ async function handleUpdateParticipantState(req, res, pathname) {
     authCheck = authorizeRequest(req, playerId, sessionId);
   }
   if (!authCheck.ok) {
-    sendJson(res, 200, {
-      ok: false,
-      reason: "unauthorized",
-    });
+    sendJson(res, 401, { error: "Unauthorized", reason: "unauthorized" });
     return;
   }
 
@@ -1372,11 +1382,7 @@ async function handleQueueParticipantForNextGame(req, res, pathname) {
     authCheck = authorizeRequest(req, playerId, sessionId);
   }
   if (!authCheck.ok) {
-    sendJson(res, 200, {
-      ok: false,
-      queuedForNextGame: false,
-      reason: "unauthorized",
-    });
+    sendJson(res, 401, { error: "Unauthorized", reason: "unauthorized" });
     return;
   }
 

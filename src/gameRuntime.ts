@@ -985,6 +985,10 @@ class Game implements GameCallbacks {
     if (!activeSession?.sessionId) {
       return;
     }
+    if (!this.activeTurnPlayerId && this.getUnreadySeatedHumanParticipants().length > 0) {
+      this.hud.setTurnSyncStatus("ok", "Waiting For Ready");
+      return;
+    }
 
     const now = Date.now();
     const staleMs = now - this.lastTurnSyncActivityAt;
@@ -3336,6 +3340,21 @@ class Game implements GameCallbacks {
     );
   }
 
+  private getUnreadySeatedHumanParticipants(): string[] {
+    const participants = this.multiplayerSessionService.getActiveSession()?.participants ?? [];
+    return participants
+      .filter(
+        (participant) =>
+          participant &&
+          !participant.isBot &&
+          participant.isSeated !== false &&
+          participant.queuedForNextGame !== true &&
+          participant.isComplete !== true &&
+          participant.isReady !== true
+      )
+      .map((participant) => participant.playerId);
+  }
+
   private hasActiveBotOpponent(): boolean {
     const participants = this.multiplayerSessionService.getActiveSession()?.participants ?? [];
     return participants.some(
@@ -3380,7 +3399,27 @@ class Game implements GameCallbacks {
       return true;
     }
 
+    const pendingReadyPlayers = this.getUnreadySeatedHumanParticipants();
     if (!this.activeTurnPlayerId) {
+      if (pendingReadyPlayers.length > 0) {
+        const previewNames = pendingReadyPlayers
+          .slice(0, 2)
+          .map((playerId) => this.getParticipantLabel(playerId));
+        const remainingCount = pendingReadyPlayers.length - previewNames.length;
+        const waitingOn =
+          remainingCount > 0
+            ? `${previewNames.join(", ")} +${remainingCount}`
+            : previewNames.join(", ");
+        this.hud.setTurnSyncStatus("ok", "Waiting For Ready");
+        notificationService.show(
+          waitingOn
+            ? `Waiting for players to ready up: ${waitingOn}.`
+            : "Waiting for players to ready up.",
+          "info",
+          1800
+        );
+        return false;
+      }
       if (this.shouldRecoverTurnSyncForBlockedAction()) {
         void this.requestTurnSyncRefresh("local_action_missing_active_turn");
       }
