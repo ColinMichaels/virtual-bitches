@@ -15,6 +15,7 @@
 - Updated room lifecycle saturation checks in `api/e2e/smoke.mjs` to fill the chosen room by `sessionId` (deterministic target) instead of only by room code.
 - Kept strict `room_full` assertions for session-targeted joins at capacity.
 - Relaxed room-code probe handling only when code resolution explicitly routes to a different session, with cleanup + logging, to reduce false failures in shared/persisted environments where room-code collisions can exist.
+- Updated winner-queue heartbeat handling in smoke to treat transient `session_expired`/lookup-style failures as recoverable while auth-refresh recovery runs, instead of hard-failing immediately.
 
 ### Multiplayer Post-Round Lifecycle Fixes
 - Fixed next-game scheduling baseline so `nextGameStartsAt` is now computed from **round completion time** instead of prior `gameStartedAt`.
