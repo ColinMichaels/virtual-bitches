@@ -115,6 +115,34 @@
                 </svg>
             </button>
         </div>
+        <button
+            id="seat-status-btn"
+            class="btn btn-secondary seat-status-btn"
+            title="Seat Status"
+            aria-label="Seat Status Toggle"
+            style="display: none;"
+        >
+            <span class="seat-status-btn__icon seat-status-btn__icon--sit" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="9"/>
+                    <path d="M12 8v8"/>
+                    <path d="M8 12h8"/>
+                </svg>
+            </span>
+            <span class="seat-status-btn__icon seat-status-btn__icon--ready" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="9"/>
+                    <path d="M8 12.5l2.6 2.6L16.5 9.5"/>
+                </svg>
+            </span>
+            <span class="seat-status-btn__icon seat-status-btn__icon--stand" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="9"/>
+                    <path d="M8 12h8"/>
+                </svg>
+            </span>
+            <span id="seat-status-btn-label" class="seat-status-btn__label">Sit Down</span>
+        </button>
     </div>
 
     <!-- Mobile Menu Toggle Button (shown only on mobile) -->

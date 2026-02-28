@@ -281,6 +281,8 @@ class Game implements GameCallbacks {
     | null = null;
 
   private actionBtn: HTMLButtonElement;
+  private seatStatusBtn: HTMLButtonElement | null = null;
+  private seatStatusBtnLabel: HTMLElement | null = null;
   private deselectBtn: HTMLButtonElement;
   private undoBtn: HTMLButtonElement;
   private newGameBtn: HTMLButtonElement | null = null;
@@ -554,6 +556,8 @@ class Game implements GameCallbacks {
 
     // UI elements
     this.actionBtn = document.getElementById("action-btn") as HTMLButtonElement;
+    this.seatStatusBtn = document.getElementById("seat-status-btn") as HTMLButtonElement | null;
+    this.seatStatusBtnLabel = document.getElementById("seat-status-btn-label");
     this.deselectBtn = document.getElementById("deselect-btn") as HTMLButtonElement;
     this.undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
     this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement | null;
@@ -735,16 +739,7 @@ class Game implements GameCallbacks {
           this.playMode === "multiplayer" &&
           targetPlayerId === this.localPlayerId
         ) {
-          const localSeatState = this.getLocalMultiplayerSeatState();
-          if (!localSeatState || !localSeatState.isSeated) {
-            void this.updateLocalParticipantState("sit");
-            return;
-          }
-          if (!localSeatState.isReady) {
-            void this.updateLocalParticipantState("ready");
-            return;
-          }
-          void this.updateLocalParticipantState("stand");
+          this.handleSeatStatusToggle();
           return;
         }
 
@@ -2428,6 +2423,98 @@ class Game implements GameCallbacks {
     }
   }
 
+  private resolveSeatToggleAction(
+    localSeatState: { isSeated: boolean; isReady: boolean }
+  ): "sit" | "stand" {
+    if (!localSeatState.isSeated) {
+      return "sit";
+    }
+    return "stand";
+  }
+
+  private isPlayableDisruptionStateForLocalSeatChange(
+    localSeatState: { isSeated: boolean; isReady: boolean }
+  ): boolean {
+    if (!localSeatState.isSeated || !localSeatState.isReady) {
+      return false;
+    }
+
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession || activeSession.sessionComplete === true) {
+      return false;
+    }
+
+    const round =
+      typeof activeSession.turnState?.round === "number" &&
+      Number.isFinite(activeSession.turnState.round)
+        ? Math.max(1, Math.floor(activeSession.turnState.round))
+        : 1;
+    const turnNumber =
+      typeof activeSession.turnState?.turnNumber === "number" &&
+      Number.isFinite(activeSession.turnState.turnNumber)
+        ? Math.max(1, Math.floor(activeSession.turnState.turnNumber))
+        : 1;
+    const hasQueuedOpponents = this.hasActiveHumanOpponent() || this.hasActiveBotOpponent();
+    const hasTurnRuntimeProgress =
+      this.state.status !== "READY" ||
+      this.state.rollIndex > 0 ||
+      this.state.selected.size > 0;
+
+    return (
+      hasTurnRuntimeProgress ||
+      this.activeTurnPlayerId === this.localPlayerId ||
+      (hasQueuedOpponents &&
+        (round > 1 || turnNumber > 1 || typeof activeSession.turnState?.activeTurnPlayerId === "string"))
+    );
+  }
+
+  private async confirmDisruptiveSeatOrRoomExit(
+    action: "stand" | "leave_room",
+    localSeatState: { isSeated: boolean; isReady: boolean } | null
+  ): Promise<boolean> {
+    if (
+      this.playMode !== "multiplayer" ||
+      !localSeatState ||
+      !this.isPlayableDisruptionStateForLocalSeatChange(localSeatState)
+    ) {
+      return true;
+    }
+
+    const title = action === "stand" ? "Stand Up And Exit Queue?" : "Leave Room Now?";
+    const message =
+      action === "stand"
+        ? "This will remove you from the active game queue immediately. The room will continue without you and other players will be notified."
+        : "This will remove you from the active game queue and leave the room immediately. The room will continue without you and other players will be notified.";
+    const confirmLabel = action === "stand" ? "Stand Up" : "Leave Room";
+
+    return confirmAction({
+      title,
+      message,
+      confirmLabel,
+      cancelLabel: "Stay",
+      tone: "danger",
+    });
+  }
+
+  private announceLocalPresenceChange(event: "stood_up" | "left_room"): void {
+    if (this.playMode !== "multiplayer") {
+      return;
+    }
+    const sourceLabel = this.getParticipantBroadcastLabel(this.localPlayerId);
+    const message =
+      event === "stood_up"
+        ? `${sourceLabel} stood up and left the active queue.`
+        : `${sourceLabel} left the room.`;
+    this.sendPlayerRoomChannelMessage({
+      idPrefix: event === "stood_up" ? "presence-stand" : "presence-left",
+      channel: "public",
+      topic: "presence",
+      title: "Room Presence",
+      message,
+      severity: "info",
+    });
+  }
+
   private async updateLocalParticipantState(
     action: "sit" | "stand" | "ready" | "unready"
   ): Promise<void> {
@@ -2442,8 +2529,10 @@ class Game implements GameCallbacks {
       notificationService.show("No active multiplayer room found.", "warning", 2000);
       return;
     }
+    const previousLocalSeatState = this.getLocalMultiplayerSeatState();
 
     this.participantStateUpdateInFlight = true;
+    this.updateUI();
     try {
       const nextSession = await this.multiplayerSessionService.updateParticipantState(action);
       if (!nextSession) {
@@ -2456,16 +2545,27 @@ class Game implements GameCallbacks {
       }
 
       this.applyMultiplayerSeatState(nextSession);
+      const nextLocalSeatState = this.getLocalMultiplayerSeatState();
       this.touchMultiplayerTurnSyncActivity();
+      const transitionedToStanding =
+        action === "stand" &&
+        previousLocalSeatState?.isSeated === true &&
+        nextLocalSeatState?.isSeated === false;
+      if (transitionedToStanding) {
+        this.resetLocalStateForNextMultiplayerGame({ notificationMessage: null });
+        this.announceLocalPresenceChange("stood_up");
+        this.updateUI();
+      }
       const successMessageByAction = {
         sit: "You sat down. Tap Ready when you want in.",
-        stand: "You stood up and moved to observer mode.",
+        stand: "You stood up, left the queue, and moved to observer mode.",
         ready: "Ready up confirmed.",
         unready: "You are no longer marked ready.",
       } as const;
       notificationService.show(successMessageByAction[action], action === "ready" ? "success" : "info", 1800);
     } finally {
       this.participantStateUpdateInFlight = false;
+      this.updateUI();
     }
   }
 
@@ -4209,7 +4309,7 @@ class Game implements GameCallbacks {
       return;
     }
     if (outcome === "lobby") {
-      void this.returnToLobby();
+      void this.returnToLobby({ skipDisruptionConfirm: true });
       return;
     }
 
@@ -4244,15 +4344,25 @@ class Game implements GameCallbacks {
     notificationService.show("Continuing in solo mode.", "info", 2200);
   }
 
-  private async returnToLobby(): Promise<void> {
+  private async returnToLobby(options?: { skipDisruptionConfirm?: boolean }): Promise<void> {
     if (this.lobbyRedirectInProgress) {
       return;
+    }
+    if (this.playMode === "multiplayer" && options?.skipDisruptionConfirm !== true) {
+      const localSeatState = this.getLocalMultiplayerSeatState();
+      const confirmed = await this.confirmDisruptiveSeatOrRoomExit("leave_room", localSeatState);
+      if (!confirmed) {
+        return;
+      }
     }
     this.clearSelectionSyncDebounce();
     this.playerInteractions?.clear();
     this.multiplayerChatPanel?.clear();
     this.lobbyRedirectInProgress = true;
     this.sessionExpiryPromptActive = false;
+    if (options?.skipDisruptionConfirm !== true) {
+      this.announceLocalPresenceChange("left_room");
+    }
     try {
       await this.multiplayerSessionService.leaveSession();
     } catch (error) {
@@ -4702,16 +4812,38 @@ class Game implements GameCallbacks {
     }
   }
 
+  handleSeatStatusToggle(): void {
+    if (this.playMode !== "multiplayer") {
+      notificationService.show("Seat status is available in multiplayer only.", "info", 1800);
+      return;
+    }
+    if (this.participantStateUpdateInFlight) {
+      return;
+    }
+    const localSeatState = this.getLocalMultiplayerSeatState();
+    if (!localSeatState) {
+      notificationService.show("No active multiplayer room found.", "warning", 2000);
+      return;
+    }
+
+    const nextAction = this.resolveSeatToggleAction(localSeatState);
+    void (async () => {
+      if (nextAction === "stand") {
+        const confirmed = await this.confirmDisruptiveSeatOrRoomExit("stand", localSeatState);
+        if (!confirmed) {
+          return;
+        }
+      }
+      await this.updateLocalParticipantState(nextAction);
+    })();
+  }
+
   handleAction(): void {
     if (this.paused || this.animating) return;
 
     if (this.playMode === "multiplayer") {
       const localSeatState = this.getLocalMultiplayerSeatState();
-      if (localSeatState && !localSeatState.isSeated) {
-        void this.updateLocalParticipantState("sit");
-        return;
-      }
-      if (localSeatState && localSeatState.isSeated && !localSeatState.isReady) {
+      if (localSeatState?.isSeated && !localSeatState.isReady) {
         void this.updateLocalParticipantState("ready");
         return;
       }
@@ -5149,7 +5281,7 @@ class Game implements GameCallbacks {
     const localSeatState = this.getLocalMultiplayerSeatState();
     if (this.playMode === "multiplayer" && localSeatState) {
       if (!localSeatState.isSeated) {
-        bannerEl.textContent = "Observer mode: tap Sit Down to join";
+        bannerEl.textContent = "Observer mode: use Seat toggle to sit down";
         bannerEl.dataset.tone = "info";
         bannerEl.classList.add("is-visible");
         bannerEl.classList.remove("is-urgent");
@@ -5253,6 +5385,38 @@ class Game implements GameCallbacks {
     }
 
     const localSeatState = this.getLocalMultiplayerSeatState();
+    const controlsEl = document.getElementById("controls");
+    const showSeatStatusToggle = this.playMode === "multiplayer" && localSeatState !== null;
+    controlsEl?.classList.toggle("has-seat-status-toggle", showSeatStatusToggle);
+    if (this.seatStatusBtn) {
+      this.seatStatusBtn.style.display = showSeatStatusToggle ? "inline-flex" : "none";
+      if (!showSeatStatusToggle) {
+        this.seatStatusBtn.disabled = true;
+        this.seatStatusBtn.removeAttribute("data-seat-action");
+      } else {
+        const nextAction = this.resolveSeatToggleAction(localSeatState);
+        const labelByAction: Record<typeof nextAction, string> = {
+          sit: "Sit Down",
+          stand: "Stand Up",
+        };
+        const titleByAction: Record<typeof nextAction, string> = {
+          sit: "Sit down and join the active game queue",
+          stand: "Stand up, leave queue, and observe the room",
+        };
+        this.seatStatusBtn.dataset.seatAction = nextAction;
+        if (this.seatStatusBtnLabel) {
+          this.seatStatusBtnLabel.textContent = labelByAction[nextAction];
+        }
+        this.seatStatusBtn.title = titleByAction[nextAction];
+        this.seatStatusBtn.setAttribute("aria-label", titleByAction[nextAction]);
+        this.seatStatusBtn.disabled =
+          this.participantStateUpdateInFlight ||
+          this.waitForNextGameRequestInFlight ||
+          this.paused ||
+          this.animating;
+      }
+    }
+
     const needsSitAction =
       this.playMode === "multiplayer" &&
       localSeatState !== null &&
@@ -5266,9 +5430,9 @@ class Game implements GameCallbacks {
 
     // Update multipurpose action button
     if (needsSitAction) {
-      this.actionBtn.textContent = "Sit Down";
-      this.actionBtn.disabled = this.animating || this.paused || this.participantStateUpdateInFlight;
-      this.actionBtn.className = "btn btn-primary primary";
+      this.actionBtn.textContent = "Observer Mode";
+      this.actionBtn.disabled = true;
+      this.actionBtn.className = "btn btn-secondary secondary";
     } else if (needsReadyAction) {
       this.actionBtn.textContent = "Ready Up";
       this.actionBtn.disabled = this.animating || this.paused || this.participantStateUpdateInFlight;

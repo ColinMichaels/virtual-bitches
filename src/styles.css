@@ -2058,10 +2058,75 @@ button.multiplayer-scoreboard__row {
   max-width: 600px;
 }
 
+#controls.has-seat-status-toggle {
+  gap: 10px;
+}
+
+#controls.has-seat-status-toggle #action-btn-wrap {
+  flex: 0 1 auto;
+}
+
 #action-btn-wrap {
   position: relative;
   display: inline-flex;
   align-items: center;
+}
+
+#seat-status-btn.seat-status-btn {
+  min-width: 170px;
+  height: 48px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(170, 215, 255, 0.34);
+  background: linear-gradient(180deg, rgba(14, 31, 56, 0.96), rgba(7, 18, 34, 0.96));
+  color: #f2f8ff;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.34);
+  gap: 8px;
+}
+
+#seat-status-btn.seat-status-btn:disabled {
+  opacity: 0.66;
+}
+
+#seat-status-btn[data-seat-action="stand"] {
+  border-color: rgba(255, 158, 158, 0.55);
+  background: linear-gradient(180deg, rgba(66, 28, 34, 0.95), rgba(40, 16, 21, 0.95));
+}
+
+#seat-status-btn[data-seat-action="ready"] {
+  border-color: rgba(169, 255, 207, 0.54);
+  background: linear-gradient(180deg, rgba(22, 58, 44, 0.95), rgba(13, 34, 24, 0.95));
+}
+
+#seat-status-btn[data-seat-action="sit"] {
+  border-color: rgba(164, 223, 255, 0.5);
+  background: linear-gradient(180deg, rgba(20, 47, 76, 0.95), rgba(10, 25, 44, 0.95));
+}
+
+.seat-status-btn__icon {
+  width: 18px;
+  height: 18px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.seat-status-btn__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+#seat-status-btn[data-seat-action="sit"] .seat-status-btn__icon--sit,
+#seat-status-btn[data-seat-action="ready"] .seat-status-btn__icon--ready,
+#seat-status-btn[data-seat-action="stand"] .seat-status-btn__icon--stand {
+  display: inline-flex;
+}
+
+.seat-status-btn__label {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 #undo-btn.undo-badge-btn {
@@ -6001,6 +6066,30 @@ body.splash-active :is(
 
   #action-btn-wrap {
     width: 100%;
+  }
+
+  #controls.has-seat-status-toggle #action-btn-wrap {
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  #controls.has-seat-status-toggle #seat-status-btn.seat-status-btn {
+    min-width: 50px;
+    width: 50px;
+    height: 50px;
+    padding: 0;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+
+  #controls.has-seat-status-toggle #seat-status-btn .seat-status-btn__label {
+    display: none;
+  }
+
+  #controls.has-seat-status-toggle #seat-status-btn .seat-status-btn__icon svg {
+    width: 20px;
+    height: 20px;
   }
 
   /* Game Over Screen */
