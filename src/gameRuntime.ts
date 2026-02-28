@@ -17,6 +17,10 @@ import {
   type PlayerInteractionParticipant,
   type PlayerInteractionProfileData,
 } from "./ui/playerInteractions.js";
+import {
+  MultiplayerChatPanel,
+  type MultiplayerChatParticipant,
+} from "./ui/multiplayerChatPanel.js";
 import { confirmAction } from "./ui/confirmModal.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
@@ -282,9 +286,12 @@ class Game implements GameCallbacks {
   private newGameBtn: HTMLButtonElement | null = null;
   private waitNextGameBtn: HTMLButtonElement | null = null;
   private inviteLinkBtn: HTMLButtonElement | null = null;
+  private roomChatBtn: HTMLButtonElement | null = null;
   private mobileInviteLinkBtn: HTMLButtonElement | null = null;
+  private mobileRoomChatBtn: HTMLButtonElement | null = null;
   private turnActionBannerEl: HTMLElement | null = null;
   private playerInteractions: PlayerInteractionsPanel | null = null;
+  private multiplayerChatPanel: MultiplayerChatPanel | null = null;
 
   private normalizeMultiplayerDifficulty(
     value: unknown
@@ -380,11 +387,13 @@ class Game implements GameCallbacks {
       particleService.enableNetworkSync(true);
       this.touchMultiplayerTurnSyncActivity();
       this.hud.setTurnSyncStatus("ok", "Sync Live");
+      this.multiplayerChatPanel?.setConnected(true);
       this.flushPendingTurnEndSync();
     });
     document.addEventListener("multiplayer:disconnected", () => {
       particleService.enableNetworkSync(false);
       this.touchMultiplayerTurnSyncActivity();
+      this.multiplayerChatPanel?.setConnected(false);
       if (this.playMode === "multiplayer") {
         this.hud.setTurnSyncStatus("stale", "Disconnected");
       }
@@ -550,7 +559,9 @@ class Game implements GameCallbacks {
     this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement | null;
     this.waitNextGameBtn = document.getElementById("wait-next-game-btn") as HTMLButtonElement | null;
     this.inviteLinkBtn = document.getElementById("invite-link-btn") as HTMLButtonElement | null;
+    this.roomChatBtn = document.getElementById("room-chat-btn") as HTMLButtonElement | null;
     this.mobileInviteLinkBtn = document.getElementById("mobile-invite-link-btn") as HTMLButtonElement | null;
+    this.mobileRoomChatBtn = document.getElementById("mobile-room-chat-btn") as HTMLButtonElement | null;
     this.turnActionBannerEl = this.ensureTurnActionBanner();
     this.playerInteractions = new PlayerInteractionsPanel({
       mountRoot: document.getElementById("unified-hud"),
@@ -590,6 +601,43 @@ class Game implements GameCallbacks {
     this.hud.setOnMultiplayerPlayerSelect((playerId) => {
       this.playerInteractions?.open(playerId);
     });
+    this.multiplayerChatPanel = new MultiplayerChatPanel({
+      localPlayerId: this.localPlayerId,
+      onSendPublic: (message) => {
+        const sourceLabel = this.getParticipantBroadcastLabel(this.localPlayerId);
+        return this.sendPlayerRoomChannelMessage({
+          idPrefix: "chat-public",
+          channel: "public",
+          topic: "chat",
+          title: sourceLabel,
+          message,
+          severity: "info",
+        });
+      },
+      onSendWhisper: (targetPlayerId, message) => {
+        if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
+          return null;
+        }
+        if (this.isBotParticipant(targetPlayerId)) {
+          notificationService.show("Bots cannot receive whispers yet.", "info", 1800);
+          return null;
+        }
+        const sourceLabel = this.getParticipantBroadcastLabel(this.localPlayerId);
+        return this.sendPlayerRoomChannelMessage({
+          idPrefix: `chat-whisper-${targetPlayerId}`,
+          channel: "direct",
+          topic: "whisper",
+          title: `Whisper from ${sourceLabel}`,
+          message,
+          severity: "info",
+          targetPlayerId,
+        });
+      },
+      onInfo: (message, severity = "info") => {
+        notificationService.show(message, severity, 1900);
+      },
+    });
+    this.multiplayerChatPanel.setConnected(this.multiplayerNetwork?.isConnected() ?? false);
 
     // Initialize modals (shared with splash)
     this.settingsModal = settingsModal;
@@ -1720,6 +1768,11 @@ class Game implements GameCallbacks {
       this.buildPlayerInteractionParticipants(seatedParticipants),
       this.activeTurnPlayerId
     );
+    this.multiplayerChatPanel?.setSessionContext(session.sessionId, session.roomCode);
+    this.multiplayerChatPanel?.setParticipants(
+      this.buildMultiplayerChatParticipants(session.participants ?? [])
+    );
+    this.multiplayerChatPanel?.setConnected(this.multiplayerNetwork?.isConnected() ?? false);
     this.updateUI();
   }
 
@@ -1906,6 +1959,7 @@ class Game implements GameCallbacks {
   private applySoloSeatState(): void {
     this.clearSelectionSyncDebounce();
     this.playerInteractions?.clear();
+    this.multiplayerChatPanel?.clear();
     this.participantSeatById.clear();
     this.participantIdBySeat.clear();
     this.participantLabelById.clear();
@@ -2192,6 +2246,24 @@ class Game implements GameCallbacks {
         queuedForNextGame: participant.queuedForNextGame,
         isComplete: participant.isComplete,
         score: participant.score,
+      }));
+  }
+
+  private buildMultiplayerChatParticipants(
+    participants: MultiplayerSessionParticipant[]
+  ): MultiplayerChatParticipant[] {
+    return participants
+      .filter(
+        (participant) =>
+          participant &&
+          typeof participant.playerId === "string" &&
+          participant.playerId !== this.localPlayerId
+      )
+      .map((participant) => ({
+        playerId: participant.playerId,
+        label: this.getParticipantBroadcastLabel(participant.playerId),
+        isBot: participant.isBot === true,
+        isSeated: participant.isSeated !== false,
       }));
   }
 
@@ -2795,31 +2867,7 @@ class Game implements GameCallbacks {
       notificationService.show("Bots cannot receive whispers yet.", "info", 1800);
       return;
     }
-
-    const targetLabel = this.getParticipantBroadcastLabel(targetPlayerId);
-    const message = this.normalizeComposedRoomChannelMessage(
-      window.prompt(`Whisper to ${targetLabel}:`, "")
-    );
-    if (!message) {
-      return;
-    }
-
-    const sourceLabel = this.getParticipantBroadcastLabel(this.localPlayerId);
-    const sent = this.sendPlayerRoomChannelMessage({
-      idPrefix: `chat-whisper-${targetPlayerId}`,
-      channel: "direct",
-      topic: "whisper",
-      title: `Whisper from ${sourceLabel}`,
-      message,
-      severity: "info",
-      targetPlayerId,
-    });
-
-    if (!sent) {
-      notificationService.show("Unable to send whisper.", "warning", 1800);
-      return;
-    }
-    notificationService.show(`Whisper sent to ${targetLabel}.`, "success", 1400);
+    this.multiplayerChatPanel?.openWhisper(targetPlayerId);
   }
 
   private async loadPlayerInteractionProfileData(
@@ -2902,10 +2950,10 @@ class Game implements GameCallbacks {
       targetPlayerId?: string;
     },
     timestamp: number = Date.now()
-  ): boolean {
+  ): MultiplayerRoomChannelMessage | null {
     const normalizedMessage = this.normalizeComposedRoomChannelMessage(options.message);
     if (!normalizedMessage) {
-      return false;
+      return null;
     }
     const payload: MultiplayerRoomChannelMessage = {
       type: "room_channel",
@@ -2929,7 +2977,8 @@ class Game implements GameCallbacks {
         : {}),
       timestamp,
     };
-    return this.multiplayerNetwork?.sendRoomChannelMessage(payload) ?? false;
+    const sent = this.multiplayerNetwork?.sendRoomChannelMessage(payload) ?? false;
+    return sent ? payload : null;
   }
 
   private triggerTurnNudge(targetPlayerId: string): void {
@@ -3150,6 +3199,7 @@ class Game implements GameCallbacks {
     if (!message) {
       return;
     }
+    this.multiplayerChatPanel?.appendIncomingChannelMessage(payload);
     const topic = typeof payload.topic === "string" ? payload.topic.trim().toLowerCase() : "";
     const countdownMatch = /^next game starts in\s+(\d+)s\.?$/i.exec(message);
     const countdownSeconds = countdownMatch ? Number.parseInt(countdownMatch[1], 10) : null;
@@ -3180,12 +3230,20 @@ class Game implements GameCallbacks {
       });
     }
 
-    const fallbackTitle = channel === "direct" ? "Direct" : "Room";
-    const title = typeof payload.title === "string" && payload.title.trim()
-      ? payload.title.trim()
-      : fallbackTitle;
-    const durationMs = topic === "next_game_countdown" ? 1400 : channel === "direct" ? 3600 : 2600;
-    notificationService.show(`${title}: ${message}`, tone, durationMs);
+    const shouldSurfaceNotification =
+      !this.multiplayerChatPanel?.isOpen() ||
+      tone === "warning" ||
+      tone === "error" ||
+      channel === "direct" ||
+      topic === "next_game_countdown";
+    if (shouldSurfaceNotification) {
+      const fallbackTitle = channel === "direct" ? "Direct" : "Room";
+      const title = typeof payload.title === "string" && payload.title.trim()
+        ? payload.title.trim()
+        : fallbackTitle;
+      const durationMs = topic === "next_game_countdown" ? 1400 : channel === "direct" ? 3600 : 2600;
+      notificationService.show(`${title}: ${message}`, tone, durationMs);
+    }
   }
 
   private handleMultiplayerSessionState(message: MultiplayerSessionStateMessage): void {
@@ -4177,6 +4235,7 @@ class Game implements GameCallbacks {
     this.lastTurnPlanPreview = "";
     this.lastSessionComplete = false;
     this.hud.setTurnSyncStatus(null);
+    this.multiplayerChatPanel?.clear();
     playerDataSyncService.setSessionId(undefined);
     this.clearSessionQueryParam();
     this.applySoloSeatState();
@@ -4191,6 +4250,7 @@ class Game implements GameCallbacks {
     }
     this.clearSelectionSyncDebounce();
     this.playerInteractions?.clear();
+    this.multiplayerChatPanel?.clear();
     this.lobbyRedirectInProgress = true;
     this.sessionExpiryPromptActive = false;
     try {
@@ -4258,14 +4318,22 @@ class Game implements GameCallbacks {
   }
 
   private updateInviteLinkControlVisibility(): void {
-    const showInviteControl =
+    const hasActiveMultiplayerSession =
       this.playMode === "multiplayer" &&
       typeof this.multiplayerSessionService.getActiveSession()?.sessionId === "string";
+    const showInviteControl = hasActiveMultiplayerSession;
+    const showRoomChatControl = hasActiveMultiplayerSession;
     if (this.inviteLinkBtn) {
       this.inviteLinkBtn.style.display = showInviteControl ? "flex" : "none";
     }
+    if (this.roomChatBtn) {
+      this.roomChatBtn.style.display = showRoomChatControl ? "flex" : "none";
+    }
     if (this.mobileInviteLinkBtn) {
       this.mobileInviteLinkBtn.style.display = showInviteControl ? "flex" : "none";
+    }
+    if (this.mobileRoomChatBtn) {
+      this.mobileRoomChatBtn.style.display = showRoomChatControl ? "flex" : "none";
     }
   }
 
@@ -4343,56 +4411,14 @@ class Game implements GameCallbacks {
     if (!this.canComposeRoomChannelMessage()) {
       return;
     }
-    const message = this.normalizeComposedRoomChannelMessage(
-      window.prompt("Send a room message:", "")
-    );
-    if (!message) {
-      return;
-    }
-
-    const sourceLabel = this.getParticipantBroadcastLabel(this.localPlayerId);
-    const sent = this.sendPlayerRoomChannelMessage({
-      idPrefix: "chat-public",
-      channel: "public",
-      topic: "chat",
-      title: sourceLabel,
-      message,
-      severity: "info",
-    });
-
-    if (!sent) {
-      notificationService.show("Unable to send room message.", "warning", 1800);
-      return;
-    }
-    notificationService.show("Room message sent.", "success", 1200);
+    this.multiplayerChatPanel?.openRoom();
   }
 
   openMultiplayerWhisperComposer(): void {
     if (!this.canComposeRoomChannelMessage()) {
       return;
     }
-    const whisperTargets = this.getWhisperTargets();
-    if (whisperTargets.length === 0) {
-      notificationService.show("No player available to whisper.", "info", 1800);
-      return;
-    }
-
-    const targetPrompt = whisperTargets
-      .map((target, index) => `${index + 1}. ${target.label}`)
-      .join("\n");
-    const targetInput = window.prompt(
-      `Whisper target:\n${targetPrompt}\nType number, player name, or player id.`,
-      ""
-    );
-    if (typeof targetInput !== "string") {
-      return;
-    }
-    const targetPlayerId = this.resolveWhisperTargetPlayerId(targetInput);
-    if (!targetPlayerId) {
-      notificationService.show("Whisper target not recognized.", "warning", 2000);
-      return;
-    }
-    this.openWhisperComposerForTarget(targetPlayerId);
+    this.multiplayerChatPanel?.openWhisper();
   }
 
   private focusCameraOnSeat(seatIndex: number): void {

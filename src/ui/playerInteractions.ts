@@ -398,7 +398,7 @@ export class PlayerInteractionsPanel {
 
     const whisperDisabledReason = (
       this.options.resolveWhisperDisabledReason?.(participant) ??
-      (participant.isBot ? "Bots cannot receive whispers yet." : !participant.isSeated ? "Player is currently standing." : "")
+      (participant.isBot ? "Bots cannot receive whispers yet." : "")
     ).trim();
     actionsEl.appendChild(
       this.createActionButton({
