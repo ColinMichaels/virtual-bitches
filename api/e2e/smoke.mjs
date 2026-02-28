@@ -6,6 +6,9 @@ const WS_TIMEOUT_MS = Number(process.env.E2E_WS_TIMEOUT_MS ?? 10000);
 const firebaseIdToken = process.env.E2E_FIREBASE_ID_TOKEN?.trim() ?? "";
 const assertBotTraffic = process.env.E2E_ASSERT_BOTS === "1";
 const assertRoomExpiry = process.env.E2E_ASSERT_ROOM_EXPIRY === "1";
+const assertChatConductFlow = process.env.E2E_ASSERT_CHAT_CONDUCT === "1";
+const chatConductTestTerm = normalizeOptionalString(process.env.E2E_CHAT_CONDUCT_TEST_TERM).toLowerCase();
+const assertModerationFlow = process.env.E2E_ASSERT_MULTIPLAYER_MODERATION !== "0";
 const assertAdminMonitor = process.env.E2E_ASSERT_ADMIN_MONITOR === "1";
 const assertStorageCutover = process.env.E2E_ASSERT_STORAGE_CUTOVER === "1";
 const adminToken = process.env.E2E_ADMIN_TOKEN?.trim() ?? "";
@@ -83,6 +86,7 @@ async function run() {
   assert(typeof created?.sessionId === "string", "create session returned no sessionId");
   assert(created?.auth?.accessToken, "create session returned no access token");
   activeSessionId = created.sessionId;
+  const hostAccessToken = created.auth.accessToken;
 
   const joined = await apiRequest(
     `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/join`,
@@ -101,15 +105,17 @@ async function run() {
     "join session response missing guest participant"
   );
   assert(Array.isArray(joined?.turnState?.order), "join session missing turnState.order");
+  let guestAccessToken = joined.auth.accessToken;
+  const activeRoomCode = typeof created?.roomCode === "string" ? created.roomCode : "";
 
   hostSocket = await openSocket(
     "host",
-    buildSocketUrl(activeSessionId, hostPlayerId, created.auth.accessToken)
+    buildSocketUrl(activeSessionId, hostPlayerId, hostAccessToken)
   );
   hostMessageBuffer = createSocketMessageBuffer(hostSocket);
   guestSocket = await openSocket(
     "guest",
-    buildSocketUrl(activeSessionId, guestPlayerId, joined.auth.accessToken)
+    buildSocketUrl(activeSessionId, guestPlayerId, guestAccessToken)
   );
   guestMessageBuffer = createSocketMessageBuffer(guestSocket);
 
@@ -117,7 +123,7 @@ async function run() {
     `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
     {
       method: "POST",
-      accessToken: created.auth.accessToken,
+      accessToken: hostAccessToken,
       body: {
         playerId: hostPlayerId,
         action: "sit",
@@ -133,7 +139,7 @@ async function run() {
     `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
     {
       method: "POST",
-      accessToken: joined.auth.accessToken,
+      accessToken: guestAccessToken,
       body: {
         playerId: guestPlayerId,
         action: "sit",
@@ -149,7 +155,7 @@ async function run() {
     `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
     {
       method: "POST",
-      accessToken: created.auth.accessToken,
+      accessToken: hostAccessToken,
       body: {
         playerId: hostPlayerId,
         action: "ready",
@@ -165,7 +171,7 @@ async function run() {
     `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
     {
       method: "POST",
-      accessToken: joined.auth.accessToken,
+      accessToken: guestAccessToken,
       body: {
         playerId: guestPlayerId,
         action: "ready",
@@ -538,6 +544,271 @@ async function run() {
     "room channel direct message mismatch on host receive"
   );
 
+  if (assertChatConductFlow) {
+    log("Running multiplayer chat-conduct strike/mute checks...");
+    assert(chatConductTestTerm.length > 0, "chat-conduct smoke requires E2E_CHAT_CONDUCT_TEST_TERM");
+    const chatConductHealth = health?.multiplayer?.chatConduct;
+    assert(chatConductHealth?.enabled === true, "chat-conduct smoke requires multiplayer.chatConduct.enabled=true");
+    const bannedTermsCount = Number(chatConductHealth?.bannedTermsCount ?? 0);
+    assert(
+      Number.isFinite(bannedTermsCount) && bannedTermsCount > 0,
+      "chat-conduct smoke requires at least one configured banned term"
+    );
+    const strikeLimitRaw = Number(chatConductHealth?.strikeLimit ?? 3);
+    const strikeLimit =
+      Number.isFinite(strikeLimitRaw) && strikeLimitRaw > 0 ? Math.floor(strikeLimitRaw) : 3;
+
+    for (let index = 0; index < strikeLimit; index += 1) {
+      const blockedRoomChannel = createRoomChannelMessage(runSuffix, {
+        channel: "public",
+        topic: "chat",
+        title: "E2E Conduct Strike",
+        message: `Filtered term test ${chatConductTestTerm} #${index + 1}`,
+      });
+      hostSocket.send(JSON.stringify(blockedRoomChannel));
+      const blockedError = await waitForBufferedMessage(
+        hostMessageBuffer,
+        (payload) => payload?.type === "error" && payload?.code === "room_channel_message_blocked",
+        `host room_channel_message_blocked strike ${index + 1}`
+      );
+      assertEqual(
+        blockedError?.code,
+        "room_channel_message_blocked",
+        "expected room_channel_message_blocked conduct rejection"
+      );
+      await assertNoBufferedMessage(
+        guestMessageBuffer,
+        (payload) =>
+          payload?.type === "room_channel" && payload?.id === blockedRoomChannel.id,
+        400,
+        "guest blocked room channel relay"
+      );
+    }
+
+    const mutedProbe = createRoomChannelMessage(runSuffix, {
+      channel: "public",
+      topic: "chat",
+      title: "E2E Conduct Mute Probe",
+      message: "Safe chat message should be muted after strikes",
+    });
+    hostSocket.send(JSON.stringify(mutedProbe));
+    const mutedError = await waitForBufferedMessage(
+      hostMessageBuffer,
+      (payload) => payload?.type === "error" && payload?.code === "room_channel_sender_muted",
+      "host room_channel_sender_muted rejection"
+    );
+    assertEqual(
+      mutedError?.code,
+      "room_channel_sender_muted",
+      "expected room_channel_sender_muted after strike limit"
+    );
+    await assertNoBufferedMessage(
+      guestMessageBuffer,
+      (payload) => payload?.type === "room_channel" && payload?.id === mutedProbe.id,
+      400,
+      "guest muted room channel relay"
+    );
+
+    const adminAuthOptions = buildAdminAuthRequestOptions();
+    if (
+      adminAuthOptions.accessToken ||
+      (adminAuthOptions.headers &&
+        typeof adminAuthOptions.headers === "object" &&
+        typeof adminAuthOptions.headers["x-admin-token"] === "string" &&
+        adminAuthOptions.headers["x-admin-token"].length > 0)
+    ) {
+      const conductBeforeClear = await apiRequest(
+        `/admin/sessions/${encodeURIComponent(activeSessionId)}/conduct/players/${encodeURIComponent(hostPlayerId)}`,
+        {
+          method: "GET",
+          ...adminAuthOptions,
+        }
+      );
+      assert(
+        conductBeforeClear?.player?.isMuted === true,
+        "expected host conduct player record to report isMuted=true before clear"
+      );
+
+      const clearConduct = await apiRequest(
+        `/admin/sessions/${encodeURIComponent(activeSessionId)}/conduct/players/${encodeURIComponent(hostPlayerId)}/clear`,
+        {
+          method: "POST",
+          ...adminAuthOptions,
+          body: {
+            resetTotalStrikes: true,
+          },
+        }
+      );
+      assert(clearConduct?.ok === true, "admin conduct player clear did not report success");
+
+      const unmutedMessage = createRoomChannelMessage(runSuffix, {
+        channel: "public",
+        topic: "chat",
+        title: "E2E Conduct Unmute Probe",
+        message: "Chat should relay again after admin clear",
+      });
+      hostSocket.send(JSON.stringify(unmutedMessage));
+      const guestUnmutedMessage = await waitForBufferedMessage(
+        guestMessageBuffer,
+        (payload) => payload?.type === "room_channel" && payload?.id === unmutedMessage.id,
+        "guest room channel receive after admin conduct clear"
+      );
+      assertEqual(
+        guestUnmutedMessage?.id,
+        unmutedMessage.id,
+        "expected room channel relay after admin conduct clear"
+      );
+    } else {
+      log("Skipping chat-conduct admin clear verification (no admin auth configured).");
+    }
+
+    log("Multiplayer chat-conduct strike/mute checks passed.");
+  } else {
+    log("Skipping multiplayer chat-conduct checks (set E2E_ASSERT_CHAT_CONDUCT=1 to enable).");
+  }
+
+  if (assertModerationFlow) {
+    log("Running multiplayer moderation + interaction-block checks...");
+    const profileUpdate = await apiRequest(`/players/${encodeURIComponent(guestPlayerId)}/profile`, {
+      method: "PUT",
+      accessToken: guestAccessToken,
+      body: {
+        playerId: guestPlayerId,
+        displayName: "E2E Guest",
+        blockedPlayerIds: [hostPlayerId],
+        updatedAt: Date.now(),
+      },
+    });
+    assert(Array.isArray(profileUpdate?.blockedPlayerIds), "blocked profile update missing blockedPlayerIds");
+    assert(
+      profileUpdate.blockedPlayerIds.includes(hostPlayerId),
+      "blocked profile update missing host in blockedPlayerIds"
+    );
+
+    const blockedInteraction = {
+      ...createPlayerNotification(runSuffix),
+      id: `e2e-blocked-interaction-${runSuffix}`,
+      targetPlayerId: guestPlayerId,
+      message: "This direct interaction should be blocked",
+    };
+    hostSocket.send(JSON.stringify(blockedInteraction));
+    const interactionBlockedError = await waitForBufferedMessage(
+      hostMessageBuffer,
+      (payload) => payload?.type === "error" && payload?.code === "interaction_blocked",
+      "host interaction_blocked rejection"
+    );
+    assertEqual(
+      interactionBlockedError?.code,
+      "interaction_blocked",
+      "expected interaction_blocked rejection for blocked direct interaction"
+    );
+    await assertNoBufferedMessage(
+      guestMessageBuffer,
+      (payload) =>
+        payload?.type === "player_notification" && payload?.id === blockedInteraction.id,
+      400,
+      "guest blocked interaction relay"
+    );
+
+    const kickResult = await apiRequest(
+      `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/moderate`,
+      {
+        method: "POST",
+        accessToken: hostAccessToken,
+        body: {
+          requesterPlayerId: hostPlayerId,
+          targetPlayerId: guestPlayerId,
+          action: "kick",
+        },
+      }
+    );
+    assert(kickResult?.ok === true, "kick moderation did not return ok=true");
+    assertEqual(kickResult?.action, "kick", "kick moderation returned unexpected action");
+
+    const rejoinAfterKick = await apiRequest(
+      `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/join`,
+      {
+        method: "POST",
+        body: {
+          playerId: guestPlayerId,
+          displayName: "E2E Guest",
+        },
+      }
+    );
+    assert(
+      typeof rejoinAfterKick?.auth?.accessToken === "string" && rejoinAfterKick.auth.accessToken.length > 0,
+      "guest rejoin after kick returned no access token"
+    );
+    guestAccessToken = rejoinAfterKick.auth.accessToken;
+    await safeCloseSocket(guestSocket);
+    guestSocket = await openSocket(
+      "guest_rejoin_after_kick",
+      buildSocketUrl(activeSessionId, guestPlayerId, guestAccessToken)
+    );
+    guestMessageBuffer = createSocketMessageBuffer(guestSocket);
+
+    const banResult = await apiRequest(
+      `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/moderate`,
+      {
+        method: "POST",
+        accessToken: hostAccessToken,
+        body: {
+          requesterPlayerId: hostPlayerId,
+          targetPlayerId: guestPlayerId,
+          action: "ban",
+        },
+      }
+    );
+    assert(banResult?.ok === true, "ban moderation did not return ok=true");
+    assertEqual(banResult?.action, "ban", "ban moderation returned unexpected action");
+
+    const bannedJoinBySessionId = await apiRequestWithStatus(
+      `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/join`,
+      {
+        method: "POST",
+        body: {
+          playerId: guestPlayerId,
+          displayName: "E2E Guest",
+        },
+      }
+    );
+    assertEqual(
+      bannedJoinBySessionId.status,
+      403,
+      "expected room_banned 403 when banned player rejoins by session id"
+    );
+    assertEqual(
+      bannedJoinBySessionId.body?.reason,
+      "room_banned",
+      "expected room_banned reason when banned player rejoins by session id"
+    );
+    if (activeRoomCode) {
+      const bannedJoinByRoomCode = await apiRequestWithStatus(
+        `/multiplayer/rooms/${encodeURIComponent(activeRoomCode)}/join`,
+        {
+          method: "POST",
+          body: {
+            playerId: guestPlayerId,
+            displayName: "E2E Guest",
+          },
+        }
+      );
+      assertEqual(
+        bannedJoinByRoomCode.status,
+        403,
+        "expected room_banned 403 when banned player rejoins by room code"
+      );
+      assertEqual(
+        bannedJoinByRoomCode.body?.reason,
+        "room_banned",
+        "expected room_banned reason when banned player rejoins by room code"
+      );
+    }
+    log("Multiplayer moderation + interaction-block checks passed.");
+  } else {
+    log("Skipping multiplayer moderation checks (set E2E_ASSERT_MULTIPLAYER_MODERATION=1 to enable).");
+  }
+
   if (assertBotTraffic) {
     await waitForMessage(hostSocket, isBotPayload, "host bot websocket traffic receive");
   }
@@ -546,7 +817,7 @@ async function run() {
     `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/heartbeat`,
     {
       method: "POST",
-      accessToken: created.auth.accessToken,
+      accessToken: hostAccessToken,
       body: { playerId: hostPlayerId },
     }
   );
@@ -1433,6 +1704,21 @@ async function waitForBufferedMessage(buffer, matcher, label) {
   }
 
   throw new Error(`${label} timed out after ${WS_TIMEOUT_MS}ms`);
+}
+
+async function assertNoBufferedMessage(buffer, matcher, waitDurationMs, label) {
+  const startedAt = Date.now();
+  const waitLimitMs =
+    Number.isFinite(waitDurationMs) && waitDurationMs > 0
+      ? Math.max(10, Math.floor(waitDurationMs))
+      : 250;
+  while (Date.now() - startedAt < waitLimitMs) {
+    const hasMatch = buffer.some((payload) => matcher(payload));
+    if (hasMatch) {
+      throw new Error(`${label} unexpectedly received a matching payload`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 async function safeCloseSocket(socket) {

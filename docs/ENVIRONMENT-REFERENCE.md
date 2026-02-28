@@ -124,7 +124,17 @@ Optional but recommended:
 | `API_MIN_INSTANCES` | `1` | Cloud Run capacity target |
 | `API_MAX_INSTANCES` | `1` | Keep `1` for current single-instance multiplayer architecture |
 | `MULTIPLAYER_SESSION_IDLE_TTL_MS` | integer ms like `1800000` | Session expiry policy |
+| `MULTIPLAYER_CHAT_CONDUCT_ENABLED` | `0` or `1` | Enable/disable chat conduct middleware |
+| `MULTIPLAYER_CHAT_CONDUCT_PUBLIC_ONLY` | `0` or `1` | Enforce profanity checks only on public channel (`1` default) |
+| `MULTIPLAYER_CHAT_BANNED_TERMS` | comma/space delimited terms | Team-owned initial profanity/blocked term list |
+| `MULTIPLAYER_CHAT_STRIKE_LIMIT` | integer like `3` | Number of violations before temporary mute |
+| `MULTIPLAYER_CHAT_STRIKE_WINDOW_MS` | integer ms like `900000` | Rolling strike window |
+| `MULTIPLAYER_CHAT_MUTE_MS` | integer ms like `300000` | Temporary mute duration when strike limit is reached |
+| `MULTIPLAYER_CHAT_AUTO_ROOM_BAN_STRIKE_LIMIT` | integer like `0` or `8` | Optional auto-room-ban threshold (`0` disables) |
 | `E2E_QUEUE_LIFECYCLE_WAIT_MS` | integer ms like `90000` | CI smoke tolerance |
+| `E2E_ASSERT_MULTIPLAYER_MODERATION` | `0` or `1` | Toggle moderation smoke segment (`kick/ban`, `room_banned`, `interaction_blocked`) |
+| `E2E_ASSERT_CHAT_CONDUCT` | `0` or `1` | Toggle chat conduct smoke segment (strikes + mute + admin clear) |
+| `E2E_CHAT_CONDUCT_TEST_TERM` | token like `e2e-term-blocked` | Deterministic banned term used by smoke payloads |
 | `E2E_EXPECT_STORAGE_SECTION_MIN_COUNTS` | `players:1,sessions:1` | Optional CI assertions |
 | `CDN_REQUIRE_PUBLIC_READ` | `0` or `1` | CDN/public bucket strategy |
 | `CDN_AUTOCONFIGURE_PUBLIC_READ` | `0` or `1` | CI IAM automation toggle |

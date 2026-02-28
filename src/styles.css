@@ -939,6 +939,11 @@ button.multiplayer-scoreboard__row {
   background: linear-gradient(180deg, rgba(49, 28, 24, 0.76), rgba(26, 16, 16, 0.82));
 }
 
+.player-interaction-action.is-danger {
+  border-color: rgba(255, 120, 120, 0.5);
+  background: linear-gradient(180deg, rgba(58, 22, 28, 0.8), rgba(30, 12, 16, 0.86));
+}
+
 .player-interaction-action-title {
   font-size: 13px;
   font-weight: 700;
@@ -1936,6 +1941,25 @@ button.multiplayer-scoreboard__row {
   background: rgba(84, 168, 255, 0.86);
   border-color: rgba(156, 213, 255, 0.95);
   transform: scale(1.1);
+}
+
+#room-chat-btn .room-chat-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: linear-gradient(135deg, rgba(93, 191, 255, 0.95), rgba(66, 133, 244, 0.95));
+  color: #f8fcff;
+  font-size: 11px;
+  font-weight: 800;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  box-shadow: 0 2px 8px rgba(47, 124, 255, 0.5);
+  animation: pulse-badge 2s ease-in-out infinite;
 }
 
 #settings-gear-btn:hover {
@@ -6036,6 +6060,11 @@ body.splash-active :is(
     justify-content: center;
     padding: 0 6px;
     box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.6);
+  }
+
+  .mobile-room-chat-badge {
+    background: linear-gradient(135deg, rgba(93, 191, 255, 0.95), rgba(66, 133, 244, 0.95));
+    box-shadow: 0 2px 8px rgba(47, 124, 255, 0.6);
   }
 
   .mobile-menu-divider {

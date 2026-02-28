@@ -3,6 +3,8 @@ import {
   backendApiService,
   type MultiplayerGameDifficulty,
   type MultiplayerJoinFailureReason,
+  type MultiplayerModerationAction,
+  type MultiplayerModerationResult,
   type MultiplayerParticipantStateAction,
   type MultiplayerSessionRecord,
 } from "../services/backendApi.js";
@@ -167,6 +169,7 @@ export class MultiplayerSessionService {
         expiresAt: response.session.expiresAt,
         serverNow: response.session.serverNow,
         gameDifficulty: response.session.gameDifficulty,
+        ownerPlayerId: response.session.ownerPlayerId,
       });
       if (synced) {
         return synced;
@@ -213,6 +216,7 @@ export class MultiplayerSessionService {
         expiresAt: response.session.expiresAt,
         serverNow: response.session.serverNow,
         gameDifficulty: response.session.gameDifficulty,
+        ownerPlayerId: response.session.ownerPlayerId,
       });
       if (synced) {
         return synced;
@@ -220,6 +224,56 @@ export class MultiplayerSessionService {
     }
 
     return this.activeSession;
+  }
+
+  async moderateParticipant(
+    targetPlayerId: string,
+    action: MultiplayerModerationAction
+  ): Promise<MultiplayerModerationResult> {
+    const current = this.activeSession;
+    if (!current) {
+      return {
+        ok: false,
+        reason: "unknown_session",
+      };
+    }
+
+    const result = await backendApiService.moderateMultiplayerParticipant(
+      current.sessionId,
+      this.playerId,
+      targetPlayerId,
+      action
+    );
+    if (!result.ok) {
+      if (result.reason === "session_expired") {
+        this.handleSessionExpired("session_expired");
+      }
+      return result;
+    }
+
+    if (result.session) {
+      const synced = this.syncSessionState({
+        sessionId: result.session.sessionId,
+        roomCode: result.session.roomCode,
+        participants: result.session.participants,
+        standings: result.session.standings,
+        turnState: result.session.turnState ?? null,
+        sessionComplete: result.session.sessionComplete,
+        completedAt: result.session.completedAt ?? null,
+        gameStartedAt: result.session.gameStartedAt,
+        nextGameStartsAt: result.session.nextGameStartsAt,
+        nextGameAutoStartDelayMs: result.session.nextGameAutoStartDelayMs,
+        expiresAt: result.session.expiresAt,
+        serverNow: result.session.serverNow,
+        gameDifficulty: result.session.gameDifficulty,
+        ownerPlayerId: result.session.ownerPlayerId,
+      });
+      if (synced) {
+        result.session = synced;
+      }
+    }
+
+    return result;
   }
 
   async refreshSessionAuth(): Promise<MultiplayerSessionRecord | null> {
@@ -253,6 +307,7 @@ export class MultiplayerSessionService {
     expiresAt?: number;
     serverNow?: number;
     gameDifficulty?: MultiplayerGameDifficulty;
+    ownerPlayerId?: string;
   }): MultiplayerSessionRecord | null {
     const current = this.activeSession;
     if (!current) return null;
@@ -317,6 +372,12 @@ export class MultiplayerSessionService {
         nextSession.gameDifficulty = normalizedDifficulty;
       }
     }
+    if (Object.prototype.hasOwnProperty.call(update, "ownerPlayerId")) {
+      nextSession.ownerPlayerId =
+        typeof update.ownerPlayerId === "string" && update.ownerPlayerId.trim().length > 0
+          ? update.ownerPlayerId.trim()
+          : undefined;
+    }
 
     this.activeSession = nextSession;
     return nextSession;
@@ -328,15 +389,25 @@ export class MultiplayerSessionService {
   }
 
   private setActiveSession(session: MultiplayerSessionRecord): void {
-    const { gameDifficulty: _ignoredDifficulty, ...sessionWithoutDifficulty } = session;
+    const {
+      gameDifficulty: _ignoredDifficulty,
+      ownerPlayerId: _ignoredOwnerPlayerId,
+      ...sessionWithoutDifficulty
+    } = session;
     const normalizedDifficulty = normalizeMultiplayerDifficulty(session.gameDifficulty);
+    const normalizedOwnerPlayerId =
+      typeof session.ownerPlayerId === "string" && session.ownerPlayerId.trim().length > 0
+        ? session.ownerPlayerId.trim()
+        : undefined;
     this.activeSession = normalizedDifficulty
       ? {
           ...sessionWithoutDifficulty,
           gameDifficulty: normalizedDifficulty,
+          ...(normalizedOwnerPlayerId ? { ownerPlayerId: normalizedOwnerPlayerId } : {}),
         }
       : {
           ...sessionWithoutDifficulty,
+          ...(normalizedOwnerPlayerId ? { ownerPlayerId: normalizedOwnerPlayerId } : {}),
         };
     this.lastJoinFailureReason = null;
     if (session.auth?.accessToken) {

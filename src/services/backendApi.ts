@@ -136,6 +136,7 @@ export interface MultiplayerSessionRecord {
   sessionId: string;
   roomCode: string;
   gameDifficulty?: MultiplayerGameDifficulty;
+  ownerPlayerId?: string;
   roomType?: "private" | "public_default" | "public_overflow";
   isPublic?: boolean;
   maxHumanCount?: number;
@@ -201,12 +202,35 @@ export type MultiplayerJoinFailureReason =
   | "room_full"
   | "session_expired"
   | "room_not_found"
+  | "room_banned"
   | "unknown";
 
 export interface MultiplayerJoinSessionResult {
   session: MultiplayerSessionRecord | null;
   reason?: MultiplayerJoinFailureReason;
   status?: number;
+}
+
+export type MultiplayerModerationAction = "kick" | "ban";
+
+export interface MultiplayerModerationResult {
+  ok: boolean;
+  action?: MultiplayerModerationAction;
+  targetPlayerId?: string;
+  reason?:
+    | "session_expired"
+    | "unknown_session"
+    | "unknown_player"
+    | "not_room_owner"
+    | "unauthorized"
+    | "invalid_moderation_action"
+    | "cannot_moderate_self"
+    | "invalid_session_id"
+    | "invalid_requester_player_id"
+    | "invalid_target_player_id"
+    | "unknown";
+  status?: number;
+  session?: MultiplayerSessionRecord | null;
 }
 
 export interface LeaderboardScoreSubmission {
@@ -461,6 +485,85 @@ export class BackendApiService {
         body: { playerId, action },
       }
     );
+  }
+
+  async moderateMultiplayerParticipant(
+    sessionId: string,
+    requesterPlayerId: string,
+    targetPlayerId: string,
+    action: MultiplayerModerationAction
+  ): Promise<MultiplayerModerationResult> {
+    const normalizedSessionId = sessionId.trim();
+    const normalizedRequesterPlayerId = requesterPlayerId.trim();
+    const normalizedTargetPlayerId = targetPlayerId.trim();
+    if (!normalizedSessionId) {
+      return {
+        ok: false,
+        reason: "invalid_session_id",
+      };
+    }
+    if (!normalizedRequesterPlayerId) {
+      return {
+        ok: false,
+        reason: "invalid_requester_player_id",
+      };
+    }
+    if (!normalizedTargetPlayerId) {
+      return {
+        ok: false,
+        reason: "invalid_target_player_id",
+      };
+    }
+    if (action !== "kick" && action !== "ban") {
+      return {
+        ok: false,
+        reason: "invalid_moderation_action",
+      };
+    }
+
+    const path = `/multiplayer/sessions/${encodeURIComponent(normalizedSessionId)}/moderate`;
+    const requestOptions = {
+      method: "POST",
+      body: {
+        requesterPlayerId: normalizedRequesterPlayerId,
+        targetPlayerId: normalizedTargetPlayerId,
+        action,
+      },
+    };
+    const firstResponse = await this.executeRequest(path, requestOptions, "session");
+    if (!firstResponse) {
+      return {
+        ok: false,
+        reason: "unknown",
+      };
+    }
+
+    if (firstResponse.status === 401) {
+      const refreshed = await authSessionService.refreshTokens({
+        baseUrl: this.baseUrl,
+        fetchImpl: this.fetchImpl,
+        timeoutMs: this.timeoutMs,
+      });
+      if (!refreshed) {
+        authSessionService.markSessionExpired("http_401_refresh_failed");
+        return {
+          ok: false,
+          reason: "unauthorized",
+          status: 401,
+        };
+      }
+
+      const retryResponse = await this.executeRequest(path, requestOptions, "session");
+      if (!retryResponse) {
+        return {
+          ok: false,
+          reason: "unknown",
+        };
+      }
+      return this.parseModerationResponse(retryResponse, path);
+    }
+
+    return this.parseModerationResponse(firstResponse, path);
   }
 
   async leaveMultiplayerSession(
@@ -728,6 +831,50 @@ export class BackendApiService {
     };
   }
 
+  private async parseModerationResponse(
+    response: Response,
+    path: string
+  ): Promise<MultiplayerModerationResult> {
+    const payload = await parseJsonPayload(response);
+    if (!response.ok) {
+      const reason = extractFailureReason(payload);
+      if (reason) {
+        log.warn(
+          `API request failed: POST ${path} (${response.status}) - ${reason}`
+        );
+      } else {
+        log.warn(`API request failed: POST ${path} (${response.status})`);
+      }
+      return {
+        ok: false,
+        reason: normalizeModerationFailureReason(reason),
+        status: response.status,
+      };
+    }
+
+    const action =
+      payload?.action === "kick" || payload?.action === "ban"
+        ? payload.action
+        : undefined;
+    const targetPlayerId =
+      typeof payload?.targetPlayerId === "string" && payload.targetPlayerId.trim().length > 0
+        ? payload.targetPlayerId.trim()
+        : undefined;
+    const session =
+      payload && isRecord(payload.session)
+        ? (payload.session as unknown as MultiplayerSessionRecord)
+        : null;
+
+    return {
+      ok: payload?.ok === true,
+      action,
+      targetPlayerId,
+      session,
+      status: response.status,
+      reason: payload?.ok === true ? undefined : normalizeModerationFailureReason(extractFailureReason(payload)),
+    };
+  }
+
   private async joinMultiplayerByPath(
     path: string,
     request: JoinMultiplayerSessionRequest
@@ -814,7 +961,83 @@ function resolveJoinFailureReason(
   ) {
     return "room_not_found";
   }
+  if (
+    status === 403 ||
+    normalized.includes("room_banned") ||
+    normalized.includes("banned from room")
+  ) {
+    return "room_banned";
+  }
   return "unknown";
+}
+
+function normalizeModerationFailureReason(
+  value: string
+): MultiplayerModerationResult["reason"] {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!normalized) {
+    return "unknown";
+  }
+  if (normalized.includes("session_expired")) {
+    return "session_expired";
+  }
+  if (normalized.includes("unknown_session")) {
+    return "unknown_session";
+  }
+  if (normalized.includes("unknown_player")) {
+    return "unknown_player";
+  }
+  if (normalized.includes("not_room_owner")) {
+    return "not_room_owner";
+  }
+  if (normalized.includes("cannot_moderate_self")) {
+    return "cannot_moderate_self";
+  }
+  if (normalized.includes("invalid_moderation_action")) {
+    return "invalid_moderation_action";
+  }
+  if (normalized.includes("invalid_session_id")) {
+    return "invalid_session_id";
+  }
+  if (normalized.includes("invalid_requester_player_id")) {
+    return "invalid_requester_player_id";
+  }
+  if (normalized.includes("invalid_target_player_id")) {
+    return "invalid_target_player_id";
+  }
+  if (normalized.includes("unauthorized")) {
+    return "unauthorized";
+  }
+  return "unknown";
+}
+
+function extractFailureReason(payload: Record<string, unknown> | null): string {
+  if (typeof payload?.reason === "string" && payload.reason.trim().length > 0) {
+    return payload.reason.trim();
+  }
+  if (typeof payload?.error === "string" && payload.error.trim().length > 0) {
+    return payload.error.trim();
+  }
+  if (typeof payload?.message === "string" && payload.message.trim().length > 0) {
+    return payload.message.trim();
+  }
+  return "";
+}
+
+async function parseJsonPayload(response: Response): Promise<Record<string, unknown> | null> {
+  try {
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      return null;
+    }
+    return (await response.json()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 async function readErrorSummary(response: Response): Promise<string> {
