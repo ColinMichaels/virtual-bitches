@@ -43,7 +43,8 @@ const ROOM_CHANNEL_BAD_TERMS = parseDelimitedEnvSet(
   (value) => value.toLowerCase()
 );
 const log = logger.create("Server");
-const ALLOW_SHORT_SESSION_TTLS = process.env.ALLOW_SHORT_SESSION_TTLS === "1";
+const SHORT_SESSION_TTL_REQUESTED = process.env.ALLOW_SHORT_SESSION_TTLS === "1";
+const ALLOW_SHORT_SESSION_TTLS = SHORT_SESSION_TTL_REQUESTED && NODE_ENV !== "production";
 const SESSION_IDLE_TTL_MIN_MS = ALLOW_SHORT_SESSION_TTLS ? 2000 : 60 * 1000;
 
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -109,6 +110,7 @@ const BOT_TICK_MAX_MS = 9000;
 const BOT_NAMES = ["Byte Bessie", "Lag Larry", "Packet Patty", "Dicebot Dave"];
 const BOT_PROFILES = ["cautious", "balanced", "aggressive"];
 const GAME_DIFFICULTIES = new Set(["easy", "normal", "hard"]);
+const PARTICIPANT_STATE_ACTIONS = new Set(["sit", "stand", "ready", "unready"]);
 const BOT_CAMERA_EFFECTS = ["shake"];
 const BOT_TURN_ADVANCE_MIN_MS = 1600;
 const BOT_TURN_ADVANCE_MAX_MS = 3200;
@@ -251,6 +253,10 @@ server.listen(PORT, () => {
   log.info(`Listening on http://localhost:${PORT}`);
   log.info(`Health endpoint: http://localhost:${PORT}/api/health`);
   log.info(`WebSocket endpoint: ws://localhost:${PORT}/?session=<id>&playerId=<id>&token=<token>`);
+  log.info(`Multiplayer session idle TTL: ${MULTIPLAYER_SESSION_IDLE_TTL_MS}ms`);
+  if (SHORT_SESSION_TTL_REQUESTED && NODE_ENV === "production") {
+    log.warn("Ignoring ALLOW_SHORT_SESSION_TTLS in production");
+  }
   log.info(`Session cleanup sweep: every ${MULTIPLAYER_CLEANUP_INTERVAL_MS}ms`);
 });
 
@@ -467,6 +473,11 @@ async function handleRequest(req, res) {
 
     if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/heartbeat$/.test(pathname)) {
       await handleSessionHeartbeat(req, res, pathname);
+      return;
+    }
+
+    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/participant-state$/.test(pathname)) {
+      await handleUpdateParticipantState(req, res, pathname);
       return;
     }
 
@@ -966,6 +977,7 @@ async function handleCreateSession(req, res) {
         : {}),
       joinedAt: now,
       lastHeartbeatAt: now,
+      isSeated: false,
       isReady: false,
       score: 0,
       remainingDice: DEFAULT_PARTICIPANT_DICE_COUNT,
@@ -1066,13 +1078,9 @@ async function handleJoinSessionByTarget(req, res, target) {
 
   const existingParticipant = session.participants[playerId];
   const isReturningParticipant = Boolean(existingParticipant && !isBotParticipant(existingParticipant));
-  const shouldQueueForNextGame =
-    !isReturningParticipant && shouldQueueParticipantForNextGame(session);
   const queuedForNextGame = isReturningParticipant
     ? normalizeQueuedForNextGame(existingParticipant?.queuedForNextGame)
-    : shouldQueueForNextGame;
-  const hasActiveTurnBeforeJoin =
-    typeof ensureSessionTurnState(session)?.activeTurnPlayerId === "string";
+    : false;
   if (!isReturningParticipant && getHumanParticipantCount(session) >= MAX_MULTIPLAYER_HUMAN_PLAYERS) {
     sendJson(res, 409, { error: "Room is full", reason: "room_full" });
     return;
@@ -1094,9 +1102,10 @@ async function handleJoinSessionByTarget(req, res, target) {
       : {}),
     joinedAt: existingParticipant?.joinedAt ?? now,
     lastHeartbeatAt: now,
+    isSeated: isReturningParticipant ? isParticipantSeated(existingParticipant) : false,
     isReady: isReturningParticipant
-      ? existingParticipant?.isReady === true
-      : queuedForNextGame || hasActiveTurnBeforeJoin,
+      ? existingParticipant?.isReady === true && isParticipantSeated(existingParticipant)
+      : false,
     score: normalizeParticipantScore(existingParticipant?.score),
     remainingDice: normalizeParticipantRemainingDice(existingParticipant?.remainingDice),
     queuedForNextGame,
@@ -1162,6 +1171,168 @@ async function handleSessionHeartbeat(req, res, pathname) {
   sendJson(res, 200, { ok: true });
 }
 
+async function handleUpdateParticipantState(req, res, pathname) {
+  const sessionId = decodeURIComponent(pathname.split("/")[4]);
+  let session = store.multiplayerSessions[sessionId];
+  if (!session || session.expiresAt <= Date.now()) {
+    await rehydrateStoreFromAdapter(`participant_state_session:${sessionId}`);
+    session = store.multiplayerSessions[sessionId];
+  }
+  if (!session || session.expiresAt <= Date.now()) {
+    sendJson(res, 200, {
+      ok: false,
+      reason: "session_expired",
+    });
+    return;
+  }
+
+  const body = await parseJsonBody(req);
+  const playerId = typeof body?.playerId === "string" ? body.playerId : "";
+  const action = normalizeParticipantStateAction(body?.action);
+  let participant = playerId ? session.participants[playerId] : null;
+  if (!playerId || !participant || isBotParticipant(participant)) {
+    await rehydrateStoreFromAdapter(`participant_state_participant:${sessionId}:${playerId || "unknown"}`);
+    session = store.multiplayerSessions[sessionId];
+    participant = playerId && session ? session.participants[playerId] : null;
+  }
+  if (!session || !playerId || !participant || isBotParticipant(participant)) {
+    sendJson(res, 200, {
+      ok: false,
+      reason: "unknown_player",
+    });
+    return;
+  }
+  if (!action) {
+    sendJson(res, 400, {
+      error: "action is required",
+      reason: "invalid_action",
+    });
+    return;
+  }
+
+  let authCheck = authorizeRequest(req, playerId, sessionId);
+  if (!authCheck.ok) {
+    await rehydrateStoreFromAdapter(`participant_state_auth:${sessionId}:${playerId}`);
+    authCheck = authorizeRequest(req, playerId, sessionId);
+  }
+  if (!authCheck.ok) {
+    sendJson(res, 200, {
+      ok: false,
+      reason: "unauthorized",
+    });
+    return;
+  }
+
+  const now = Date.now();
+  let changed = false;
+  let reason = "ok";
+
+  if (action === "sit") {
+    const shouldQueueForNextGame = shouldQueueParticipantForNextGame(session);
+    if (!isParticipantSeated(participant)) {
+      participant.isSeated = true;
+      changed = true;
+    }
+    if (participant.isReady === true) {
+      participant.isReady = false;
+      changed = true;
+    }
+    const nextQueuedForNextGame = shouldQueueForNextGame ? true : false;
+    if (participant.queuedForNextGame !== nextQueuedForNextGame) {
+      participant.queuedForNextGame = nextQueuedForNextGame;
+      changed = true;
+    }
+  } else if (action === "stand") {
+    if (isParticipantSeated(participant)) {
+      participant.isSeated = false;
+      changed = true;
+    }
+    if (participant.isReady === true) {
+      participant.isReady = false;
+      changed = true;
+    }
+    if (participant.queuedForNextGame === true) {
+      participant.queuedForNextGame = false;
+      changed = true;
+    }
+  } else if (action === "ready") {
+    if (!isParticipantSeated(participant)) {
+      reason = "not_seated";
+    } else {
+      const shouldQueueForNextGame = shouldQueueParticipantForNextGame(session);
+      const nextQueuedForNextGame = shouldQueueForNextGame ? true : false;
+      if (participant.queuedForNextGame !== nextQueuedForNextGame) {
+        participant.queuedForNextGame = nextQueuedForNextGame;
+        changed = true;
+      }
+      if (participant.isReady !== true) {
+        participant.isReady = true;
+        changed = true;
+      }
+    }
+  } else if (action === "unready") {
+    if (participant.isReady === true) {
+      participant.isReady = false;
+      changed = true;
+    }
+    if (!shouldQueueParticipantForNextGame(session) && participant.queuedForNextGame === true) {
+      participant.queuedForNextGame = false;
+      changed = true;
+    }
+  }
+
+  if (!isParticipantSeated(participant) && participant.isReady === true) {
+    participant.isReady = false;
+    changed = true;
+  }
+  participant.lastHeartbeatAt = now;
+  markSessionActivity(session, playerId, now);
+
+  if (changed) {
+    ensureSessionTurnState(session);
+    reconcileSessionLoops(sessionId);
+    broadcastSessionState(session, `participant_${action}`);
+    const actorName = participant.displayName || participant.playerId;
+    const actionMessageMap = {
+      sit:
+        participant.queuedForNextGame === true
+          ? `${actorName} sat down and is waiting for the next game.`
+          : `${actorName} sat down.`,
+      stand: `${actorName} stood up.`,
+      ready:
+        participant.queuedForNextGame === true
+          ? `${actorName} is ready for the next game.`
+          : `${actorName} is ready to play.`,
+      unready: `${actorName} is no longer ready.`,
+    };
+    const actionMessage = actionMessageMap[action];
+    if (actionMessage) {
+      broadcastSystemRoomChannelMessage(sessionId, {
+        topic: "seat_state",
+        title: actorName,
+        message: actionMessage,
+        severity: action === "ready" ? "success" : "info",
+        timestamp: now,
+      });
+    }
+  }
+  await persistStore();
+
+  sendJson(res, 200, {
+    ok: reason === "ok",
+    reason,
+    state: {
+      isSeated: isParticipantSeated(participant),
+      isReady: participant.isReady === true,
+      queuedForNextGame: isParticipantQueuedForNextGame(participant),
+    },
+    session: {
+      ...buildSessionSnapshot(session),
+      serverNow: now,
+    },
+  });
+}
+
 async function handleQueueParticipantForNextGame(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
   let session = store.multiplayerSessions[sessionId];
@@ -1214,6 +1385,15 @@ async function handleQueueParticipantForNextGame(req, res, pathname) {
       ok: false,
       queuedForNextGame: false,
       reason: "round_in_progress",
+    });
+    return;
+  }
+
+  if (!isParticipantSeated(participant)) {
+    sendJson(res, 200, {
+      ok: false,
+      queuedForNextGame: false,
+      reason: "not_seated",
     });
     return;
   }
@@ -1880,6 +2060,7 @@ function buildAdminRoomDiagnostic(sessionId, session, now = Date.now()) {
       avatarUrl: participant.avatarUrl,
       providerId: participant.providerId,
       isBot: participant.isBot,
+      isSeated: participant.isSeated === true,
       isReady: participant.isReady,
       isComplete: participant.isComplete,
       score: participant.score,
@@ -2892,7 +3073,7 @@ function buildSessionSnapshot(session) {
   const nextGameStartsAt = resolveSessionNextGameStartsAt(session, gameStartedAt);
   const humanCount = participants.filter((participant) => !isBotParticipant(participant)).length;
   const activeGameParticipants = participants.filter(
-    (participant) => participant.queuedForNextGame !== true
+    (participant) => participant.isSeated === true && participant.queuedForNextGame !== true
   );
   const roomKind = getSessionRoomKind(session);
   const sessionComplete =
@@ -2945,7 +3126,9 @@ function buildRoomListing(session, now = Date.now()) {
 
   const participants = serializeSessionParticipants(session);
   const humans = participants.filter((participant) => !isBotParticipant(participant));
-  const activeGameHumans = humans.filter((participant) => participant.queuedForNextGame !== true);
+  const activeGameHumans = humans.filter(
+    (participant) => participant.isSeated === true && participant.queuedForNextGame !== true
+  );
   const activeHumanCount = humans.filter((participant) =>
     isRoomParticipantActive(session.sessionId, participant, now)
   ).length;
@@ -3049,7 +3232,10 @@ function buildPublicOverflowRoomCode() {
 function isSessionCompleteForHumans(session) {
   const participants = serializeSessionParticipants(session);
   const humans = participants.filter(
-    (participant) => !isBotParticipant(participant) && participant.queuedForNextGame !== true
+    (participant) =>
+      !isBotParticipant(participant) &&
+      participant.isSeated === true &&
+      participant.queuedForNextGame !== true
   );
   return humans.length > 0 && humans.every((participant) => participant?.isComplete === true);
 }
@@ -3866,6 +4052,8 @@ function serializeSessionParticipants(session) {
       const remainingDice = normalizeParticipantRemainingDice(participant.remainingDice);
       const isComplete = participant.isComplete === true || remainingDice === 0;
       const queuedForNextGame = isParticipantQueuedForNextGame(participant);
+      const isSeated = isParticipantSeated(participant);
+      const isReady = participant.isBot ? true : isSeated && participant.isReady === true;
       return {
         playerId: participant.playerId,
         displayName:
@@ -3880,7 +4068,8 @@ function serializeSessionParticipants(session) {
             : Date.now(),
         isBot: Boolean(participant.isBot),
         botProfile: participant.isBot ? normalizeBotProfile(participant.botProfile) : undefined,
-        isReady: participant.isBot ? true : participant.isReady === true,
+        isSeated,
+        isReady,
         score: normalizeParticipantScore(participant.score),
         remainingDice,
         queuedForNextGame,
@@ -3906,6 +4095,7 @@ function serializeParticipantsInJoinOrder(session) {
     .filter((participant) => participant && typeof participant.playerId === "string")
     .map((participant) => ({
       playerId: participant.playerId,
+      isSeated: isParticipantSeated(participant),
       queuedForNextGame: isParticipantQueuedForNextGame(participant),
       isComplete: isParticipantComplete(participant),
       joinedAt:
@@ -3924,7 +4114,7 @@ function serializeParticipantsInJoinOrder(session) {
 
 function buildSessionStandings(session) {
   const serializedParticipants = serializeSessionParticipants(session).filter(
-    (participant) => participant.queuedForNextGame !== true
+    (participant) => participant.isSeated === true && participant.queuedForNextGame !== true
   );
   return [...serializedParticipants]
     .sort((left, right) => {
@@ -3995,15 +4185,17 @@ function ensureSessionTurnState(session) {
   const orderedParticipants = serializeParticipantsInJoinOrder(session).filter(
     (participant) =>
       participant &&
+      participant.isSeated === true &&
       !participant.isComplete &&
       participant.queuedForNextGame !== true &&
       (!keepCompletedActivePlayer || participant.playerId !== currentActiveTurnPlayerId)
   );
   if (keepCompletedActivePlayer) {
     const activeParticipant = session.participants?.[currentActiveTurnPlayerId];
-    if (activeParticipant) {
+    if (activeParticipant && isParticipantActiveForCurrentGame(activeParticipant)) {
       orderedParticipants.push({
         playerId: currentActiveTurnPlayerId,
+        isSeated: true,
         isComplete: false,
         joinedAt:
           typeof activeParticipant.joinedAt === "number" && Number.isFinite(activeParticipant.joinedAt)
@@ -4039,13 +4231,14 @@ function ensureSessionTurnState(session) {
   });
 
   const allHumansReady = areAllHumansReady(session);
+  const hasSeatedHumanParticipant = getActiveHumanParticipants(session).length > 0;
   const now = Date.now();
   let activeTurnPlayerId =
     typeof currentState?.activeTurnPlayerId === "string"
       ? currentState.activeTurnPlayerId
       : null;
   let activeTurnRecovered = false;
-  if (!allHumansReady || participantIds.length === 0) {
+  if (!allHumansReady || participantIds.length === 0 || !hasSeatedHumanParticipant) {
     activeTurnPlayerId = null;
   } else if (!activeTurnPlayerId || !nextOrder.includes(activeTurnPlayerId)) {
     activeTurnPlayerId = nextOrder[0] ?? null;
@@ -4516,6 +4709,28 @@ function normalizeQueuedForNextGame(value) {
   return value === true;
 }
 
+function normalizeParticipantStateAction(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const normalized = value.trim().toLowerCase();
+  return PARTICIPANT_STATE_ACTIONS.has(normalized) ? normalized : "";
+}
+
+function isParticipantSeated(participant) {
+  if (!participant || typeof participant !== "object") {
+    return false;
+  }
+  if (isBotParticipant(participant)) {
+    return true;
+  }
+  return participant.isSeated !== false;
+}
+
+function isParticipantActiveForCurrentGame(participant) {
+  return isParticipantSeated(participant) && !isParticipantQueuedForNextGame(participant);
+}
+
 function isParticipantQueuedForNextGame(participant) {
   if (!participant || typeof participant !== "object") {
     return false;
@@ -4610,7 +4825,7 @@ function isSessionGameInProgress(session) {
     if (
       !participant ||
       typeof participant !== "object" ||
-      isParticipantQueuedForNextGame(participant)
+      !isParticipantActiveForCurrentGame(participant)
     ) {
       return false;
     }
@@ -4642,7 +4857,7 @@ function areCurrentGameParticipantsComplete(session) {
   }
 
   const activeParticipants = Object.values(session.participants).filter(
-    (participant) => participant && !isParticipantQueuedForNextGame(participant)
+    (participant) => participant && isParticipantActiveForCurrentGame(participant)
   );
   if (activeParticipants.length === 0) {
     return hasQueuedParticipantsForNextGame(session);
@@ -4784,7 +4999,7 @@ function completeSessionRoundWithWinner(session, winnerPlayerId, timestamp = Dat
   }
 
   const winner = session.participants[winnerPlayerId];
-  if (!winner || isParticipantQueuedForNextGame(winner)) {
+  if (!winner || !isParticipantActiveForCurrentGame(winner)) {
     return { ok: false };
   }
 
@@ -4800,7 +5015,7 @@ function completeSessionRoundWithWinner(session, winnerPlayerId, timestamp = Dat
       playerId === winnerPlayerId ||
       !participant ||
       typeof participant !== "object" ||
-      isParticipantQueuedForNextGame(participant)
+      !isParticipantActiveForCurrentGame(participant)
     ) {
       return;
     }
@@ -4819,7 +5034,7 @@ function completeSessionRoundWithWinner(session, winnerPlayerId, timestamp = Dat
     turnState.activeTurnPlayerId = null;
     turnState.order = turnState.order.filter((playerId) => {
       const participant = session.participants?.[playerId];
-      return Boolean(participant) && !isParticipantQueuedForNextGame(participant);
+      return Boolean(participant) && isParticipantActiveForCurrentGame(participant);
     });
     turnState.phase = TURN_PHASES.awaitRoll;
     turnState.lastRollSnapshot = null;
@@ -4886,7 +5101,7 @@ function getActiveHumanParticipants(session) {
     (participant) =>
       participant &&
       !isBotParticipant(participant) &&
-      !isParticipantQueuedForNextGame(participant)
+      isParticipantActiveForCurrentGame(participant)
   );
 }
 
@@ -4904,8 +5119,7 @@ function maybeForfeitSessionForSingleHumanRemaining(session, now = Date.now()) {
   }
 
   const activeParticipants = Object.values(session.participants).filter(
-    (participant) =>
-      participant && !isParticipantQueuedForNextGame(participant)
+    (participant) => participant && isParticipantActiveForCurrentGame(participant)
   );
   if (activeParticipants.length === 0) {
     return false;
@@ -5012,7 +5226,7 @@ function hasConnectedHumanParticipant(sessionId, session) {
     (participant) =>
       participant &&
       !isBotParticipant(participant) &&
-      !isParticipantQueuedForNextGame(participant) &&
+      isParticipantActiveForCurrentGame(participant) &&
       isSessionParticipantConnected(sessionId, participant.playerId)
   );
 }
@@ -5025,7 +5239,7 @@ function hasLiveHumanParticipant(sessionId, session, now = Date.now()) {
     (participant) =>
       participant &&
       !isBotParticipant(participant) &&
-      !isParticipantQueuedForNextGame(participant) &&
+      isParticipantActiveForCurrentGame(participant) &&
       isRoomParticipantActive(sessionId, participant, now)
   );
 }
@@ -5083,6 +5297,7 @@ function addBotsToSession(session, requestedBotCount, now = Date.now()) {
       lastHeartbeatAt: joinedAt,
       isBot: true,
       botProfile: BOT_PROFILES[botOffset % BOT_PROFILES.length],
+      isSeated: true,
       isReady: true,
       score: 0,
       remainingDice: DEFAULT_PARTICIPANT_DICE_COUNT,
@@ -6716,25 +6931,10 @@ function handleSocketConnection(socket, auth) {
   if (session) {
     const participant = session.participants[client.playerId];
     const now = Date.now();
-    let readinessChanged = false;
-    if (participant && !isBotParticipant(participant) && participant.isReady !== true) {
-      participant.isReady = true;
+    if (participant) {
       participant.lastHeartbeatAt = now;
-      ensureSessionTurnState(session);
-      readinessChanged = true;
     }
     markSessionActivity(session, client.playerId, now);
-
-    if (readinessChanged) {
-      broadcastSessionState(session, "ready", client);
-      const turnStart = buildTurnStartMessage(session, { source: "ready" });
-      if (turnStart) {
-        broadcastToSession(client.sessionId, JSON.stringify(turnStart), client);
-      }
-      persistStore().catch((error) => {
-        log.warn("Failed to persist session after readiness update", error);
-      });
-    }
 
     sendTurnSyncPayload(client, session, "sync");
     reconcileSessionLoops(client.sessionId);

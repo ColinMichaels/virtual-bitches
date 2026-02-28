@@ -93,6 +93,7 @@ interface SeatedMultiplayerParticipant {
   providerId?: string;
   seatIndex: number;
   isBot: boolean;
+  isSeated: boolean;
   isReady: boolean;
   score: number;
   remainingDice: number;
@@ -253,6 +254,7 @@ class Game implements GameCallbacks {
   private botMemeAvatarRotationHandle: ReturnType<typeof setInterval> | null = null;
   private botMemeAvatarRefreshInFlight = false;
   private waitForNextGameRequestInFlight = false;
+  private participantStateUpdateInFlight = false;
   private cachedMultiplayerIdentity:
     | {
         value: {
@@ -629,6 +631,23 @@ class Game implements GameCallbacks {
       audioService.playSfx("click");
       if (activeSession) {
         const targetPlayerId = this.participantIdBySeat.get(seatIndex);
+        if (
+          this.playMode === "multiplayer" &&
+          targetPlayerId === this.localPlayerId
+        ) {
+          const localSeatState = this.getLocalMultiplayerSeatState();
+          if (!localSeatState || !localSeatState.isSeated) {
+            void this.updateLocalParticipantState("sit");
+            return;
+          }
+          if (!localSeatState.isReady) {
+            void this.updateLocalParticipantState("ready");
+            return;
+          }
+          void this.updateLocalParticipantState("stand");
+          return;
+        }
+
         if (
           this.playMode === "multiplayer" &&
           targetPlayerId &&
@@ -1546,7 +1565,13 @@ class Game implements GameCallbacks {
     const localSeatState = seatedParticipants.find(
       (participant) => participant.playerId === this.localPlayerId
     );
-    this.hud.setLocalWaitStatus(localSeatState?.queuedForNextGame ? "Waiting" : null);
+    this.hud.setLocalWaitStatus(
+      localSeatState?.queuedForNextGame
+        ? "Waiting"
+        : localSeatState?.isSeated === false
+          ? "Standing"
+          : null
+    );
     this.syncBotMemeAvatarState(seatedParticipants);
     const participantBySeat = new Map<number, SeatedMultiplayerParticipant>();
     const previousParticipantIds = new Set(this.participantSeatById.keys());
@@ -1556,6 +1581,7 @@ class Game implements GameCallbacks {
     const showReadyState =
       seatedParticipants.filter(
         (participant) =>
+          participant.isSeated &&
           !participant.isBot &&
           !participant.isComplete &&
           !participant.queuedForNextGame
@@ -1618,7 +1644,7 @@ class Game implements GameCallbacks {
 
     this.multiplayerTurnPlan = buildClockwiseTurnPlan(
       seatedParticipants
-        .filter((participant) => !participant.queuedForNextGame)
+        .filter((participant) => participant.isSeated && !participant.queuedForNextGame)
         .map((participant) => ({
           playerId: participant.playerId,
           displayName: this.formatParticipantLabel(
@@ -1887,6 +1913,7 @@ class Game implements GameCallbacks {
       providerId: localParticipant?.providerId,
       seatIndex: currentSeatIndex,
       isBot: false,
+      isSeated: localParticipant?.isSeated === true,
       isReady: localParticipant?.isReady === true,
       score: normalizeParticipantScore(localParticipant?.score),
       remainingDice: normalizeRemainingDice(localParticipant?.remainingDice),
@@ -1911,6 +1938,7 @@ class Game implements GameCallbacks {
         providerId: participant.providerId,
         seatIndex: availableSeats[index],
         isBot: participant.isBot,
+        isSeated: participant.isSeated,
         isReady: participant.isReady,
         score: participant.score,
         remainingDice: participant.remainingDice,
@@ -1931,6 +1959,7 @@ class Game implements GameCallbacks {
     avatarUrl?: string;
     providerId?: string;
     isBot: boolean;
+    isSeated: boolean;
     isReady: boolean;
     score: number;
     remainingDice: number;
@@ -1947,6 +1976,7 @@ class Game implements GameCallbacks {
         avatarUrl?: string;
         providerId?: string;
         isBot: boolean;
+        isSeated: boolean;
         isReady: boolean;
         score: number;
         remainingDice: number;
@@ -1979,7 +2009,11 @@ class Game implements GameCallbacks {
         avatarUrl: this.normalizeMultiplayerAvatarUrl(participant.avatarUrl),
         providerId: this.normalizeMultiplayerProviderId(participant.providerId),
         isBot: Boolean(participant.isBot),
-        isReady: Boolean(participant.isBot) ? true : participant.isReady === true,
+        isSeated: Boolean(participant.isBot) ? true : participant.isSeated !== false,
+        isReady:
+          Boolean(participant.isBot)
+            ? true
+            : participant.isSeated !== false && participant.isReady === true,
         score: normalizeParticipantScore(participant.score),
         remainingDice: normalizeRemainingDice(participant.remainingDice),
         queuedForNextGame: normalizeQueuedForNextGame(participant.queuedForNextGame),
@@ -1999,7 +2033,8 @@ class Game implements GameCallbacks {
         avatarUrl: this.localAvatarUrl,
         providerId: undefined,
         isBot: false,
-        isReady: true,
+        isSeated: false,
+        isReady: false,
         score: normalizeParticipantScore(this.state.score),
         remainingDice: 0,
         queuedForNextGame: false,
@@ -2055,6 +2090,9 @@ class Game implements GameCallbacks {
     if (participant.queuedForNextGame) {
       return `${label} • NEXT`.slice(0, 24);
     }
+    if (!participant.isSeated) {
+      return `${label} • STAND`.slice(0, 24);
+    }
     if (participant.isComplete) {
       return `${label} • DONE`.slice(0, 24);
     }
@@ -2077,6 +2115,9 @@ class Game implements GameCallbacks {
     if (participant.isBot) {
       return new Color3(0.84, 0.52, 0.24);
     }
+    if (!participant.isSeated) {
+      return new Color3(0.44, 0.48, 0.56);
+    }
     return new Color3(0.36, 0.62, 0.9);
   }
 
@@ -2095,7 +2136,7 @@ class Game implements GameCallbacks {
     const participants = Array.isArray(session.standings) && session.standings.length > 0
       ? session.standings
       : seatedParticipants
-          .filter((participant) => !participant.queuedForNextGame)
+          .filter((participant) => participant.isSeated && !participant.queuedForNextGame)
           .map((participant) => ({
             playerId: participant.playerId,
             displayName: participant.displayName,
@@ -2144,6 +2185,70 @@ class Game implements GameCallbacks {
       }
     }
     return null;
+  }
+
+  private getLocalMultiplayerSeatState(): {
+    isSeated: boolean;
+    isReady: boolean;
+    queuedForNextGame: boolean;
+  } | null {
+    if (this.playMode !== "multiplayer") {
+      return null;
+    }
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession) {
+      return null;
+    }
+    const localParticipant = this.getSessionParticipantById(activeSession, this.localPlayerId);
+    if (!localParticipant || localParticipant.isBot) {
+      return null;
+    }
+    return {
+      isSeated: localParticipant.isSeated !== false,
+      isReady: localParticipant.isSeated !== false && localParticipant.isReady === true,
+      queuedForNextGame: normalizeQueuedForNextGame(localParticipant.queuedForNextGame),
+    };
+  }
+
+  private async updateLocalParticipantState(
+    action: "sit" | "stand" | "ready" | "unready"
+  ): Promise<void> {
+    if (this.participantStateUpdateInFlight) {
+      return;
+    }
+    if (this.playMode !== "multiplayer") {
+      return;
+    }
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession?.sessionId) {
+      notificationService.show("No active multiplayer room found.", "warning", 2000);
+      return;
+    }
+
+    this.participantStateUpdateInFlight = true;
+    try {
+      const nextSession = await this.multiplayerSessionService.updateParticipantState(action);
+      if (!nextSession) {
+        if (action === "ready") {
+          notificationService.show("Sit down before readying up.", "warning", 2200);
+        } else {
+          notificationService.show("Unable to update seat status right now.", "warning", 2200);
+        }
+        return;
+      }
+
+      this.applyMultiplayerSeatState(nextSession);
+      this.touchMultiplayerTurnSyncActivity();
+      const successMessageByAction = {
+        sit: "You sat down. Tap Ready when you want in.",
+        stand: "You stood up and moved to observer mode.",
+        ready: "Ready up confirmed.",
+        unready: "You are no longer marked ready.",
+      } as const;
+      notificationService.show(successMessageByAction[action], action === "ready" ? "success" : "info", 1800);
+    } finally {
+      this.participantStateUpdateInFlight = false;
+    }
   }
 
   private shouldResetLocalStateForNextMultiplayerGame(
@@ -2734,7 +2839,7 @@ class Game implements GameCallbacks {
   private handleMultiplayerRealtimeNotification(
     payload: MultiplayerPlayerNotificationMessage
   ): void {
-    if (!this.isMultiplayerTurnEnforced()) {
+    if (this.playMode !== "multiplayer") {
       return;
     }
     if (payload.targetPlayerId && payload.targetPlayerId !== this.localPlayerId) {
@@ -3225,6 +3330,7 @@ class Game implements GameCallbacks {
         participant &&
         participant.playerId !== this.localPlayerId &&
         !participant.isBot &&
+        participant.isSeated !== false &&
         participant.queuedForNextGame !== true &&
         participant.isComplete !== true
     );
@@ -3237,6 +3343,7 @@ class Game implements GameCallbacks {
         participant &&
         participant.playerId !== this.localPlayerId &&
         participant.isBot === true &&
+        participant.isSeated !== false &&
         participant.queuedForNextGame !== true &&
         participant.isComplete !== true
     );
@@ -3248,6 +3355,11 @@ class Game implements GameCallbacks {
     }
 
     if (this.multiplayerSessionService.getActiveSession()?.sessionComplete === true) {
+      return false;
+    }
+
+    const localSeatState = this.getLocalMultiplayerSeatState();
+    if (localSeatState && !localSeatState.isSeated) {
       return false;
     }
 
@@ -4280,6 +4392,14 @@ class Game implements GameCallbacks {
   handleAction(): void {
     if (this.paused || this.animating) return;
 
+    if (this.playMode === "multiplayer") {
+      const localSeatState = this.getLocalMultiplayerSeatState();
+      if (localSeatState && localSeatState.isSeated && !localSeatState.isReady) {
+        void this.updateLocalParticipantState("ready");
+        return;
+      }
+    }
+
     if (this.state.status === "READY") {
       this.handleRoll();
     } else if (this.state.status === "ROLLED" && this.state.selected.size > 0) {
@@ -4733,10 +4853,20 @@ class Game implements GameCallbacks {
         : "Wait for Next Game";
     }
 
+    const localSeatState = this.getLocalMultiplayerSeatState();
+    const needsReadyAction =
+      this.playMode === "multiplayer" &&
+      localSeatState !== null &&
+      localSeatState.isSeated &&
+      !localSeatState.isReady;
     const hasSelection = this.state.selected.size > 0;
 
     // Update multipurpose action button
-    if (this.state.status === "READY") {
+    if (needsReadyAction) {
+      this.actionBtn.textContent = "Ready Up";
+      this.actionBtn.disabled = this.animating || this.paused || this.participantStateUpdateInFlight;
+      this.actionBtn.className = "btn btn-primary primary";
+    } else if (this.state.status === "READY") {
       this.actionBtn.textContent = isTurnLocked
         ? `Waiting: ${this.activeTurnPlayerId ? this.getParticipantLabel(this.activeTurnPlayerId) : "Sync"}`
         : "Roll";

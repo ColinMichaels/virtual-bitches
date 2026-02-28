@@ -1067,7 +1067,7 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
 7. **iOS Device QA Pass**: Execute physical-device validation for new mobile menu and safe-area responsive behavior.
 
 ### Multiplayer Sit/Stand Model (`isSeated` + `isReady`) — Post-Deployment Plan
-- **Status**: 🟡 Design captured, implementation deferred until deployment/runtime stability issues are resolved
+- **Status**: 🟡 Phase 1 foundation merged (2026-02-27), lobby UX follow-up pending
 - **Goal**: A player can be in a room without being auto-queued into active multiplayer gameplay.
 - **State model**:
   - `isSeated=false, isReady=false`: in room/lobby observer only (not in turn order, can still view chat/room events)
@@ -1075,20 +1075,18 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - `isSeated=true, isReady=true`: seated and ready for multiplayer round participation
   - `isSeated=false, isReady=true`: invalid state (server normalizes back to `isReady=false`)
 - **Server/API next steps**:
-  - Add participant field `isSeated` to session participant record + serialization.
-  - Add participant action endpoint (or websocket action) to toggle `sit`, `stand`, and `ready`.
-  - Build turn order from seated/ready participants only; observers stay connected but out of turn flow.
-  - Emit room-channel system notifications for key transitions:
-    - player joined room (observer)
-    - player sat down
-    - player ready/unready
-    - player stood up
+  - [x] Add participant field `isSeated` to session participant record + serialization.
+  - [x] Add participant action endpoint to toggle `sit`, `stand`, and `ready` (`POST /api/multiplayer/sessions/:sessionId/participant-state`).
+  - [x] Build turn order from seated/ready participants only; observers stay connected but out of turn flow.
+  - [x] Emit room-channel system notifications for seat/ready transitions (sit, stand, ready, unready).
+  - [ ] Add explicit observer join room-channel message when a player enters but remains unseated.
   - Preserve backward compatibility by defaulting missing `isSeated` based on current participation behavior during rollout.
 - **Client/UI next steps**:
-  - Add lobby controls: `Sit Down` / `Stand Up` / `Ready`.
-  - Disable `Join Game`/multiplayer start until local player is seated (and ready if required by rule).
-  - Show room status feed notifications when another player sits/stands/gets ready.
-  - Keep solo-style practice available for lone players without forcing multiplayer round state.
+  - [x] Add in-game controls: local seat tap toggles `Sit/Ready/Stand`, and action button switches to `Ready Up` when seated but not ready.
+  - [x] Show room status feed notifications when another player sits/stands/gets ready.
+  - [ ] Add explicit splash/lobby controls for `Sit Down` / `Stand Up` / `Ready` (not only in-game controls).
+  - [ ] Disable splash `Join Game`/multiplayer start until local player is seated (and ready if required by rule).
+  - [x] Keep solo-style practice available for standing/lone players without forcing multiplayer turn state.
 - **Acceptance criteria**:
   - Lone player can enter room and practice without auto-starting a multiplayer round.
   - New joiners are explicitly notified when another player sits and is ready.
