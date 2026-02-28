@@ -132,16 +132,23 @@ async function run() {
   activeSessionId = created.sessionId;
   const hostAccessToken = created.auth.accessToken;
 
-  const joined = await apiRequest(
-    `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/join`,
+  const joinedAttempt = await joinSessionByIdWithTransientRetry(
+    activeSessionId,
     {
-      method: "POST",
-      body: {
-        playerId: guestPlayerId,
-        displayName: "E2E Guest",
-      },
+      playerId: guestPlayerId,
+      displayName: "E2E Guest",
+    },
+    {
+      maxAttempts: 6,
+      initialDelayMs: 180,
     }
   );
+  if (!joinedAttempt?.ok) {
+    throw new Error(
+      `request failed (POST /multiplayer/sessions/${activeSessionId}/join) status=${joinedAttempt?.status ?? "unknown"} body=${JSON.stringify(joinedAttempt?.body ?? null)}`
+    );
+  }
+  const joined = joinedAttempt.body;
   assert(joined?.auth?.accessToken, "join session returned no access token");
   assert(Array.isArray(joined?.participants), "join session missing participants array");
   assert(
@@ -1453,16 +1460,23 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
   }
 
   try {
-    const joined = await apiRequest(
-      `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/join`,
+    const joinedAttempt = await joinSessionByIdWithTransientRetry(
+      queueSessionId,
       {
-        method: "POST",
-        body: {
-          playerId: queueGuestPlayerId,
-          displayName: "E2E Queue Guest",
-        },
+        playerId: queueGuestPlayerId,
+        displayName: "E2E Queue Guest",
+      },
+      {
+        maxAttempts: 8,
+        initialDelayMs: 220,
       }
     );
+    if (!joinedAttempt?.ok) {
+      throw new Error(
+        `request failed (POST /multiplayer/sessions/${queueSessionId}/join) status=${joinedAttempt?.status ?? "unknown"} body=${JSON.stringify(joinedAttempt?.body ?? null)}`
+      );
+    }
+    const joined = joinedAttempt.body;
     assert(Array.isArray(joined?.participants), "queue lifecycle join missing participants[]");
     const guestAccessToken =
       typeof joined?.auth?.accessToken === "string" ? joined.auth.accessToken : "";
@@ -1753,29 +1767,43 @@ async function runTimeoutStrikeObserverChecks(runSuffix) {
       log(`Timeout strike host socket unavailable; falling back to HTTP-only polling (${String(error)}).`);
     }
 
-    const joinGuestA = await apiRequest(
-      `/multiplayer/sessions/${encodeURIComponent(timeoutSessionId)}/join`,
+    const joinGuestAAttempt = await joinSessionByIdWithTransientRetry(
+      timeoutSessionId,
       {
-        method: "POST",
-        body: {
-          playerId: timeoutGuestAPlayerId,
-          displayName: timeoutGuestADisplayName,
-        },
+        playerId: timeoutGuestAPlayerId,
+        displayName: timeoutGuestADisplayName,
+      },
+      {
+        maxAttempts: 8,
+        initialDelayMs: 220,
       }
     );
+    if (!joinGuestAAttempt?.ok) {
+      throw new Error(
+        `request failed (POST /multiplayer/sessions/${timeoutSessionId}/join) status=${joinGuestAAttempt?.status ?? "unknown"} body=${JSON.stringify(joinGuestAAttempt?.body ?? null)}`
+      );
+    }
+    const joinGuestA = joinGuestAAttempt.body;
     guestAAccessToken = typeof joinGuestA?.auth?.accessToken === "string" ? joinGuestA.auth.accessToken : "";
     assert(guestAAccessToken, "timeout strike guest A join returned no access token");
 
-    const joinGuestB = await apiRequest(
-      `/multiplayer/sessions/${encodeURIComponent(timeoutSessionId)}/join`,
+    const joinGuestBAttempt = await joinSessionByIdWithTransientRetry(
+      timeoutSessionId,
       {
-        method: "POST",
-        body: {
-          playerId: timeoutGuestBPlayerId,
-          displayName: timeoutGuestBDisplayName,
-        },
+        playerId: timeoutGuestBPlayerId,
+        displayName: timeoutGuestBDisplayName,
+      },
+      {
+        maxAttempts: 8,
+        initialDelayMs: 220,
       }
     );
+    if (!joinGuestBAttempt?.ok) {
+      throw new Error(
+        `request failed (POST /multiplayer/sessions/${timeoutSessionId}/join) status=${joinGuestBAttempt?.status ?? "unknown"} body=${JSON.stringify(joinGuestBAttempt?.body ?? null)}`
+      );
+    }
+    const joinGuestB = joinGuestBAttempt.body;
     guestBAccessToken = typeof joinGuestB?.auth?.accessToken === "string" ? joinGuestB.auth.accessToken : "";
     assert(guestBAccessToken, "timeout strike guest B join returned no access token");
 
@@ -3067,7 +3095,7 @@ async function joinRoomByCodeWithTransientRetry(roomCode, payload, options = {})
         body: payload,
       }
     );
-    if (!isTransientRoomLookupFailure(lastAttempt)) {
+    if (!isTransientQueueRefreshFailure(lastAttempt)) {
       break;
     }
     if (attempt >= maxAttempts - 1) {
