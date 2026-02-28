@@ -35,6 +35,15 @@
 - Impact: heartbeat/auth-refresh activity during winner queue no longer keeps pushing auto-start forward, so fresh rounds start on schedule.
 - Hardened session rehydration retries for multiplayer lifecycle endpoints (`join`, `heartbeat`, `queue-next`, and auth-refresh participant recovery) to reduce transient `session_expired` responses under distributed Firestore read/write lag.
 
+### Multiplayer Timeout + Seating Controls
+- Updated turn-timeout behavior so timed-out active players are no longer auto-forfeited/removed immediately.
+- If the timed-out player has selected dice (selection preview captured server-side), timeout now auto-applies score and ends turn automatically.
+- If no selection is present at timeout, the turn still auto-ends to prevent round deadlocks.
+- Added room-level no-seated timeout (`MULTIPLAYER_NO_SEATED_ROOM_TIMEOUT_MS`, default `180000`) so sessions with no seated human players are cleaned up after ~3 minutes:
+  - private/overflow rooms expire with `no_seated_timeout`
+  - public default rooms reset to idle
+- Exposed `noSeatedRoomTimeoutMs` in `/api/health` multiplayer diagnostics.
+
 ### Difficulty-Based Turn Timeout Policy
 - Added per-difficulty multiplayer turn timeout configuration on API:
   - `easy`: 40s
