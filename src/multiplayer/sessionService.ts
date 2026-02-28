@@ -3,6 +3,7 @@ import {
   backendApiService,
   type MultiplayerGameDifficulty,
   type MultiplayerJoinFailureReason,
+  type MultiplayerParticipantStateAction,
   type MultiplayerSessionRecord,
 } from "../services/backendApi.js";
 import { getLocalPlayerId } from "../services/playerIdentity.js";
@@ -146,6 +147,52 @@ export class MultiplayerSessionService {
       } else {
         log.warn(
           `Failed to queue for next multiplayer game: ${current.sessionId} (${response?.reason ?? "unknown"})`
+        );
+      }
+      return null;
+    }
+
+    if (response.session) {
+      const synced = this.syncSessionState({
+        sessionId: response.session.sessionId,
+        roomCode: response.session.roomCode,
+        participants: response.session.participants,
+        standings: response.session.standings,
+        turnState: response.session.turnState ?? null,
+        sessionComplete: response.session.sessionComplete,
+        completedAt: response.session.completedAt ?? null,
+        gameStartedAt: response.session.gameStartedAt,
+        nextGameStartsAt: response.session.nextGameStartsAt,
+        nextGameAutoStartDelayMs: response.session.nextGameAutoStartDelayMs,
+        expiresAt: response.session.expiresAt,
+        serverNow: response.session.serverNow,
+        gameDifficulty: response.session.gameDifficulty,
+      });
+      if (synced) {
+        return synced;
+      }
+    }
+
+    return this.activeSession;
+  }
+
+  async updateParticipantState(
+    action: MultiplayerParticipantStateAction
+  ): Promise<MultiplayerSessionRecord | null> {
+    const current = this.activeSession;
+    if (!current) return null;
+
+    const response = await backendApiService.updateMultiplayerParticipantState(
+      current.sessionId,
+      this.playerId,
+      action
+    );
+    if (!response?.ok) {
+      if (response?.reason === "session_expired") {
+        this.handleSessionExpired("session_expired");
+      } else {
+        log.warn(
+          `Failed to update multiplayer participant state: ${current.sessionId} (${response?.reason ?? "unknown"})`
         );
       }
       return null;

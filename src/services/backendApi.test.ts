@@ -310,6 +310,51 @@ await test("queues multiplayer player for next game", async () => {
   assertEqual(fetchCalls[0].init?.method, "POST", "Expected POST method");
 });
 
+await test("updates multiplayer participant seat/ready state", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    jsonResponse({
+      ok: true,
+      reason: "ok",
+      state: {
+        isSeated: true,
+        isReady: true,
+        queuedForNextGame: false,
+      },
+      session: {
+        sessionId: "session-seat",
+        roomCode: "SEAT42",
+        createdAt: Date.now(),
+      },
+    });
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.updateMultiplayerParticipantState(
+    "session/seat",
+    "player-alpha",
+    "ready"
+  );
+  assert(result !== null, "Expected participant-state response");
+  assertEqual(result?.ok, true, "Expected participant-state success");
+  assertEqual(fetchCalls.length, 1, "Expected one participant-state call");
+  assertEqual(
+    fetchCalls[0].url,
+    "https://api.example.com/api/multiplayer/sessions/session%2Fseat/participant-state",
+    "Expected encoded participant-state endpoint"
+  );
+  const body = JSON.parse(String(fetchCalls[0].init?.body ?? "{}")) as {
+    playerId?: string;
+    action?: string;
+  };
+  assertEqual(body.playerId, "player-alpha", "Expected participant-state player id");
+  assertEqual(body.action, "ready", "Expected participant-state action");
+});
+
 await test("returns typed room_full reason when multiplayer join is rejected", async () => {
   authSessionService.clear();
   fetchCalls.length = 0;

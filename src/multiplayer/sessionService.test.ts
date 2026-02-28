@@ -443,6 +443,80 @@ await test("queueForNextGame syncs updated session state", async () => {
   }
 });
 
+await test("updateParticipantState syncs sit/ready state changes", async () => {
+  const service = new MultiplayerSessionService("player-alpha");
+  const originalJoin = backendApiService.joinMultiplayerSession.bind(backendApiService);
+  const originalUpdate = backendApiService.updateMultiplayerParticipantState.bind(backendApiService);
+
+  (backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession })
+    .joinMultiplayerSession = async () => ({
+      session: createSession({
+        sessionId: "session-seat-state",
+        roomCode: "ROOMS1",
+        participants: [
+          {
+            playerId: "player-alpha",
+            displayName: "Alpha",
+            isSeated: false,
+            isReady: false,
+            queuedForNextGame: false,
+            joinedAt: Date.now(),
+            lastHeartbeatAt: Date.now(),
+          },
+        ],
+      }),
+    });
+  (
+    backendApiService as {
+      updateMultiplayerParticipantState: typeof backendApiService.updateMultiplayerParticipantState;
+    }
+  ).updateMultiplayerParticipantState = async () => ({
+    ok: true,
+    reason: "ok",
+    state: {
+      isSeated: true,
+      isReady: true,
+      queuedForNextGame: false,
+    },
+    session: {
+      sessionId: "session-seat-state",
+      roomCode: "ROOMS1",
+      createdAt: Date.now(),
+      participants: [
+        {
+          playerId: "player-alpha",
+          displayName: "Alpha",
+          isSeated: true,
+          isReady: true,
+          queuedForNextGame: false,
+          joinedAt: Date.now(),
+          lastHeartbeatAt: Date.now(),
+        },
+      ],
+    },
+  });
+
+  try {
+    const joined = await service.joinSession("session-seat-state");
+    assert(joined !== null, "Expected joined session before participant-state update");
+
+    const updated = await service.updateParticipantState("ready");
+    assert(updated !== null, "Expected updated session response");
+    assertEqual(updated?.participants?.[0]?.isSeated, true, "Expected updated seated state");
+    assertEqual(updated?.participants?.[0]?.isReady, true, "Expected updated ready state");
+  } finally {
+    service.dispose();
+    (
+      backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession }
+    ).joinMultiplayerSession = originalJoin;
+    (
+      backendApiService as {
+        updateMultiplayerParticipantState: typeof backendApiService.updateMultiplayerParticipantState;
+      }
+    ).updateMultiplayerParticipantState = originalUpdate;
+  }
+});
+
 await test("queueForNextGame expires active session when API reports session_expired", async () => {
   const documentShim = installDocumentShim();
   const service = new MultiplayerSessionService("player-alpha");

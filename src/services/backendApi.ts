@@ -42,11 +42,36 @@ export interface MultiplayerHeartbeatResponse {
 export interface MultiplayerQueueNextGameResponse {
   ok: boolean;
   queuedForNextGame: boolean;
-  reason?: "session_expired" | "unknown_player" | "round_in_progress" | "unauthorized" | "unknown_session";
+  reason?:
+    | "session_expired"
+    | "unknown_player"
+    | "round_in_progress"
+    | "unauthorized"
+    | "unknown_session"
+    | "not_seated";
   session?: MultiplayerSessionRecord;
 }
 
 export interface MultiplayerSessionAuth extends AuthTokenBundle {}
+
+export type MultiplayerParticipantStateAction = "sit" | "stand" | "ready" | "unready";
+
+export interface MultiplayerParticipantStateResponse {
+  ok: boolean;
+  reason?:
+    | "ok"
+    | "invalid_action"
+    | "session_expired"
+    | "unknown_player"
+    | "unauthorized"
+    | "not_seated";
+  state?: {
+    isSeated: boolean;
+    isReady: boolean;
+    queuedForNextGame: boolean;
+  };
+  session?: MultiplayerSessionRecord;
+}
 
 export interface MultiplayerSessionParticipant {
   playerId: string;
@@ -57,6 +82,7 @@ export interface MultiplayerSessionParticipant {
   lastHeartbeatAt: number;
   isBot?: boolean;
   botProfile?: "cautious" | "balanced" | "aggressive";
+  isSeated?: boolean;
   isReady?: boolean;
   score?: number;
   remainingDice?: number;
@@ -74,6 +100,7 @@ export interface MultiplayerSessionStanding {
   lastHeartbeatAt: number;
   isBot?: boolean;
   botProfile?: "cautious" | "balanced" | "aggressive";
+  isSeated?: boolean;
   isReady?: boolean;
   score?: number;
   remainingDice?: number;
@@ -418,6 +445,20 @@ export class BackendApiService {
       {
         method: "POST",
         body: { playerId },
+      }
+    );
+  }
+
+  async updateMultiplayerParticipantState(
+    sessionId: string,
+    playerId: string,
+    action: MultiplayerParticipantStateAction
+  ): Promise<MultiplayerParticipantStateResponse | null> {
+    return this.request<MultiplayerParticipantStateResponse>(
+      `/multiplayer/sessions/${encodeURIComponent(sessionId)}/participant-state`,
+      {
+        method: "POST",
+        body: { playerId, action },
       }
     );
   }

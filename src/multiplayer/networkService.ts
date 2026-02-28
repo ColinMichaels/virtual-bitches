@@ -185,6 +185,7 @@ export interface MultiplayerSessionStateParticipant {
   lastHeartbeatAt: number;
   isBot?: boolean;
   botProfile?: "cautious" | "balanced" | "aggressive";
+  isSeated?: boolean;
   isReady?: boolean;
   score?: number;
   remainingDice?: number;
@@ -202,6 +203,7 @@ export interface MultiplayerSessionStateStanding {
   lastHeartbeatAt: number;
   isBot?: boolean;
   botProfile?: "cautious" | "balanced" | "aggressive";
+  isSeated?: boolean;
   isReady?: boolean;
   score?: number;
   remainingDice?: number;
