@@ -20,6 +20,7 @@ Environment variables:
 - `API_DEPLOY_PRESERVE_DB` (deploy helper flag, default: `1`; keeps Firestore backend pinned during deploy)
 - `TURN_TIMEOUT_MS` (active turn timeout window, default: `45000`)
 - `TURN_TIMEOUT_WARNING_MS` (pre-timeout warning lead, default: `10000`)
+- `MULTIPLAYER_TURN_TIMEOUT_STAND_STRIKE_LIMIT` (timeouts in the same round before auto-stand/observer move, default: `2`)
 - `MULTIPLAYER_PARTICIPANT_STALE_MS` (disconnect grace window before stale player pruning, default: `45000`)
 - `MULTIPLAYER_CLEANUP_INTERVAL_MS` (background sweep interval for stale players/sessions, default: `15000`)
 - `PUBLIC_ROOM_MIN_PER_DIFFICULTY` (minimum joinable public rooms per difficulty lane, default: `1`)
@@ -218,6 +219,7 @@ Planned (not implemented yet):
   - server-issued roll id: accepted roll actions are stamped with `roll.serverRollId` and mirrored in `turn_start.activeRollServerId`
   - turn recovery sync: `turn_start` can include `phase` + `activeRoll` snapshot (`rollIndex`, `dice[]`, `serverRollId`) so reconnecting clients can resume `await_score` safely
   - timeout metadata: `turn_start`/session `turnState` include `turnExpiresAt` and `turnTimeoutMs`; server emits `turn_timeout_warning` before `turn_auto_advanced` when a turn expires
+  - timeout strike policy: after `MULTIPLAYER_TURN_TIMEOUT_STAND_STRIKE_LIMIT` turn timeouts in the same round, the participant is auto-stood (observer/lounge), removed from the active queue, and the turn auto-advances
   - score payload shape: `turn_action.action=score` with `score.selectedDiceIds[]`, `score.points`, and `score.rollServerId` (must match the server-issued id from the latest accepted roll)
 - Bot participants can emit periodic `player_notification`, `game_update`, and `chaos_attack` messages to connected humans.
 - Leaderboard ordering is deterministic:

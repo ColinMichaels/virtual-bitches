@@ -193,6 +193,10 @@ const TURN_TIMEOUT_WARNING_MS = normalizeTurnWarningValue(
   TURN_TIMEOUT_MS,
   10000
 );
+const TURN_TIMEOUT_STAND_STRIKE_LIMIT = normalizeTurnStrikeLimitValue(
+  process.env.MULTIPLAYER_TURN_TIMEOUT_STAND_STRIKE_LIMIT,
+  2
+);
 const POST_GAME_INACTIVITY_TIMEOUT_MS = normalizeTurnTimeoutValue(
   process.env.MULTIPLAYER_POST_GAME_INACTIVITY_TIMEOUT_MS,
   2 * 60 * 1000
@@ -571,6 +575,7 @@ async function handleRequest(req, res) {
           noSeatedRoomTimeoutMs: NO_SEATED_ROOM_TIMEOUT_MS,
           turnTimeoutMs: TURN_TIMEOUT_MS,
           turnTimeoutByDifficultyMs: TURN_TIMEOUT_BY_DIFFICULTY_MS,
+          turnTimeoutStandStrikeLimit: TURN_TIMEOUT_STAND_STRIKE_LIMIT,
           nextGameAutoStartDelayMs: NEXT_GAME_AUTO_START_DELAY_MS,
           chatConduct: buildAdminChatConductPolicySummary(),
         },
@@ -1372,6 +1377,8 @@ async function handleCreateSession(req, res) {
       isReady: false,
       score: 0,
       remainingDice: DEFAULT_PARTICIPANT_DICE_COUNT,
+      turnTimeoutRound: null,
+      turnTimeoutCount: 0,
       queuedForNextGame: false,
       isComplete: false,
       completedAt: null,
@@ -1510,6 +1517,8 @@ async function handleJoinSessionByTarget(req, res, target) {
       : false,
     score: normalizeParticipantScore(existingParticipant?.score),
     remainingDice: normalizeParticipantRemainingDice(existingParticipant?.remainingDice),
+    turnTimeoutRound: normalizeParticipantTimeoutRound(existingParticipant?.turnTimeoutRound),
+    turnTimeoutCount: normalizeParticipantTimeoutCount(existingParticipant?.turnTimeoutCount),
     queuedForNextGame,
     isComplete: existingParticipant?.isComplete === true,
     completedAt: normalizeParticipantCompletedAt(existingParticipant?.completedAt),
@@ -6108,6 +6117,12 @@ function normalizeStoreConsistency(now = Date.now()) {
         isReady: isBot ? true : rawParticipant.isReady === true && rawParticipant.isSeated !== false,
         score: normalizeParticipantScore(rawParticipant.score),
         remainingDice,
+        turnTimeoutRound: isBot
+          ? null
+          : normalizeParticipantTimeoutRound(rawParticipant.turnTimeoutRound),
+        turnTimeoutCount: isBot
+          ? 0
+          : normalizeParticipantTimeoutCount(rawParticipant.turnTimeoutCount),
         queuedForNextGame: isBot ? false : normalizeQueuedForNextGame(rawParticipant.queuedForNextGame),
         isComplete: rawParticipant.isComplete === true || remainingDice === 0,
         completedAt: normalizeParticipantCompletedAt(rawParticipant.completedAt),
@@ -6257,6 +6272,14 @@ function normalizeTurnWarningValue(rawValue, timeoutMs, fallback) {
   const parsed = Number(rawValue);
   const defaultValue = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
   return Math.max(1000, Math.min(timeoutMs - 500, defaultValue));
+}
+
+function normalizeTurnStrikeLimitValue(rawValue, fallback) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return Math.max(1, Math.floor(fallback));
+  }
+  return Math.max(1, Math.floor(parsed));
 }
 
 function normalizeTurnTimeoutMs(value, fallback = TURN_TIMEOUT_MS) {
@@ -6465,6 +6488,68 @@ function normalizeParticipantCompletedAt(value) {
   return Math.floor(parsed);
 }
 
+function normalizeParticipantTimeoutRound(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+  return Math.max(1, Math.floor(parsed));
+}
+
+function normalizeParticipantTimeoutCount(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(parsed));
+}
+
+function registerParticipantTimeoutStrike(participant, round) {
+  if (!participant || typeof participant !== "object" || isBotParticipant(participant)) {
+    return 0;
+  }
+  const normalizedRound = Number.isFinite(round) && round > 0 ? Math.floor(round) : 1;
+  const previousRound = normalizeParticipantTimeoutRound(participant.turnTimeoutRound);
+  const previousCount = normalizeParticipantTimeoutCount(participant.turnTimeoutCount);
+  const nextCount = previousRound === normalizedRound ? previousCount + 1 : 1;
+  participant.turnTimeoutRound = normalizedRound;
+  participant.turnTimeoutCount = nextCount;
+  return nextCount;
+}
+
+function standParticipantIntoObserverMode(participant, timestamp = Date.now()) {
+  if (!participant || typeof participant !== "object" || isBotParticipant(participant)) {
+    return false;
+  }
+  const now = Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
+  let changed = false;
+  if (participant.isSeated !== false) {
+    participant.isSeated = false;
+    changed = true;
+  }
+  if (participant.isReady === true) {
+    participant.isReady = false;
+    changed = true;
+  }
+  if (participant.queuedForNextGame === true) {
+    participant.queuedForNextGame = false;
+    changed = true;
+  }
+  if (participant.isComplete !== true) {
+    participant.isComplete = true;
+    changed = true;
+  }
+  if (normalizeParticipantCompletedAt(participant.completedAt) === null) {
+    participant.completedAt = now;
+    changed = true;
+  }
+  if (normalizeEpochMs(participant.lastHeartbeatAt, 0) < now) {
+    participant.lastHeartbeatAt = now;
+    changed = true;
+  }
+  return changed;
+}
+
 function isParticipantComplete(participant) {
   if (!participant || typeof participant !== "object") {
     return false;
@@ -6655,6 +6740,8 @@ function resetSessionForNextGame(session, timestamp = Date.now()) {
 
     participant.score = 0;
     participant.remainingDice = DEFAULT_PARTICIPANT_DICE_COUNT;
+    participant.turnTimeoutRound = null;
+    participant.turnTimeoutCount = 0;
     participant.queuedForNextGame = false;
     participant.isComplete = false;
     participant.completedAt = null;
@@ -7937,6 +8024,8 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
 
   let timeoutReason = "turn_timeout";
   const timeoutNow = Date.now();
+  const timeoutRound =
+    Number.isFinite(turnState.round) && turnState.round > 0 ? Math.floor(turnState.round) : 1;
   const timeoutPhase = normalizeTurnPhase(turnState.phase);
   if (timeoutPhase === TURN_PHASES.awaitScore) {
     const pendingScoreSummary = normalizeTurnScoreSummary(turnState.lastScoreSummary);
@@ -7992,6 +8081,29 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
         }
       }
     }
+  }
+
+  const timeoutStrikeCount = registerParticipantTimeoutStrike(timedOutParticipant, timeoutRound);
+  let forcedObserverStand = false;
+  if (timeoutStrikeCount >= TURN_TIMEOUT_STAND_STRIKE_LIMIT) {
+    forcedObserverStand = standParticipantIntoObserverMode(timedOutParticipant, timeoutNow);
+    if (forcedObserverStand) {
+      const timedOutName =
+        typeof timedOutParticipant.displayName === "string" && timedOutParticipant.displayName.trim().length > 0
+          ? timedOutParticipant.displayName.trim()
+          : timedOutPlayerId;
+      broadcastSystemRoomChannelMessage(sessionId, {
+        topic: "seat_state",
+        title: timedOutName,
+        message: `${timedOutName} timed out twice this round and moved to observer lounge.`,
+        severity: "warning",
+        timestamp: timeoutNow,
+      });
+    }
+    timeoutReason =
+      timeoutReason === "turn_timeout_auto_score"
+        ? "turn_timeout_auto_score_stand"
+        : "turn_timeout_stand";
   }
 
   if (normalizeTurnPhase(turnState.phase) !== TURN_PHASES.readyToEnd) {
