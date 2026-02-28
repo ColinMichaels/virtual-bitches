@@ -1181,7 +1181,7 @@ async function handleSessionHeartbeat(req, res, pathname) {
 
   const now = Date.now();
   session.participants[playerId].lastHeartbeatAt = now;
-  markSessionActivity(session, playerId, now, { countAsPlayerAction: false });
+  markSessionActivity(session, playerId, now);
   await persistStore();
   sendJson(res, 200, { ok: true });
 }
@@ -1556,8 +1556,9 @@ async function handleRefreshSessionAuth(req, res, pathname) {
   if (participant && typeof participant === "object") {
     participant.lastHeartbeatAt = now;
   }
-  // Token refresh is an authenticated presence signal and should keep the participant active.
-  markSessionActivity(session, playerId, now, { countAsPlayerAction: false });
+  // Token refresh is an authenticated presence signal and should keep the participant active,
+  // including post-game queue windows.
+  markSessionActivity(session, playerId, now);
   reconcileSessionLoops(sessionId);
 
   const auth = issueAuthTokenBundle(playerId, sessionId);
@@ -4915,14 +4916,16 @@ function scheduleSessionPostGameLifecycle(session, timestamp = Date.now()) {
   const completedAt = Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
   const gameStartedAt = resolveSessionGameStartedAt(session, completedAt);
   const nextGameStartsAt = gameStartedAt + NEXT_GAME_AUTO_START_DELAY_MS;
+  const postGameIdleFloor = nextGameStartsAt + 1000;
   const currentPostGameActivityAt = normalizePostGameTimestamp(session?.postGameActivityAt);
   const postGameActivityAt =
     currentPostGameActivityAt !== null ? currentPostGameActivityAt : completedAt;
   const currentPostGameIdleExpiresAt = normalizePostGameTimestamp(session?.postGameIdleExpiresAt);
-  const postGameIdleExpiresAt =
+  const postGameIdleCandidate =
     currentPostGameIdleExpiresAt !== null
       ? currentPostGameIdleExpiresAt
       : postGameActivityAt + POST_GAME_INACTIVITY_TIMEOUT_MS;
+  const postGameIdleExpiresAt = Math.max(postGameIdleCandidate, postGameIdleFloor);
 
   let changed = false;
   if (normalizePostGameTimestamp(session.nextGameStartsAt) !== nextGameStartsAt) {
@@ -4945,7 +4948,9 @@ function markSessionPostGamePlayerAction(session, timestamp = Date.now()) {
     return false;
   }
   const actionAt = Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
-  const postGameIdleExpiresAt = actionAt + POST_GAME_INACTIVITY_TIMEOUT_MS;
+  const nextGameStartsAt = resolveSessionNextGameStartsAt(session, actionAt);
+  const postGameIdleFloor = nextGameStartsAt + 1000;
+  const postGameIdleExpiresAt = Math.max(actionAt + POST_GAME_INACTIVITY_TIMEOUT_MS, postGameIdleFloor);
   let changed = false;
   if (normalizePostGameTimestamp(session.postGameActivityAt) !== actionAt) {
     session.postGameActivityAt = actionAt;
