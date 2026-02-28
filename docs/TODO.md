@@ -171,8 +171,21 @@ Reference docs:
     - `interaction_blocked` realtime rejection
   - [x] Add chat-conduct smoke segment for strike accumulation + temporary mute (+ admin clear recovery path).
   - [x] Add admin tooling endpoints for reviewing/clearing chat strikes/mutes.
+  - [x] Replace static banned-term config wiring with adaptive in-process term service (seed + managed + optional remote sync/poll + admin term management endpoints).
   - [ ] Expand chat conduct test matrix for mute-expiry timing and auto-ban threshold edge cases.
   - [ ] Extract in-process chat conduct enforcement into a standalone moderation service (contract stub documented in `docs/CHAT-CONDUCT-SERVICE-PLAN.md`).
+
+#### Admin Portal (`/admin`) Angular Track (2026-02-28)
+- **Status**: 🔵 Planned (documented, not started in pipeline)
+- **Plan Doc**: `docs/ADMIN-PORTAL-ANGULAR-PLAN.md`
+- **Intent**:
+  - Build a separate Angular + Angular Material admin surface under `/admin`
+  - Keep gameplay bundle lean and keep admin dependencies isolated
+- **Next steps**:
+  - [ ] Scaffold `/admin` Angular workspace with strict TS + Material baseline.
+  - [ ] Implement auth bootstrap + role guards (`viewer`/`operator`/`owner`).
+  - [ ] Build dashboard/rooms/conduct modules against current admin API.
+  - [ ] Add dedicated admin CI workflow separate from gameplay pipeline.
 
 #### Multiplayer Player Interaction Menu Scaffold (2026-02-28)
 - **Status**: 🟡 Baseline complete and extracted into `src/ui/playerInteractions.ts`

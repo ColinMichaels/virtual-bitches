@@ -3,11 +3,13 @@
 ## Scope
 
 This document defines the moderation contract for multiplayer chat conduct.
-Current implementation is an in-process bootstrap, intentionally isolated so it can be extracted into a standalone API service later.
+Current implementation is an in-process service bootstrap, intentionally isolated so it can be extracted into a standalone API service later.
 
 ## Current Bootstrap (In Process)
 
-- Module: `api/moderation/chatConduct.mjs`
+- Modules:
+  - `api/moderation/chatConduct.mjs` (strike/mute evaluation)
+  - `api/moderation/termService.mjs` (seed + managed + remote term aggregation)
 - Integration point: `relayRealtimeSocketMessage(...)` in `api/server.mjs`
 - First-pass enforcement:
   - public room-channel profanity filter (default)
@@ -20,6 +22,10 @@ Current implementation is an in-process bootstrap, intentionally isolated so it 
   - `GET /api/admin/sessions/:sessionId/conduct/players/:playerId`
   - `POST /api/admin/sessions/:sessionId/conduct/players/:playerId/clear`
   - `POST /api/admin/sessions/:sessionId/conduct/clear`
+  - `GET /api/admin/moderation/terms`
+  - `POST /api/admin/moderation/terms/upsert`
+  - `POST /api/admin/moderation/terms/remove`
+  - `POST /api/admin/moderation/terms/refresh`
 
 ## Session State Contract
 
@@ -76,11 +82,19 @@ Target request/response shape for future extraction:
 - `MULTIPLAYER_CHAT_STRIKE_WINDOW_MS` (default `900000`)
 - `MULTIPLAYER_CHAT_MUTE_MS` (default `300000`)
 - `MULTIPLAYER_CHAT_AUTO_ROOM_BAN_STRIKE_LIMIT` (default `0`, disabled)
+- `MULTIPLAYER_CHAT_TERMS_SERVICE_URL` (optional remote term feed URL)
+- `MULTIPLAYER_CHAT_TERMS_SERVICE_API_KEY` (optional remote auth token)
+- `MULTIPLAYER_CHAT_TERMS_SERVICE_API_KEY_HEADER` (optional auth header name, default `x-api-key`)
+- `MULTIPLAYER_CHAT_TERMS_REFRESH_MS` (remote poll interval in ms; default `60000` when URL set)
+- `MULTIPLAYER_CHAT_TERMS_FETCH_TIMEOUT_MS` (remote fetch timeout in ms, default `6000`)
+- `MULTIPLAYER_CHAT_TERMS_SYNC_ON_BOOT` (`1` default; `0` disables bootstrap sync)
+- `MULTIPLAYER_CHAT_TERMS_MAX_MANAGED` (max managed terms, default `2048`)
+- `MULTIPLAYER_CHAT_TERMS_MAX_REMOTE` (max remote terms, default `4096`)
 
 If `MULTIPLAYER_CHAT_BANNED_TERMS` is unset, server falls back to `MULTIPLAYER_ROOM_CHANNEL_BAD_TERMS`.
 
 ## Next Steps
 
 1. Add richer term severity categories and per-room policy overrides.
-2. Add mute-expiry and auto-ban edge-case integration coverage for CI.
-3. Move evaluation and policy state to a dedicated moderation service with API auth, audit logs, and rate limiting.
+2. Add dedicated e2e assertions for `/api/admin/moderation/terms/*` endpoint contract.
+3. Move in-process term + strike state to an external moderation service with API auth, audit logs, and rate limiting.

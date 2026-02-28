@@ -13,6 +13,7 @@ import {
   evaluateRoomChannelConduct,
   normalizeChatConductState,
 } from "./moderation/chatConduct.mjs";
+import { createChatModerationTermService } from "./moderation/termService.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,19 +50,38 @@ const ROOM_CHANNEL_BAD_TERMS = parseDelimitedEnvSet(
   process.env.MULTIPLAYER_ROOM_CHANNEL_BAD_TERMS,
   (value) => value.toLowerCase()
 );
-const CHAT_CONDUCT_BANNED_TERMS = resolveChatConductTerms(
+const CHAT_CONDUCT_SEED_TERMS = resolveChatConductTerms(
   process.env.MULTIPLAYER_CHAT_BANNED_TERMS,
   ROOM_CHANNEL_BAD_TERMS
 );
-const CHAT_CONDUCT_POLICY = createChatConductPolicy({
+const CHAT_CONDUCT_TERM_SERVICE_URL =
+  typeof process.env.MULTIPLAYER_CHAT_TERMS_SERVICE_URL === "string"
+    ? process.env.MULTIPLAYER_CHAT_TERMS_SERVICE_URL.trim()
+    : "";
+const CHAT_CONDUCT_TERM_SERVICE_REFRESH_MS = normalizeChatTermsRefreshValue(
+  process.env.MULTIPLAYER_CHAT_TERMS_REFRESH_MS,
+  CHAT_CONDUCT_TERM_SERVICE_URL ? 60 * 1000 : 0
+);
+const CHAT_CONDUCT_TERM_SYNC_ON_BOOT = process.env.MULTIPLAYER_CHAT_TERMS_SYNC_ON_BOOT !== "0";
+const CHAT_CONDUCT_TERM_SERVICE = createChatModerationTermService({
+  seedTerms: CHAT_CONDUCT_SEED_TERMS,
+  remoteUrl: CHAT_CONDUCT_TERM_SERVICE_URL,
+  remoteApiKey: process.env.MULTIPLAYER_CHAT_TERMS_SERVICE_API_KEY,
+  remoteApiKeyHeader: process.env.MULTIPLAYER_CHAT_TERMS_SERVICE_API_KEY_HEADER,
+  requestTimeoutMs: process.env.MULTIPLAYER_CHAT_TERMS_FETCH_TIMEOUT_MS,
+  maxManagedTerms: process.env.MULTIPLAYER_CHAT_TERMS_MAX_MANAGED,
+  maxRemoteTerms: process.env.MULTIPLAYER_CHAT_TERMS_MAX_REMOTE,
+});
+const CHAT_CONDUCT_BASE_POLICY = createChatConductPolicy({
   enabled: process.env.MULTIPLAYER_CHAT_CONDUCT_ENABLED !== "0",
   publicOnly: process.env.MULTIPLAYER_CHAT_CONDUCT_PUBLIC_ONLY !== "0",
-  bannedTerms: CHAT_CONDUCT_BANNED_TERMS,
+  bannedTerms: CHAT_CONDUCT_SEED_TERMS,
   strikeLimit: process.env.MULTIPLAYER_CHAT_STRIKE_LIMIT,
   strikeWindowMs: process.env.MULTIPLAYER_CHAT_STRIKE_WINDOW_MS,
   muteDurationMs: process.env.MULTIPLAYER_CHAT_MUTE_MS,
   autoBanStrikeLimit: process.env.MULTIPLAYER_CHAT_AUTO_ROOM_BAN_STRIKE_LIMIT,
 });
+const MODERATION_STORE_CHAT_TERMS_KEY = "chatTerms";
 const log = logger.create("Server");
 const SHORT_SESSION_TTL_REQUESTED = process.env.ALLOW_SHORT_SESSION_TTLS === "1";
 const ALLOW_SHORT_SESSION_TTLS = SHORT_SESSION_TTL_REQUESTED && NODE_ENV !== "production";
@@ -218,6 +238,7 @@ let storeAdapter = null;
 let firebaseAdminAuthClientPromise = null;
 let storeRehydratePromise = null;
 let lastStoreRehydrateAt = 0;
+let chatConductTermRefreshHandle = null;
 
 const server = createServer((req, res) => {
   void handleRequest(req, res);
@@ -243,6 +264,7 @@ const botEngine = createBotEngine({
 });
 
 await bootstrap();
+startChatConductTermRefreshLoop();
 
 server.on("upgrade", async (req, socket) => {
   try {
@@ -296,6 +318,26 @@ if (typeof cleanupSweepHandle.unref === "function") {
   cleanupSweepHandle.unref();
 }
 
+function startChatConductTermRefreshLoop() {
+  if (chatConductTermRefreshHandle) {
+    return;
+  }
+  if (CHAT_CONDUCT_TERM_SERVICE_REFRESH_MS <= 0) {
+    return;
+  }
+  if (!CHAT_CONDUCT_TERM_SERVICE_URL) {
+    return;
+  }
+
+  chatConductTermRefreshHandle = setInterval(() => {
+    void refreshChatModerationTermsFromRemote({ source: "interval" });
+  }, CHAT_CONDUCT_TERM_SERVICE_REFRESH_MS);
+  if (typeof chatConductTermRefreshHandle.unref === "function") {
+    chatConductTermRefreshHandle.unref();
+  }
+  log.info(`Chat moderation term refresh loop: every ${CHAT_CONDUCT_TERM_SERVICE_REFRESH_MS}ms`);
+}
+
 async function bootstrap() {
   storeAdapter = await createStoreAdapter({
     backend: STORE_BACKEND,
@@ -306,6 +348,7 @@ async function bootstrap() {
     logger: log,
   });
   store = await storeAdapter.load();
+  hydrateChatModerationTermsFromStore();
   log.info(`Using ${storeAdapter.name} store backend`);
   if (storeAdapter.name === "firestore") {
     const prefix = storeAdapter.metadata?.collectionPrefix ?? FIRESTORE_COLLECTION_PREFIX;
@@ -326,9 +369,22 @@ async function bootstrap() {
   log.info(
     `Admin bootstrap owners: uids=${ADMIN_OWNER_UID_ALLOWLIST.size} emails=${ADMIN_OWNER_EMAIL_ALLOWLIST.size}`
   );
+  const chatConductPolicy = getChatConductPolicy();
+  const chatConductTermsSnapshot = CHAT_CONDUCT_TERM_SERVICE.getSnapshot();
   log.info(
-    `Chat conduct filter: enabled=${CHAT_CONDUCT_POLICY.enabled} publicOnly=${CHAT_CONDUCT_POLICY.publicOnly} terms=${CHAT_CONDUCT_POLICY.bannedTerms.size} strikeLimit=${CHAT_CONDUCT_POLICY.strikeLimit} muteMs=${CHAT_CONDUCT_POLICY.muteDurationMs} autoBanStrikeLimit=${CHAT_CONDUCT_POLICY.autoBanStrikeLimit}`
+    `Chat conduct filter: enabled=${chatConductPolicy.enabled} publicOnly=${chatConductPolicy.publicOnly} terms=${chatConductPolicy.bannedTerms.size} strikeLimit=${chatConductPolicy.strikeLimit} muteMs=${chatConductPolicy.muteDurationMs} autoBanStrikeLimit=${chatConductPolicy.autoBanStrikeLimit} managedTerms=${chatConductTermsSnapshot.managedTermCount} remoteTerms=${chatConductTermsSnapshot.remoteTermCount} remoteConfigured=${chatConductTermsSnapshot.remoteConfigured}`
   );
+  if (CHAT_CONDUCT_TERM_SYNC_ON_BOOT && chatConductTermsSnapshot.remoteConfigured) {
+    const bootstrapSync = await refreshChatModerationTermsFromRemote({
+      source: "bootstrap",
+      persistOnNoChange: true,
+    });
+    if (!bootstrapSync.ok) {
+      log.warn(
+        `Chat moderation term bootstrap sync skipped (${bootstrapSync.reason ?? "unknown"})`
+      );
+    }
+  }
   const publicRoomsChanged = reconcilePublicRoomInventory(Date.now());
   Object.keys(store.multiplayerSessions).forEach((sessionId) => {
     reconcileSessionLoops(sessionId);
@@ -379,15 +435,7 @@ async function handleRequest(req, res) {
           cleanupIntervalMs: MULTIPLAYER_CLEANUP_INTERVAL_MS,
           turnTimeoutMs: TURN_TIMEOUT_MS,
           nextGameAutoStartDelayMs: NEXT_GAME_AUTO_START_DELAY_MS,
-          chatConduct: {
-            enabled: CHAT_CONDUCT_POLICY.enabled,
-            publicOnly: CHAT_CONDUCT_POLICY.publicOnly,
-            bannedTermsCount: CHAT_CONDUCT_POLICY.bannedTerms.size,
-            strikeLimit: CHAT_CONDUCT_POLICY.strikeLimit,
-            strikeWindowMs: CHAT_CONDUCT_POLICY.strikeWindowMs,
-            muteDurationMs: CHAT_CONDUCT_POLICY.muteDurationMs,
-            autoBanStrikeLimit: CHAT_CONDUCT_POLICY.autoBanStrikeLimit,
-          },
+          chatConduct: buildAdminChatConductPolicySummary(),
         },
         storage: buildStoreDiagnostics(),
       });
@@ -416,6 +464,26 @@ async function handleRequest(req, res) {
 
     if (req.method === "GET" && pathname === "/api/admin/storage") {
       await handleAdminStorage(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/api/admin/moderation/terms") {
+      await handleAdminModerationTermsOverview(req, res, url);
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/api/admin/moderation/terms/upsert") {
+      await handleAdminUpsertModerationTerm(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/api/admin/moderation/terms/remove") {
+      await handleAdminRemoveModerationTerm(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/api/admin/moderation/terms/refresh") {
+      await handleAdminRefreshModerationTerms(req, res);
       return;
     }
 
@@ -1925,6 +1993,189 @@ async function handleAdminStorage(req, res) {
   });
 }
 
+async function handleAdminModerationTermsOverview(req, res, url) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.operator });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const now = Date.now();
+  const includeTerms = url.searchParams.get("includeTerms") === "1";
+  const limit = parseAdminModerationTermLimit(url.searchParams.get("limit"));
+  const snapshot = CHAT_CONDUCT_TERM_SERVICE.getSnapshot(now);
+
+  sendJson(res, 200, {
+    timestamp: now,
+    accessMode: auth.mode,
+    principal: buildAdminPrincipal(auth),
+    policy: buildAdminChatConductPolicySummary(now),
+    terms: {
+      remoteConfigured: snapshot.remoteConfigured,
+      seedTermCount: snapshot.seedTermCount,
+      managedTermCount: snapshot.managedTermCount,
+      remoteTermCount: snapshot.remoteTermCount,
+      activeTermCount: snapshot.activeTermCount,
+      lastRemoteSyncAt: snapshot.lastRemoteSyncAt,
+      lastRemoteAttemptAt: snapshot.lastRemoteAttemptAt,
+      lastRemoteError: snapshot.lastRemoteError,
+      remoteSyncStaleMs: snapshot.remoteSyncStaleMs,
+      refreshIntervalMs: CHAT_CONDUCT_TERM_SERVICE_REFRESH_MS,
+      policy: snapshot.policy,
+      ...(includeTerms
+        ? {
+            seedTerms: snapshot.seedTerms.slice(0, limit),
+            managedTerms: snapshot.managedTerms.slice(0, limit),
+            remoteTerms: snapshot.remoteTerms.slice(0, limit),
+            activeTerms: snapshot.activeTerms.slice(0, limit),
+          }
+        : {}),
+    },
+  });
+}
+
+async function handleAdminUpsertModerationTerm(req, res) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.operator });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const body = await parseJsonBody(req);
+  const term = typeof body?.term === "string" ? body.term : "";
+  const enabled = body?.enabled !== false;
+  const note = typeof body?.note === "string" ? body.note : "";
+  const now = Date.now();
+  const upsertResult = CHAT_CONDUCT_TERM_SERVICE.upsertManagedTerm(term, {
+    enabled,
+    note,
+    addedBy:
+      typeof auth.uid === "string" && auth.uid.trim().length > 0
+        ? auth.uid.trim()
+        : `admin:${auth.authType ?? "unknown"}`,
+    timestamp: now,
+  });
+  if (!upsertResult.ok) {
+    const status = upsertResult.reason === "max_terms_reached" ? 409 : 400;
+    sendJson(res, status, {
+      error: "Invalid moderation term",
+      reason: upsertResult.reason,
+    });
+    return;
+  }
+
+  recordAdminAuditEvent(auth, "moderation_term_upsert", {
+    summary: `${upsertResult.created ? "Added" : "Updated"} moderation term ${upsertResult.term}`,
+    term: upsertResult.term,
+    enabled: upsertResult.record?.enabled !== false,
+    created: upsertResult.created === true,
+  });
+  await persistStore();
+
+  sendJson(res, 200, {
+    ok: true,
+    term: upsertResult.term,
+    created: upsertResult.created === true,
+    record: upsertResult.record,
+    policy: buildAdminChatConductPolicySummary(now),
+    terms: CHAT_CONDUCT_TERM_SERVICE.getSnapshot(now),
+    principal: buildAdminPrincipal(auth),
+  });
+}
+
+async function handleAdminRemoveModerationTerm(req, res) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.operator });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const body = await parseJsonBody(req);
+  const term = typeof body?.term === "string" ? body.term : "";
+  const removeResult = CHAT_CONDUCT_TERM_SERVICE.removeManagedTerm(term);
+  if (!removeResult.ok) {
+    sendJson(res, 400, {
+      error: "Invalid moderation term",
+      reason: removeResult.reason,
+    });
+    return;
+  }
+
+  const now = Date.now();
+  recordAdminAuditEvent(auth, "moderation_term_remove", {
+    summary: `Removed moderation term ${removeResult.term}`,
+    term: removeResult.term,
+    removed: removeResult.removed === true,
+  });
+  await persistStore();
+
+  sendJson(res, 200, {
+    ok: true,
+    term: removeResult.term,
+    removed: removeResult.removed === true,
+    policy: buildAdminChatConductPolicySummary(now),
+    terms: CHAT_CONDUCT_TERM_SERVICE.getSnapshot(now),
+    principal: buildAdminPrincipal(auth),
+  });
+}
+
+async function handleAdminRefreshModerationTerms(req, res) {
+  const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.operator });
+  if (!auth.ok) {
+    sendJson(res, auth.status, {
+      error: "Unauthorized",
+      reason: auth.reason,
+    });
+    return;
+  }
+
+  const refresh = await refreshChatModerationTermsFromRemote({
+    source: "admin_refresh",
+    persistOnChange: false,
+    persistOnNoChange: false,
+  });
+  if (!refresh.ok) {
+    const status =
+      refresh.reason === "remote_not_configured"
+        ? 409
+        : refresh.reason === "fetch_unavailable"
+          ? 500
+          : 502;
+    sendJson(res, status, {
+      error: "Failed to refresh moderation terms",
+      reason: refresh.reason,
+      details: refresh,
+    });
+    return;
+  }
+
+  const now = Date.now();
+  recordAdminAuditEvent(auth, "moderation_term_refresh", {
+    summary: `Refreshed moderation terms (${refresh.remoteTermCount ?? 0} remote terms)`,
+    changed: refresh.changed === true,
+    remoteTermCount: refresh.remoteTermCount ?? 0,
+    activeTermCount: refresh.activeTermCount ?? 0,
+  });
+  await persistStore();
+
+  sendJson(res, 200, {
+    ok: true,
+    refresh,
+    policy: buildAdminChatConductPolicySummary(now),
+    terms: CHAT_CONDUCT_TERM_SERVICE.getSnapshot(now),
+    principal: buildAdminPrincipal(auth),
+  });
+}
+
 async function handleAdminAudit(req, res, url) {
   const auth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.viewer });
   if (!auth.ok) {
@@ -2456,7 +2707,7 @@ async function handleAdminClearSessionConductPlayer(req, res, pathname) {
       existingRecord.totalStrikes = 0;
     }
   }
-  session.chatConductState = normalizeChatConductState(state, CHAT_CONDUCT_POLICY, now);
+  session.chatConductState = normalizeChatConductState(state, CHAT_CONDUCT_BASE_POLICY, now);
   const updatedPlayer = buildAdminChatConductPlayerRecord(
     session,
     playerId,
@@ -2515,7 +2766,7 @@ async function handleAdminClearSessionConductState(req, res, pathname) {
   const state = ensureSessionChatConductState(session, now);
   const clearedPlayerCount = Object.keys(state.players).length;
   state.players = {};
-  session.chatConductState = normalizeChatConductState(state, CHAT_CONDUCT_POLICY, now);
+  session.chatConductState = normalizeChatConductState(state, CHAT_CONDUCT_BASE_POLICY, now);
 
   recordAdminAuditEvent(auth, "session_conduct_clear_all", {
     summary: `Cleared chat conduct state for ${sessionId}`,
@@ -2532,15 +2783,54 @@ async function handleAdminClearSessionConductState(req, res, pathname) {
   });
 }
 
-function buildAdminChatConductPolicySummary() {
+function getChatConductPolicy() {
   return {
-    enabled: CHAT_CONDUCT_POLICY.enabled,
-    publicOnly: CHAT_CONDUCT_POLICY.publicOnly,
-    bannedTermsCount: CHAT_CONDUCT_POLICY.bannedTerms.size,
-    strikeLimit: CHAT_CONDUCT_POLICY.strikeLimit,
-    strikeWindowMs: CHAT_CONDUCT_POLICY.strikeWindowMs,
-    muteDurationMs: CHAT_CONDUCT_POLICY.muteDurationMs,
-    autoBanStrikeLimit: CHAT_CONDUCT_POLICY.autoBanStrikeLimit,
+    ...CHAT_CONDUCT_BASE_POLICY,
+    bannedTerms: CHAT_CONDUCT_TERM_SERVICE.getActiveTerms(),
+  };
+}
+
+function ensureModerationStoreSection() {
+  if (
+    !store.moderation ||
+    typeof store.moderation !== "object" ||
+    Array.isArray(store.moderation)
+  ) {
+    store.moderation = {};
+  }
+  return store.moderation;
+}
+
+function hydrateChatModerationTermsFromStore() {
+  const moderation = ensureModerationStoreSection();
+  const persistedState = moderation[MODERATION_STORE_CHAT_TERMS_KEY];
+  CHAT_CONDUCT_TERM_SERVICE.hydrateFromStore(persistedState);
+}
+
+function exportChatModerationTermsToStore() {
+  const moderation = ensureModerationStoreSection();
+  moderation[MODERATION_STORE_CHAT_TERMS_KEY] =
+    CHAT_CONDUCT_TERM_SERVICE.exportToStoreState();
+}
+
+function buildAdminChatConductPolicySummary(now = Date.now()) {
+  const policy = getChatConductPolicy();
+  const terms = CHAT_CONDUCT_TERM_SERVICE.getSnapshot(now);
+  return {
+    enabled: policy.enabled,
+    publicOnly: policy.publicOnly,
+    bannedTermsCount: policy.bannedTerms.size,
+    strikeLimit: policy.strikeLimit,
+    strikeWindowMs: policy.strikeWindowMs,
+    muteDurationMs: policy.muteDurationMs,
+    autoBanStrikeLimit: policy.autoBanStrikeLimit,
+    managedTermsCount: terms.managedTermCount,
+    remoteTermsCount: terms.remoteTermCount,
+    remoteConfigured: terms.remoteConfigured,
+    lastRemoteSyncAt: terms.lastRemoteSyncAt,
+    lastRemoteAttemptAt: terms.lastRemoteAttemptAt,
+    lastRemoteError: terms.lastRemoteError,
+    termRefreshIntervalMs: CHAT_CONDUCT_TERM_SERVICE_REFRESH_MS,
   };
 }
 
@@ -2833,6 +3123,14 @@ function parseAdminConductLimit(rawValue) {
     return ADMIN_CONDUCT_LIST_LIMIT_DEFAULT;
   }
   return Math.max(1, Math.min(ADMIN_CONDUCT_LIST_LIMIT_MAX, Math.floor(parsed)));
+}
+
+function parseAdminModerationTermLimit(rawValue) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return 250;
+  }
+  return Math.max(1, Math.min(5000, Math.floor(parsed)));
 }
 
 async function authorizeAdminRequest(req, options = {}) {
@@ -5199,6 +5497,16 @@ function parseDelimitedEnvSet(rawValue, normalizer = (value) => value) {
   return new Set(values);
 }
 
+function normalizeChatTermsRefreshValue(rawValue, fallback) {
+  const fallbackValue =
+    Number.isFinite(Number(fallback)) && Number(fallback) > 0 ? Math.floor(Number(fallback)) : 0;
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallbackValue;
+  }
+  return Math.max(5000, Math.min(24 * 60 * 60 * 1000, Math.floor(parsed)));
+}
+
 function resolveChatConductTerms(rawValue, fallbackTerms = new Set()) {
   const explicitTerms = parseDelimitedEnvSet(rawValue, (value) => value.toLowerCase());
   if (explicitTerms.size > 0) {
@@ -7136,7 +7444,7 @@ function ensureSessionChatConductState(session, now = Date.now()) {
   if (!session || typeof session !== "object") {
     return createEmptyChatConductState();
   }
-  const normalized = normalizeChatConductState(session.chatConductState, CHAT_CONDUCT_POLICY, now);
+  const normalized = normalizeChatConductState(session.chatConductState, CHAT_CONDUCT_BASE_POLICY, now);
   session.chatConductState = normalized;
   return normalized;
 }
@@ -8050,7 +8358,7 @@ function relayRealtimeSocketMessage(client, session, payload, now = Date.now()) 
     }
     const chatConductState = ensureSessionChatConductState(session, now);
     const conductEvaluation = evaluateRoomChannelConduct({
-      policy: CHAT_CONDUCT_POLICY,
+      policy: getChatConductPolicy(),
       state: chatConductState,
       playerId: client.playerId,
       channel: normalizedChannel,
@@ -8914,7 +9222,32 @@ async function persistStore() {
   if (!storeAdapter) {
     return;
   }
+  exportChatModerationTermsToStore();
   await storeAdapter.save(store);
+}
+
+async function refreshChatModerationTermsFromRemote(options = {}) {
+  const source =
+    typeof options.source === "string" && options.source.trim().length > 0
+      ? options.source.trim()
+      : "manual";
+  const persistOnChange = options.persistOnChange !== false;
+  const persistOnNoChange = options.persistOnNoChange === true;
+  const result = await CHAT_CONDUCT_TERM_SERVICE.refreshFromRemote(globalThis.fetch, Date.now());
+  if (!result.ok) {
+    if (source !== "interval") {
+      log.warn(`Chat moderation term refresh failed (${source}): ${result.reason ?? "unknown"}`);
+    }
+    return result;
+  }
+
+  log.info(
+    `Chat moderation term refresh (${source}): changed=${result.changed === true} remoteTerms=${result.remoteTermCount ?? 0} activeTerms=${result.activeTermCount ?? 0}`
+  );
+  if ((result.changed === true && persistOnChange) || (result.changed !== true && persistOnNoChange)) {
+    await persistStore();
+  }
+  return result;
 }
 
 async function rehydrateStoreFromAdapter(reason, options = {}) {
@@ -8942,6 +9275,7 @@ async function rehydrateStoreFromAdapter(reason, options = {}) {
         return false;
       }
       store = loaded;
+      hydrateChatModerationTermsFromStore();
       lastStoreRehydrateAt = Date.now();
       log.debug(`Store rehydrated from adapter (${reason})`);
       return true;

@@ -38,6 +38,14 @@ Environment variables:
 - `MULTIPLAYER_CHAT_STRIKE_WINDOW_MS` (rolling strike window, default: `900000`)
 - `MULTIPLAYER_CHAT_MUTE_MS` (temporary mute duration, default: `300000`)
 - `MULTIPLAYER_CHAT_AUTO_ROOM_BAN_STRIKE_LIMIT` (optional auto-ban threshold; default: `0` disabled)
+- `MULTIPLAYER_CHAT_TERMS_SERVICE_URL` (optional remote moderation-term endpoint returning JSON list)
+- `MULTIPLAYER_CHAT_TERMS_SERVICE_API_KEY` (optional API key for remote moderation-term endpoint)
+- `MULTIPLAYER_CHAT_TERMS_SERVICE_API_KEY_HEADER` (optional API key header name, default: `x-api-key`)
+- `MULTIPLAYER_CHAT_TERMS_REFRESH_MS` (remote refresh interval in ms, default: `60000` when service URL is set)
+- `MULTIPLAYER_CHAT_TERMS_FETCH_TIMEOUT_MS` (remote fetch timeout in ms, default: `6000`)
+- `MULTIPLAYER_CHAT_TERMS_SYNC_ON_BOOT` (`1` default; `0` skips bootstrap remote sync)
+- `MULTIPLAYER_CHAT_TERMS_MAX_MANAGED` (max managed terms stored by API, default: `2048`)
+- `MULTIPLAYER_CHAT_TERMS_MAX_REMOTE` (max remote terms ingested per refresh, default: `4096`)
 
 ## Storage
 
@@ -87,6 +95,10 @@ API_DEPLOY_PRESERVE_DB=0 API_STORE_BACKEND=file API_ALLOW_FILE_STORE_IN_PRODUCTI
 - `GET /api/admin/rooms`
 - `GET /api/admin/metrics`
 - `GET /api/admin/storage`
+- `GET /api/admin/moderation/terms`
+- `POST /api/admin/moderation/terms/upsert`
+- `POST /api/admin/moderation/terms/remove`
+- `POST /api/admin/moderation/terms/refresh`
 - `GET /api/admin/audit`
 - `GET /api/admin/roles`
 - `PUT /api/admin/roles/:uid`
@@ -153,6 +165,11 @@ Planned (not implemented yet):
       - `GET /api/admin/sessions/:sessionId/conduct/players/:playerId`
       - `POST /api/admin/sessions/:sessionId/conduct/players/:playerId/clear`
       - `POST /api/admin/sessions/:sessionId/conduct/clear`
+    - manage chat moderation term service:
+      - `GET /api/admin/moderation/terms` (`includeTerms=1` to include full term lists)
+      - `POST /api/admin/moderation/terms/upsert`
+      - `POST /api/admin/moderation/terms/remove`
+      - `POST /api/admin/moderation/terms/refresh`
   - `GET /api/admin/storage` exposes active persistence backend + section counts for audit checks.
   - Admin metrics now include cumulative turn auto-advance counters for timeout advances and bot advances.
   - Mutation actions are written to admin audit logs and exposed via `GET /api/admin/audit`.
@@ -167,7 +184,7 @@ Planned (not implemented yet):
   - `session=<sessionId>`
   - `playerId=<playerId>`
   - `token=<playerToken or auth.accessToken>`
-- Supported WS message types for relay:
+  - Supported WS message types for relay:
   - `chaos_attack`
   - `particle:emit`
   - `game_update` (`title` + `content` required)
@@ -175,6 +192,7 @@ Planned (not implemented yet):
   - `room_channel` (`channel: "public" | "direct"`, `message` required, `targetPlayerId` required for `direct`)
     - server enforces block lists for sender/recipient visibility
     - server applies chat conduct middleware (`api/moderation/chatConduct.mjs`) with warning/strike/mute flow
+    - blocked terms are resolved from `api/moderation/termService.mjs` (seed + managed + optional remote feed)
     - server can reject sender/message via moderation lists:
       - `MULTIPLAYER_ROOM_CHANNEL_BAD_PLAYER_IDS` (legacy sender denylist)
       - `MULTIPLAYER_CHAT_BANNED_TERMS` (or fallback `MULTIPLAYER_ROOM_CHANNEL_BAD_TERMS`)
