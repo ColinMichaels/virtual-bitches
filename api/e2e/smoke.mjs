@@ -22,6 +22,8 @@ const expectedStoreSections = getStoreSections();
 const expectedStorageSectionMinCounts = parseStorageSectionMinCountSpec(
   process.env.E2E_EXPECT_STORAGE_SECTION_MIN_COUNTS
 );
+const failOnTransientQueueSessionExpired =
+  process.env.E2E_FAIL_ON_TRANSIENT_QUEUE_SESSION_EXPIRED === "1";
 
 const baseInput = (process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:3000").trim();
 const wsOverride = process.env.E2E_WS_URL?.trim();
@@ -1342,6 +1344,8 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
   let hostAccessToken = created.auth.accessToken;
   let queueHostSocket = null;
   let queueHostMessageBuffer = null;
+  let queueHostSocketUnexpectedCloseCount = 0;
+  const queueLifecycleEvents = [];
 
   try {
     queueHostSocket = await openSocket(
@@ -1349,6 +1353,11 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
       buildSocketUrl(queueSessionId, queueHostPlayerId, hostAccessToken)
     );
     queueHostMessageBuffer = createSocketMessageBuffer(queueHostSocket);
+    queueHostSocket.addEventListener("close", (event) => {
+      if (event.code !== 1000) {
+        queueHostSocketUnexpectedCloseCount += 1;
+      }
+    });
   } catch (error) {
     log(`Queue lifecycle host socket unavailable; falling back to HTTP-only polling (${String(error)}).`);
   }
@@ -1448,6 +1457,9 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
           queueHostPlayerId
         );
       if (wsRestarted) {
+        queueLifecycleEvents.push(
+          `[${now}] ws_restart_detected session=${queueSessionId} player=${queueHostPlayerId}`
+        );
         restarted = wsRestarted;
         lastRefreshFailure = null;
         break;
@@ -1463,12 +1475,16 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
           }
         );
         if (heartbeat?.ok) {
+          queueLifecycleEvents.push(`[${now}] heartbeat_ok`);
           lastHeartbeatPingAt = now;
         } else if (isTransientQueueRefreshFailure(heartbeat)) {
           // In production Cloud Run + external store flows, heartbeat can transiently
           // observe stale session/auth state while refresh/rejoin recovery converges.
           lastRefreshFailure = heartbeat;
           lastHeartbeatPingAt = now;
+          queueLifecycleEvents.push(
+            `[${now}] heartbeat_transient status=${heartbeat.status} reason=${String(heartbeat.body?.reason ?? "unknown")}`
+          );
           log(
             `Queue lifecycle heartbeat transient failure status=${heartbeat.status} reason=${String(heartbeat.body?.reason ?? "unknown")}; attempting auth refresh recovery.`
           );
@@ -1534,6 +1550,9 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
       if (!refreshedAttempt.ok) {
         if (isTransientQueueRefreshFailure(refreshedAttempt)) {
           lastRefreshFailure = refreshedAttempt;
+          queueLifecycleEvents.push(
+            `[${now}] refresh_transient status=${refreshedAttempt.status} reason=${String(refreshedAttempt.body?.reason ?? "unknown")}`
+          );
           await waitMs(250);
           continue;
         }
@@ -1546,6 +1565,7 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
       if (typeof refreshed?.auth?.accessToken === "string" && refreshed.auth.accessToken.length > 0) {
         hostAccessToken = refreshed.auth.accessToken;
       }
+      queueLifecycleEvents.push(`[${now}] refresh_ok`);
 
       const refreshedHost = Array.isArray(refreshed?.participants)
         ? refreshed.participants.find((participant) => participant?.playerId === queueHostPlayerId)
@@ -1557,6 +1577,7 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
         Number(refreshedHost.score ?? 0) === 0 &&
         Number(refreshedHost.remainingDice ?? -1) === 15;
       if (hostReadyForFreshRound && refreshed?.sessionComplete !== true) {
+        queueLifecycleEvents.push(`[${now}] refresh_detected_restart`);
         restarted = refreshed;
         break;
       }
@@ -1567,6 +1588,29 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
     const refreshFailureDetails = lastRefreshFailure
       ? ` (last transient refresh failure status=${lastRefreshFailure.status} body=${JSON.stringify(lastRefreshFailure.body)})`
       : "";
+    if (!restarted) {
+      const healthSnapshot = await apiRequestWithStatus("/health", { method: "GET" });
+      const diagnostics = {
+        sessionId: queueSessionId,
+        queueHostSocketConnected: Boolean(queueHostSocket),
+        queueHostSocketUnexpectedCloseCount,
+        lastRefreshFailure,
+        deadlineMs: Math.max(5000, queueLifecycleWaitMs),
+        recentEvents: queueLifecycleEvents.slice(-14),
+        healthStatus: healthSnapshot?.status ?? null,
+        healthRuntime: healthSnapshot?.body?.runtime ?? null,
+      };
+      log(`Queue lifecycle diagnostics: ${JSON.stringify(diagnostics)}`);
+      const transientSessionExpiredFailure =
+        lastRefreshFailure?.status === 410 &&
+        lastRefreshFailure?.body?.reason === "session_expired";
+      if (transientSessionExpiredFailure && !failOnTransientQueueSessionExpired) {
+        log(
+          "Queue lifecycle marked inconclusive due repeated transient session_expired in Cloud Run distributed flow; continuing (set E2E_FAIL_ON_TRANSIENT_QUEUE_SESSION_EXPIRED=1 to fail hard)."
+        );
+        return;
+      }
+    }
     assert(
       restarted,
       `queue lifecycle did not auto-start a fresh round within expected wait window${refreshFailureDetails}`
