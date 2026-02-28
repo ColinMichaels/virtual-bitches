@@ -104,7 +104,7 @@ async function run() {
   }
   if (assertTimeoutStrikeObserver) {
     try {
-      await runTimeoutStrikeObserverChecks(runSuffix);
+      await runTimeoutStrikeObserverSuite(runSuffix);
     } catch (error) {
       if (!isTransientTimeoutStrikeObserverFailure(error)) {
         throw error;
@@ -114,7 +114,7 @@ async function run() {
         `Timeout strike observer checks encountered transient failure; retrying once with a fresh session (${firstAttemptMessage}).`
       );
       try {
-        await runTimeoutStrikeObserverChecks(`${runSuffix}-retry`);
+        await runTimeoutStrikeObserverSuite(`${runSuffix}-retry`);
       } catch (retryError) {
         if (
           isTransientTimeoutStrikeSessionExpiredFailure(retryError) &&
@@ -1997,6 +1997,249 @@ async function runTimeoutStrikeObserverChecks(runSuffix) {
     await safeCloseSocket(timeoutHostSocket);
     await safeLeave(timeoutSessionId, timeoutGuestAPlayerId);
     await safeLeave(timeoutSessionId, timeoutGuestBPlayerId);
+    await safeLeave(timeoutSessionId, timeoutHostPlayerId);
+  }
+}
+
+async function runTimeoutStrikeObserverSuite(runSuffix) {
+  await runTimeoutStrikeObserverChecks(runSuffix);
+  await runTimeoutStrikeObserverTwoPlayerWrapChecks(`${runSuffix}-2p`);
+}
+
+async function runTimeoutStrikeObserverTwoPlayerWrapChecks(runSuffix) {
+  log("Running timeout strike observer two-player wrap checks...");
+
+  const timeoutHostPlayerId = `e2e-timeout-2p-host-${runSuffix}`;
+  const timeoutGuestPlayerId = `e2e-timeout-2p-guest-${runSuffix}`;
+  const timeoutHostDisplayName = "E2E Timeout 2P Host";
+  const timeoutGuestDisplayName = "E2E Timeout 2P Guest";
+
+  const created = await apiRequest("/multiplayer/sessions", {
+    method: "POST",
+    body: {
+      playerId: timeoutHostPlayerId,
+      displayName: timeoutHostDisplayName,
+      botCount: 0,
+      gameDifficulty: "hard",
+    },
+  });
+  assert(typeof created?.sessionId === "string", "timeout strike 2p create session returned no sessionId");
+  assert(created?.auth?.accessToken, "timeout strike 2p create session returned no host access token");
+
+  const timeoutSessionId = created.sessionId;
+  let hostAccessToken = created.auth.accessToken;
+  let guestAccessToken = "";
+  let timeoutHostSocket = null;
+  let timeoutHostMessageBuffer = null;
+
+  try {
+    try {
+      timeoutHostSocket = await openSocket(
+        "timeout-strike-2p-host",
+        buildSocketUrl(timeoutSessionId, timeoutHostPlayerId, hostAccessToken)
+      );
+      timeoutHostMessageBuffer = createSocketMessageBuffer(timeoutHostSocket);
+    } catch (error) {
+      log(
+        `Timeout strike 2p host socket unavailable; falling back to HTTP-only polling (${String(error)}).`
+      );
+    }
+
+    const joinGuestAttempt = await joinSessionByIdWithTransientRetry(
+      timeoutSessionId,
+      {
+        playerId: timeoutGuestPlayerId,
+        displayName: timeoutGuestDisplayName,
+      },
+      {
+        maxAttempts: 8,
+        initialDelayMs: 220,
+      }
+    );
+    if (!joinGuestAttempt?.ok) {
+      throw new Error(
+        `request failed (POST /multiplayer/sessions/${timeoutSessionId}/join) status=${joinGuestAttempt?.status ?? "unknown"} body=${JSON.stringify(joinGuestAttempt?.body ?? null)}`
+      );
+    }
+    guestAccessToken =
+      typeof joinGuestAttempt.body?.auth?.accessToken === "string"
+        ? joinGuestAttempt.body.auth.accessToken
+        : "";
+    assert(guestAccessToken, "timeout strike 2p guest join returned no access token");
+
+    const setParticipantState = async (playerId, accessToken, action, label) => {
+      const response = await apiRequest(
+        `/multiplayer/sessions/${encodeURIComponent(timeoutSessionId)}/participant-state`,
+        {
+          method: "POST",
+          accessToken,
+          body: {
+            playerId,
+            action,
+          },
+        }
+      );
+      assert(
+        response?.ok === true,
+        `${label} did not return ok=true (reason=${String(response?.reason ?? "unknown")})`
+      );
+      return response;
+    };
+
+    await setParticipantState(timeoutHostPlayerId, hostAccessToken, "sit", "timeout strike 2p host sit");
+    await setParticipantState(timeoutGuestPlayerId, guestAccessToken, "sit", "timeout strike 2p guest sit");
+    await setParticipantState(timeoutHostPlayerId, hostAccessToken, "ready", "timeout strike 2p host ready");
+    await setParticipantState(timeoutGuestPlayerId, guestAccessToken, "ready", "timeout strike 2p guest ready");
+
+    const initialRefresh = await refreshSessionAuthWithRecovery({
+      sessionId: timeoutSessionId,
+      playerId: timeoutHostPlayerId,
+      displayName: timeoutHostDisplayName,
+      accessToken: hostAccessToken,
+    });
+    hostAccessToken = initialRefresh.accessToken;
+    const initialTurnState = initialRefresh.snapshot?.turnState ?? null;
+    const initialActivePlayerId =
+      typeof initialTurnState?.activeTurnPlayerId === "string" ? initialTurnState.activeTurnPlayerId : "";
+    assert(
+      initialActivePlayerId === timeoutHostPlayerId,
+      `timeout strike 2p expected host to receive first active turn (active=${initialActivePlayerId || "none"})`
+    );
+
+    const initialRound = normalizeE2ERoundNumber(initialTurnState?.round);
+    const timeoutMs = normalizeE2ETurnTimeoutMs(initialTurnState?.turnTimeoutMs);
+    const firstTimeoutWaitMs = computeTurnAutoAdvanceWaitMs(initialTurnState, timeoutMs);
+
+    if (timeoutHostMessageBuffer) {
+      timeoutHostMessageBuffer.length = 0;
+    }
+    const firstTimeout = await waitForTurnAutoAdvanceForPlayer({
+      sessionId: timeoutSessionId,
+      playerId: timeoutHostPlayerId,
+      expectedRound: initialRound,
+      hostPlayerId: timeoutHostPlayerId,
+      hostDisplayName: timeoutHostDisplayName,
+      accessToken: hostAccessToken,
+      messageBuffer: timeoutHostMessageBuffer,
+      waitTimeoutMs: firstTimeoutWaitMs,
+    });
+    hostAccessToken = firstTimeout.accessToken;
+    const firstSnapshot = firstTimeout.snapshot;
+    const firstTurnState = firstSnapshot?.turnState ?? null;
+    const activeAfterFirstTimeout =
+      typeof firstTurnState?.activeTurnPlayerId === "string" ? firstTurnState.activeTurnPlayerId : "";
+    assert(
+      activeAfterFirstTimeout === timeoutGuestPlayerId,
+      `timeout strike 2p expected guest active turn after first timeout (active=${activeAfterFirstTimeout || "none"})`
+    );
+
+    if (timeoutHostMessageBuffer) {
+      timeoutHostMessageBuffer.length = 0;
+    }
+    const guestTimeoutWaitMs = computeTurnAutoAdvanceWaitMs(
+      firstTurnState,
+      normalizeE2ETurnTimeoutMs(firstTurnState?.turnTimeoutMs, timeoutMs)
+    );
+    const guestTimeout = await waitForTurnAutoAdvanceForPlayer({
+      sessionId: timeoutSessionId,
+      playerId: timeoutGuestPlayerId,
+      expectedRound: null,
+      hostPlayerId: timeoutHostPlayerId,
+      hostDisplayName: timeoutHostDisplayName,
+      accessToken: hostAccessToken,
+      messageBuffer: timeoutHostMessageBuffer,
+      waitTimeoutMs: guestTimeoutWaitMs,
+    });
+    hostAccessToken = guestTimeout.accessToken;
+    const recoveredSnapshot = guestTimeout.snapshot;
+    const recoveredTurnState = recoveredSnapshot?.turnState ?? null;
+    const recoveredActivePlayerId =
+      typeof recoveredTurnState?.activeTurnPlayerId === "string"
+        ? recoveredTurnState.activeTurnPlayerId
+        : "";
+    assert(
+      recoveredActivePlayerId === timeoutHostPlayerId,
+      `timeout strike 2p expected host active turn after guest timeout (active=${recoveredActivePlayerId || "none"})`
+    );
+    const recoveredRound = normalizeE2ERoundNumber(recoveredTurnState?.round, initialRound);
+    assert(
+      recoveredRound > initialRound,
+      `timeout strike 2p expected round wrap before second host timeout (initial=${initialRound}, recovered=${recoveredRound})`
+    );
+    if (typeof guestTimeout.reason === "string" && guestTimeout.reason.length > 0) {
+      assert(
+        guestTimeout.reason.includes("turn_timeout"),
+        `timeout strike 2p expected timeout reason while advancing guest turn (actual=${guestTimeout.reason})`
+      );
+    }
+
+    if (timeoutHostMessageBuffer) {
+      timeoutHostMessageBuffer.length = 0;
+    }
+    const refreshedHost = await refreshSessionAuthWithRecovery({
+      sessionId: timeoutSessionId,
+      playerId: timeoutHostPlayerId,
+      displayName: timeoutHostDisplayName,
+      accessToken: hostAccessToken,
+      maxAttempts: 8,
+      initialDelayMs: 250,
+    });
+    hostAccessToken = refreshedHost.accessToken;
+    const confirmedHostTurnState = refreshedHost.snapshot?.turnState ?? null;
+    const confirmedHostActivePlayerId =
+      typeof confirmedHostTurnState?.activeTurnPlayerId === "string"
+        ? confirmedHostTurnState.activeTurnPlayerId
+        : "";
+    assert(
+      confirmedHostActivePlayerId === timeoutHostPlayerId,
+      `timeout strike 2p expected host to remain active before second timeout (active=${confirmedHostActivePlayerId || "none"})`
+    );
+
+    const secondTimeoutWaitMs = computeTurnAutoAdvanceWaitMs(
+      confirmedHostTurnState,
+      normalizeE2ETurnTimeoutMs(confirmedHostTurnState?.turnTimeoutMs, timeoutMs)
+    );
+    const secondTimeout = await waitForTurnAutoAdvanceForPlayer({
+      sessionId: timeoutSessionId,
+      playerId: timeoutHostPlayerId,
+      expectedRound: recoveredRound,
+      hostPlayerId: timeoutHostPlayerId,
+      hostDisplayName: timeoutHostDisplayName,
+      accessToken: hostAccessToken,
+      messageBuffer: timeoutHostMessageBuffer,
+      waitTimeoutMs: secondTimeoutWaitMs,
+    });
+    hostAccessToken = secondTimeout.accessToken;
+    const hostAfterSecondTimeout = findSnapshotParticipant(secondTimeout.snapshot, timeoutHostPlayerId);
+    assert(hostAfterSecondTimeout, "timeout strike 2p snapshot missing host after second timeout");
+    assert(
+      hostAfterSecondTimeout?.isSeated === false,
+      "timeout strike 2p expected host moved to observer lounge (isSeated=false) after second timeout"
+    );
+    assert(
+      hostAfterSecondTimeout?.isReady !== true,
+      "timeout strike 2p expected host unready after observer/lounge move"
+    );
+    assert(
+      hostAfterSecondTimeout?.queuedForNextGame !== true,
+      "timeout strike 2p expected host queuedForNextGame=false after observer/lounge move"
+    );
+    assert(
+      hostAfterSecondTimeout?.isComplete === true,
+      "timeout strike 2p expected host marked complete after observer/lounge move"
+    );
+    if (typeof secondTimeout.reason === "string" && secondTimeout.reason.length > 0) {
+      assert(
+        secondTimeout.reason.includes("turn_timeout_stand") ||
+          secondTimeout.reason.includes("turn_timeout_auto_score_stand"),
+        `timeout strike 2p expected stand timeout reason on second timeout (actual=${secondTimeout.reason})`
+      );
+    }
+
+    log("Timeout strike observer two-player wrap checks passed.");
+  } finally {
+    await safeCloseSocket(timeoutHostSocket);
+    await safeLeave(timeoutSessionId, timeoutGuestPlayerId);
     await safeLeave(timeoutSessionId, timeoutHostPlayerId);
   }
 }
