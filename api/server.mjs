@@ -7413,6 +7413,29 @@ function handlePostGameInactivityExpiry(sessionId, expectedIdleExpiresAt) {
     return;
   }
 
+  // If a human participant has been active recently, extend post-game idle instead
+  // of hard-expiring the session.
+  const now = Date.now();
+  const hasRecentlyActiveHuman = Object.values(session.participants ?? {}).some((participant) => {
+    if (!participant || isBotParticipant(participant)) {
+      return false;
+    }
+    const lastHeartbeatAt =
+      Number.isFinite(participant.lastHeartbeatAt) && participant.lastHeartbeatAt > 0
+        ? Math.floor(participant.lastHeartbeatAt)
+        : 0;
+    return lastHeartbeatAt > 0 && now - lastHeartbeatAt <= MULTIPLAYER_PARTICIPANT_STALE_MS;
+  });
+  if (hasRecentlyActiveHuman) {
+    markSessionPostGamePlayerAction(session, now);
+    markSessionActivity(session, "", now, { countAsPlayerAction: false });
+    reconcileSessionLoops(sessionId);
+    persistStore().catch((error) => {
+      log.warn("Failed to persist store after post-game inactivity extension", error);
+    });
+    return;
+  }
+
   expireSession(sessionId, "session_expired");
   persistStore().catch((error) => {
     log.warn("Failed to persist store after post-game inactivity expiry", error);

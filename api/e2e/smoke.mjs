@@ -1289,7 +1289,7 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
         lastHeartbeatPingAt = now;
       }
 
-      const refreshed = await apiRequest(
+      let refreshedAttempt = await apiRequestWithStatus(
         `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/auth/refresh`,
         {
           method: "POST",
@@ -1297,6 +1297,28 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
           body: { playerId: queueHostPlayerId },
         }
       );
+      if (refreshedAttempt.ok !== true && isTransientSessionExpiryFailure(refreshedAttempt)) {
+        const rejoinAttempt = await apiRequestWithStatus(
+          `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/join`,
+          {
+            method: "POST",
+            body: {
+              playerId: queueHostPlayerId,
+              displayName: "E2E Queue Host",
+            },
+          }
+        );
+        if (rejoinAttempt.ok === true) {
+          refreshedAttempt = rejoinAttempt;
+          log("Queue lifecycle auth refresh recovered via session rejoin fallback.");
+        }
+      }
+      if (!refreshedAttempt.ok) {
+        throw new Error(
+          `request failed (POST /multiplayer/sessions/${queueSessionId}/auth/refresh) status=${refreshedAttempt.status} body=${JSON.stringify(refreshedAttempt.body)}`
+        );
+      }
+      const refreshed = refreshedAttempt.body;
       if (typeof refreshed?.auth?.accessToken === "string" && refreshed.auth.accessToken.length > 0) {
         hostAccessToken = refreshed.auth.accessToken;
       }
@@ -1983,6 +2005,10 @@ function isTransientRoomLookupFailure(result) {
       ((result.status === 410 && result.body?.reason === "session_expired") ||
         (result.status === 404 && result.body?.reason === "room_not_found"))
   );
+}
+
+function isTransientSessionExpiryFailure(result) {
+  return Boolean(result && result.status === 410 && result.body?.reason === "session_expired");
 }
 
 async function joinRoomByCodeWithTransientRetry(roomCode, payload, options = {}) {
