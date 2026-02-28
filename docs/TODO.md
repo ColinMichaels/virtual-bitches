@@ -83,6 +83,21 @@ Reference docs:
   - [ ] Add role-only admin smoke variant (no admin token path) for Firebase-role authorization validation.
   - [ ] Add structured Cloud Run log filters/alerts for websocket auth failures and moderation abuse spikes.
 
+### Multiplayer Test-Speed Profile + UI Demo Mode (2026-02-28)
+- **Status**: 🔵 Planned
+- **Why**:
+  - 8-player timeout/bot smoke coverage is high-value but slow at production pacing.
+  - We want faster CI/local validation without changing real gameplay defaults.
+  - A controlled "demo speed" mode could be useful for live showcases in UI.
+- **Implementation Targets**:
+  - [ ] Make bot pacing env-configurable in API (tick interval + bot turn-advance delay ranges) with safe defaults matching current production behavior.
+  - [ ] Add a dedicated "fast test speed" env profile for local/CI smoke (`api/e2e/run-local.mjs` + workflow vars) that shortens bot pacing and timeout windows only in test lanes.
+  - [ ] Keep production deploy workflow on normal speed unless an explicit CI variable enables the fast profile.
+  - [ ] Add smoke diagnostics that print active speed profile values at startup for easier debugging.
+  - [ ] Add docs for new speed knobs in `docs/ENVIRONMENT-REFERENCE.md`.
+  - [ ] Add an optional UI-facing "Demo Speed Mode" (private room only) behind a flag, with clear visual badge + reset path.
+  - [ ] Add guardrails so demo/test speed settings cannot be accidentally enabled globally in production.
+
 ### Camera System & Machinima Tools (Phase 1 COMPLETE, Phase 2 PARTIAL) 📷
 - **Status**: ✅ Phase 1 COMPLETE (2026-02-24) • 🟡 Phase 2 PARTIAL (2026-02-25 foundation work)
 - **Complexity**: Medium (Phase 1), Very High (Full System)
