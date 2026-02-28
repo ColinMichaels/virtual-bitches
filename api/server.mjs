@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "./logger.mjs";
 import { createStoreAdapter, DEFAULT_STORE } from "./storage/index.mjs";
+import { cloneStore } from "./storage/defaultStore.mjs";
 import { createBotEngine } from "./bot/engine.mjs";
 import {
   buildChatConductWarning,
@@ -381,7 +382,9 @@ async function bootstrap() {
     firestorePrefix: FIRESTORE_COLLECTION_PREFIX,
     logger: log,
   });
-  store = await storeAdapter.load();
+  const loadedStore = await storeAdapter.load();
+  store = cloneStore(loadedStore);
+  const consistencyChanged = normalizeStoreConsistency(Date.now());
   hydrateChatModerationTermsFromStore();
   log.info(`Using ${storeAdapter.name} store backend`);
   if (storeAdapter.name === "firestore") {
@@ -419,11 +422,12 @@ async function bootstrap() {
       );
     }
   }
-  const publicRoomsChanged = reconcilePublicRoomInventory(Date.now());
+  const now = Date.now();
+  const publicRoomsChanged = reconcilePublicRoomInventory(now);
   Object.keys(store.multiplayerSessions).forEach((sessionId) => {
     reconcileSessionLoops(sessionId);
   });
-  if (publicRoomsChanged) {
+  if (publicRoomsChanged || consistencyChanged) {
     await persistStore();
   }
 }
@@ -1140,9 +1144,10 @@ async function handlePutProfile(req, res, pathname) {
       : existingProfile?.blockedPlayerIds,
     playerId
   );
+  const normalizedDisplayName = normalizeParticipantDisplayName(body.displayName);
   const profile = {
     playerId,
-    displayName: typeof body.displayName === "string" ? body.displayName : undefined,
+    ...(normalizedDisplayName ? { displayName: normalizedDisplayName } : {}),
     settings: body.settings ?? {},
     upgradeProgression: body.upgradeProgression ?? {},
     ...(blockedPlayerIds.length > 0 ? { blockedPlayerIds } : {}),
@@ -1335,10 +1340,11 @@ async function handleCreateSession(req, res) {
   const participantBlockedPlayerIds = resolveParticipantBlockedPlayerIds(playerId, {
     candidateBlockedPlayerIds: body?.blockedPlayerIds,
   });
+  const normalizedDisplayName = normalizeParticipantDisplayName(body?.displayName);
   const participants = {
     [playerId]: {
       playerId,
-      displayName: typeof body?.displayName === "string" ? body.displayName : undefined,
+      ...(normalizedDisplayName ? { displayName: normalizedDisplayName } : {}),
       avatarUrl: normalizeAvatarUrl(body?.avatarUrl),
       providerId: normalizeProviderId(body?.providerId),
       ...(participantBlockedPlayerIds.length > 0
@@ -1466,10 +1472,12 @@ async function handleJoinSessionByTarget(req, res, target) {
     candidateBlockedPlayerIds: body?.blockedPlayerIds,
     fallbackBlockedPlayerIds: existingParticipant?.blockedPlayerIds,
   });
+  const normalizedDisplayName =
+    normalizeParticipantDisplayName(body?.displayName) ??
+    normalizeParticipantDisplayName(existingParticipant?.displayName);
   session.participants[playerId] = {
     playerId,
-    displayName:
-      typeof body?.displayName === "string" ? body.displayName : existingParticipant?.displayName,
+    ...(normalizedDisplayName ? { displayName: normalizedDisplayName } : {}),
     avatarUrl: normalizeAvatarUrl(body?.avatarUrl) ?? normalizeAvatarUrl(existingParticipant?.avatarUrl),
     providerId:
       normalizeProviderId(body?.providerId) ?? normalizeProviderId(existingParticipant?.providerId),
@@ -1536,7 +1544,7 @@ async function handleSessionHeartbeat(req, res, pathname) {
   }
 
   let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-  if (!authCheck.ok) {
+  if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
     await rehydrateStoreFromAdapter(`heartbeat_auth:${sessionId}:${playerId}`, { force: true });
     authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
   }
@@ -1594,7 +1602,7 @@ async function handleUpdateParticipantState(req, res, pathname) {
   }
 
   let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-  if (!authCheck.ok) {
+  if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
     await rehydrateStoreFromAdapter(`participant_state_auth:${sessionId}:${playerId}`, { force: true });
     authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
   }
@@ -1749,7 +1757,7 @@ async function handleQueueParticipantForNextGame(req, res, pathname) {
   }
 
   let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-  if (!authCheck.ok) {
+  if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
     await rehydrateStoreFromAdapter(`queue_next_auth:${sessionId}:${playerId}`, { force: true });
     authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
   }
@@ -2119,7 +2127,7 @@ async function handleRefreshSessionAuth(req, res, pathname) {
   }
 
   let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-  if (!authCheck.ok) {
+  if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
     await rehydrateStoreFromAdapter(`refresh_auth_authorize:${sessionId}:${playerId}`, { force: true });
     authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
   }
@@ -3851,6 +3859,14 @@ function authorizeSessionActionRequest(req, expectedPlayerId, expectedSessionId)
   return { ok: true, playerId: record.playerId, sessionId: record.sessionId };
 }
 
+function shouldRetrySessionAuthFromStore(reason) {
+  return (
+    reason === "invalid_or_expired_access_token" ||
+    reason === "player_mismatch" ||
+    reason === "session_mismatch"
+  );
+}
+
 async function verifyFirebaseIdToken(idToken) {
   const now = Date.now();
   const cached = firebaseTokenCache.get(idToken);
@@ -5241,9 +5257,12 @@ function parseTurnSelectionPayload(payload, lastRollSnapshot) {
 }
 
 function serializeSessionParticipants(session) {
+  const sessionCreatedAt = normalizeEpochMs(session?.createdAt, Date.now());
   const participants = Object.values(session?.participants ?? {})
     .filter((participant) => participant && typeof participant.playerId === "string")
     .map((participant) => {
+      const joinedAt = normalizeEpochMs(participant.joinedAt, sessionCreatedAt);
+      const lastHeartbeatAt = normalizeEpochMs(participant.lastHeartbeatAt, joinedAt);
       const remainingDice = normalizeParticipantRemainingDice(participant.remainingDice);
       const isComplete = participant.isComplete === true || remainingDice === 0;
       const queuedForNextGame = isParticipantQueuedForNextGame(participant);
@@ -5252,15 +5271,11 @@ function serializeSessionParticipants(session) {
       return {
         playerId: participant.playerId,
         displayName:
-          typeof participant.displayName === "string" ? participant.displayName : undefined,
+          normalizeParticipantDisplayName(participant.displayName),
         avatarUrl: normalizeAvatarUrl(participant.avatarUrl),
         providerId: normalizeProviderId(participant.providerId),
-        joinedAt:
-          typeof participant.joinedAt === "number" ? participant.joinedAt : Date.now(),
-        lastHeartbeatAt:
-          typeof participant.lastHeartbeatAt === "number"
-            ? participant.lastHeartbeatAt
-            : Date.now(),
+        joinedAt,
+        lastHeartbeatAt,
         isBot: Boolean(participant.isBot),
         botProfile: participant.isBot ? normalizeBotProfile(participant.botProfile) : undefined,
         isSeated,
@@ -5699,6 +5714,195 @@ function resolveDataFile(rawValue, dataDir) {
     return path.resolve(rawValue.trim());
   }
   return path.join(dataDir, "store.json");
+}
+
+function normalizeEpochMs(value, fallback = Date.now()) {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.floor(parsed);
+  }
+  const fallbackValue = Number(fallback);
+  if (Number.isFinite(fallbackValue) && fallbackValue > 0) {
+    return Math.floor(fallbackValue);
+  }
+  return Date.now();
+}
+
+function normalizeParticipantId(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const normalized = value.trim();
+  if (!normalized) {
+    return "";
+  }
+  return normalized.slice(0, 128);
+}
+
+function normalizeParticipantDisplayName(value) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return undefined;
+  }
+  return normalized.slice(0, 48);
+}
+
+function normalizeStoreConsistency(now = Date.now()) {
+  let changed = false;
+  if (!store || typeof store !== "object") {
+    store = structuredClone(DEFAULT_STORE);
+    return true;
+  }
+  if (!store.multiplayerSessions || typeof store.multiplayerSessions !== "object") {
+    store.multiplayerSessions = {};
+    return true;
+  }
+
+  const sessionEntries = Object.entries({ ...store.multiplayerSessions });
+  for (const [sessionKey, rawSession] of sessionEntries) {
+    if (!rawSession || typeof rawSession !== "object") {
+      delete store.multiplayerSessions[sessionKey];
+      changed = true;
+      continue;
+    }
+
+    const normalizedSessionId =
+      typeof rawSession.sessionId === "string" && rawSession.sessionId.trim().length > 0
+        ? rawSession.sessionId.trim()
+        : sessionKey;
+    if (normalizedSessionId !== sessionKey) {
+      store.multiplayerSessions[normalizedSessionId] = rawSession;
+      delete store.multiplayerSessions[sessionKey];
+      rawSession.sessionId = normalizedSessionId;
+      changed = true;
+    } else if (rawSession.sessionId !== normalizedSessionId) {
+      rawSession.sessionId = normalizedSessionId;
+      changed = true;
+    }
+
+    const createdAt = normalizeEpochMs(rawSession.createdAt, now);
+    if (rawSession.createdAt !== createdAt) {
+      rawSession.createdAt = createdAt;
+      changed = true;
+    }
+    const gameStartedAt = normalizeEpochMs(rawSession.gameStartedAt, createdAt);
+    if (rawSession.gameStartedAt !== gameStartedAt) {
+      rawSession.gameStartedAt = gameStartedAt;
+      changed = true;
+    }
+    const lastActivityAt = normalizeEpochMs(rawSession.lastActivityAt, gameStartedAt);
+    if (rawSession.lastActivityAt !== lastActivityAt) {
+      rawSession.lastActivityAt = lastActivityAt;
+      changed = true;
+    }
+    const expiresAt = normalizeEpochMs(rawSession.expiresAt, createdAt + MULTIPLAYER_SESSION_IDLE_TTL_MS);
+    if (rawSession.expiresAt !== expiresAt) {
+      rawSession.expiresAt = expiresAt;
+      changed = true;
+    }
+
+    const normalizedDifficulty = normalizeGameDifficulty(rawSession.gameDifficulty);
+    if (rawSession.gameDifficulty !== normalizedDifficulty) {
+      rawSession.gameDifficulty = normalizedDifficulty;
+      changed = true;
+    }
+    const normalizedRoomKind = normalizeRoomKind(rawSession.roomKind);
+    if (rawSession.roomKind !== normalizedRoomKind) {
+      rawSession.roomKind = normalizedRoomKind;
+      changed = true;
+    }
+
+    const sourceParticipants =
+      rawSession.participants && typeof rawSession.participants === "object"
+        ? rawSession.participants
+        : {};
+    if (rawSession.participants !== sourceParticipants) {
+      rawSession.participants = sourceParticipants;
+      changed = true;
+    }
+
+    const normalizedParticipants = {};
+    for (const [rawParticipantKey, rawParticipant] of Object.entries(sourceParticipants)) {
+      if (!rawParticipant || typeof rawParticipant !== "object") {
+        changed = true;
+        continue;
+      }
+
+      const participantId = normalizeParticipantId(
+        typeof rawParticipant.playerId === "string" ? rawParticipant.playerId : rawParticipantKey
+      );
+      if (!participantId) {
+        changed = true;
+        continue;
+      }
+
+      const participantJoinedAt = normalizeEpochMs(rawParticipant.joinedAt, createdAt);
+      const participantLastHeartbeatAt = normalizeEpochMs(rawParticipant.lastHeartbeatAt, participantJoinedAt);
+      const isBot = rawParticipant.isBot === true;
+      const remainingDice = normalizeParticipantRemainingDice(rawParticipant.remainingDice);
+      const normalizedParticipant = {
+        ...rawParticipant,
+        playerId: participantId,
+        joinedAt: participantJoinedAt,
+        lastHeartbeatAt: participantLastHeartbeatAt,
+        isBot,
+        isSeated: isBot ? true : rawParticipant.isSeated !== false,
+        isReady: isBot ? true : rawParticipant.isReady === true && rawParticipant.isSeated !== false,
+        score: normalizeParticipantScore(rawParticipant.score),
+        remainingDice,
+        queuedForNextGame: isBot ? false : normalizeQueuedForNextGame(rawParticipant.queuedForNextGame),
+        isComplete: rawParticipant.isComplete === true || remainingDice === 0,
+        completedAt: normalizeParticipantCompletedAt(rawParticipant.completedAt),
+      };
+
+      const displayName = normalizeParticipantDisplayName(rawParticipant.displayName);
+      if (displayName) {
+        normalizedParticipant.displayName = displayName;
+      } else {
+        delete normalizedParticipant.displayName;
+      }
+      const avatarUrl = normalizeAvatarUrl(rawParticipant.avatarUrl);
+      if (avatarUrl) {
+        normalizedParticipant.avatarUrl = avatarUrl;
+      } else {
+        delete normalizedParticipant.avatarUrl;
+      }
+      const providerId = normalizeProviderId(rawParticipant.providerId);
+      if (providerId) {
+        normalizedParticipant.providerId = providerId;
+      } else {
+        delete normalizedParticipant.providerId;
+      }
+      const blockedPlayerIds = isBot
+        ? []
+        : normalizeBlockedPlayerIds(rawParticipant.blockedPlayerIds, participantId);
+      if (blockedPlayerIds.length > 0) {
+        normalizedParticipant.blockedPlayerIds = blockedPlayerIds;
+      } else {
+        delete normalizedParticipant.blockedPlayerIds;
+      }
+
+      const existing = normalizedParticipants[participantId];
+      if (!existing || participantLastHeartbeatAt >= normalizeEpochMs(existing.lastHeartbeatAt, 0)) {
+        normalizedParticipants[participantId] = normalizedParticipant;
+      } else {
+        changed = true;
+      }
+      if (rawParticipantKey !== participantId) {
+        changed = true;
+      }
+    }
+
+    if (JSON.stringify(sourceParticipants) !== JSON.stringify(normalizedParticipants)) {
+      rawSession.participants = normalizedParticipants;
+      changed = true;
+    }
+  }
+
+  return changed;
 }
 
 function normalizeSessionIdleTtlValue(rawValue, fallback) {
@@ -9533,8 +9737,12 @@ async function rehydrateStoreFromAdapter(reason, options = {}) {
       if (!loaded || typeof loaded !== "object") {
         return false;
       }
-      store = loaded;
+      store = cloneStore(loaded);
+      const consistencyChanged = normalizeStoreConsistency(Date.now());
       hydrateChatModerationTermsFromStore();
+      if (consistencyChanged) {
+        await persistStore();
+      }
       lastStoreRehydrateAt = Date.now();
       log.debug(`Store rehydrated from adapter (${reason})`);
       return true;

@@ -65,6 +65,7 @@ Reference docs:
   - [x] Extended e2e smoke with player-score write/read-back sync assertions and auth-required mutation assertions.
   - [x] Added API readiness endpoint (`/api/ready`) + bootstrap/shutdown diagnostics for deploy troubleshooting.
   - [x] Added Cloud Run smoke readiness polling in deploy workflow before API/hosting rewrite smoke execution.
+  - [x] Added store/session consistency normalization on bootstrap + rehydrate to reduce malformed participant/session payload drift.
 - **P0 Before Beta Invite**:
   - [ ] Configure dedicated admin Firebase project credentials/secrets (`ADMIN_FIREBASE_PROJECT_ID_*`, `ADMIN_GCP_SA_KEY*`) and run first manual admin deploy.
   - [ ] Confirm prod admin access policy (`API_ADMIN_ACCESS_MODE`) and bootstrap owner allowlists match intended operator model.
