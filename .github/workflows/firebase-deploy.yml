@@ -417,8 +417,15 @@ jobs:
           echo "Running smoke against Cloud Run URL..."
           node api/e2e/smoke.mjs
           if [ -n "${E2E_HOSTING_API_BASE_URL:-}" ] && [ "${E2E_HOSTING_API_BASE_URL}" != "${E2E_API_BASE_URL}" ]; then
-            echo "Running smoke against Hosting rewrite URL..."
-            E2E_API_BASE_URL="${E2E_HOSTING_API_BASE_URL}" node api/e2e/smoke.mjs
+            case "${E2E_HOSTING_API_BASE_URL}" in
+              http://*|https://*)
+                echo "Running smoke against Hosting rewrite URL..."
+                E2E_API_BASE_URL="${E2E_HOSTING_API_BASE_URL}" node api/e2e/smoke.mjs
+                ;;
+              *)
+                echo "Skipping Hosting rewrite smoke (E2E_HOSTING_API_BASE_URL is not an absolute URL)."
+                ;;
+            esac
           fi
 
       - name: API smoke diagnostics (on failure)
