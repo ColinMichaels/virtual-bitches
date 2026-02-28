@@ -738,6 +738,41 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
       }
     );
     assert(Array.isArray(joined?.participants), "queue lifecycle join missing participants[]");
+    const guestAccessToken =
+      typeof joined?.auth?.accessToken === "string" ? joined.auth.accessToken : "";
+    assert(guestAccessToken, "queue lifecycle join returned no guest access token");
+
+    const hostSat = await apiRequest(
+      `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/participant-state`,
+      {
+        method: "POST",
+        accessToken: hostAccessToken,
+        body: {
+          playerId: queueHostPlayerId,
+          action: "sit",
+        },
+      }
+    );
+    assert(
+      hostSat?.ok === true,
+      `queue lifecycle host sit did not return ok=true (reason=${String(hostSat?.reason ?? "unknown")})`
+    );
+
+    const guestSat = await apiRequest(
+      `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/participant-state`,
+      {
+        method: "POST",
+        accessToken: guestAccessToken,
+        body: {
+          playerId: queueGuestPlayerId,
+          action: "sit",
+        },
+      }
+    );
+    assert(
+      guestSat?.ok === true,
+      `queue lifecycle guest sit did not return ok=true (reason=${String(guestSat?.reason ?? "unknown")})`
+    );
 
     await apiRequest(`/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/leave`, {
       method: "POST",
