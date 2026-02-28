@@ -4565,6 +4565,29 @@ function resetPublicRoomForIdle(session, now = Date.now()) {
   ensureSessionTurnState(session);
 }
 
+function ensurePublicOverflowRoomCode(sessionId, session, now = Date.now()) {
+  if (!session || typeof session !== "object") {
+    return false;
+  }
+  if (getSessionRoomKind(session) !== ROOM_KINDS.publicOverflow) {
+    return false;
+  }
+
+  const normalizedCode = normalizeOptionalRoomCode(session.roomCode);
+  const hasCollision =
+    !normalizedCode || isRoomCodeInUse(normalizedCode, now, { excludeSessionId: sessionId });
+  if (!hasCollision) {
+    return false;
+  }
+
+  const reassignedCode = buildPublicOverflowRoomCode();
+  if (!reassignedCode || session.roomCode === reassignedCode) {
+    return false;
+  }
+  session.roomCode = reassignedCode;
+  return true;
+}
+
 function pruneInactivePublicRoomParticipants(sessionId, session, now = Date.now()) {
   if (!session || typeof session !== "object" || !session.participants) {
     return false;
@@ -4658,6 +4681,9 @@ function reconcilePublicRoomInventory(now = Date.now()) {
         delete session.publicRoomSlot;
         changed = true;
       }
+      if (ensurePublicOverflowRoomCode(sessionId, session, now)) {
+        changed = true;
+      }
       return;
     }
 
@@ -4675,6 +4701,9 @@ function reconcilePublicRoomInventory(now = Date.now()) {
       if (Object.prototype.hasOwnProperty.call(session, "publicRoomSlot")) {
         delete session.publicRoomSlot;
       }
+      if (ensurePublicOverflowRoomCode(sessionId, session, now)) {
+        changed = true;
+      }
       changed = true;
       return;
     }
@@ -4682,6 +4711,9 @@ function reconcilePublicRoomInventory(now = Date.now()) {
     if (defaultSlots.has(normalizedSlot)) {
       session.roomKind = ROOM_KINDS.publicOverflow;
       delete session.publicRoomSlot;
+      if (ensurePublicOverflowRoomCode(sessionId, session, now)) {
+        changed = true;
+      }
       changed = true;
       return;
     }
