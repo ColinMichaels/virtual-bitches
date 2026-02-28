@@ -346,13 +346,14 @@ jobs:
           service: biscuits-api
           source: ./api
           region: us-central1
-          flags: --allow-unauthenticated --max-instances=${{ vars.API_MAX_INSTANCES || '1' }}
+          flags: --allow-unauthenticated --no-use-http2 --session-affinity --min-instances=${{ vars.API_MIN_INSTANCES || '1' }} --max-instances=${{ vars.API_MAX_INSTANCES || '1' }}
           env_vars: |
             NODE_ENV=production
             WS_BASE_URL=${{ steps.target.outputs.ws_url }}
             FIREBASE_PROJECT_ID=${{ steps.target.outputs.fb_project_id }}
             FIREBASE_WEB_API_KEY=${{ steps.target.outputs.fb_api_key }}
-            API_STORE_BACKEND=${{ vars.API_STORE_BACKEND || 'firestore' }}
+            API_STORE_BACKEND=firestore
+            API_ALLOW_FILE_STORE_IN_PRODUCTION=0
             API_FIRESTORE_PREFIX=${{ vars.API_FIRESTORE_PREFIX || 'api_v1' }}
             FIREBASE_AUTH_MODE=${{ vars.FIREBASE_AUTH_MODE || 'auto' }}
             API_ADMIN_ACCESS_MODE=${{ vars.API_ADMIN_ACCESS_MODE || 'hybrid' }}
@@ -400,7 +401,7 @@ jobs:
           E2E_ADMIN_TOKEN: ${{ secrets.API_ADMIN_TOKEN }}
           E2E_QUEUE_LIFECYCLE_WAIT_MS: ${{ vars.E2E_QUEUE_LIFECYCLE_WAIT_MS || '90000' }}
           E2E_ASSERT_STORAGE_CUTOVER: ${{ (secrets.API_ADMIN_TOKEN != '' || secrets.E2E_FIREBASE_ID_TOKEN != '') && '1' || '0' }}
-          E2E_EXPECT_STORAGE_BACKEND: ${{ vars.API_STORE_BACKEND || 'firestore' }}
+          E2E_EXPECT_STORAGE_BACKEND: firestore
           E2E_EXPECT_FIRESTORE_PREFIX: ${{ vars.API_FIRESTORE_PREFIX || 'api_v1' }}
           E2E_EXPECT_STORAGE_SECTION_MIN_COUNTS: ${{ vars.E2E_EXPECT_STORAGE_SECTION_MIN_COUNTS || '' }}
         run: |
@@ -413,6 +414,20 @@ jobs:
             echo "Skipping admin storage cutover assertion (no API_ADMIN_TOKEN or E2E_FIREBASE_ID_TOKEN configured)."
           fi
           node api/e2e/smoke.mjs
+
+      - name: API smoke diagnostics (on failure)
+        if: ${{ failure() && (github.event_name != 'workflow_dispatch' || inputs.run_api_smoke) }}
+        env:
+          SERVICE_NAME: biscuits-api
+          REGION: us-central1
+        run: |
+          set +e
+          echo "Recent websocket/auth diagnostics from Cloud Run:"
+          gcloud logging read \
+            "resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE_NAME AND (textPayload:\"Rejected WebSocket upgrade\" OR textPayload:\"Using firestore store backend\" OR textPayload:\"Using file store backend\" OR textPayload:\"Multiplayer session idle TTL\")" \
+            --limit=200 \
+            --format='table(timestamp,severity,resource.labels.revision_name,textPayload,jsonPayload.message)' || true
+          exit 0
 
   deploy-web:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy_web }}

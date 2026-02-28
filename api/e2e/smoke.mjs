@@ -35,7 +35,17 @@ async function run() {
   log(`API base URL: ${targets.apiBaseUrl}`);
   log(`WS base URL:  ${targets.wsBaseUrl}`);
 
-  await apiRequest("/health", { method: "GET" });
+  const health = await apiRequest("/health", { method: "GET" });
+  if (expectedStorageBackend) {
+    const reportedBackend =
+      typeof health?.storage?.backend === "string"
+        ? health.storage.backend.trim().toLowerCase()
+        : "";
+    assert(
+      reportedBackend === expectedStorageBackend,
+      `unexpected storage backend from /health (expected=${expectedStorageBackend}, actual=${reportedBackend || "unknown"})`
+    );
+  }
 
   const shouldRunAdminStorageChecks = assertStorageCutover || assertAdminMonitor;
   let storageSnapshot = null;
