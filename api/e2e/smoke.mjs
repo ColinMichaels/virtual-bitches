@@ -1238,6 +1238,18 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
 
   const queueSessionId = created.sessionId;
   let hostAccessToken = created.auth.accessToken;
+  let queueHostSocket = null;
+  let queueHostMessageBuffer = null;
+
+  try {
+    queueHostSocket = await openSocket(
+      "queue-host",
+      buildSocketUrl(queueSessionId, queueHostPlayerId, hostAccessToken)
+    );
+    queueHostMessageBuffer = createSocketMessageBuffer(queueHostSocket);
+  } catch (error) {
+    log(`Queue lifecycle host socket unavailable; falling back to HTTP-only polling (${String(error)}).`);
+  }
 
   try {
     const joined = await apiRequest(
@@ -1315,12 +1327,28 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
       queuedHost?.queuedForNextGame === true,
       "queue lifecycle host participant missing queuedForNextGame=true after queue-next"
     );
+    if (queueHostMessageBuffer) {
+      queueHostMessageBuffer.length = 0;
+    }
 
     const deadline = Date.now() + Math.max(5000, queueLifecycleWaitMs);
     let restarted = null;
     let lastHeartbeatPingAt = 0;
     let lastRefreshFailure = null;
     while (Date.now() < deadline) {
+      const wsRestarted =
+        queueHostMessageBuffer &&
+        consumeQueueLifecycleRestartFromBuffer(
+          queueHostMessageBuffer,
+          queueSessionId,
+          queueHostPlayerId
+        );
+      if (wsRestarted) {
+        restarted = wsRestarted;
+        lastRefreshFailure = null;
+        break;
+      }
+
       const now = Date.now();
       if (now - lastHeartbeatPingAt >= 5000) {
         const heartbeat = await apiRequestWithStatus(
@@ -1440,6 +1468,7 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
     );
     log("Winner queue lifecycle checks passed.");
   } finally {
+    await safeCloseSocket(queueHostSocket);
     await safeLeave(queueSessionId, queueGuestPlayerId);
     await safeLeave(queueSessionId, queueHostPlayerId);
   }
@@ -2051,6 +2080,39 @@ async function waitForBufferedMessage(buffer, matcher, label) {
   }
 
   throw new Error(`${label} timed out after ${WS_TIMEOUT_MS}ms`);
+}
+
+function consumeQueueLifecycleRestartFromBuffer(buffer, sessionId, hostPlayerId) {
+  if (!Array.isArray(buffer) || !sessionId || !hostPlayerId) {
+    return null;
+  }
+  const index = buffer.findIndex((payload) => {
+    if (!payload || typeof payload !== "object" || payload.type !== "session_state") {
+      return false;
+    }
+    if (payload.sessionId !== sessionId) {
+      return false;
+    }
+    const refreshedHost = Array.isArray(payload?.participants)
+      ? payload.participants.find((participant) => participant?.playerId === hostPlayerId)
+      : null;
+    const hostReadyForFreshRound =
+      refreshedHost &&
+      refreshedHost.queuedForNextGame !== true &&
+      refreshedHost.isComplete !== true &&
+      Number(refreshedHost.score ?? 0) === 0 &&
+      Number(refreshedHost.remainingDice ?? -1) === 15;
+    const turnReady =
+      payload?.sessionComplete !== true &&
+      typeof payload?.turnState?.activeTurnPlayerId === "string" &&
+      payload.turnState.activeTurnPlayerId === hostPlayerId;
+    return hostReadyForFreshRound && turnReady;
+  });
+  if (index < 0) {
+    return null;
+  }
+  const [match] = buffer.splice(index, 1);
+  return match;
 }
 
 async function assertNoBufferedMessage(buffer, matcher, waitDurationMs, label) {
