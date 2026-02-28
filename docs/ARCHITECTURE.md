@@ -43,6 +43,7 @@
 Admin Surface Note:
 - A separate `/admin` Angular portal is planned and documented in `docs/ADMIN-PORTAL-ANGULAR-PLAN.md`.
 - It is intentionally decoupled from the gameplay frontend architecture described in this document.
+- Beta deployment/security readiness review is tracked in `docs/BETA-DEPLOYMENT-ARCHITECTURE-REVIEW.md`.
 
 ---
 

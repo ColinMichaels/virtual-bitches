@@ -10,6 +10,7 @@ const assertChatConductFlow = process.env.E2E_ASSERT_CHAT_CONDUCT === "1";
 const chatConductTestTerm = normalizeOptionalString(process.env.E2E_CHAT_CONDUCT_TEST_TERM).toLowerCase();
 const assertModerationFlow = process.env.E2E_ASSERT_MULTIPLAYER_MODERATION !== "0";
 const assertAdminMonitor = process.env.E2E_ASSERT_ADMIN_MONITOR === "1";
+const assertAdminModerationTerms = process.env.E2E_ASSERT_ADMIN_MODERATION_TERMS === "1";
 const assertStorageCutover = process.env.E2E_ASSERT_STORAGE_CUTOVER === "1";
 const adminToken = process.env.E2E_ADMIN_TOKEN?.trim() ?? "";
 const roomExpiryWaitMs = Number(process.env.E2E_ROOM_EXPIRY_WAIT_MS ?? 9000);
@@ -67,6 +68,12 @@ async function run() {
     await runAdminMonitorChecks(storageSnapshot);
   } else {
     log("Skipping admin monitor checks (set E2E_ASSERT_ADMIN_MONITOR=1 to enable).");
+  }
+
+  if (assertAdminModerationTerms) {
+    await runAdminModerationTermChecks();
+  } else {
+    log("Skipping admin moderation-term checks (set E2E_ASSERT_ADMIN_MODERATION_TERMS=1 to enable).");
   }
 
   const runSuffix = randomUUID().slice(0, 8);
@@ -1344,6 +1351,115 @@ async function runAdminMonitorChecks(cachedStorage = null) {
   );
   assert(expireAudit, "admin audit missing session_expire event");
   log("Admin monitor checks passed.");
+}
+
+async function runAdminModerationTermChecks() {
+  log("Running admin moderation-term checks...");
+  assert(
+    adminToken || firebaseIdToken,
+    "admin moderation-term checks require E2E_ADMIN_TOKEN or E2E_FIREBASE_ID_TOKEN"
+  );
+  const adminAuthOptions = buildAdminAuthRequestOptions();
+  const runSuffix = randomUUID().slice(0, 10).toLowerCase();
+  const probeTerm = `e2e-admin-${runSuffix}`;
+
+  const before = await apiRequest("/admin/moderation/terms?includeTerms=1&limit=500", {
+    method: "GET",
+    ...adminAuthOptions,
+  });
+  assert(
+    before?.policy && typeof before.policy === "object",
+    "admin moderation-term overview missing policy object"
+  );
+  assert(
+    before?.terms && typeof before.terms === "object",
+    "admin moderation-term overview missing terms object"
+  );
+  assert(
+    Array.isArray(before?.terms?.managedTerms),
+    "admin moderation-term overview missing managedTerms[]"
+  );
+
+  const upsert = await apiRequest("/admin/moderation/terms/upsert", {
+    method: "POST",
+    ...adminAuthOptions,
+    body: {
+      term: probeTerm,
+      enabled: true,
+      note: "e2e moderation term probe",
+    },
+  });
+  assert(upsert?.ok === true, "admin moderation-term upsert did not report success");
+  assertEqual(
+    upsert?.term,
+    probeTerm,
+    "admin moderation-term upsert returned unexpected term"
+  );
+  assert(
+    upsert?.record?.enabled === true,
+    "admin moderation-term upsert returned non-enabled record"
+  );
+
+  const afterUpsert = await apiRequest("/admin/moderation/terms?includeTerms=1&limit=500", {
+    method: "GET",
+    ...adminAuthOptions,
+  });
+  const managedAfterUpsert = Array.isArray(afterUpsert?.terms?.managedTerms)
+    ? afterUpsert.terms.managedTerms.find((entry) => entry?.term === probeTerm)
+    : null;
+  assert(managedAfterUpsert, "admin moderation-term upsert not visible in managedTerms[]");
+  const activeAfterUpsert = Array.isArray(afterUpsert?.terms?.activeTerms)
+    ? afterUpsert.terms.activeTerms.includes(probeTerm)
+    : false;
+  assert(activeAfterUpsert, "admin moderation-term upsert not visible in activeTerms[]");
+
+  const remove = await apiRequest("/admin/moderation/terms/remove", {
+    method: "POST",
+    ...adminAuthOptions,
+    body: {
+      term: probeTerm,
+    },
+  });
+  assert(remove?.ok === true, "admin moderation-term remove did not report success");
+  assertEqual(
+    remove?.term,
+    probeTerm,
+    "admin moderation-term remove returned unexpected term"
+  );
+
+  const afterRemove = await apiRequest("/admin/moderation/terms?includeTerms=1&limit=500", {
+    method: "GET",
+    ...adminAuthOptions,
+  });
+  const managedAfterRemove = Array.isArray(afterRemove?.terms?.managedTerms)
+    ? afterRemove.terms.managedTerms.find((entry) => entry?.term === probeTerm)
+    : null;
+  assert(!managedAfterRemove, "admin moderation-term remove still present in managedTerms[]");
+  const activeAfterRemove = Array.isArray(afterRemove?.terms?.activeTerms)
+    ? afterRemove.terms.activeTerms.includes(probeTerm)
+    : false;
+  assert(!activeAfterRemove, "admin moderation-term remove still present in activeTerms[]");
+
+  const refreshResult = await apiRequestWithStatus("/admin/moderation/terms/refresh", {
+    method: "POST",
+    ...adminAuthOptions,
+  });
+  if (refreshResult.status === 200) {
+    assert(refreshResult.body?.ok === true, "admin moderation-term refresh returned 200 without ok=true");
+  } else {
+    assertEqual(
+      refreshResult.status,
+      409,
+      "admin moderation-term refresh returned unexpected status when remote feed is unavailable"
+    );
+    assertEqual(
+      refreshResult.body?.reason,
+      "remote_not_configured",
+      "admin moderation-term refresh returned unexpected reason"
+    );
+  }
+
+  log("Admin moderation-term checks passed.");
 }
 
 async function runStorageCutoverChecks() {
