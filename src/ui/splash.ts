@@ -7,7 +7,6 @@ import { audioService } from "../services/audio.js";
 import { logger } from "../utils/logger.js";
 import type { MultiplayerGameDifficulty, MultiplayerRoomListing } from "../services/backendApi.js";
 import type { SplashBackground3D } from "./splashBackground3d.js";
-import { getLocalPlayerId } from "../services/playerIdentity.js";
 import { getBrandLogoUrl } from "../services/assetUrl.js";
 import { gameBrand } from "../config/brand.js";
 import { getLocale, setLocale, t, type LocaleCode } from "../i18n/index.js";
@@ -258,50 +257,62 @@ export class SplashScreen {
                   </label>
                 </div>
                 <div id="splash-private-room-settings" class="splash-private-room-settings" hidden>
-                  <div class="splash-private-config-grid">
-                    <div>
-                      <label for="splash-private-room-name">${t("splash.multiplayer.privateRoomName")}</label>
+                  <div class="splash-private-room-panel splash-private-room-panel-create">
+                    <div class="splash-private-room-panel-head">
+                      <h4>${t("splash.multiplayer.privateCreateHeading")}</h4>
+                      <p>${t("splash.multiplayer.privateCreateHint")}</p>
+                    </div>
+                    <div class="splash-private-config-grid">
+                      <div>
+                        <label for="splash-private-room-name">${t("splash.multiplayer.privateRoomName")}</label>
+                        <input
+                          id="splash-private-room-name"
+                          type="text"
+                          autocomplete="off"
+                          spellcheck="false"
+                          maxlength="24"
+                          placeholder="${t("splash.multiplayer.privateRoomNamePlaceholder")}"
+                        />
+                      </div>
+                      <div>
+                        <label for="splash-private-room-player-limit">${t("splash.multiplayer.privatePlayerLimit")}</label>
+                        <select id="splash-private-room-player-limit">
+                          <option value="2">2</option>
+                          <option value="3">3</option>
+                          <option value="4">4</option>
+                          <option value="5">5</option>
+                          <option value="6">6</option>
+                          <option value="7">7</option>
+                          <option value="8" selected>8</option>
+                        </select>
+                      </div>
+                    </div>
+                    <p class="splash-private-room-limit-note">${t("splash.multiplayer.privatePlayerLimitNote")}</p>
+                  </div>
+                  <div class="splash-private-room-panel splash-private-room-panel-join">
+                    <div class="splash-private-room-panel-head">
+                      <h4>${t("splash.multiplayer.privateJoinHeading")}</h4>
+                      <p>${t("splash.multiplayer.privateJoinHint")}</p>
+                    </div>
+                    <label for="splash-room-code">${t("splash.multiplayer.joinByInviteCode")}</label>
+                    <div class="splash-room-code-actions">
                       <input
-                        id="splash-private-room-name"
+                        id="splash-room-code"
                         type="text"
+                        inputmode="text"
+                        autocapitalize="characters"
                         autocomplete="off"
                         spellcheck="false"
-                        maxlength="24"
-                        placeholder="${t("splash.multiplayer.privateRoomNamePlaceholder")}"
+                        placeholder="${t("splash.multiplayer.roomCodePlaceholder")}"
+                        maxlength="8"
+                        aria-describedby="splash-room-code-error"
                       />
+                      <button type="button" id="splash-room-code-join" class="btn btn-primary primary">
+                        ${t("splash.multiplayer.joinCode")}
+                      </button>
                     </div>
-                    <div>
-                      <label for="splash-private-room-player-limit">${t("splash.multiplayer.privatePlayerLimit")}</label>
-                      <select id="splash-private-room-player-limit">
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                        <option value="6">6</option>
-                        <option value="7">7</option>
-                        <option value="8" selected>8</option>
-                      </select>
-                    </div>
+                    <p id="splash-room-code-error" class="splash-room-code-error" style="display: none;"></p>
                   </div>
-                  <p class="splash-private-room-limit-note">${t("splash.multiplayer.privatePlayerLimitNote")}</p>
-                  <label for="splash-room-code">${t("splash.multiplayer.joinByInviteCode")}</label>
-                  <div class="splash-room-code-actions">
-                    <input
-                      id="splash-room-code"
-                      type="text"
-                      inputmode="text"
-                      autocapitalize="characters"
-                      autocomplete="off"
-                      spellcheck="false"
-                      placeholder="${t("splash.multiplayer.roomCodePlaceholder")}"
-                      maxlength="8"
-                      aria-describedby="splash-room-code-error"
-                    />
-                    <button type="button" id="splash-room-code-join" class="btn btn-primary primary">
-                      ${t("splash.multiplayer.joinCode")}
-                    </button>
-                  </div>
-                  <p id="splash-room-code-error" class="splash-room-code-error" style="display: none;"></p>
                 </div>
               </div>
 
@@ -666,18 +677,8 @@ export class SplashScreen {
         this.updateStartActionsUi();
         return;
       }
-      const privateModeEnabled = this.isPrivateRoomModeEnabled();
-      const selectedRoom =
-        !privateModeEnabled && this.selectedRoomSessionId
-          ? this.roomList.find((room) => room.sessionId === this.selectedRoomSessionId) ?? null
-          : null;
-      const selectedRoomCode = !privateModeEnabled ? selectedRoom?.roomCode?.trim() ?? "" : "";
-      const selectedRoomSessionIdFallback =
-        !privateModeEnabled && !selectedRoomCode
-          ? this.selectedRoomSessionId ?? undefined
-          : undefined;
       const roomCodeValidationError =
-        this.playMode === "multiplayer" && privateModeEnabled
+        this.playMode === "multiplayer" && this.isPrivateRoomModeEnabled()
           ? this.getRoomCodeValidationError(this.privateRoomCode)
           : null;
       if (roomCodeValidationError) {
@@ -686,21 +687,11 @@ export class SplashScreen {
         return;
       }
       audioService.playSfx("click");
+      const multiplayerStartOptions =
+        this.playMode === "multiplayer" ? this.buildMultiplayerStartOptions() : undefined;
       void attemptStart({
         playMode: this.playMode,
-        multiplayer:
-          this.playMode === "multiplayer"
-            ? {
-              botCount: this.botCount,
-              joinBotCount: this.getJoinBotSeedCount(),
-              gameDifficulty: this.multiplayerDifficulty,
-              sessionId: privateModeEnabled ? undefined : selectedRoomSessionIdFallback,
-              roomCode: privateModeEnabled
-                ? this.privateRoomCode || undefined
-                : selectedRoomCode || undefined,
-              autoSeatReady: this.autoSeatReadyOnJoin,
-            }
-          : undefined,
+        multiplayer: multiplayerStartOptions,
       });
     };
 
@@ -866,16 +857,71 @@ export class SplashScreen {
       const roomCodeValidationError = this.getRoomCodeValidationError(this.privateRoomCode);
       return !roomCodeValidationError;
     }
-    if (typeof this.selectedRoomSessionId !== "string" || this.selectedRoomSessionId.trim().length === 0) {
-      return false;
+    return this.resolveSelectedPublicRoomJoinTarget() !== null;
+  }
+
+  private getPrivateRoomJoinIntent(): "create" | "code" {
+    if (!this.isPrivateRoomModeEnabled()) {
+      return "create";
     }
-    const selectedRoom = this.roomList.find(
-      (room) => room.sessionId === this.selectedRoomSessionId
-    );
+    return this.privateRoomCode.length > 0 ? "code" : "create";
+  }
+
+  private resolveSelectedPublicRoomJoinTarget(): { sessionId?: string; roomCode?: string } | null {
+    const selectedSessionId = this.selectedRoomSessionId?.trim();
+    if (!selectedSessionId) {
+      return null;
+    }
+    const selectedRoom =
+      this.roomList.find((room) => room.sessionId === selectedSessionId) ?? null;
     if (!selectedRoom) {
-      return false;
+      return null;
     }
-    return typeof selectedRoom.roomCode === "string" && selectedRoom.roomCode.trim().length > 0;
+    const selectedRoomCode = this.normalizeRoomCode(selectedRoom.roomCode ?? "");
+    if (selectedRoomCode) {
+      return {
+        roomCode: selectedRoomCode,
+      };
+    }
+    return {
+      sessionId: selectedSessionId,
+    };
+  }
+
+  private buildMultiplayerStartOptions(): SplashStartOptions["multiplayer"] {
+    if (this.playMode !== "multiplayer") {
+      return undefined;
+    }
+    const privateModeEnabled = this.isPrivateRoomModeEnabled();
+    const publicJoinTarget = privateModeEnabled ? null : this.resolveSelectedPublicRoomJoinTarget();
+    return {
+      botCount: this.botCount,
+      joinBotCount: this.getJoinBotSeedCount(),
+      gameDifficulty: this.multiplayerDifficulty,
+      sessionId: privateModeEnabled ? undefined : publicJoinTarget?.sessionId,
+      roomCode: privateModeEnabled
+        ? this.privateRoomCode || undefined
+        : publicJoinTarget?.roomCode,
+      autoSeatReady: this.autoSeatReadyOnJoin,
+    };
+  }
+
+  private resolveMultiplayerJoinLabel(): string {
+    if (!this.isPrivateRoomModeEnabled()) {
+      return t("splash.button.joinGame");
+    }
+    return this.getPrivateRoomJoinIntent() === "code"
+      ? t("splash.multiplayer.joinCode")
+      : t("splash.multiplayer.createPrivateRoom");
+  }
+
+  private resolveMultiplayerJoinHint(): string {
+    if (!this.isPrivateRoomModeEnabled()) {
+      return t("splash.multiplayer.pickLobbyHint");
+    }
+    return this.getPrivateRoomJoinIntent() === "code"
+      ? t("splash.multiplayer.pickLobbyHintPrivateCode")
+      : t("splash.multiplayer.pickLobbyHintPrivateCreate");
   }
 
   private updateStartActionsUi(): void {
@@ -885,9 +931,13 @@ export class SplashScreen {
     const multiplayerJoinTooltip =
       this.container.querySelector<HTMLElement>(".splash-multiplayer-join-tooltip");
     const joinMode = this.playMode === "multiplayer";
-    const label = joinMode ? t("splash.button.joinGame") : t("splash.button.startGame");
+    const label = joinMode
+      ? this.resolveMultiplayerJoinLabel()
+      : t("splash.button.startGame");
     const multiplayerJoinReady = this.canJoinSelectedMultiplayerRoom();
-    const joinHint = t("splash.multiplayer.pickLobbyHint");
+    const joinHint = joinMode
+      ? this.resolveMultiplayerJoinHint()
+      : t("splash.multiplayer.pickLobbyHint");
 
     if (startButton) {
       startButton.textContent = label;
@@ -897,7 +947,9 @@ export class SplashScreen {
       multiplayerJoinTooltip.title = joinHint;
     }
     if (multiplayerJoinButton) {
-      multiplayerJoinButton.textContent = t("splash.button.joinGame");
+      multiplayerJoinButton.textContent = joinMode
+        ? this.resolveMultiplayerJoinLabel()
+        : t("splash.button.joinGame");
       multiplayerJoinButton.disabled = !multiplayerJoinReady;
       multiplayerJoinButton.title = joinHint;
     }
@@ -915,6 +967,11 @@ export class SplashScreen {
     }
     if (privateRoomSettings) {
       privateRoomSettings.hidden = !privateEnabled;
+      if (privateEnabled) {
+        privateRoomSettings.dataset.intent = this.getPrivateRoomJoinIntent();
+      } else {
+        delete privateRoomSettings.dataset.intent;
+      }
     }
   }
 
@@ -1238,8 +1295,22 @@ export class SplashScreen {
       return;
     }
     if (this.isPrivateRoomModeEnabled()) {
+      const privateRoomName = this.privateRoomName.trim();
       if (!this.privateRoomCode) {
         const joinSeedNote = this.getJoinBotSeedStatusNote();
+        if (privateRoomName) {
+          statusEl.textContent = joinSeedNote
+            ? t("splash.multiplayer.status.privateReadyNamedWithNote", {
+                roomName: privateRoomName,
+                maxPlayers: this.privateRoomMaxPlayers,
+                note: joinSeedNote,
+              })
+            : t("splash.multiplayer.status.privateReadyNamed", {
+                roomName: privateRoomName,
+                maxPlayers: this.privateRoomMaxPlayers,
+              });
+          return;
+        }
         statusEl.textContent = joinSeedNote
           ? t("splash.multiplayer.status.privateReadyWithNote", {
               note: joinSeedNote,
@@ -1254,11 +1325,11 @@ export class SplashScreen {
       }
       const joinSeedNote = this.getJoinBotSeedStatusNote();
       statusEl.textContent = joinSeedNote
-        ? t("splash.multiplayer.status.joiningPrivateWithNote", {
+        ? t("splash.multiplayer.status.privateInviteReadyWithNote", {
             roomCode: this.privateRoomCode,
             note: joinSeedNote,
           })
-        : t("splash.multiplayer.status.joiningPrivate", {
+        : t("splash.multiplayer.status.privateInviteReady", {
             roomCode: this.privateRoomCode,
           });
       return;
@@ -1425,19 +1496,6 @@ export class SplashScreen {
     this.roomCodeFeedback = null;
   }
 
-  private getRoomCodeJoinFailureMessage(reason: string | undefined): string {
-    if (reason === "room_not_found") {
-      return t("splash.multiplayer.joinFailure.roomNotFound");
-    }
-    if (reason === "room_full") {
-      return t("splash.multiplayer.joinFailure.roomFull");
-    }
-    if (reason === "session_expired") {
-      return t("splash.multiplayer.joinFailure.sessionExpired");
-    }
-    return t("splash.multiplayer.joinFailure.default");
-  }
-
   private async handleJoinCodeQuickAction(
     attemptStart: (options: SplashStartOptions) => Promise<boolean>
   ): Promise<void> {
@@ -1459,51 +1517,33 @@ export class SplashScreen {
     }
 
     const targetRoomCode = this.privateRoomCode;
-    const localPlayerId = getLocalPlayerId();
+    const multiplayerStartOptions = this.buildMultiplayerStartOptions();
+    if (!multiplayerStartOptions) {
+      return;
+    }
     this.roomCodeJoinInFlight = true;
-    this.setRoomCodeFeedback(t("splash.multiplayer.joinCodeChecking"), "info");
+    // Let runtime own join-or-create behavior for invite codes so both CTAs share one flow.
+    this.setRoomCodeFeedback(
+      t("splash.multiplayer.joinCodeChecking", { roomCode: targetRoomCode }),
+      "info"
+    );
 
-    let joinedSessionId: string | null = null;
     try {
-      const { backendApiService } = await import("../services/backendApi.js");
-      const joinResult = await backendApiService.joinMultiplayerRoomByCode(targetRoomCode, {
-        playerId: localPlayerId,
-        botCount: this.getJoinBotSeedCount(),
-        gameDifficulty: this.multiplayerDifficulty,
-      });
-
-      if (!joinResult.session) {
-        this.setRoomCodeFeedback(
-          this.getRoomCodeJoinFailureMessage(joinResult.reason),
-          "error"
-        );
-        return;
-      }
-
-      joinedSessionId = joinResult.session.sessionId;
-      this.setRoomCodeFeedback(
-        t("splash.multiplayer.joinCodeFound", { roomCode: joinResult.session.roomCode }),
-        "success"
-      );
       const started = await attemptStart({
         playMode: "multiplayer",
         multiplayer: {
-          botCount: this.botCount,
-          joinBotCount: this.getJoinBotSeedCount(),
-          gameDifficulty: this.multiplayerDifficulty,
-          sessionId: joinedSessionId,
+          ...multiplayerStartOptions,
           roomCode: targetRoomCode,
-          autoSeatReady: this.autoSeatReadyOnJoin,
+          sessionId: undefined,
         },
       });
 
       if (!started) {
         this.setRoomCodeFeedback(t("splash.multiplayer.joinCodeUnableStart"), "error");
-        await backendApiService.leaveMultiplayerSession(joinedSessionId, localPlayerId);
       }
     } catch (error) {
-      log.warn("Invite-code join precheck failed", error);
-      this.setRoomCodeFeedback(t("splash.multiplayer.joinCodeUnableValidate"), "error");
+      log.warn("Invite-code join quick action failed", error);
+      this.setRoomCodeFeedback(t("splash.multiplayer.joinFailure.default"), "error");
     } finally {
       this.roomCodeJoinInFlight = false;
       this.updateRoomCodeValidationUi();

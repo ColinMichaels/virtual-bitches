@@ -3238,13 +3238,90 @@ body.splash-active :is(
   align-items: center;
   gap: 8px;
   text-transform: none;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 168, 255, 0.4);
+  background: linear-gradient(180deg, rgba(24, 46, 84, 0.84) 0%, rgba(10, 24, 52, 0.9) 100%);
+  color: rgba(234, 242, 255, 0.95);
 }
 
 .splash-private-room-settings {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+}
+
+.splash-private-room-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(120, 164, 255, 0.2);
+  background: linear-gradient(165deg, rgba(16, 31, 58, 0.9) 0%, rgba(7, 15, 33, 0.88) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.splash-private-room-panel::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: rgba(var(--color-primary-rgb), 0.9);
+}
+
+.splash-private-room-panel-create {
+  background:
+    radial-gradient(112% 90% at 0% 0%, rgba(64, 110, 201, 0.22), rgba(0, 0, 0, 0) 58%),
+    linear-gradient(170deg, rgba(16, 32, 62, 0.92) 0%, rgba(8, 18, 38, 0.9) 100%);
+}
+
+.splash-private-room-panel-join {
+  background:
+    radial-gradient(118% 92% at 100% 0%, rgba(42, 146, 133, 0.2), rgba(0, 0, 0, 0) 60%),
+    linear-gradient(170deg, rgba(11, 30, 52, 0.92) 0%, rgba(7, 18, 32, 0.9) 100%);
+}
+
+.splash-private-room-panel-join::before {
+  background: rgba(var(--status-info-rgb), 0.9);
+}
+
+.splash-private-room-settings[data-intent="create"] .splash-private-room-panel-create,
+.splash-private-room-settings[data-intent="code"] .splash-private-room-panel-join {
+  border-color: rgba(var(--color-primary-rgb), 0.62);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 18px rgba(0, 0, 0, 0.24);
+}
+
+.splash-private-room-settings[data-intent="create"] .splash-private-room-panel-join,
+.splash-private-room-settings[data-intent="code"] .splash-private-room-panel-create {
+  opacity: 0.84;
+}
+
+.splash-private-room-panel-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.splash-private-room-panel-head h4 {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #f4f8ff;
+}
+
+.splash-private-room-panel-head p {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(210, 223, 250, 0.78);
 }
 
 .splash-private-config-grid {
@@ -3295,14 +3372,24 @@ body.splash-active :is(
   align-items: center;
 }
 
+#splash-room-code {
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
 .splash-room-code-actions button {
-  min-width: 104px;
+  min-width: 122px;
   padding: 9px 12px;
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .splash-room-code-error {
   min-height: 16px;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .splash-room-code-error.is-info {
