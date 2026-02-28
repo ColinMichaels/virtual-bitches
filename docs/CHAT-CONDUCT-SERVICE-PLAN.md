@@ -26,6 +26,8 @@ Current implementation is an in-process service bootstrap, intentionally isolate
   - `POST /api/admin/moderation/terms/upsert`
   - `POST /api/admin/moderation/terms/remove`
   - `POST /api/admin/moderation/terms/refresh`
+- E2E coverage:
+  - `E2E_ASSERT_ADMIN_MODERATION_TERMS=1` validates moderation term overview/upsert/remove/refresh contract.
 
 ## Session State Contract
 
@@ -96,5 +98,5 @@ If `MULTIPLAYER_CHAT_BANNED_TERMS` is unset, server falls back to `MULTIPLAYER_R
 ## Next Steps
 
 1. Add richer term severity categories and per-room policy overrides.
-2. Add dedicated e2e assertions for `/api/admin/moderation/terms/*` endpoint contract.
+2. Add dedicated role-based (no admin-token) moderation-term smoke variant.
 3. Move in-process term + strike state to an external moderation service with API auth, audit logs, and rate limiting.

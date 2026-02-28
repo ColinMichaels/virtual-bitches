@@ -76,15 +76,26 @@ Two viable options:
 2. Separate Hosting target/subdomain (recommended long-term):
    - `admin.<domain>` or separate Firebase hosting target
    - fully independent rollback cadence
+   - separate Firebase project credentials and deploy workflow
+
+Current scaffolded deploy path:
+- workflow: `.github/workflows/admin-deploy.yml`
+- intended environment lanes:
+  - `admin-dev`
+  - `admin-prod`
+- expected defaults (override with vars):
+  - Firebase config: `admin/firebase.json`
+  - build output: `admin/dist`
 
 ## CI/CD Strategy
 
 Keep current pipeline focused on API + gameplay.
 
-Add a separate admin job/workflow later:
-- install/build/test only `/admin`
-- deploy only when admin paths change
-- optional environment protections for owner-only release approvals
+Admin workflow scaffold has been added and should be hardened as `/admin` is implemented:
+- install/build/deploy only `/admin`
+- deploy only when admin paths change (or manual dispatch)
+- optional smoke probe against `ADMIN_APP_BASE_URL`
+- environment protections recommended for `admin-prod`
 
 ## Phased Delivery
 

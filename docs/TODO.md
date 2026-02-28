@@ -54,6 +54,23 @@ Reference docs:
   - [ ] Re-run GitHub Actions deploy smoke to confirm mitigation in CI.
   - [ ] Document root cause + mitigation in `docs/AUDIT-2026-02-25.md` follow-up section or a new deployment incident note.
 
+### Beta Deployment + Security Readiness (2026-02-28)
+- **Status**: 🟡 In Progress
+- **Review Doc**: `docs/BETA-DEPLOYMENT-ARCHITECTURE-REVIEW.md`
+- **Completed Foundations**:
+  - [x] Added admin moderation-term smoke segment (`E2E_ASSERT_ADMIN_MODERATION_TERMS`) in `api/e2e/smoke.mjs`.
+  - [x] Wired smoke toggles for admin monitor + admin moderation terms in `.github/workflows/firebase-deploy.yml`.
+  - [x] Added separate admin deploy workflow scaffold (`.github/workflows/admin-deploy.yml`) for independent Firebase project lane.
+- **P0 Before Beta Invite**:
+  - [ ] Configure dedicated admin Firebase project credentials/secrets (`ADMIN_FIREBASE_PROJECT_ID_*`, `ADMIN_GCP_SA_KEY*`) and run first manual admin deploy.
+  - [ ] Confirm prod admin access policy (`API_ADMIN_ACCESS_MODE`) and bootstrap owner allowlists match intended operator model.
+  - [ ] Add explicit login/logout + profile-write smoke assertions to cover auth session lifecycle regressions.
+  - [ ] Add deterministic leaderboard sync/read-back smoke assertion for single-player score persistence path.
+  - [ ] Define and document token rotation procedure for `API_ADMIN_TOKEN` and emergency revocation runbook.
+- **P1 Hardening**:
+  - [ ] Add role-only admin smoke variant (no admin token path) for Firebase-role authorization validation.
+  - [ ] Add structured Cloud Run log filters/alerts for websocket auth failures and moderation abuse spikes.
+
 ### Camera System & Machinima Tools (Phase 1 COMPLETE, Phase 2 PARTIAL) 📷
 - **Status**: ✅ Phase 1 COMPLETE (2026-02-24) • 🟡 Phase 2 PARTIAL (2026-02-25 foundation work)
 - **Complexity**: Medium (Phase 1), Very High (Full System)
@@ -185,7 +202,8 @@ Reference docs:
   - [ ] Scaffold `/admin` Angular workspace with strict TS + Material baseline.
   - [ ] Implement auth bootstrap + role guards (`viewer`/`operator`/`owner`).
   - [ ] Build dashboard/rooms/conduct modules against current admin API.
-  - [ ] Add dedicated admin CI workflow separate from gameplay pipeline.
+  - [x] Add dedicated admin CI workflow scaffold separate from gameplay pipeline (`.github/workflows/admin-deploy.yml`).
+  - [ ] Harden admin workflow with admin-app tests/smoke once `/admin` workspace lands.
 
 #### Multiplayer Player Interaction Menu Scaffold (2026-02-28)
 - **Status**: 🟡 Baseline complete and extracted into `src/ui/playerInteractions.ts`

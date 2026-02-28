@@ -260,6 +260,26 @@ Notes:
 - `E2E_ASSERT_CHAT_CONDUCT` is opt-in for deployed smoke.
 - local harness (`npm run test:e2e:api:local`) enables it by default with a deterministic test term.
 
+Optional admin monitor assertion segment:
+
+```bash
+E2E_ASSERT_ADMIN_MONITOR=1 npm run test:e2e:api
+```
+
+Notes:
+- validates `/api/admin/overview`, `/rooms`, `/metrics`, `/audit`, `/roles` and mutation audit probes.
+- requires admin auth (`E2E_ADMIN_TOKEN` or `E2E_FIREBASE_ID_TOKEN` with sufficient role).
+
+Optional admin moderation-term assertion segment:
+
+```bash
+E2E_ASSERT_ADMIN_MODERATION_TERMS=1 npm run test:e2e:api
+```
+
+Notes:
+- validates `GET/POST /api/admin/moderation/terms*` contract (overview/upsert/remove/refresh).
+- requires admin auth (`E2E_ADMIN_TOKEN` or `E2E_FIREBASE_ID_TOKEN` with sufficient role).
+
 Bot engine contract tests (strategy interface and invariants):
 
 ```bash

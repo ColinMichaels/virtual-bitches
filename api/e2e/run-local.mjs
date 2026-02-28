@@ -107,6 +107,8 @@ function runSmoke(baseUrl) {
           process.env.E2E_QUEUE_LIFECYCLE_WAIT_MS ?? (shortTtlModeEnabled ? "12000" : "90000"),
         E2E_ADMIN_TOKEN: adminToken,
         E2E_ASSERT_ADMIN_MONITOR: process.env.E2E_ASSERT_ADMIN_MONITOR ?? "1",
+        E2E_ASSERT_ADMIN_MODERATION_TERMS:
+          process.env.E2E_ASSERT_ADMIN_MODERATION_TERMS ?? "1",
         E2E_ASSERT_CHAT_CONDUCT: process.env.E2E_ASSERT_CHAT_CONDUCT ?? "1",
         E2E_CHAT_CONDUCT_TEST_TERM: chatConductTestTerm,
       },

@@ -141,6 +141,8 @@ Optional but recommended:
 | `MULTIPLAYER_CHAT_TERMS_MAX_MANAGED` | integer like `2048` | Max in-API managed moderation terms |
 | `MULTIPLAYER_CHAT_TERMS_MAX_REMOTE` | integer like `4096` | Max remote moderation terms per refresh |
 | `E2E_QUEUE_LIFECYCLE_WAIT_MS` | integer ms like `90000` | CI smoke tolerance |
+| `E2E_ASSERT_ADMIN_MONITOR` | `0` or `1` | Toggle admin monitor smoke segment (overview/rooms/metrics/audit/roles + admin mutations) |
+| `E2E_ASSERT_ADMIN_MODERATION_TERMS` | `0` or `1` | Toggle admin moderation-term smoke segment (`/api/admin/moderation/terms*`) |
 | `E2E_ASSERT_MULTIPLAYER_MODERATION` | `0` or `1` | Toggle moderation smoke segment (`kick/ban`, `room_banned`, `interaction_blocked`) |
 | `E2E_ASSERT_CHAT_CONDUCT` | `0` or `1` | Toggle chat conduct smoke segment (strikes + mute + admin clear) |
 | `E2E_CHAT_CONDUCT_TEST_TERM` | token like `e2e-term-blocked` | Deterministic banned term used by smoke payloads |
@@ -169,6 +171,25 @@ Workflow also supports repo-level fallback keys:
 - `VITE_FIREBASE_MEASUREMENT_ID_PROD`, `VITE_FIREBASE_MEASUREMENT_ID_DEV`
 
 Use these only if you cannot use environment-scoped keys.
+
+### 2.6 Admin Deployment Workflow Keys (`admin-deploy.yml`)
+
+Secrets:
+- `ADMIN_GCP_SA_KEY` or `ADMIN_GCP_SA_KEY_B64`:
+  - recommended dedicated service account for admin Firebase project
+  - if absent, workflow falls back to `GCP_SA_KEY`/`GCP_SA_KEY_B64`
+- `ADMIN_FIREBASE_PROJECT_ID` (or branch-specific):
+  - `ADMIN_FIREBASE_PROJECT_ID_DEV`
+  - `ADMIN_FIREBASE_PROJECT_ID_PROD`
+
+Variables:
+- `ADMIN_FIREBASE_CONFIG_PATH` (default: `admin/firebase.json`)
+- `ADMIN_DIST_DIR` (default: `admin/dist`)
+- `ADMIN_HOSTING_TARGET` (optional; deploy alias when using multi-site target mapping)
+- `ADMIN_APP_BASE_URL` (optional smoke URL for manual dispatch)
+- branch-specific optional smoke URLs:
+  - `ADMIN_APP_BASE_URL_DEV`
+  - `ADMIN_APP_BASE_URL_PROD`
 
 ## 3) Quick Secret Generation Tips
 
