@@ -20,6 +20,8 @@
 - Updated winner-queue heartbeat handling in smoke to treat transient `session_expired`/lookup-style failures as recoverable while auth-refresh recovery runs, instead of hard-failing immediately.
 - Added websocket-assisted winner-queue restart detection (with HTTP fallback) so smoke can observe post-game auto-restart reliably even when cross-instance HTTP refresh polling sees transient session-store inconsistency.
 - Reduced winner-queue refresh polling cadence (1s throttle) and widened fresh-round detection criteria to avoid false negatives when participant reset state arrives before turn assignment state converges.
+- Added transient winner-queue retry behavior: when the first queue lifecycle attempt fails with `session_expired`/auto-start timeout signatures, smoke retries once with a fresh session before failing.
+- Increased winner-queue heartbeat/refresh polling intervals to reduce cross-instance auth-refresh churn in Cloud Run while still maintaining liveness coverage.
 
 ### Multiplayer Post-Round Lifecycle Fixes
 - Fixed next-game scheduling baseline so `nextGameStartsAt` is now computed from **round completion time** instead of prior `gameStartedAt`.

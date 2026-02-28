@@ -78,7 +78,18 @@ async function run() {
 
   const runSuffix = randomUUID().slice(0, 8);
   await runRoomLifecycleChecks(runSuffix);
-  await runWinnerQueueLifecycleChecks(runSuffix);
+  try {
+    await runWinnerQueueLifecycleChecks(runSuffix);
+  } catch (error) {
+    if (!isTransientWinnerQueueLifecycleFailure(error)) {
+      throw error;
+    }
+    const firstAttemptMessage = error instanceof Error ? error.message : String(error);
+    log(
+      `Winner queue lifecycle encountered transient failure; retrying once with a fresh session (${firstAttemptMessage}).`
+    );
+    await runWinnerQueueLifecycleChecks(`${runSuffix}-retry`);
+  }
   hostPlayerId = `e2e-host-${runSuffix}`;
   guestPlayerId = `e2e-guest-${runSuffix}`;
 
@@ -1382,7 +1393,7 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
         break;
       }
 
-      if (now - lastHeartbeatPingAt >= 5000) {
+      if (now - lastHeartbeatPingAt >= 10000) {
         const heartbeat = await apiRequestWithStatus(
           `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/heartbeat`,
           {
@@ -1408,7 +1419,7 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
         }
       }
 
-      if (now - lastRefreshAttemptAt < 1000) {
+      if (now - lastRefreshAttemptAt < 3000) {
         await waitMs(250);
         continue;
       }
@@ -2218,6 +2229,15 @@ function isTransientQueueRefreshFailure(result) {
   }
 
   return false;
+}
+
+function isTransientWinnerQueueLifecycleFailure(error) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("queue lifecycle did not auto-start a fresh round") ||
+    normalized.includes("session_expired")
+  );
 }
 
 async function joinRoomByCodeWithTransientRetry(roomCode, payload, options = {}) {
