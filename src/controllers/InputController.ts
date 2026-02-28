@@ -548,6 +548,11 @@ export class InputController {
         this.leaderboardModal.hide();
       } else if (this.profileModal.isVisible()) {
         this.profileModal.hide();
+      } else if (this.isElementVisibleById("player-interaction-modal")) {
+        const closeButton = document.querySelector<HTMLButtonElement>(
+          "#player-interaction-modal .player-interaction-close"
+        );
+        closeButton?.click();
       } else if (this.chaosUpgradeMenu.isVisible()) {
         this.chaosUpgradeMenu.hide();
       } else if (this.isElementVisibleById("settings-modal")) {

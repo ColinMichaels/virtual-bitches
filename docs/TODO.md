@@ -1,8 +1,12 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-27 (Wave A i18n complete + multiplayer lobby polish + notification UX update)
+**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-28 (player interactions refactor extracted + backlog archive cleanup)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
+
+Reference docs:
+- Production-ready baseline features: `docs/PRODUCTION-READY-FEATURES.md`
+- Archived completed TODO milestones: `docs/TODO-ARCHIVE-2026-02.md`
 
 ---
 
@@ -156,39 +160,25 @@ This document tracks all pending work, active bugs, technical debt, and backlog 
   - [ ] Run focused device QA pass (iPhone + Android + iPad) for settings, updates panel links, and camera focus flows.
 
 #### Multiplayer Room Channel Messaging (2026-02-27)
-- **Status**: 🟡 Core transport complete; UX and block-management UI follow-up pending
-- **Completed**:
-  - ✅ Added websocket `room_channel` messaging contract for `public` and `direct` channels.
-  - ✅ Routed turn nudge actions through direct room-channel delivery.
-  - ✅ Added player send shortcuts:
-    - `M` for public room messages
-    - `W` for direct whispers
-  - ✅ Added server-side moderation/privacy checks:
-    - deny-list senders via `MULTIPLAYER_ROOM_CHANNEL_BAD_PLAYER_IDS`
-    - deny-list content via `MULTIPLAYER_ROOM_CHANNEL_BAD_TERMS`
-    - enforce per-player block-list rules on both direct and public message delivery
-  - ✅ Added `blockedPlayerIds` support to player profile/session ingestion paths.
+- **Status**: 🟡 Baseline complete; follow-up UX and moderation tests pending
+- **Archive**: Completed baseline milestones moved to `docs/TODO-ARCHIVE-2026-02.md`
 - **Follow-up**:
   - [ ] Replace temporary `window.prompt(...)` compose flow with in-game chat/whisper modal UI.
   - [ ] Add block/unblock controls in Profile/Settings and sync with `blockedPlayerIds`.
   - [ ] Add API/WebSocket integration test coverage for moderation rejection codes (`room_channel_*`).
 
+#### Multiplayer Player Interaction Menu Scaffold (2026-02-28)
+- **Status**: 🟡 Baseline complete and extracted into `src/ui/playerInteractions.ts`
+- **Archive**: Completed scaffold milestones moved to `docs/TODO-ARCHIVE-2026-02.md`
+- **Follow-up**:
+  - [ ] Replace prompt-based whisper + chaos choice with dedicated in-modal composers.
+  - [ ] Integrate gifting economy service/API and enable `Send Gift`.
+  - [ ] Integrate friends service/API and enable `Add Friend`.
+  - [ ] Add moderation/block-list guards to interaction-menu actions (same rules as room-channel messaging).
+
 #### Multiplayer Post-Round Queue + Lifecycle (2026-02-27)
-- **Status**: 🟡 Core lifecycle and queue flow complete; UX polish/testing follow-up pending
-- **Completed**:
-  - ✅ Winner-only end-game action added: `Wait for Next Game` (winner can re-seat and queue from modal).
-  - ✅ Added queue intent endpoint: `POST /api/multiplayer/sessions/:sessionId/queue-next`.
-  - ✅ Added post-round lifecycle server timers:
-    - auto-start next game after 60s (configurable)
-    - room expiry after 2m post-round inactivity (configurable)
-  - ✅ Added room-wide broadcasts for:
-    - round winner + score
-    - next-game pending message
-    - 10-second next-game countdown
-    - next-game started
-  - ✅ Added client-side countdown notification + short beep/click cue handling.
-  - ✅ Added queue-next client/service test coverage (`backendApi` + `sessionService`).
-  - ✅ Added local API e2e smoke coverage for winner queue lifecycle (`queue-next` -> auto-restart round).
+- **Status**: 🟡 Baseline complete; UX polish/testing follow-up pending
+- **Archive**: Completed baseline milestones moved to `docs/TODO-ARCHIVE-2026-02.md`
 - **Follow-up**:
   - [ ] Add dedicated audio SFX asset for countdown (replace temporary click fallback).
   - [ ] Add focused regression for inactivity-expiry timer edge cases (already covered for restart path in e2e smoke).
