@@ -1271,6 +1271,7 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
     const deadline = Date.now() + Math.max(5000, queueLifecycleWaitMs);
     let restarted = null;
     let lastHeartbeatPingAt = 0;
+    let lastRefreshFailure = null;
     while (Date.now() < deadline) {
       const now = Date.now();
       if (now - lastHeartbeatPingAt >= 5000) {
@@ -1297,7 +1298,7 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
           body: { playerId: queueHostPlayerId },
         }
       );
-      if (refreshedAttempt.ok !== true && isTransientSessionExpiryFailure(refreshedAttempt)) {
+      if (refreshedAttempt.ok !== true && isTransientQueueRefreshFailure(refreshedAttempt)) {
         const rejoinAttempt = await apiRequestWithStatus(
           `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/join`,
           {
@@ -1311,14 +1312,28 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
         if (rejoinAttempt.ok === true) {
           refreshedAttempt = rejoinAttempt;
           log("Queue lifecycle auth refresh recovered via session rejoin fallback.");
+        } else if (isTransientQueueRefreshFailure(rejoinAttempt)) {
+          lastRefreshFailure = rejoinAttempt;
+          await waitMs(250);
+          continue;
+        } else {
+          throw new Error(
+            `request failed (POST /multiplayer/sessions/${queueSessionId}/join) status=${rejoinAttempt.status} body=${JSON.stringify(rejoinAttempt.body)}`
+          );
         }
       }
       if (!refreshedAttempt.ok) {
+        if (isTransientQueueRefreshFailure(refreshedAttempt)) {
+          lastRefreshFailure = refreshedAttempt;
+          await waitMs(250);
+          continue;
+        }
         throw new Error(
           `request failed (POST /multiplayer/sessions/${queueSessionId}/auth/refresh) status=${refreshedAttempt.status} body=${JSON.stringify(refreshedAttempt.body)}`
         );
       }
       const refreshed = refreshedAttempt.body;
+      lastRefreshFailure = null;
       if (typeof refreshed?.auth?.accessToken === "string" && refreshed.auth.accessToken.length > 0) {
         hostAccessToken = refreshed.auth.accessToken;
       }
@@ -1344,7 +1359,13 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
       await waitMs(250);
     }
 
-    assert(restarted, "queue lifecycle did not auto-start a fresh round within expected wait window");
+    const refreshFailureDetails = lastRefreshFailure
+      ? ` (last transient refresh failure status=${lastRefreshFailure.status} body=${JSON.stringify(lastRefreshFailure.body)})`
+      : "";
+    assert(
+      restarted,
+      `queue lifecycle did not auto-start a fresh round within expected wait window${refreshFailureDetails}`
+    );
     log("Winner queue lifecycle checks passed.");
   } finally {
     await safeLeave(queueSessionId, queueGuestPlayerId);
@@ -2007,8 +2028,32 @@ function isTransientRoomLookupFailure(result) {
   );
 }
 
-function isTransientSessionExpiryFailure(result) {
-  return Boolean(result && result.status === 410 && result.body?.reason === "session_expired");
+function isTransientQueueRefreshFailure(result) {
+  if (!result) {
+    return false;
+  }
+
+  if (result.status === 429 || (result.status >= 500 && result.status <= 504)) {
+    return true;
+  }
+
+  if (result.status === 410 && result.body?.reason === "session_expired") {
+    return true;
+  }
+
+  if (result.status === 404) {
+    return result.body?.reason === "room_not_found" || result.body?.reason === "unknown_player";
+  }
+
+  if (result.status === 401) {
+    return (
+      result.body?.reason === "invalid_or_expired_access_token" ||
+      result.body?.reason === "session_mismatch" ||
+      result.body?.reason === "player_mismatch"
+    );
+  }
+
+  return false;
 }
 
 async function joinRoomByCodeWithTransientRetry(roomCode, payload, options = {}) {
