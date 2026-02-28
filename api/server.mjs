@@ -247,6 +247,7 @@ let storeAdapter = null;
 let firebaseAdminAuthClientPromise = null;
 let storeRehydratePromise = null;
 let lastStoreRehydrateAt = 0;
+let persistStoreQueue = Promise.resolve();
 let chatConductTermRefreshHandle = null;
 let bootstrapPromise = null;
 let bootstrapRetryHandle = null;
@@ -2103,33 +2104,65 @@ function removeParticipantFromSession(
 
 async function handleRefreshSessionAuth(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
+  const body = await parseJsonBody(req);
+  const playerId = typeof body?.playerId === "string" ? body.playerId : "";
+  if (!playerId) {
+    sendJson(res, 400, { error: "playerId is required" });
+    return;
+  }
+
   let session = store.multiplayerSessions[sessionId];
   if (!session || session.expiresAt <= Date.now()) {
     await rehydrateStoreFromAdapter(`refresh_auth_session:${sessionId}`, { force: true });
     session = store.multiplayerSessions[sessionId];
   }
-  if (!session || session.expiresAt <= Date.now()) {
-    sendJson(res, 410, { error: "Session expired" });
+  if (!session) {
+    sendJson(res, 410, { error: "Session expired", reason: "session_expired" });
     return;
   }
 
-  const body = await parseJsonBody(req);
-  const playerId = typeof body?.playerId === "string" ? body.playerId : "";
-  if (!playerId || !session.participants[playerId]) {
+  let participant = session.participants[playerId];
+  if (!participant) {
     await rehydrateStoreFromAdapter(`refresh_auth_participant:${sessionId}:${playerId || "unknown"}`, {
       force: true,
     });
     session = store.multiplayerSessions[sessionId];
+    participant = session?.participants?.[playerId];
   }
-  if (!session || !playerId || !session.participants[playerId]) {
+
+  if (!session || !participant) {
     sendJson(res, 404, { error: "Player not in session" });
     return;
+  }
+
+  // During high write load with external storage, session expiry can be observed transiently.
+  // Allow an authenticated participant refresh to revive liveness instead of hard-expiring.
+  const sessionExpired =
+    !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now();
+  if (sessionExpired) {
+    let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
+    if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
+      await rehydrateStoreFromAdapter(`refresh_auth_expired_retry:${sessionId}:${playerId}`, { force: true });
+      session = store.multiplayerSessions[sessionId];
+      participant = session?.participants?.[playerId];
+      authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
+    }
+    if (!session || !participant || !authCheck.ok) {
+      sendJson(res, 410, { error: "Session expired", reason: "session_expired" });
+      return;
+    }
   }
 
   let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
   if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
     await rehydrateStoreFromAdapter(`refresh_auth_authorize:${sessionId}:${playerId}`, { force: true });
+    session = store.multiplayerSessions[sessionId];
+    participant = session?.participants?.[playerId];
     authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
+  }
+  if (!session || !participant) {
+    sendJson(res, 404, { error: "Player not in session" });
+    return;
   }
   if (!authCheck.ok) {
     sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "unauthorized" });
@@ -2137,7 +2170,6 @@ async function handleRefreshSessionAuth(req, res, pathname) {
   }
 
   const now = Date.now();
-  const participant = session.participants[playerId];
   if (participant && typeof participant === "object") {
     participant.lastHeartbeatAt = now;
   }
@@ -9683,8 +9715,15 @@ async function persistStore() {
   if (!storeAdapter) {
     return;
   }
-  exportChatModerationTermsToStore();
-  await storeAdapter.save(store);
+  persistStoreQueue = persistStoreQueue
+    .catch(() => {
+      // Keep persist operations flowing even if a prior save failed.
+    })
+    .then(async () => {
+      exportChatModerationTermsToStore();
+      await storeAdapter.save(store);
+    });
+  await persistStoreQueue;
 }
 
 async function refreshChatModerationTermsFromRemote(options = {}) {
@@ -9717,6 +9756,11 @@ async function rehydrateStoreFromAdapter(reason, options = {}) {
   if (!storeAdapter || typeof storeAdapter.load !== "function") {
     return false;
   }
+
+  // Avoid reading stale remote state while local saves are still being flushed.
+  await persistStoreQueue.catch(() => {
+    // Rehydrate can still continue and try to recover from adapter state.
+  });
 
   if (storeRehydratePromise) {
     return storeRehydratePromise;
