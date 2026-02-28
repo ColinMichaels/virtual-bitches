@@ -18,6 +18,7 @@
 - Added retry-tolerant handling for room-code probes that repeatedly resolve to the same target session after a successful `room_full` session-id probe, with explicit cleanup and transient-state logging.
 - Impact: deploy smoke no longer fails on cross-instance/public-room state drift while still enforcing hard capacity checks via direct session-id joins.
 - Hardened room fill saturation to retry transient session-id lookup failures, recover via room-code resolution when needed, and continue probing capacity until a stable `room_full` signal is observed.
+- Hardened private-room join validation to retry via session-id lookup and fall back to a fresh private-room attempt when the initial private join path remains transiently `session_expired`.
 - Updated winner-queue heartbeat handling in smoke to treat transient `session_expired`/lookup-style failures as recoverable while auth-refresh recovery runs, instead of hard-failing immediately.
 - Added websocket-assisted winner-queue restart detection (with HTTP fallback) so smoke can observe post-game auto-restart reliably even when cross-instance HTTP refresh polling sees transient session-store inconsistency.
 - Reduced winner-queue refresh polling cadence (1s throttle) and widened fresh-round detection criteria to avoid false negatives when participant reset state arrives before turn assignment state converges.
