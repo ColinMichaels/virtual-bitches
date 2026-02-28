@@ -29,6 +29,23 @@ Environment variables:
 - `API_ADMIN_TOKEN` (required when `API_ADMIN_ACCESS_MODE=token`; optional in `auto`)
 - `API_ADMIN_OWNER_UIDS` (comma/space-delimited Firebase UID allowlist bootstrapped as `owner`)
 - `API_ADMIN_OWNER_EMAILS` (comma/space-delimited email allowlist bootstrapped as `owner`)
+- `MULTIPLAYER_ROOM_CHANNEL_BAD_PLAYER_IDS` (legacy denylist of room-channel senders)
+- `MULTIPLAYER_ROOM_CHANNEL_BAD_TERMS` (legacy blocked term list; used as fallback for chat conduct terms)
+- `MULTIPLAYER_CHAT_CONDUCT_ENABLED` (`1` default; `0` disables chat conduct checks)
+- `MULTIPLAYER_CHAT_CONDUCT_PUBLIC_ONLY` (`1` default; `0` applies checks to direct channel too)
+- `MULTIPLAYER_CHAT_BANNED_TERMS` (comma/space-delimited blocked term list)
+- `MULTIPLAYER_CHAT_STRIKE_LIMIT` (strike threshold before temporary mute, default: `3`)
+- `MULTIPLAYER_CHAT_STRIKE_WINDOW_MS` (rolling strike window, default: `900000`)
+- `MULTIPLAYER_CHAT_MUTE_MS` (temporary mute duration, default: `300000`)
+- `MULTIPLAYER_CHAT_AUTO_ROOM_BAN_STRIKE_LIMIT` (optional auto-ban threshold; default: `0` disabled)
+- `MULTIPLAYER_CHAT_TERMS_SERVICE_URL` (optional remote moderation-term endpoint returning JSON list)
+- `MULTIPLAYER_CHAT_TERMS_SERVICE_API_KEY` (optional API key for remote moderation-term endpoint)
+- `MULTIPLAYER_CHAT_TERMS_SERVICE_API_KEY_HEADER` (optional API key header name, default: `x-api-key`)
+- `MULTIPLAYER_CHAT_TERMS_REFRESH_MS` (remote refresh interval in ms, default: `60000` when service URL is set)
+- `MULTIPLAYER_CHAT_TERMS_FETCH_TIMEOUT_MS` (remote fetch timeout in ms, default: `6000`)
+- `MULTIPLAYER_CHAT_TERMS_SYNC_ON_BOOT` (`1` default; `0` skips bootstrap remote sync)
+- `MULTIPLAYER_CHAT_TERMS_MAX_MANAGED` (max managed terms stored by API, default: `2048`)
+- `MULTIPLAYER_CHAT_TERMS_MAX_REMOTE` (max remote terms ingested per refresh, default: `4096`)
 
 ## Storage
 
@@ -78,16 +95,25 @@ API_DEPLOY_PRESERVE_DB=0 API_STORE_BACKEND=file API_ALLOW_FILE_STORE_IN_PRODUCTI
 - `GET /api/admin/rooms`
 - `GET /api/admin/metrics`
 - `GET /api/admin/storage`
+- `GET /api/admin/moderation/terms`
+- `POST /api/admin/moderation/terms/upsert`
+- `POST /api/admin/moderation/terms/remove`
+- `POST /api/admin/moderation/terms/refresh`
 - `GET /api/admin/audit`
 - `GET /api/admin/roles`
 - `PUT /api/admin/roles/:uid`
 - `POST /api/admin/sessions/:sessionId/expire`
 - `POST /api/admin/sessions/:sessionId/participants/:playerId/remove`
 - `POST /api/admin/sessions/:sessionId/channel/messages`
+- `GET /api/admin/sessions/:sessionId/conduct`
+- `GET /api/admin/sessions/:sessionId/conduct/players/:playerId`
+- `POST /api/admin/sessions/:sessionId/conduct/players/:playerId/clear`
+- `POST /api/admin/sessions/:sessionId/conduct/clear`
 - `POST /api/multiplayer/sessions`
 - `POST /api/multiplayer/sessions/:sessionId/join`
 - `POST /api/multiplayer/rooms/:roomCode/join`
 - `POST /api/multiplayer/sessions/:sessionId/heartbeat`
+- `POST /api/multiplayer/sessions/:sessionId/moderate`
 - `POST /api/multiplayer/sessions/:sessionId/leave`
 - `POST /api/multiplayer/sessions/:sessionId/auth/refresh`
 
@@ -111,10 +137,17 @@ Planned (not implemented yet):
 - Session creation/join returns:
   - `playerToken` for WS query auth
   - `auth` bundle (`accessToken`, `refreshToken`, `expiresAt`, `tokenType`)
+  - `ownerPlayerId` for private room moderation ownership
   - `participants[]` snapshot (`playerId`, `displayName`, optional `avatarUrl`, optional `providerId`, `isBot`, `joinedAt`, `lastHeartbeatAt`)
   - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `phase`, `activeRollServerId`, optional `activeRoll`, `updatedAt`)
 - `POST /api/multiplayer/sessions` accepts optional `displayName`, `avatarUrl`, `providerId`, and `botCount` (`0..4`) to seed the local participant profile and bot seats.
 - `POST /api/multiplayer/sessions/:sessionId/join` and `POST /api/multiplayer/rooms/:roomCode/join` accept optional `displayName`, `avatarUrl`, `providerId`, and `botCount` (`0..4`) to update joining participant profile data and seed bots into an existing room.
+- Join can return `room_banned` when the player has been room-banned by the room owner/admin.
+- `POST /api/multiplayer/sessions/:sessionId/moderate` accepts:
+  - `{ requesterPlayerId, targetPlayerId, action }`
+  - `action`: `kick` or `ban`
+  - allowed for private-room owner; admins/operators can also moderate via existing admin auth paths
+  - `ban` removes the player (if present) and blocks rejoin for that room session
 - Join payloads also accept optional `gameDifficulty` (`easy` | `normal` | `hard`) and apply it only when a legacy room snapshot is missing a valid stored difficulty.
 - Bot turn strategy is isolated in [`api/bot/engine.mjs`](./bot/engine.mjs) behind `createBotEngine()` so implementations can be swapped without rewriting websocket/session orchestration.
 - Admin endpoints include monitoring plus role management scaffolds:
@@ -127,6 +160,16 @@ Planned (not implemented yet):
     - expire room session
     - remove participant from room
     - send room channel messages (`public` broadcast or `direct` to `targetPlayerId`)
+    - review/clear room chat-conduct state:
+      - `GET /api/admin/sessions/:sessionId/conduct`
+      - `GET /api/admin/sessions/:sessionId/conduct/players/:playerId`
+      - `POST /api/admin/sessions/:sessionId/conduct/players/:playerId/clear`
+      - `POST /api/admin/sessions/:sessionId/conduct/clear`
+    - manage chat moderation term service:
+      - `GET /api/admin/moderation/terms` (`includeTerms=1` to include full term lists)
+      - `POST /api/admin/moderation/terms/upsert`
+      - `POST /api/admin/moderation/terms/remove`
+      - `POST /api/admin/moderation/terms/refresh`
   - `GET /api/admin/storage` exposes active persistence backend + section counts for audit checks.
   - Admin metrics now include cumulative turn auto-advance counters for timeout advances and bot advances.
   - Mutation actions are written to admin audit logs and exposed via `GET /api/admin/audit`.
@@ -141,16 +184,22 @@ Planned (not implemented yet):
   - `session=<sessionId>`
   - `playerId=<playerId>`
   - `token=<playerToken or auth.accessToken>`
-- Supported WS message types for relay:
+  - Supported WS message types for relay:
   - `chaos_attack`
   - `particle:emit`
   - `game_update` (`title` + `content` required)
   - `player_notification` (`message` required, optional `targetPlayerId`)
   - `room_channel` (`channel: "public" | "direct"`, `message` required, `targetPlayerId` required for `direct`)
     - server enforces block lists for sender/recipient visibility
+    - server applies chat conduct middleware (`api/moderation/chatConduct.mjs`) with warning/strike/mute flow
+    - blocked terms are resolved from `api/moderation/termService.mjs` (seed + managed + optional remote feed)
     - server can reject sender/message via moderation lists:
-      - `MULTIPLAYER_ROOM_CHANNEL_BAD_PLAYER_IDS`
-      - `MULTIPLAYER_ROOM_CHANNEL_BAD_TERMS`
+      - `MULTIPLAYER_ROOM_CHANNEL_BAD_PLAYER_IDS` (legacy sender denylist)
+      - `MULTIPLAYER_CHAT_BANNED_TERMS` (or fallback `MULTIPLAYER_ROOM_CHANNEL_BAD_TERMS`)
+    - room-channel rejection codes include:
+      - `room_channel_message_blocked` (conduct violation)
+      - `room_channel_sender_muted` (temporary mute active)
+  - direct/broadcast realtime payloads (`player_notification`, `game_update`, `room_channel`) are filtered by block relationships
 - Turn flow messages:
   - client -> server: `turn_action` (`roll` | `score`), `turn_end`
   - server -> clients: `turn_action`, `turn_end`, `turn_start`, `turn_timeout_warning`, `turn_auto_advanced`
@@ -189,6 +238,27 @@ Optional bot traffic assertion in smoke tests:
 ```bash
 E2E_ASSERT_BOTS=1 npm run test:e2e:api:local
 ```
+
+Moderation assertion segment (enabled by default) covers:
+- `kick` / `ban` moderation endpoint
+- `room_banned` join rejection
+- `interaction_blocked` realtime rejection
+
+Disable that segment when isolating other failures:
+
+```bash
+E2E_ASSERT_MULTIPLAYER_MODERATION=0 npm run test:e2e:api
+```
+
+Optional chat-conduct strike/mute assertion segment:
+
+```bash
+E2E_ASSERT_CHAT_CONDUCT=1 E2E_CHAT_CONDUCT_TEST_TERM=e2e-term-blocked npm run test:e2e:api
+```
+
+Notes:
+- `E2E_ASSERT_CHAT_CONDUCT` is opt-in for deployed smoke.
+- local harness (`npm run test:e2e:api:local`) enables it by default with a deterministic test term.
 
 Bot engine contract tests (strategy interface and invariants):
 

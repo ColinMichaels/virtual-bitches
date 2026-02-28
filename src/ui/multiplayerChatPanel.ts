@@ -40,6 +40,8 @@ export interface MultiplayerChatPanelOptions {
     message: string
   ) => MultiplayerRoomChannelMessage | null;
   onInfo?: (message: string, severity?: ChatSeverity) => void;
+  onUnreadCountChange?: (count: number) => void;
+  onVisibilityChange?: (isOpen: boolean) => void;
 }
 
 const PUBLIC_THREAD_ID = "public";
@@ -113,6 +115,7 @@ export class MultiplayerChatPanel {
     this.threadsById.set(PUBLIC_THREAD_ID, this.createPublicThread());
     this.ensureModal();
     this.renderAll();
+    this.emitUnreadCountChange();
   }
 
   setLocalPlayerId(playerId: string): void {
@@ -216,6 +219,7 @@ export class MultiplayerChatPanel {
     modal.style.display = "flex";
     this.renderAll();
     this.inputEl?.focus();
+    this.options.onVisibilityChange?.(true);
   }
 
   close(): void {
@@ -223,6 +227,7 @@ export class MultiplayerChatPanel {
       return;
     }
     this.modalEl.style.display = "none";
+    this.options.onVisibilityChange?.(false);
   }
 
   isOpen(): boolean {
@@ -230,6 +235,7 @@ export class MultiplayerChatPanel {
   }
 
   clear(): void {
+    this.close();
     this.sessionId = null;
     this.roomCode = null;
     this.connected = false;
@@ -262,6 +268,7 @@ export class MultiplayerChatPanel {
     this.threadsById.set(PUBLIC_THREAD_ID, this.createPublicThread());
     this.threadOrder = [PUBLIC_THREAD_ID];
     this.activeThreadId = PUBLIC_THREAD_ID;
+    this.emitUnreadCountChange();
   }
 
   private appendChannelMessage(
@@ -340,6 +347,7 @@ export class MultiplayerChatPanel {
     this.recomputeThreadOrder();
     this.renderTabs();
     this.renderFeed();
+    this.emitUnreadCountChange();
   }
 
   private resolveSenderLabel(
@@ -429,6 +437,19 @@ export class MultiplayerChatPanel {
     this.renderTabs();
     this.renderFeed();
     this.renderComposerState();
+    this.emitUnreadCountChange();
+  }
+
+  private getTotalUnreadCount(): number {
+    let total = 0;
+    this.threadsById.forEach((thread) => {
+      total += Math.max(0, Math.floor(thread.unreadCount));
+    });
+    return total;
+  }
+
+  private emitUnreadCountChange(): void {
+    this.options.onUnreadCountChange?.(this.getTotalUnreadCount());
   }
 
   private ensureModal(): HTMLElement | null {

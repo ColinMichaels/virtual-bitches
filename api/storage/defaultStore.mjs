@@ -7,6 +7,7 @@ export const DEFAULT_STORE = {
   accessTokens: {},
   leaderboardScores: {},
   firebasePlayers: {},
+  moderation: {},
 };
 
 const STORE_SECTIONS = Object.keys(DEFAULT_STORE);

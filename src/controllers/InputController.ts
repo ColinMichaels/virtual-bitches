@@ -22,6 +22,7 @@ import type { IControlInversionService } from "../services/controlInversion.js";
  */
 export interface GameCallbacks {
   handleAction: () => void;
+  handleSeatStatusToggle: () => void;
   handleDeselectAll: () => void;
   handleUndo: () => void;
   handleCopyInviteLink: () => void;
@@ -58,6 +59,7 @@ export class InputController {
 
   // DOM elements
   private actionBtn: HTMLButtonElement;
+  private seatStatusBtn: HTMLButtonElement | null;
   private deselectBtn: HTMLButtonElement;
   private undoBtn: HTMLButtonElement;
   private newGameBtn: HTMLButtonElement;
@@ -95,6 +97,7 @@ export class InputController {
 
     // Get DOM elements
     this.actionBtn = document.getElementById("action-btn") as HTMLButtonElement;
+    this.seatStatusBtn = document.getElementById("seat-status-btn") as HTMLButtonElement | null;
     this.deselectBtn = document.getElementById("deselect-btn") as HTMLButtonElement;
     this.undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
     this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement;
@@ -132,6 +135,12 @@ export class InputController {
       audioService.playSfx("click");
       hapticsService.buttonPress();
       this.callbacks.handleAction();
+    });
+
+    this.seatStatusBtn?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      hapticsService.buttonPress();
+      this.callbacks.handleSeatStatusToggle();
     });
 
     // Deselect all button

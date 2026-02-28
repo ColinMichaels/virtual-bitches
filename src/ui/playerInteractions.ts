@@ -36,6 +36,9 @@ export interface PlayerInteractionsPanelOptions {
   onWhisper: (playerId: string) => void;
   onCauseChaos: (playerId: string) => void;
   onNudge: (playerId: string) => void;
+  onSendGift?: (playerId: string) => void;
+  onKick?: (playerId: string) => void;
+  onBan?: (playerId: string) => void;
   loadProfile: (playerId: string) => Promise<PlayerInteractionProfileData | null>;
   resolveWhisperDisabledReason?: (participant: PlayerInteractionParticipant) => string;
   resolveChaosDisabledReason?: (participant: PlayerInteractionParticipant) => string;
@@ -43,6 +46,9 @@ export interface PlayerInteractionsPanelOptions {
     participant: PlayerInteractionParticipant,
     activeTurnPlayerId: string | null
   ) => string;
+  resolveGiftDisabledReason?: (participant: PlayerInteractionParticipant) => string;
+  resolveKickDisabledReason?: (participant: PlayerInteractionParticipant) => string;
+  resolveBanDisabledReason?: (participant: PlayerInteractionParticipant) => string;
 }
 
 const DEFAULT_COMING_SOON_TOOLTIP = "Coming soon";
@@ -449,14 +455,48 @@ export class PlayerInteractionsPanel {
       })
     );
 
+    const giftDisabledReason = (
+      this.options.resolveGiftDisabledReason?.(participant) ??
+      (!this.options.onSendGift ? this.comingSoonTooltip : "")
+    ).trim();
     actionsEl.appendChild(
       this.createActionButton({
         label: "Send Gift",
-        description: "Economy hooks are scaffolded but disabled.",
-        disabledReason: this.comingSoonTooltip,
-        comingSoon: true,
+        description: "Send a quick gift ping to this player.",
+        disabledReason: giftDisabledReason,
+        comingSoon: !this.options.onSendGift,
+        onClick: () => this.options.onSendGift?.(participant.playerId),
       })
     );
+
+    const kickDisabledReason = (
+      this.options.resolveKickDisabledReason?.(participant) ??
+      (!this.options.onKick ? "Only room moderators can kick players." : "")
+    ).trim();
+    actionsEl.appendChild(
+      this.createActionButton({
+        label: "Kick Player",
+        description: "Remove this player from the current room.",
+        tone: "danger",
+        disabledReason: kickDisabledReason,
+        onClick: () => this.options.onKick?.(participant.playerId),
+      })
+    );
+
+    const banDisabledReason = (
+      this.options.resolveBanDisabledReason?.(participant) ??
+      (!this.options.onBan ? "Only room moderators can ban players." : "")
+    ).trim();
+    actionsEl.appendChild(
+      this.createActionButton({
+        label: "Ban Player",
+        description: "Remove and block this player from rejoining this room.",
+        tone: "danger",
+        disabledReason: banDisabledReason,
+        onClick: () => this.options.onBan?.(participant.playerId),
+      })
+    );
+
     actionsEl.appendChild(
       this.createActionButton({
         label: "Add Friend",
@@ -470,7 +510,7 @@ export class PlayerInteractionsPanel {
   private createActionButton(options: {
     label: string;
     description: string;
-    tone?: "default" | "chaos";
+    tone?: "default" | "chaos" | "danger";
     disabledReason?: string;
     comingSoon?: boolean;
     onClick?: () => void;
@@ -480,6 +520,8 @@ export class PlayerInteractionsPanel {
     button.className = "player-interaction-action";
     if (options.tone === "chaos") {
       button.classList.add("is-chaos");
+    } else if (options.tone === "danger") {
+      button.classList.add("is-danger");
     }
 
     const title = document.createElement("span");

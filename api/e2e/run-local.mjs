@@ -8,6 +8,7 @@ const PORT = Number(process.env.E2E_LOCAL_PORT ?? 3310);
 const apiBaseUrl = `http://127.0.0.1:${PORT}`;
 const shortTtlModeEnabled = process.env.E2E_SHORT_TTLS !== "0";
 const adminToken = process.env.E2E_ADMIN_TOKEN ?? "local-admin-token";
+const chatConductTestTerm = (process.env.E2E_CHAT_CONDUCT_TEST_TERM ?? "e2e-term-blocked").trim().toLowerCase();
 const e2eDataDir = await mkdtemp(path.join(tmpdir(), "biscuits-api-e2e-"));
 const e2eDataFile = path.join(e2eDataDir, "store.json");
 
@@ -34,6 +35,9 @@ const serverProcess = spawn("node", ["api/server.mjs"], {
     PUBLIC_ROOM_STALE_PARTICIPANT_MS:
       process.env.PUBLIC_ROOM_STALE_PARTICIPANT_MS ??
       (shortTtlModeEnabled ? "4000" : undefined),
+    MULTIPLAYER_CHAT_CONDUCT_ENABLED: process.env.MULTIPLAYER_CHAT_CONDUCT_ENABLED ?? "1",
+    MULTIPLAYER_CHAT_BANNED_TERMS:
+      process.env.MULTIPLAYER_CHAT_BANNED_TERMS ?? chatConductTestTerm,
     API_ADMIN_ACCESS_MODE: process.env.API_ADMIN_ACCESS_MODE ?? "token",
     API_ADMIN_TOKEN: process.env.API_ADMIN_TOKEN ?? adminToken,
   },
@@ -103,6 +107,8 @@ function runSmoke(baseUrl) {
           process.env.E2E_QUEUE_LIFECYCLE_WAIT_MS ?? (shortTtlModeEnabled ? "12000" : "90000"),
         E2E_ADMIN_TOKEN: adminToken,
         E2E_ASSERT_ADMIN_MONITOR: process.env.E2E_ASSERT_ADMIN_MONITOR ?? "1",
+        E2E_ASSERT_CHAT_CONDUCT: process.env.E2E_ASSERT_CHAT_CONDUCT ?? "1",
+        E2E_CHAT_CONDUCT_TEST_TERM: chatConductTestTerm,
       },
       stdio: "inherit",
     });

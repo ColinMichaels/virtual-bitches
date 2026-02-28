@@ -240,6 +240,7 @@ export interface MultiplayerSessionStateMessage {
   sessionId: string;
   roomCode: string;
   gameDifficulty?: MultiplayerGameDifficulty;
+  ownerPlayerId?: string;
   participants: MultiplayerSessionStateParticipant[];
   standings?: MultiplayerSessionStateStanding[];
   turnState: MultiplayerSessionStateTurnSnapshot | null;

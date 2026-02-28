@@ -65,6 +65,7 @@ import { environment } from "@env";
 import {
   backendApiService,
   type MultiplayerGameDifficulty,
+  type MultiplayerModerationAction,
   type MultiplayerJoinFailureReason,
   type MultiplayerRoomListing,
   type MultiplayerSessionParticipant,
@@ -263,12 +264,16 @@ class Game implements GameCallbacks {
   private lastTurnPlanPreview = "";
   private lastSessionComplete = false;
   private localAvatarUrl: string | undefined;
+  private localAdminRole: "viewer" | "operator" | "owner" | null = null;
   private botMemeAvatarByPlayerId = new Map<string, string>();
   private botMemeAvatarRotationHandle: ReturnType<typeof setInterval> | null = null;
   private botMemeAvatarRefreshInFlight = false;
   private waitForNextGameRequestInFlight = false;
   private participantStateUpdateInFlight = false;
   private autoSeatReadySyncInFlight = false;
+  private roomChatUnreadCount = 0;
+  private roomInteractionAlertCount = 0;
+  private roomChatIsOpen = false;
   private cachedMultiplayerIdentity:
     | {
         value: {
@@ -281,6 +286,8 @@ class Game implements GameCallbacks {
     | null = null;
 
   private actionBtn: HTMLButtonElement;
+  private seatStatusBtn: HTMLButtonElement | null = null;
+  private seatStatusBtnLabel: HTMLElement | null = null;
   private deselectBtn: HTMLButtonElement;
   private undoBtn: HTMLButtonElement;
   private newGameBtn: HTMLButtonElement | null = null;
@@ -289,6 +296,8 @@ class Game implements GameCallbacks {
   private roomChatBtn: HTMLButtonElement | null = null;
   private mobileInviteLinkBtn: HTMLButtonElement | null = null;
   private mobileRoomChatBtn: HTMLButtonElement | null = null;
+  private roomChatBadgeEl: HTMLElement | null = null;
+  private mobileRoomChatBadgeEl: HTMLElement | null = null;
   private turnActionBannerEl: HTMLElement | null = null;
   private playerInteractions: PlayerInteractionsPanel | null = null;
   private multiplayerChatPanel: MultiplayerChatPanel | null = null;
@@ -554,6 +563,8 @@ class Game implements GameCallbacks {
 
     // UI elements
     this.actionBtn = document.getElementById("action-btn") as HTMLButtonElement;
+    this.seatStatusBtn = document.getElementById("seat-status-btn") as HTMLButtonElement | null;
+    this.seatStatusBtnLabel = document.getElementById("seat-status-btn-label");
     this.deselectBtn = document.getElementById("deselect-btn") as HTMLButtonElement;
     this.undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
     this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement | null;
@@ -562,6 +573,7 @@ class Game implements GameCallbacks {
     this.roomChatBtn = document.getElementById("room-chat-btn") as HTMLButtonElement | null;
     this.mobileInviteLinkBtn = document.getElementById("mobile-invite-link-btn") as HTMLButtonElement | null;
     this.mobileRoomChatBtn = document.getElementById("mobile-room-chat-btn") as HTMLButtonElement | null;
+    this.ensureRoomChatNotificationBadges();
     this.turnActionBannerEl = this.ensureTurnActionBanner();
     this.playerInteractions = new PlayerInteractionsPanel({
       mountRoot: document.getElementById("unified-hud"),
@@ -583,6 +595,15 @@ class Game implements GameCallbacks {
       onNudge: (playerId) => {
         this.triggerTurnNudge(playerId);
       },
+      onSendGift: (playerId) => {
+        this.sendGiftInteractionToPlayer(playerId);
+      },
+      onKick: (playerId) => {
+        void this.handleModerationAction(playerId, "kick");
+      },
+      onBan: (playerId) => {
+        void this.handleModerationAction(playerId, "ban");
+      },
       loadProfile: (playerId) => this.loadPlayerInteractionProfileData(playerId),
       resolveChaosDisabledReason: (participant) => {
         if (!participant.isSeated) {
@@ -597,6 +618,33 @@ class Game implements GameCallbacks {
         activeTurnPlayerId === participant.playerId
           ? ""
           : "Nudge unlocks when this player is active.",
+      resolveGiftDisabledReason: (participant) => {
+        if (participant.isBot) {
+          return "Bots cannot receive gifts yet.";
+        }
+        if (!this.multiplayerNetwork?.isConnected()) {
+          return "Reconnect to multiplayer before sending gifts.";
+        }
+        return "";
+      },
+      resolveKickDisabledReason: (participant) => {
+        if (participant.isBot) {
+          return "Bots are managed automatically.";
+        }
+        if (!this.canLocalPlayerModerateMultiplayerRoom()) {
+          return "Only room creator or admins can kick players.";
+        }
+        return "";
+      },
+      resolveBanDisabledReason: (participant) => {
+        if (participant.isBot) {
+          return "Bots are managed automatically.";
+        }
+        if (!this.canLocalPlayerModerateMultiplayerRoom()) {
+          return "Only room creator or admins can ban players.";
+        }
+        return "";
+      },
     });
     this.hud.setOnMultiplayerPlayerSelect((playerId) => {
       this.playerInteractions?.open(playerId);
@@ -636,8 +684,20 @@ class Game implements GameCallbacks {
       onInfo: (message, severity = "info") => {
         notificationService.show(message, severity, 1900);
       },
+      onUnreadCountChange: (count) => {
+        this.roomChatUnreadCount = Math.max(0, Math.floor(count));
+        this.updateRoomChatNotificationBadge();
+      },
+      onVisibilityChange: (isOpen) => {
+        this.roomChatIsOpen = isOpen;
+        if (isOpen) {
+          this.roomInteractionAlertCount = 0;
+        }
+        this.updateRoomChatNotificationBadge();
+      },
     });
     this.multiplayerChatPanel.setConnected(this.multiplayerNetwork?.isConnected() ?? false);
+    this.updateRoomChatNotificationBadge();
 
     // Initialize modals (shared with splash)
     this.settingsModal = settingsModal;
@@ -735,16 +795,7 @@ class Game implements GameCallbacks {
           this.playMode === "multiplayer" &&
           targetPlayerId === this.localPlayerId
         ) {
-          const localSeatState = this.getLocalMultiplayerSeatState();
-          if (!localSeatState || !localSeatState.isSeated) {
-            void this.updateLocalParticipantState("sit");
-            return;
-          }
-          if (!localSeatState.isReady) {
-            void this.updateLocalParticipantState("ready");
-            return;
-          }
-          void this.updateLocalParticipantState("stand");
+          this.handleSeatStatusToggle();
           return;
         }
 
@@ -1279,6 +1330,8 @@ class Game implements GameCallbacks {
 
       if (joinFailureReason === "room_full") {
         notificationService.show("Selected room is full. Creating a new room instead.", "warning", 2800);
+      } else if (joinFailureReason === "room_banned") {
+        notificationService.show("You are banned from that room. Creating a new room instead.", "warning", 3000);
       } else if (joinFailureReason === "session_expired") {
         notificationService.show("Selected room expired. Creating a new room instead.", "warning", 2800);
       } else {
@@ -1308,6 +1361,8 @@ class Game implements GameCallbacks {
         notificationService.show("Room code not found. Creating a new room instead.", "warning", 2800);
       } else if (joinFailureReason === "room_full") {
         notificationService.show("That room code is full. Creating a new room instead.", "warning", 2800);
+      } else if (joinFailureReason === "room_banned") {
+        notificationService.show("You are banned from that room. Creating a new room instead.", "warning", 3000);
       } else if (joinFailureReason === "session_expired") {
         notificationService.show("That room expired. Creating a new room instead.", "warning", 2800);
       } else {
@@ -1372,6 +1427,8 @@ class Game implements GameCallbacks {
         const joinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason();
         if (joinFailureReason === "room_full") {
           notificationService.show("Room is full. Pick another room or create a new one.", "warning", 2800);
+        } else if (joinFailureReason === "room_banned") {
+          notificationService.show("You are banned from that room.", "warning", 3000);
         } else if (joinFailureReason === "session_expired") {
           notificationService.show("That room expired. Pick another room.", "warning", 2800);
         } else if (joinFailureReason === "room_not_found") {
@@ -1418,6 +1475,8 @@ class Game implements GameCallbacks {
           notificationService.show("Room code not found.", "warning", 2600);
         } else if (joinFailureReason === "room_full") {
           notificationService.show("That room is full. Try another room.", "warning", 2600);
+        } else if (joinFailureReason === "room_banned") {
+          notificationService.show("You are banned from that room.", "warning", 3000);
         } else if (joinFailureReason === "session_expired") {
           notificationService.show("That room expired. Try another room.", "warning", 2600);
         } else {
@@ -1544,6 +1603,12 @@ class Game implements GameCallbacks {
     if (isAuthenticated) {
       accountProfile = await leaderboardService.getAccountProfile();
     }
+    this.localAdminRole =
+      accountProfile?.admin?.role === "viewer" ||
+      accountProfile?.admin?.role === "operator" ||
+      accountProfile?.admin?.role === "owner"
+        ? accountProfile.admin.role
+        : null;
 
     const displayNameCandidates = [
       accountProfile?.leaderboardName,
@@ -1623,6 +1688,8 @@ class Game implements GameCallbacks {
     playerDataSyncService.setSessionId(session.sessionId);
     this.sessionExpiryPromptActive = false;
     this.lastTurnPlanPreview = "";
+    this.roomInteractionAlertCount = 0;
+    this.updateRoomChatNotificationBadge();
     this.applyMultiplayerClockFromServer(session, { force: true });
     this.applyMultiplayerDifficultyIfPresent(
       session.gameDifficulty ?? this.multiplayerOptions.gameDifficulty
@@ -1960,6 +2027,10 @@ class Game implements GameCallbacks {
     this.clearSelectionSyncDebounce();
     this.playerInteractions?.clear();
     this.multiplayerChatPanel?.clear();
+    this.roomChatUnreadCount = 0;
+    this.roomInteractionAlertCount = 0;
+    this.roomChatIsOpen = false;
+    this.updateRoomChatNotificationBadge();
     this.participantSeatById.clear();
     this.participantIdBySeat.clear();
     this.participantLabelById.clear();
@@ -2428,6 +2499,98 @@ class Game implements GameCallbacks {
     }
   }
 
+  private resolveSeatToggleAction(
+    localSeatState: { isSeated: boolean; isReady: boolean }
+  ): "sit" | "stand" {
+    if (!localSeatState.isSeated) {
+      return "sit";
+    }
+    return "stand";
+  }
+
+  private isPlayableDisruptionStateForLocalSeatChange(
+    localSeatState: { isSeated: boolean; isReady: boolean }
+  ): boolean {
+    if (!localSeatState.isSeated || !localSeatState.isReady) {
+      return false;
+    }
+
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession || activeSession.sessionComplete === true) {
+      return false;
+    }
+
+    const round =
+      typeof activeSession.turnState?.round === "number" &&
+      Number.isFinite(activeSession.turnState.round)
+        ? Math.max(1, Math.floor(activeSession.turnState.round))
+        : 1;
+    const turnNumber =
+      typeof activeSession.turnState?.turnNumber === "number" &&
+      Number.isFinite(activeSession.turnState.turnNumber)
+        ? Math.max(1, Math.floor(activeSession.turnState.turnNumber))
+        : 1;
+    const hasQueuedOpponents = this.hasActiveHumanOpponent() || this.hasActiveBotOpponent();
+    const hasTurnRuntimeProgress =
+      this.state.status !== "READY" ||
+      this.state.rollIndex > 0 ||
+      this.state.selected.size > 0;
+
+    return (
+      hasTurnRuntimeProgress ||
+      this.activeTurnPlayerId === this.localPlayerId ||
+      (hasQueuedOpponents &&
+        (round > 1 || turnNumber > 1 || typeof activeSession.turnState?.activeTurnPlayerId === "string"))
+    );
+  }
+
+  private async confirmDisruptiveSeatOrRoomExit(
+    action: "stand" | "leave_room",
+    localSeatState: { isSeated: boolean; isReady: boolean } | null
+  ): Promise<boolean> {
+    if (
+      this.playMode !== "multiplayer" ||
+      !localSeatState ||
+      !this.isPlayableDisruptionStateForLocalSeatChange(localSeatState)
+    ) {
+      return true;
+    }
+
+    const title = action === "stand" ? "Stand Up And Exit Queue?" : "Leave Room Now?";
+    const message =
+      action === "stand"
+        ? "This will remove you from the active game queue immediately. The room will continue without you and other players will be notified."
+        : "This will remove you from the active game queue and leave the room immediately. The room will continue without you and other players will be notified.";
+    const confirmLabel = action === "stand" ? "Stand Up" : "Leave Room";
+
+    return confirmAction({
+      title,
+      message,
+      confirmLabel,
+      cancelLabel: "Stay",
+      tone: "danger",
+    });
+  }
+
+  private announceLocalPresenceChange(event: "stood_up" | "left_room"): void {
+    if (this.playMode !== "multiplayer") {
+      return;
+    }
+    const sourceLabel = this.getParticipantBroadcastLabel(this.localPlayerId);
+    const message =
+      event === "stood_up"
+        ? `${sourceLabel} stood up and left the active queue.`
+        : `${sourceLabel} left the room.`;
+    this.sendPlayerRoomChannelMessage({
+      idPrefix: event === "stood_up" ? "presence-stand" : "presence-left",
+      channel: "public",
+      topic: "presence",
+      title: "Room Presence",
+      message,
+      severity: "info",
+    });
+  }
+
   private async updateLocalParticipantState(
     action: "sit" | "stand" | "ready" | "unready"
   ): Promise<void> {
@@ -2442,8 +2605,10 @@ class Game implements GameCallbacks {
       notificationService.show("No active multiplayer room found.", "warning", 2000);
       return;
     }
+    const previousLocalSeatState = this.getLocalMultiplayerSeatState();
 
     this.participantStateUpdateInFlight = true;
+    this.updateUI();
     try {
       const nextSession = await this.multiplayerSessionService.updateParticipantState(action);
       if (!nextSession) {
@@ -2456,16 +2621,27 @@ class Game implements GameCallbacks {
       }
 
       this.applyMultiplayerSeatState(nextSession);
+      const nextLocalSeatState = this.getLocalMultiplayerSeatState();
       this.touchMultiplayerTurnSyncActivity();
+      const transitionedToStanding =
+        action === "stand" &&
+        previousLocalSeatState?.isSeated === true &&
+        nextLocalSeatState?.isSeated === false;
+      if (transitionedToStanding) {
+        this.resetLocalStateForNextMultiplayerGame({ notificationMessage: null });
+        this.announceLocalPresenceChange("stood_up");
+        this.updateUI();
+      }
       const successMessageByAction = {
         sit: "You sat down. Tap Ready when you want in.",
-        stand: "You stood up and moved to observer mode.",
+        stand: "You stood up, left the queue, and moved to observer mode.",
         ready: "Ready up confirmed.",
         unready: "You are no longer marked ready.",
       } as const;
       notificationService.show(successMessageByAction[action], action === "ready" ? "success" : "info", 1800);
     } finally {
       this.participantStateUpdateInFlight = false;
+      this.updateUI();
     }
   }
 
@@ -2870,6 +3046,184 @@ class Game implements GameCallbacks {
     this.multiplayerChatPanel?.openWhisper(targetPlayerId);
   }
 
+  private ensureRoomChatNotificationBadges(): void {
+    if (this.roomChatBtn && !this.roomChatBadgeEl) {
+      const existingBadge = this.roomChatBtn.querySelector<HTMLElement>(".room-chat-badge");
+      if (existingBadge) {
+        this.roomChatBadgeEl = existingBadge;
+      } else {
+        const badge = document.createElement("span");
+        badge.className = "room-chat-badge";
+        badge.style.display = "none";
+        this.roomChatBtn.appendChild(badge);
+        this.roomChatBadgeEl = badge;
+      }
+    }
+
+    if (this.mobileRoomChatBtn && !this.mobileRoomChatBadgeEl) {
+      const existingBadge = this.mobileRoomChatBtn.querySelector<HTMLElement>(".mobile-room-chat-badge");
+      if (existingBadge) {
+        this.mobileRoomChatBadgeEl = existingBadge;
+      } else {
+        const badge = document.createElement("span");
+        badge.className = "mobile-updates-badge mobile-room-chat-badge";
+        badge.style.display = "none";
+        this.mobileRoomChatBtn.appendChild(badge);
+        this.mobileRoomChatBadgeEl = badge;
+      }
+    }
+  }
+
+  private updateRoomChatNotificationBadge(): void {
+    this.ensureRoomChatNotificationBadges();
+    const totalUnread = this.roomChatIsOpen
+      ? 0
+      : Math.max(0, this.roomChatUnreadCount + this.roomInteractionAlertCount);
+    const label = totalUnread > 99 ? "99+" : String(totalUnread);
+    const shouldDisplay = totalUnread > 0;
+
+    if (this.roomChatBadgeEl) {
+      this.roomChatBadgeEl.textContent = label;
+      this.roomChatBadgeEl.style.display = shouldDisplay ? "flex" : "none";
+    }
+    if (this.mobileRoomChatBadgeEl) {
+      this.mobileRoomChatBadgeEl.textContent = label;
+      this.mobileRoomChatBadgeEl.style.display = shouldDisplay ? "inline-flex" : "none";
+    }
+  }
+
+  private canLocalPlayerModerateMultiplayerRoom(): boolean {
+    if (this.playMode !== "multiplayer") {
+      return false;
+    }
+    if (this.localAdminRole === "operator" || this.localAdminRole === "owner") {
+      return true;
+    }
+    const ownerPlayerId = this.multiplayerSessionService.getActiveSession()?.ownerPlayerId;
+    return (
+      typeof ownerPlayerId === "string" &&
+      ownerPlayerId.trim().length > 0 &&
+      ownerPlayerId.trim() === this.localPlayerId
+    );
+  }
+
+  private sendGiftInteractionToPlayer(targetPlayerId: string): void {
+    if (!this.canComposeRoomChannelMessage()) {
+      return;
+    }
+    if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
+      notificationService.show("Pick another player for gifts.", "warning", 1800);
+      return;
+    }
+    if (this.isBotParticipant(targetPlayerId)) {
+      notificationService.show("Bots cannot receive gifts yet.", "info", 1800);
+      return;
+    }
+
+    const sourceLabel = this.getParticipantBroadcastLabel(this.localPlayerId);
+    const payload: MultiplayerPlayerNotificationMessage = {
+      type: "player_notification",
+      id: `gift-${this.localPlayerId}-${targetPlayerId}-${Date.now()}`,
+      playerId: this.localPlayerId,
+      sourcePlayerId: this.localPlayerId,
+      title: `Gift from ${sourceLabel}`,
+      message: `${sourceLabel} sent you a gift. Rewards are in preview mode.`,
+      severity: "success",
+      targetPlayerId,
+      timestamp: Date.now(),
+    };
+    const sent = this.multiplayerNetwork?.sendPlayerNotification(payload) ?? false;
+    if (!sent) {
+      notificationService.show("Unable to send gift right now.", "warning", 2000);
+      return;
+    }
+
+    notificationService.show(`Gift sent to ${this.getParticipantLabel(targetPlayerId)}.`, "success", 2000);
+  }
+
+  private async handleModerationAction(
+    targetPlayerId: string,
+    action: MultiplayerModerationAction
+  ): Promise<void> {
+    if (this.playMode !== "multiplayer") {
+      notificationService.show("Moderation is available in multiplayer rooms only.", "info", 1800);
+      return;
+    }
+
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession?.sessionId) {
+      notificationService.show("No active multiplayer room found.", "warning", 2000);
+      return;
+    }
+    if (!this.canLocalPlayerModerateMultiplayerRoom()) {
+      notificationService.show("Only room creator or admins can moderate players.", "warning", 2200);
+      return;
+    }
+    if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
+      notificationService.show("You cannot moderate yourself.", "warning", 1800);
+      return;
+    }
+    if (this.isBotParticipant(targetPlayerId)) {
+      notificationService.show("Bots are managed automatically.", "info", 1800);
+      return;
+    }
+
+    const targetLabel = this.getParticipantLabel(targetPlayerId);
+    const confirmed = await confirmAction({
+      title: action === "ban" ? `Ban ${targetLabel}?` : `Kick ${targetLabel}?`,
+      message:
+        action === "ban"
+          ? "This removes them now and blocks them from rejoining this room."
+          : "This removes them from the current room immediately.",
+      confirmLabel: action === "ban" ? "Ban Player" : "Kick Player",
+      cancelLabel: "Cancel",
+      tone: "danger",
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    const result = await this.multiplayerSessionService.moderateParticipant(targetPlayerId, action);
+    if (!result.ok) {
+      notificationService.show(
+        this.resolveModerationFailureMessage(result.reason),
+        "warning",
+        2400
+      );
+      return;
+    }
+    if (result.session) {
+      this.applyMultiplayerSeatState(result.session);
+    }
+
+    notificationService.show(
+      action === "ban"
+        ? `${targetLabel} was banned from the room.`
+        : `${targetLabel} was removed from the room.`,
+      "success",
+      2400
+    );
+  }
+
+  private resolveModerationFailureMessage(reason: string | undefined): string {
+    if (reason === "not_room_owner") {
+      return "Only room creator or admins can moderate players.";
+    }
+    if (reason === "unknown_player") {
+      return "That player is no longer in this room.";
+    }
+    if (reason === "session_expired" || reason === "unknown_session") {
+      return "Room expired while applying moderation.";
+    }
+    if (reason === "cannot_moderate_self") {
+      return "You cannot moderate yourself.";
+    }
+    if (reason === "unauthorized") {
+      return "Moderation requires valid room authorization.";
+    }
+    return "Unable to apply moderation action.";
+  }
+
   private async loadPlayerInteractionProfileData(
     targetPlayerId: string
   ): Promise<PlayerInteractionProfileData | null> {
@@ -3182,6 +3536,16 @@ class Game implements GameCallbacks {
       const title = payload.title?.trim() || (payload.targetPlayerId === this.localPlayerId ? "Direct" : "Multiplayer");
       notificationService.show(`${title}: ${message}`, tone, 3200);
     }
+
+    if (
+      sourcePlayerId &&
+      sourcePlayerId !== this.localPlayerId &&
+      payload.targetPlayerId === this.localPlayerId &&
+      !this.roomChatIsOpen
+    ) {
+      this.roomInteractionAlertCount += 1;
+      this.updateRoomChatNotificationBadge();
+    }
   }
 
   private handleMultiplayerRoomChannelMessage(payload: MultiplayerRoomChannelMessage): void {
@@ -3288,6 +3652,9 @@ class Game implements GameCallbacks {
       ...(typeof message.serverNow === "number" && Number.isFinite(message.serverNow)
         ? { serverNow: message.serverNow }
         : {}),
+      ...(typeof message.ownerPlayerId === "string" && message.ownerPlayerId.trim().length > 0
+        ? { ownerPlayerId: message.ownerPlayerId.trim() }
+        : { ownerPlayerId: undefined }),
     });
     if (!syncedSession) {
       return;
@@ -3568,7 +3935,14 @@ class Game implements GameCallbacks {
   }
 
   private handleMultiplayerProtocolError(code: string, message?: string): void {
-    if (!this.isMultiplayerTurnEnforced()) {
+    const isChatOrInteractionError =
+      code === "room_channel_sender_restricted" ||
+      code === "room_channel_message_blocked" ||
+      code === "room_channel_sender_muted" ||
+      code === "room_channel_blocked" ||
+      code === "room_channel_invalid_message" ||
+      code === "interaction_blocked";
+    if (!this.isMultiplayerTurnEnforced() && !isChatOrInteractionError) {
       return;
     }
 
@@ -3582,8 +3956,18 @@ class Game implements GameCallbacks {
       return;
     }
 
+    if (code === "room_channel_sender_muted") {
+      notificationService.show("Room chat is temporarily muted for your account.", "warning", 2400);
+      return;
+    }
+
     if (code === "room_channel_blocked") {
       notificationService.show("Message blocked by player privacy settings.", "warning", 2200);
+      return;
+    }
+
+    if (code === "interaction_blocked") {
+      notificationService.show("Interaction blocked by player privacy settings.", "warning", 2200);
       return;
     }
 
@@ -4209,7 +4593,7 @@ class Game implements GameCallbacks {
       return;
     }
     if (outcome === "lobby") {
-      void this.returnToLobby();
+      void this.returnToLobby({ skipDisruptionConfirm: true });
       return;
     }
 
@@ -4244,15 +4628,25 @@ class Game implements GameCallbacks {
     notificationService.show("Continuing in solo mode.", "info", 2200);
   }
 
-  private async returnToLobby(): Promise<void> {
+  private async returnToLobby(options?: { skipDisruptionConfirm?: boolean }): Promise<void> {
     if (this.lobbyRedirectInProgress) {
       return;
+    }
+    if (this.playMode === "multiplayer" && options?.skipDisruptionConfirm !== true) {
+      const localSeatState = this.getLocalMultiplayerSeatState();
+      const confirmed = await this.confirmDisruptiveSeatOrRoomExit("leave_room", localSeatState);
+      if (!confirmed) {
+        return;
+      }
     }
     this.clearSelectionSyncDebounce();
     this.playerInteractions?.clear();
     this.multiplayerChatPanel?.clear();
     this.lobbyRedirectInProgress = true;
     this.sessionExpiryPromptActive = false;
+    if (options?.skipDisruptionConfirm !== true) {
+      this.announceLocalPresenceChange("left_room");
+    }
     try {
       await this.multiplayerSessionService.leaveSession();
     } catch (error) {
@@ -4335,6 +4729,12 @@ class Game implements GameCallbacks {
     if (this.mobileRoomChatBtn) {
       this.mobileRoomChatBtn.style.display = showRoomChatControl ? "flex" : "none";
     }
+    if (!showRoomChatControl) {
+      this.roomChatUnreadCount = 0;
+      this.roomInteractionAlertCount = 0;
+      this.roomChatIsOpen = false;
+    }
+    this.updateRoomChatNotificationBadge();
   }
 
   // GameCallbacks implementation
@@ -4702,16 +5102,38 @@ class Game implements GameCallbacks {
     }
   }
 
+  handleSeatStatusToggle(): void {
+    if (this.playMode !== "multiplayer") {
+      notificationService.show("Seat status is available in multiplayer only.", "info", 1800);
+      return;
+    }
+    if (this.participantStateUpdateInFlight) {
+      return;
+    }
+    const localSeatState = this.getLocalMultiplayerSeatState();
+    if (!localSeatState) {
+      notificationService.show("No active multiplayer room found.", "warning", 2000);
+      return;
+    }
+
+    const nextAction = this.resolveSeatToggleAction(localSeatState);
+    void (async () => {
+      if (nextAction === "stand") {
+        const confirmed = await this.confirmDisruptiveSeatOrRoomExit("stand", localSeatState);
+        if (!confirmed) {
+          return;
+        }
+      }
+      await this.updateLocalParticipantState(nextAction);
+    })();
+  }
+
   handleAction(): void {
     if (this.paused || this.animating) return;
 
     if (this.playMode === "multiplayer") {
       const localSeatState = this.getLocalMultiplayerSeatState();
-      if (localSeatState && !localSeatState.isSeated) {
-        void this.updateLocalParticipantState("sit");
-        return;
-      }
-      if (localSeatState && localSeatState.isSeated && !localSeatState.isReady) {
+      if (localSeatState?.isSeated && !localSeatState.isReady) {
         void this.updateLocalParticipantState("ready");
         return;
       }
@@ -5149,7 +5571,7 @@ class Game implements GameCallbacks {
     const localSeatState = this.getLocalMultiplayerSeatState();
     if (this.playMode === "multiplayer" && localSeatState) {
       if (!localSeatState.isSeated) {
-        bannerEl.textContent = "Observer mode: tap Sit Down to join";
+        bannerEl.textContent = "Observer mode: use Seat toggle to sit down";
         bannerEl.dataset.tone = "info";
         bannerEl.classList.add("is-visible");
         bannerEl.classList.remove("is-urgent");
@@ -5253,6 +5675,38 @@ class Game implements GameCallbacks {
     }
 
     const localSeatState = this.getLocalMultiplayerSeatState();
+    const controlsEl = document.getElementById("controls");
+    const showSeatStatusToggle = this.playMode === "multiplayer" && localSeatState !== null;
+    controlsEl?.classList.toggle("has-seat-status-toggle", showSeatStatusToggle);
+    if (this.seatStatusBtn) {
+      this.seatStatusBtn.style.display = showSeatStatusToggle ? "inline-flex" : "none";
+      if (!showSeatStatusToggle) {
+        this.seatStatusBtn.disabled = true;
+        this.seatStatusBtn.removeAttribute("data-seat-action");
+      } else {
+        const nextAction = this.resolveSeatToggleAction(localSeatState);
+        const labelByAction: Record<typeof nextAction, string> = {
+          sit: "Sit Down",
+          stand: "Stand Up",
+        };
+        const titleByAction: Record<typeof nextAction, string> = {
+          sit: "Sit down and join the active game queue",
+          stand: "Stand up, leave queue, and observe the room",
+        };
+        this.seatStatusBtn.dataset.seatAction = nextAction;
+        if (this.seatStatusBtnLabel) {
+          this.seatStatusBtnLabel.textContent = labelByAction[nextAction];
+        }
+        this.seatStatusBtn.title = titleByAction[nextAction];
+        this.seatStatusBtn.setAttribute("aria-label", titleByAction[nextAction]);
+        this.seatStatusBtn.disabled =
+          this.participantStateUpdateInFlight ||
+          this.waitForNextGameRequestInFlight ||
+          this.paused ||
+          this.animating;
+      }
+    }
+
     const needsSitAction =
       this.playMode === "multiplayer" &&
       localSeatState !== null &&
@@ -5266,9 +5720,9 @@ class Game implements GameCallbacks {
 
     // Update multipurpose action button
     if (needsSitAction) {
-      this.actionBtn.textContent = "Sit Down";
-      this.actionBtn.disabled = this.animating || this.paused || this.participantStateUpdateInFlight;
-      this.actionBtn.className = "btn btn-primary primary";
+      this.actionBtn.textContent = "Observer Mode";
+      this.actionBtn.disabled = true;
+      this.actionBtn.className = "btn btn-secondary secondary";
     } else if (needsReadyAction) {
       this.actionBtn.textContent = "Ready Up";
       this.actionBtn.disabled = this.animating || this.paused || this.participantStateUpdateInFlight;

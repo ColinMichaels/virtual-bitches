@@ -160,12 +160,32 @@ Reference docs:
   - [ ] Run focused device QA pass (iPhone + Android + iPad) for settings, updates panel links, and camera focus flows.
 
 #### Multiplayer Room Channel Messaging (2026-02-27)
-- **Status**: 🟡 Baseline complete; follow-up UX and moderation tests pending
+- **Status**: 🟡 Baseline complete; follow-up UX + conduct system hardening pending
 - **Archive**: Completed baseline milestones moved to `docs/TODO-ARCHIVE-2026-02.md`
 - **Follow-up**:
   - [ ] Replace temporary `window.prompt(...)` compose flow with in-game chat/whisper modal UI.
   - [ ] Add block/unblock controls in Profile/Settings and sync with `blockedPlayerIds`.
-  - [ ] Add API/WebSocket integration test coverage for moderation rejection codes (`room_channel_*`).
+  - [x] Add focused API/WebSocket smoke coverage for moderation rejection flows:
+    - `kick` / `ban` moderation endpoint (`POST /api/multiplayer/sessions/:sessionId/moderate`)
+    - `room_banned` join rejection
+    - `interaction_blocked` realtime rejection
+  - [x] Add chat-conduct smoke segment for strike accumulation + temporary mute (+ admin clear recovery path).
+  - [x] Add admin tooling endpoints for reviewing/clearing chat strikes/mutes.
+  - [x] Replace static banned-term config wiring with adaptive in-process term service (seed + managed + optional remote sync/poll + admin term management endpoints).
+  - [ ] Expand chat conduct test matrix for mute-expiry timing and auto-ban threshold edge cases.
+  - [ ] Extract in-process chat conduct enforcement into a standalone moderation service (contract stub documented in `docs/CHAT-CONDUCT-SERVICE-PLAN.md`).
+
+#### Admin Portal (`/admin`) Angular Track (2026-02-28)
+- **Status**: 🔵 Planned (documented, not started in pipeline)
+- **Plan Doc**: `docs/ADMIN-PORTAL-ANGULAR-PLAN.md`
+- **Intent**:
+  - Build a separate Angular + Angular Material admin surface under `/admin`
+  - Keep gameplay bundle lean and keep admin dependencies isolated
+- **Next steps**:
+  - [ ] Scaffold `/admin` Angular workspace with strict TS + Material baseline.
+  - [ ] Implement auth bootstrap + role guards (`viewer`/`operator`/`owner`).
+  - [ ] Build dashboard/rooms/conduct modules against current admin API.
+  - [ ] Add dedicated admin CI workflow separate from gameplay pipeline.
 
 #### Multiplayer Player Interaction Menu Scaffold (2026-02-28)
 - **Status**: 🟡 Baseline complete and extracted into `src/ui/playerInteractions.ts`
@@ -174,7 +194,7 @@ Reference docs:
   - [ ] Replace prompt-based whisper + chaos choice with dedicated in-modal composers.
   - [ ] Integrate gifting economy service/API and enable `Send Gift`.
   - [ ] Integrate friends service/API and enable `Add Friend`.
-  - [ ] Add moderation/block-list guards to interaction-menu actions (same rules as room-channel messaging).
+  - [x] Add moderation/block-list guards to interaction-menu actions (same rules as room-channel messaging).
 
 #### Multiplayer Post-Round Queue + Lifecycle (2026-02-27)
 - **Status**: 🟡 Baseline complete; UX polish/testing follow-up pending
