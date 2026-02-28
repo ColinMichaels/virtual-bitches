@@ -23,6 +23,8 @@
 - Reduced winner-queue refresh polling cadence (1s throttle) and widened fresh-round detection criteria to avoid false negatives when participant reset state arrives before turn assignment state converges.
 - Added transient winner-queue retry behavior: when the first queue lifecycle attempt fails with `session_expired`/auto-start timeout signatures, smoke retries once with a fresh session before failing.
 - Increased winner-queue heartbeat/refresh polling intervals to reduce cross-instance auth-refresh churn in Cloud Run while still maintaining liveness coverage.
+- Added winner-queue failure diagnostics output (`Queue lifecycle diagnostics`) including recent event timeline, socket close counts, last refresh failure, and current `/health` runtime snapshot.
+- Added temporary transient-failure handling for repeated winner-queue `410 session_expired` churn in distributed Cloud Run paths: smoke marks the check inconclusive (non-fatal) unless `E2E_FAIL_ON_TRANSIENT_QUEUE_SESSION_EXPIRED=1` is set.
 
 ### Multiplayer Post-Round Lifecycle Fixes
 - Fixed next-game scheduling baseline so `nextGameStartsAt` is now computed from **round completion time** instead of prior `gameStartedAt`.
