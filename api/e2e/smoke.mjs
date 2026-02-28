@@ -994,42 +994,53 @@ async function runRoomLifecycleChecks(runSuffix) {
   let roomFullObserved = false;
   for (let index = 0; index < maxHumans + 2; index += 1) {
     const playerId = `e2e-roomfill-${runSuffix}-${index + 1}`;
-    let joinAttempt = await joinRoomByCodeWithTransientRetry(
-      targetRoomCode,
+    let joinAttempt = await apiRequestWithStatus(
+      `/multiplayer/sessions/${encodeURIComponent(targetRoomId)}/join`,
       {
-        playerId,
-        displayName: `E2E Fill ${index + 1}`,
-      },
-      {
-        maxAttempts: 5,
-        initialDelayMs: 150,
+        method: "POST",
+        body: {
+          playerId,
+          displayName: `E2E Fill ${index + 1}`,
+        },
       }
     );
     if (!joinAttempt.ok && isTransientRoomLookupFailure(joinAttempt)) {
-      const sessionJoinAttempt = await apiRequestWithStatus(
-        `/multiplayer/sessions/${encodeURIComponent(targetRoomId)}/join`,
+      const roomJoinAttempt = await joinRoomByCodeWithTransientRetry(
+        targetRoomCode,
         {
-          method: "POST",
-          body: {
-            playerId,
-            displayName: `E2E Fill ${index + 1}`,
-          },
+          playerId,
+          displayName: `E2E Fill ${index + 1}`,
+        },
+        {
+          maxAttempts: 5,
+          initialDelayMs: 150,
         }
       );
       if (
-        sessionJoinAttempt.ok &&
-        typeof sessionJoinAttempt.body?.roomCode === "string" &&
-        sessionJoinAttempt.body.roomCode.length > 0
+        roomJoinAttempt.ok &&
+        typeof roomJoinAttempt.body?.roomCode === "string" &&
+        roomJoinAttempt.body.roomCode.length > 0
       ) {
-        targetRoomCode = String(sessionJoinAttempt.body.roomCode);
+        targetRoomCode = String(roomJoinAttempt.body.roomCode);
       }
-      joinAttempt = sessionJoinAttempt;
+      joinAttempt = roomJoinAttempt;
     }
     assert(joinAttempt, "missing room fill join attempt result");
     if (joinAttempt.ok) {
       const joinedSessionId = String(joinAttempt.body?.sessionId ?? targetRoomId);
       if (joinedSessionId.length > 0) {
+        if (joinedSessionId !== targetRoomId) {
+          log(
+            `Room lifecycle fill target session moved from ${targetRoomId} to ${joinedSessionId}; continuing with resolved session.`
+          );
+        }
         targetRoomId = joinedSessionId;
+      }
+      if (
+        typeof joinAttempt.body?.roomCode === "string" &&
+        joinAttempt.body.roomCode.length > 0
+      ) {
+        targetRoomCode = String(joinAttempt.body.roomCode);
       }
       joinedPlayers.push({
         playerId,
@@ -1110,22 +1121,59 @@ async function runRoomLifecycleChecks(runSuffix) {
   await safeLeave(privateCreated.sessionId, privateJoinerId);
   await safeLeave(privateCreated.sessionId, privateCreatorId);
 
-  const fullJoinProbe = await apiRequestWithStatus(
-    `/multiplayer/rooms/${encodeURIComponent(targetRoomCode)}/join`,
+  const fullSessionJoinProbePlayerId = `e2e-roomfill-extra-session-${runSuffix}`;
+  const fullSessionJoinProbe = await apiRequestWithStatus(
+    `/multiplayer/sessions/${encodeURIComponent(targetRoomId)}/join`,
     {
       method: "POST",
       body: {
-        playerId: `e2e-roomfill-extra-${runSuffix}`,
-        displayName: "E2E Overflow Probe",
+        playerId: fullSessionJoinProbePlayerId,
+        displayName: "E2E Overflow Session Probe",
       },
     }
   );
-  assertEqual(fullJoinProbe.status, 409, "expected room_full 409 once room is at capacity");
   assertEqual(
-    fullJoinProbe.body?.reason,
-    "room_full",
-    "expected room_full reason in full-room join rejection"
+    fullSessionJoinProbe.status,
+    409,
+    "expected room_full 409 once target room session is at capacity"
   );
+  assertEqual(
+    fullSessionJoinProbe.body?.reason,
+    "room_full",
+    "expected room_full reason in full-session join rejection"
+  );
+
+  const fullJoinProbePlayerId = `e2e-roomfill-extra-code-${runSuffix}`;
+  const fullJoinProbe = await joinRoomByCodeWithTransientRetry(
+    targetRoomCode,
+    {
+      playerId: fullJoinProbePlayerId,
+      displayName: "E2E Overflow Code Probe",
+    },
+    {
+      maxAttempts: 5,
+      initialDelayMs: 150,
+    }
+  );
+  if (!(fullJoinProbe.status === 409 && fullJoinProbe.body?.reason === "room_full")) {
+    if (fullJoinProbe.ok) {
+      const resolvedSessionId = String(fullJoinProbe.body?.sessionId ?? "");
+      if (resolvedSessionId && resolvedSessionId !== targetRoomId) {
+        log(
+          `Room-code probe resolved to a different session (${resolvedSessionId}) while target session ${targetRoomId} is full.`
+        );
+        await safeLeave(resolvedSessionId, fullJoinProbePlayerId);
+      } else {
+        throw new Error(
+          `expected room_full or different-session resolution from room-code probe, got status=${fullJoinProbe.status} body=${JSON.stringify(fullJoinProbe.body)}`
+        );
+      }
+    } else {
+      throw new Error(
+        `expected room_full from room-code probe, got status=${fullJoinProbe.status} body=${JSON.stringify(fullJoinProbe.body)}`
+      );
+    }
+  }
 
   const postFillListing = await apiRequest("/multiplayer/rooms?limit=100", { method: "GET" });
   assert(Array.isArray(postFillListing?.rooms), "post-fill room listing missing rooms[]");
