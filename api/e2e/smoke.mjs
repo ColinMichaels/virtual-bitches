@@ -21,7 +21,7 @@ const expectedStorageSectionMinCounts = parseStorageSectionMinCountSpec(
 
 const baseInput = (process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:3000").trim();
 const wsOverride = process.env.E2E_WS_URL?.trim();
-const targets = resolveTargets(baseInput, wsOverride);
+let targets;
 
 let activeSessionId = "";
 let hostPlayerId = "";
@@ -32,6 +32,7 @@ let hostMessageBuffer;
 let guestMessageBuffer;
 
 async function run() {
+  targets = resolveTargets(baseInput, wsOverride);
   log(`API base URL: ${targets.apiBaseUrl}`);
   log(`WS base URL:  ${targets.wsBaseUrl}`);
 
@@ -1106,7 +1107,7 @@ run()
   });
 
 function resolveTargets(rawApiBase, rawWsBase) {
-  const parsed = new URL(rawApiBase);
+  const parsed = parseAbsoluteUrl("E2E_API_BASE_URL", rawApiBase);
 
   const apiUrl = new URL(parsed.toString());
   const normalizedPath = apiUrl.pathname.replace(/\/+$/, "");
@@ -1116,7 +1117,9 @@ function resolveTargets(rawApiBase, rawWsBase) {
   apiUrl.search = "";
   apiUrl.hash = "";
 
-  const wsUrl = rawWsBase ? new URL(rawWsBase) : new URL(apiUrl.toString());
+  const wsUrl = rawWsBase
+    ? parseAbsoluteUrl("E2E_WS_URL", rawWsBase)
+    : new URL(apiUrl.toString());
   if (!rawWsBase) {
     wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
     wsUrl.pathname = wsUrl.pathname.replace(/\/api$/, "/");
@@ -1128,6 +1131,35 @@ function resolveTargets(rawApiBase, rawWsBase) {
     apiBaseUrl: stripTrailingSlash(apiUrl.toString()),
     wsBaseUrl: stripTrailingSlash(wsUrl.toString()),
   };
+}
+
+function parseAbsoluteUrl(envName, rawValue) {
+  const normalized = typeof rawValue === "string" ? rawValue.trim() : "";
+  if (!normalized) {
+    throw new Error(`${envName} is required and must be an absolute URL`);
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(
+      `${envName} must be an absolute URL (received: "${normalized}")`
+    );
+  }
+
+  if (
+    parsed.protocol !== "http:" &&
+    parsed.protocol !== "https:" &&
+    parsed.protocol !== "ws:" &&
+    parsed.protocol !== "wss:"
+  ) {
+    throw new Error(
+      `${envName} must use http(s) or ws(s) scheme (received: "${normalized}")`
+    );
+  }
+
+  return parsed;
 }
 
 async function apiRequest(path, options) {
