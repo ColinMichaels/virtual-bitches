@@ -201,6 +201,10 @@ const NEXT_GAME_AUTO_START_DELAY_MS = normalizeTurnTimeoutValue(
   process.env.MULTIPLAYER_NEXT_GAME_DELAY_MS,
   60 * 1000
 );
+const NO_SEATED_ROOM_TIMEOUT_MS = normalizeTurnTimeoutValue(
+  process.env.MULTIPLAYER_NO_SEATED_ROOM_TIMEOUT_MS,
+  3 * 60 * 1000
+);
 const BOOTSTRAP_WAIT_TIMEOUT_MS = normalizeTurnTimeoutValue(
   process.env.API_BOOTSTRAP_WAIT_TIMEOUT_MS,
   20000
@@ -564,6 +568,7 @@ async function handleRequest(req, res) {
           sessionIdleTtlMinMs: SESSION_IDLE_TTL_MIN_MS,
           participantStaleMs: MULTIPLAYER_PARTICIPANT_STALE_MS,
           cleanupIntervalMs: MULTIPLAYER_CLEANUP_INTERVAL_MS,
+          noSeatedRoomTimeoutMs: NO_SEATED_ROOM_TIMEOUT_MS,
           turnTimeoutMs: TURN_TIMEOUT_MS,
           turnTimeoutByDifficultyMs: TURN_TIMEOUT_BY_DIFFICULTY_MS,
           nextGameAutoStartDelayMs: NEXT_GAME_AUTO_START_DELAY_MS,
@@ -5455,6 +5460,57 @@ function parseTurnSelectionPayload(payload, lastRollSnapshot) {
   };
 }
 
+function buildTurnScoreSummaryFromSelectedDice(lastRollSnapshot, selectedDiceIds, now = Date.now()) {
+  const normalizedRoll = normalizeTurnRollSnapshot(lastRollSnapshot);
+  if (!normalizedRoll || !Array.isArray(selectedDiceIds) || selectedDiceIds.length === 0) {
+    return null;
+  }
+
+  const rollById = new Map();
+  normalizedRoll.dice.forEach((die) => {
+    if (!die || typeof die !== "object" || typeof die.dieId !== "string") {
+      return;
+    }
+    const sides = Number.isFinite(die.sides) ? Math.floor(die.sides) : NaN;
+    const valueAtFace = Number.isFinite(die.value) ? Math.floor(die.value) : NaN;
+    if (!Number.isFinite(sides) || !Number.isFinite(valueAtFace)) {
+      return;
+    }
+    rollById.set(die.dieId, { sides, value: valueAtFace });
+  });
+  if (rollById.size === 0) {
+    return null;
+  }
+
+  let points = 0;
+  const dedupedSelectedDiceIds = [];
+  const seen = new Set();
+  for (const rawDieId of selectedDiceIds) {
+    const dieId = typeof rawDieId === "string" ? rawDieId.trim() : "";
+    if (!dieId || seen.has(dieId)) {
+      continue;
+    }
+    const die = rollById.get(dieId);
+    if (!die) {
+      continue;
+    }
+    seen.add(dieId);
+    dedupedSelectedDiceIds.push(dieId);
+    points += die.sides - die.value;
+  }
+  if (dedupedSelectedDiceIds.length === 0) {
+    return null;
+  }
+
+  return {
+    selectedDiceIds: dedupedSelectedDiceIds,
+    points,
+    expectedPoints: points,
+    rollServerId: normalizedRoll.serverRollId,
+    updatedAt: now,
+  };
+}
+
 function serializeSessionParticipants(session) {
   const sessionCreatedAt = normalizeEpochMs(session?.createdAt, Date.now());
   const participants = Object.values(session?.participants ?? {})
@@ -6677,6 +6733,60 @@ function completeSessionRoundWithWinner(session, winnerPlayerId, timestamp = Dat
   };
 }
 
+function broadcastRoundWinnerResolved(session, winnerPlayerId, timestamp = Date.now(), source = "winner_complete") {
+  if (!session?.participants || typeof winnerPlayerId !== "string" || !winnerPlayerId) {
+    return;
+  }
+
+  const winnerParticipant = session.participants?.[winnerPlayerId];
+  const winnerName =
+    typeof winnerParticipant?.displayName === "string" &&
+    winnerParticipant.displayName.trim().length > 0
+      ? winnerParticipant.displayName.trim()
+      : winnerPlayerId;
+  const winnerScore = normalizeParticipantScore(winnerParticipant?.score);
+  broadcastToSession(
+    session.sessionId,
+    JSON.stringify({
+      type: "player_notification",
+      playerId: winnerPlayerId,
+      sourcePlayerId: winnerPlayerId,
+      title: "Round Winner",
+      message: `${winnerName} wins the round`,
+      severity: "success",
+      timestamp,
+      source,
+    }),
+    null
+  );
+  broadcastSystemRoomChannelMessage(session.sessionId, {
+    topic: "round_result",
+    title: "Round Winner",
+    message: `${winnerName} wins with ${winnerScore} point${winnerScore === 1 ? "" : "s"}.`,
+    severity: "success",
+    timestamp,
+  });
+  const nextGameStartsAt = resolveSessionNextGameStartsAt(session, timestamp);
+  const nextGameSecondsRemaining = Math.max(
+    1,
+    Math.ceil((nextGameStartsAt - timestamp) / 1000)
+  );
+  broadcastSystemRoomChannelMessage(session.sessionId, {
+    topic: "next_game_pending",
+    title: "Next Game",
+    message: `Next game starts in ${nextGameSecondsRemaining}s.`,
+    severity: nextGameSecondsRemaining <= 3 ? "warning" : "info",
+    timestamp,
+  });
+
+  const winnerTurnEnd = buildTurnEndMessage(session, winnerPlayerId, {
+    source,
+  });
+  if (winnerTurnEnd) {
+    broadcastToSession(session.sessionId, JSON.stringify(winnerTurnEnd), null);
+  }
+}
+
 function applyParticipantScoreUpdate(participant, scoreSummary, rollDiceCount) {
   const safeRollDiceCount =
     Number.isFinite(rollDiceCount) && rollDiceCount > 0 ? Math.floor(rollDiceCount) : 0;
@@ -6718,6 +6828,18 @@ function getHumanParticipantCount(session) {
   }
   return Object.values(session.participants).filter((participant) => participant && !isBotParticipant(participant))
     .length;
+}
+
+function getSeatedHumanParticipantCount(session) {
+  if (!session?.participants) {
+    return 0;
+  }
+  return Object.values(session.participants).filter(
+    (participant) =>
+      participant &&
+      !isBotParticipant(participant) &&
+      isParticipantSeated(participant)
+  ).length;
 }
 
 function getActiveHumanParticipants(session) {
@@ -6778,6 +6900,34 @@ function maybeForfeitSessionForSingleHumanRemaining(session, now = Date.now()) {
   session.turnState = null;
   ensureSessionTurnState(session);
   return true;
+}
+
+function reconcileSessionNoSeatedTimeoutState(session, now = Date.now()) {
+  if (!session || typeof session !== "object") {
+    return { changed: false, expired: false };
+  }
+
+  const seatedHumans = getSeatedHumanParticipantCount(session);
+  if (seatedHumans > 0) {
+    if (Object.prototype.hasOwnProperty.call(session, "noSeatedSince")) {
+      delete session.noSeatedSince;
+      return { changed: true, expired: false };
+    }
+    return { changed: false, expired: false };
+  }
+
+  const normalizedNoSeatedSince = normalizeEpochMs(session.noSeatedSince, now);
+  let changed = false;
+  if (session.noSeatedSince !== normalizedNoSeatedSince) {
+    session.noSeatedSince = normalizedNoSeatedSince;
+    changed = true;
+  }
+
+  const elapsedMs = Math.max(0, now - normalizedNoSeatedSince);
+  return {
+    changed,
+    expired: elapsedMs >= NO_SEATED_ROOM_TIMEOUT_MS,
+  };
 }
 
 function pruneInactiveSessionParticipants(sessionId, session, now = Date.now()) {
@@ -7780,21 +7930,75 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
 
   const timedOutPlayerId = turnState.activeTurnPlayerId;
   const timedOutParticipant = session.participants?.[timedOutPlayerId];
-  if (timedOutParticipant) {
-    const timeoutSource = isBotParticipant(timedOutParticipant)
-      ? "bot_timeout_forfeit"
-      : "turn_timeout_forfeit";
-    const removal = removeParticipantFromSession(sessionId, timedOutPlayerId, {
-      source: timeoutSource,
-      socketReason: timeoutSource,
-    });
-    if (removal.ok) {
-      turnAdvanceMetrics.timeoutAutoAdvanceCount += 1;
-      persistStore().catch((error) => {
-        log.warn("Failed to persist session after timeout forfeit removal", error);
-      });
-      return;
+  if (!timedOutParticipant) {
+    reconcileTurnTimeoutLoop(sessionId);
+    return;
+  }
+
+  let timeoutReason = "turn_timeout";
+  const timeoutNow = Date.now();
+  const timeoutPhase = normalizeTurnPhase(turnState.phase);
+  if (timeoutPhase === TURN_PHASES.awaitScore) {
+    const pendingScoreSummary = normalizeTurnScoreSummary(turnState.lastScoreSummary);
+    const normalizedRollSnapshot = normalizeTurnRollSnapshot(turnState.lastRollSnapshot);
+    const canAutoScore =
+      pendingScoreSummary &&
+      normalizedRollSnapshot &&
+      pendingScoreSummary.rollServerId === normalizedRollSnapshot.serverRollId;
+    if (canAutoScore) {
+      const rollDiceCount = Array.isArray(normalizedRollSnapshot.dice)
+        ? normalizedRollSnapshot.dice.length
+        : 0;
+      const scoreUpdate = applyParticipantScoreUpdate(
+        timedOutParticipant,
+        pendingScoreSummary,
+        rollDiceCount
+      );
+      const finalizedScoreSummary = {
+        ...pendingScoreSummary,
+        projectedTotalScore: scoreUpdate.nextScore,
+        remainingDice: scoreUpdate.nextRemainingDice,
+        isComplete: scoreUpdate.didComplete,
+        updatedAt: timeoutNow,
+      };
+      turnState.lastRollSnapshot = normalizedRollSnapshot;
+      turnState.lastScoreSummary = finalizedScoreSummary;
+      turnState.phase = TURN_PHASES.readyToEnd;
+      turnState.updatedAt = timeoutNow;
+      timeoutReason = "turn_timeout_auto_score";
+
+      const timeoutScoreAction = buildTurnActionMessage(
+        session,
+        timedOutPlayerId,
+        "score",
+        { score: finalizedScoreSummary },
+        { source: "timeout_auto" }
+      );
+      if (timeoutScoreAction) {
+        broadcastToSession(sessionId, JSON.stringify(timeoutScoreAction), null);
+      }
+
+      if (scoreUpdate.didComplete) {
+        const completedRound = completeSessionRoundWithWinner(session, timedOutPlayerId, timeoutNow);
+        if (completedRound.ok) {
+          broadcastRoundWinnerResolved(session, timedOutPlayerId, timeoutNow, "timeout_auto_complete");
+          markSessionActivity(session, timedOutPlayerId, timeoutNow);
+          broadcastSessionState(session, "timeout_auto_complete");
+          persistStore().catch((error) => {
+            log.warn("Failed to persist session after timeout auto-complete", error);
+          });
+          reconcileSessionLoops(sessionId);
+          return;
+        }
+      }
     }
+  }
+
+  if (normalizeTurnPhase(turnState.phase) !== TURN_PHASES.readyToEnd) {
+    turnState.phase = TURN_PHASES.readyToEnd;
+    turnState.lastRollSnapshot = null;
+    turnState.lastScoreSummary = null;
+    turnState.updatedAt = timeoutNow;
   }
 
   const timeoutMs = resolveSessionTurnTimeoutMs(session, turnState.turnTimeoutMs);
@@ -7818,7 +8022,7 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
       round: previousRound,
       turnNumber: previousTurnNumber,
       timeoutMs,
-      reason: "turn_timeout",
+      reason: timeoutReason,
       timestamp: Date.now(),
       source: "timeout_auto",
     }),
@@ -8572,6 +8776,26 @@ function cleanupExpiredRecords() {
       sessionsChanged = true;
     }
 
+    const noSeatedState = reconcileSessionNoSeatedTimeoutState(latestSession, now);
+    if (noSeatedState.changed) {
+      sessionsChanged = true;
+    }
+    if (noSeatedState.expired) {
+      const roomKind = getSessionRoomKind(latestSession);
+      if (roomKind === ROOM_KINDS.publicDefault) {
+        resetPublicRoomForIdle(latestSession, now);
+        if (Object.prototype.hasOwnProperty.call(latestSession, "noSeatedSince")) {
+          delete latestSession.noSeatedSince;
+        }
+        ensureSessionTurnState(latestSession);
+        reconcileSessionLoops(sessionId);
+      } else {
+        expireSession(sessionId, "no_seated_timeout");
+      }
+      sessionsChanged = true;
+      return;
+    }
+
     const roomKind = getSessionRoomKind(latestSession);
     if (roomKind === ROOM_KINDS.publicDefault) {
       if (!Number.isFinite(latestSession.expiresAt) || latestSession.expiresAt <= now + 5000) {
@@ -9253,6 +9477,37 @@ function handleTurnActionMessage(client, session, payload) {
       return;
     }
 
+    const previewScoreSummary = buildTurnScoreSummaryFromSelectedDice(
+      turnState.lastRollSnapshot,
+      parsedSelection.value.selectedDiceIds,
+      timestamp
+    );
+    if (previewScoreSummary) {
+      const participant = session.participants[client.playerId];
+      const rollDiceCount = Array.isArray(turnState.lastRollSnapshot?.dice)
+        ? turnState.lastRollSnapshot.dice.length
+        : 0;
+      const participantPreview = participant
+        ? {
+            ...participant,
+            score: normalizeParticipantScore(participant.score),
+            remainingDice: normalizeParticipantRemainingDice(participant.remainingDice),
+            isComplete: isParticipantComplete(participant),
+            completedAt: normalizeParticipantCompletedAt(participant.completedAt),
+          }
+        : null;
+      const previewUpdate = participantPreview
+        ? applyParticipantScoreUpdate(participantPreview, previewScoreSummary, rollDiceCount)
+        : null;
+      turnState.lastScoreSummary = {
+        ...previewScoreSummary,
+        projectedTotalScore: previewUpdate?.nextScore ?? null,
+        remainingDice: previewUpdate?.nextRemainingDice ?? DEFAULT_PARTICIPANT_DICE_COUNT,
+        isComplete: previewUpdate?.didComplete === true,
+      };
+    } else {
+      turnState.lastScoreSummary = null;
+    }
     details = { select: parsedSelection.value };
   } else {
     const parsedScore = parseTurnScorePayload(payload, turnState.lastRollSnapshot);
@@ -9305,53 +9560,7 @@ function handleTurnActionMessage(client, session, payload) {
   if (action === "score" && scoreDidComplete) {
     const completedRound = completeSessionRoundWithWinner(session, client.playerId, timestamp);
     if (completedRound.ok) {
-      const winnerParticipant = session.participants?.[client.playerId];
-      const winnerName =
-        typeof winnerParticipant?.displayName === "string" &&
-        winnerParticipant.displayName.trim().length > 0
-          ? winnerParticipant.displayName.trim()
-          : client.playerId;
-      const winnerScore = normalizeParticipantScore(winnerParticipant?.score);
-      broadcastToSession(
-        client.sessionId,
-        JSON.stringify({
-          type: "player_notification",
-          playerId: client.playerId,
-          sourcePlayerId: client.playerId,
-          title: "Round Winner",
-          message: `${winnerName} wins the round`,
-          severity: "success",
-          timestamp,
-          source: "winner_complete",
-        }),
-        null
-      );
-      broadcastSystemRoomChannelMessage(client.sessionId, {
-        topic: "round_result",
-        title: "Round Winner",
-        message: `${winnerName} wins with ${winnerScore} point${winnerScore === 1 ? "" : "s"}.`,
-        severity: "success",
-        timestamp,
-      });
-      const nextGameStartsAt = resolveSessionNextGameStartsAt(session, timestamp);
-      const nextGameSecondsRemaining = Math.max(
-        1,
-        Math.ceil((nextGameStartsAt - timestamp) / 1000)
-      );
-      broadcastSystemRoomChannelMessage(client.sessionId, {
-        topic: "next_game_pending",
-        title: "Next Game",
-        message: `Next game starts in ${nextGameSecondsRemaining}s.`,
-        severity: nextGameSecondsRemaining <= 3 ? "warning" : "info",
-        timestamp,
-      });
-
-      const winnerTurnEnd = buildTurnEndMessage(session, client.playerId, {
-        source: "winner_complete",
-      });
-      if (winnerTurnEnd) {
-        broadcastToSession(client.sessionId, JSON.stringify(winnerTurnEnd), null);
-      }
+      broadcastRoundWinnerResolved(session, client.playerId, timestamp, "winner_complete");
     }
   }
 
