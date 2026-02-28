@@ -1422,8 +1422,10 @@ async function handleJoinSessionByTarget(req, res, target) {
     const sessionId = target.sessionId.trim();
     let sessionById = store.multiplayerSessions[sessionId];
     if (!sessionById || sessionById.expiresAt <= now) {
-      await rehydrateStoreFromAdapter(`join_session:${sessionId}`, { force: true });
-      sessionById = store.multiplayerSessions[sessionId];
+      sessionById = await rehydrateSessionWithRetry(sessionId, "join_session", {
+        attempts: 6,
+        baseDelayMs: 150,
+      });
     }
     if (!sessionById || sessionById.expiresAt <= now) {
       sendJson(res, 410, { error: "Session expired", reason: "session_expired" });
@@ -1533,8 +1535,10 @@ async function handleSessionHeartbeat(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
   let session = store.multiplayerSessions[sessionId];
   if (!session || session.expiresAt <= Date.now()) {
-    await rehydrateStoreFromAdapter(`heartbeat_session:${sessionId}`, { force: true });
-    session = store.multiplayerSessions[sessionId];
+    session = await rehydrateSessionWithRetry(sessionId, "heartbeat_session", {
+      attempts: 6,
+      baseDelayMs: 150,
+    });
   }
   if (!session || session.expiresAt <= Date.now()) {
     sendJson(res, 200, { ok: false, reason: "session_expired" });
@@ -1736,8 +1740,10 @@ async function handleQueueParticipantForNextGame(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
   let session = store.multiplayerSessions[sessionId];
   if (!session || session.expiresAt <= Date.now()) {
-    await rehydrateStoreFromAdapter(`queue_next_session:${sessionId}`, { force: true });
-    session = store.multiplayerSessions[sessionId];
+    session = await rehydrateSessionWithRetry(sessionId, "queue_next_session", {
+      attempts: 6,
+      baseDelayMs: 150,
+    });
   }
   if (!session || session.expiresAt <= Date.now()) {
     sendJson(res, 200, {
@@ -2124,8 +2130,8 @@ async function handleRefreshSessionAuth(req, res, pathname) {
   let session = store.multiplayerSessions[sessionId];
   if (!session || session.expiresAt <= Date.now()) {
     session = await rehydrateSessionWithRetry(sessionId, "refresh_auth_session", {
-      attempts: 4,
-      baseDelayMs: 120,
+      attempts: 7,
+      baseDelayMs: 200,
     });
   }
   if (!session) {
@@ -2140,8 +2146,8 @@ async function handleRefreshSessionAuth(req, res, pathname) {
       playerId,
       "refresh_auth_participant",
       {
-        attempts: 4,
-        baseDelayMs: 120,
+        attempts: 7,
+        baseDelayMs: 200,
       }
     );
     session = recovered.session;
@@ -2165,8 +2171,8 @@ async function handleRefreshSessionAuth(req, res, pathname) {
         playerId,
         "refresh_auth_expired_retry",
         {
-          attempts: 3,
-          baseDelayMs: 100,
+          attempts: 5,
+          baseDelayMs: 160,
         }
       );
       session = recovered.session;
@@ -2186,8 +2192,8 @@ async function handleRefreshSessionAuth(req, res, pathname) {
       playerId,
       "refresh_auth_authorize",
       {
-        attempts: 3,
-        baseDelayMs: 100,
+        attempts: 5,
+        baseDelayMs: 160,
       }
     );
     session = recovered.session;
