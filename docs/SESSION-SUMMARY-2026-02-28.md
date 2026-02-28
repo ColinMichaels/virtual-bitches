@@ -11,6 +11,11 @@
 - Cleaned the winner-queue auth-refresh fallback block formatting in `api/e2e/smoke.mjs` to remove merge artifact indentation drift.
 - Kept smoke resiliency behavior (transient refresh recovery via rejoin) while improving readability/maintainability.
 
+### Deploy Smoke Hardening (Room Lifecycle)
+- Updated room lifecycle saturation checks in `api/e2e/smoke.mjs` to fill the chosen room by `sessionId` (deterministic target) instead of only by room code.
+- Kept strict `room_full` assertions for session-targeted joins at capacity.
+- Relaxed room-code probe handling only when code resolution explicitly routes to a different session, with cleanup + logging, to reduce false failures in shared/persisted environments where room-code collisions can exist.
+
 ### Multiplayer Post-Round Lifecycle Fixes
 - Fixed next-game scheduling baseline so `nextGameStartsAt` is now computed from **round completion time** instead of prior `gameStartedAt`.
 - Updated fallback next-game timestamp resolution to use the supplied event timestamp (`fallback + delay`) when no explicit post-game schedule exists.
