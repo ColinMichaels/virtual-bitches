@@ -2908,6 +2908,19 @@ body.splash-active :is(
   color: #f5f8ff;
 }
 
+.splash-multiplayer-demo-badge {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--status-info-rgb), 0.62);
+  background: rgba(var(--status-info-rgb), 0.14);
+  color: rgba(var(--status-info-rgb), 0.98);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .splash-multiplayer-close-btn {
   color: var(--ui-text-dim);
   align-self: flex-end;

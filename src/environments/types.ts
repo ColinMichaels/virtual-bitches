@@ -15,6 +15,8 @@ export interface Environment {
     multiplayer: boolean;
     analytics: boolean;
     multiplayerAutoSeatReady: boolean;
+    multiplayerDemoSpeedMode: boolean;
+    multiplayerDemoSpeedLabel: string;
   };
   storage: {
     prefix: string; // localStorage key prefix

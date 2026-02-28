@@ -145,6 +145,11 @@ export class SplashScreen {
                 &times;
               </button>
             </div>
+            ${
+              environment.features.multiplayerDemoSpeedMode
+                ? `<p class="splash-multiplayer-demo-badge">${environment.features.multiplayerDemoSpeedLabel} (private rooms only)</p>`
+                : ""
+            }
 
             <div class="splash-multiplayer-scroll">
               <div class="splash-multiplayer-section">

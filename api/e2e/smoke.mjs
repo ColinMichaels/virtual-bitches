@@ -27,6 +27,7 @@ const timeoutStrikeHeartbeatIntervalMs = Number(
 const queueLifecycleWaitMs = Number(process.env.E2E_QUEUE_LIFECYCLE_WAIT_MS ?? 75000);
 const expectedStorageBackend = normalizeOptionalString(process.env.E2E_EXPECT_STORAGE_BACKEND).toLowerCase();
 const expectedFirestorePrefix = normalizeOptionalString(process.env.E2E_EXPECT_FIRESTORE_PREFIX);
+const expectedSpeedProfile = normalizeOptionalString(process.env.E2E_EXPECT_SPEED_PROFILE).toLowerCase();
 const expectedStoreSections = getStoreSections();
 const expectedStorageSectionMinCounts = parseStorageSectionMinCountSpec(
   process.env.E2E_EXPECT_STORAGE_SECTION_MIN_COUNTS
@@ -58,6 +59,19 @@ async function run() {
   log(`WS base URL:  ${targets.wsBaseUrl}`);
 
   const health = await apiRequest("/health", { method: "GET" });
+  const reportedSpeedProfile = normalizeOptionalString(health?.multiplayer?.speedProfile).toLowerCase();
+  const reportedTurnTimeoutByDifficulty = health?.multiplayer?.turnTimeoutByDifficultyMs ?? null;
+  const reportedBotTickRange = health?.multiplayer?.botTickRangeMs ?? null;
+  const reportedBotTurnAdvanceRange = health?.multiplayer?.botTurnAdvanceRangeMs ?? null;
+  log(
+    `Smoke runtime profile: speedProfile=${reportedSpeedProfile || "unknown"} turnTimeoutByDifficultyMs=${JSON.stringify(reportedTurnTimeoutByDifficulty)} botTickRangeMs=${JSON.stringify(reportedBotTickRange)} botTurnAdvanceRangeMs=${JSON.stringify(reportedBotTurnAdvanceRange)}`
+  );
+  if (expectedSpeedProfile) {
+    assert(
+      reportedSpeedProfile === expectedSpeedProfile,
+      `unexpected speed profile from /health (expected=${expectedSpeedProfile}, actual=${reportedSpeedProfile || "unknown"})`
+    );
+  }
   if (expectedStorageBackend) {
     const reportedBackend =
       typeof health?.storage?.backend === "string"

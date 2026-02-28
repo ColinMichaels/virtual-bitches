@@ -152,8 +152,46 @@ const IMAGE_PROXY_MAX_BYTES = 6 * 1024 * 1024;
 const IMAGE_PROXY_TIMEOUT_MS = 7000;
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const MAX_MULTIPLAYER_BOTS = 4;
-const BOT_TICK_MIN_MS = 4500;
-const BOT_TICK_MAX_MS = 9000;
+const MULTIPLAYER_ALLOW_FAST_PROFILE_IN_PRODUCTION =
+  process.env.MULTIPLAYER_ALLOW_FAST_PROFILE_IN_PRODUCTION === "1";
+const MULTIPLAYER_SPEED_PROFILE_REQUESTED = normalizeMultiplayerSpeedProfileValue(
+  process.env.MULTIPLAYER_SPEED_PROFILE
+);
+const MULTIPLAYER_SPEED_PROFILE =
+  NODE_ENV === "production" &&
+  MULTIPLAYER_SPEED_PROFILE_REQUESTED === "fast" &&
+  !MULTIPLAYER_ALLOW_FAST_PROFILE_IN_PRODUCTION
+    ? "normal"
+    : MULTIPLAYER_SPEED_PROFILE_REQUESTED;
+const BOT_SPEED_PROFILE_DEFAULTS = Object.freeze({
+  normal: Object.freeze({
+    tickRangeMs: Object.freeze({ min: 4500, max: 9000 }),
+    turnAdvanceRangeMs: Object.freeze({ min: 1600, max: 3200 }),
+    turnAdvanceByProfileMs: Object.freeze({
+      cautious: Object.freeze({ min: 2300, max: 4200 }),
+      balanced: Object.freeze({ min: 1500, max: 3100 }),
+      aggressive: Object.freeze({ min: 900, max: 2200 }),
+    }),
+  }),
+  fast: Object.freeze({
+    tickRangeMs: Object.freeze({ min: 900, max: 1800 }),
+    turnAdvanceRangeMs: Object.freeze({ min: 450, max: 1100 }),
+    turnAdvanceByProfileMs: Object.freeze({
+      cautious: Object.freeze({ min: 700, max: 1700 }),
+      balanced: Object.freeze({ min: 450, max: 1100 }),
+      aggressive: Object.freeze({ min: 250, max: 800 }),
+    }),
+  }),
+});
+const ACTIVE_BOT_SPEED_DEFAULTS = BOT_SPEED_PROFILE_DEFAULTS[MULTIPLAYER_SPEED_PROFILE];
+const BOT_TICK_DELAY_RANGE_MS = normalizeDelayRangeFromEnv(
+  process.env.MULTIPLAYER_BOT_TICK_MIN_MS,
+  process.env.MULTIPLAYER_BOT_TICK_MAX_MS,
+  ACTIVE_BOT_SPEED_DEFAULTS.tickRangeMs,
+  { minimum: 200, maximum: 60 * 1000 }
+);
+const BOT_TICK_MIN_MS = BOT_TICK_DELAY_RANGE_MS.min;
+const BOT_TICK_MAX_MS = BOT_TICK_DELAY_RANGE_MS.max;
 const BOT_NAMES = ["Byte Bessie", "Lag Larry", "Packet Patty", "Dicebot Dave"];
 const BOT_PROFILES = ["cautious", "balanced", "aggressive"];
 const GAME_DIFFICULTIES = new Set(["easy", "normal", "hard"]);
@@ -161,13 +199,34 @@ const PARTICIPANT_STATE_ACTIONS = new Set(["sit", "stand", "ready", "unready"]);
 const SESSION_MODERATION_ACTIONS = new Set(["kick", "ban"]);
 const BOT_CAMERA_EFFECTS = ["shake"];
 const MAX_SESSION_ROOM_BANS = 256;
-const BOT_TURN_ADVANCE_MIN_MS = 1600;
-const BOT_TURN_ADVANCE_MAX_MS = 3200;
-const BOT_TURN_ADVANCE_DELAY_BY_PROFILE = {
-  cautious: { min: 2300, max: 4200 },
-  balanced: { min: 1500, max: 3100 },
-  aggressive: { min: 900, max: 2200 },
-};
+const BOT_TURN_ADVANCE_DELAY_RANGE_MS = normalizeDelayRangeFromEnv(
+  process.env.MULTIPLAYER_BOT_TURN_ADVANCE_MIN_MS,
+  process.env.MULTIPLAYER_BOT_TURN_ADVANCE_MAX_MS,
+  ACTIVE_BOT_SPEED_DEFAULTS.turnAdvanceRangeMs,
+  { minimum: 200, maximum: 60 * 1000 }
+);
+const BOT_TURN_ADVANCE_MIN_MS = BOT_TURN_ADVANCE_DELAY_RANGE_MS.min;
+const BOT_TURN_ADVANCE_MAX_MS = BOT_TURN_ADVANCE_DELAY_RANGE_MS.max;
+const BOT_TURN_ADVANCE_DELAY_BY_PROFILE = Object.freeze({
+  cautious: normalizeDelayRangeFromEnv(
+    process.env.MULTIPLAYER_BOT_TURN_ADVANCE_CAUTIOUS_MIN_MS,
+    process.env.MULTIPLAYER_BOT_TURN_ADVANCE_CAUTIOUS_MAX_MS,
+    ACTIVE_BOT_SPEED_DEFAULTS.turnAdvanceByProfileMs.cautious,
+    { minimum: 200, maximum: 60 * 1000 }
+  ),
+  balanced: normalizeDelayRangeFromEnv(
+    process.env.MULTIPLAYER_BOT_TURN_ADVANCE_BALANCED_MIN_MS,
+    process.env.MULTIPLAYER_BOT_TURN_ADVANCE_BALANCED_MAX_MS,
+    ACTIVE_BOT_SPEED_DEFAULTS.turnAdvanceByProfileMs.balanced,
+    { minimum: 200, maximum: 60 * 1000 }
+  ),
+  aggressive: normalizeDelayRangeFromEnv(
+    process.env.MULTIPLAYER_BOT_TURN_ADVANCE_AGGRESSIVE_MIN_MS,
+    process.env.MULTIPLAYER_BOT_TURN_ADVANCE_AGGRESSIVE_MAX_MS,
+    ACTIVE_BOT_SPEED_DEFAULTS.turnAdvanceByProfileMs.aggressive,
+    { minimum: 200, maximum: 60 * 1000 }
+  ),
+});
 const DEFAULT_PARTICIPANT_DICE_COUNT = 15;
 const BOT_ROLL_DICE_SIDES = [8, 12, 10, 6, 6, 6, 20, 6, 4, 6, 6, 6, 10, 6, 6];
 const DEFAULT_TURN_TIMEOUT_MS = normalizeTurnTimeoutValue(process.env.TURN_TIMEOUT_MS, 30000);
@@ -351,6 +410,22 @@ server.listen(PORT, () => {
   log.info(`WebSocket endpoint: ws://localhost:${PORT}/?session=<id>&playerId=<id>&token=<token>`);
   log.info(`Multiplayer session idle TTL: ${MULTIPLAYER_SESSION_IDLE_TTL_MS}ms`);
   log.info(`Multiplayer participant stale timeout: ${MULTIPLAYER_PARTICIPANT_STALE_MS}ms`);
+  log.info(
+    `Multiplayer speed profile: ${MULTIPLAYER_SPEED_PROFILE} (requested=${MULTIPLAYER_SPEED_PROFILE_REQUESTED})`
+  );
+  log.info(`Bot tick interval: ${BOT_TICK_MIN_MS}-${BOT_TICK_MAX_MS}ms`);
+  log.info(
+    `Bot turn delay interval: ${BOT_TURN_ADVANCE_MIN_MS}-${BOT_TURN_ADVANCE_MAX_MS}ms`
+  );
+  if (
+    NODE_ENV === "production" &&
+    MULTIPLAYER_SPEED_PROFILE_REQUESTED === "fast" &&
+    !MULTIPLAYER_ALLOW_FAST_PROFILE_IN_PRODUCTION
+  ) {
+    log.warn(
+      "Ignoring MULTIPLAYER_SPEED_PROFILE=fast in production (set MULTIPLAYER_ALLOW_FAST_PROFILE_IN_PRODUCTION=1 to override)."
+    );
+  }
   if (SHORT_SESSION_TTL_REQUESTED && NODE_ENV === "production") {
     log.warn("Ignoring ALLOW_SHORT_SESSION_TTLS in production");
   }
@@ -568,6 +643,8 @@ async function handleRequest(req, res) {
         sessions: Object.keys(store.multiplayerSessions).length,
         leaderboardEntries: Object.keys(store.leaderboardScores).length,
         multiplayer: {
+          speedProfile: MULTIPLAYER_SPEED_PROFILE,
+          speedProfileRequested: MULTIPLAYER_SPEED_PROFILE_REQUESTED,
           sessionIdleTtlMs: MULTIPLAYER_SESSION_IDLE_TTL_MS,
           sessionIdleTtlMinMs: SESSION_IDLE_TTL_MIN_MS,
           participantStaleMs: MULTIPLAYER_PARTICIPANT_STALE_MS,
@@ -577,6 +654,9 @@ async function handleRequest(req, res) {
           turnTimeoutByDifficultyMs: TURN_TIMEOUT_BY_DIFFICULTY_MS,
           turnTimeoutStandStrikeLimit: TURN_TIMEOUT_STAND_STRIKE_LIMIT,
           nextGameAutoStartDelayMs: NEXT_GAME_AUTO_START_DELAY_MS,
+          botTickRangeMs: BOT_TICK_DELAY_RANGE_MS,
+          botTurnAdvanceRangeMs: BOT_TURN_ADVANCE_DELAY_RANGE_MS,
+          botTurnAdvanceByProfileMs: BOT_TURN_ADVANCE_DELAY_BY_PROFILE,
           chatConduct: buildAdminChatConductPolicySummary(),
         },
         storage: buildStoreDiagnostics(),
@@ -6244,6 +6324,44 @@ function resolveChatConductTerms(rawValue, fallbackTerms = new Set()) {
     return explicitTerms;
   }
   return new Set(fallbackTerms);
+}
+
+function normalizeMultiplayerSpeedProfileValue(rawValue) {
+  const normalized = typeof rawValue === "string" ? rawValue.trim().toLowerCase() : "";
+  if (normalized === "fast" || normalized === "demo") {
+    return "fast";
+  }
+  return "normal";
+}
+
+function normalizeDelayRangeValue(rawValue, fallback, minimum, maximum) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return Math.max(minimum, Math.min(maximum, Math.floor(fallback)));
+  }
+  return Math.max(minimum, Math.min(maximum, Math.floor(parsed)));
+}
+
+function normalizeDelayRangeFromEnv(rawMinValue, rawMaxValue, fallback, options = {}) {
+  const minimum = Number.isFinite(Number(options.minimum))
+    ? Math.max(1, Math.floor(Number(options.minimum)))
+    : 1;
+  const maximum = Number.isFinite(Number(options.maximum))
+    ? Math.max(minimum, Math.floor(Number(options.maximum)))
+    : 5 * 60 * 1000;
+  const fallbackMin = normalizeDelayRangeValue(fallback?.min, minimum, minimum, maximum);
+  const fallbackMax = normalizeDelayRangeValue(
+    fallback?.max,
+    Math.max(fallbackMin, minimum),
+    minimum,
+    maximum
+  );
+  const min = normalizeDelayRangeValue(rawMinValue, fallbackMin, minimum, maximum);
+  const max = normalizeDelayRangeValue(rawMaxValue, fallbackMax, minimum, maximum);
+  return Object.freeze({
+    min,
+    max: Math.max(min, max),
+  });
 }
 
 function normalizeAdminAccessMode(rawValue) {

@@ -15,6 +15,10 @@ const parseBooleanFlag = (rawValue: string | undefined, fallback: boolean): bool
   }
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 };
+const resolveDemoSpeedLabel = (rawValue: string | undefined): string => {
+  const normalized = typeof rawValue === "string" ? rawValue.trim() : "";
+  return normalized || "Demo Speed Mode";
+};
 
 export const environment: Environment = {
   production: false,
@@ -32,6 +36,11 @@ export const environment: Environment = {
       env.VITE_MULTIPLAYER_AUTO_SEAT_READY_ENABLED,
       true
     ),
+    multiplayerDemoSpeedMode: parseBooleanFlag(
+      env.VITE_MULTIPLAYER_DEMO_SPEED_MODE_ENABLED,
+      false
+    ),
+    multiplayerDemoSpeedLabel: resolveDemoSpeedLabel(env.VITE_MULTIPLAYER_DEMO_SPEED_LABEL),
   },
   storage: {
     prefix: "biscuits-local",

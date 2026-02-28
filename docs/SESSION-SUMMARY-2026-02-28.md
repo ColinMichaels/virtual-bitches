@@ -29,6 +29,8 @@
 - Added dedicated timeout-strike smoke assertion for "two turn timeouts in one round => observer/lounge" with explicit participant-state validation.
 - Added transient timeout-strike retry behavior plus Cloud Run distributed fallback: repeated transient `session_expired` can be marked inconclusive (non-fatal) unless `E2E_FAIL_ON_TRANSIENT_TIMEOUT_STRIKE_SESSION_EXPIRED=1` is set.
 - Hardened session-id join probes in smoke (main flow, queue lifecycle, and timeout-strike setup) with transient-aware retries to reduce false negatives from short-lived session-store drift.
+- Hardened participant-state recovery in smoke under distributed `session_expired` churn and retry-raced auth refresh.
+- Hardened realtime relay smoke checks to recover after transient websocket/socket churn and mark repeated auth churn inconclusive by default (`E2E_FAIL_ON_TRANSIENT_REALTIME_RELAY_SESSION_EXPIRED=1` to fail hard).
 
 ### Multiplayer Post-Round Lifecycle Fixes
 - Fixed next-game scheduling baseline so `nextGameStartsAt` is now computed from **round completion time** instead of prior `gameStartedAt`.
@@ -64,6 +66,23 @@
 - Removed active-round fallback countdown behavior (`gameStart + roundCycle`) that previously forced countdown mode during live rounds.
 - Result: active rounds now show elapsed game time correctly; post-round states continue to show countdown when scheduled.
 
+### Multiplayer Test-Speed Profile + UI Demo Mode Foundation
+- Added API speed profile support (`MULTIPLAYER_SPEED_PROFILE=normal|fast`, with `demo` alias -> `fast`) for bot pacing defaults.
+- Added production guardrail: `MULTIPLAYER_SPEED_PROFILE=fast` is ignored in production unless `MULTIPLAYER_ALLOW_FAST_PROFILE_IN_PRODUCTION=1`.
+- Added env-configurable bot pacing ranges:
+  - `MULTIPLAYER_BOT_TICK_MIN_MS`, `MULTIPLAYER_BOT_TICK_MAX_MS`
+  - `MULTIPLAYER_BOT_TURN_ADVANCE_MIN_MS`, `MULTIPLAYER_BOT_TURN_ADVANCE_MAX_MS`
+  - profile ranges: `MULTIPLAYER_BOT_TURN_ADVANCE_{CAUTIOUS|BALANCED|AGGRESSIVE}_{MIN|MAX}_MS`
+- Exposed active speed diagnostics in `/api/health` multiplayer runtime:
+  - `speedProfile`, `speedProfileRequested`
+  - `botTickRangeMs`, `botTurnAdvanceRangeMs`, `botTurnAdvanceByProfileMs`
+- Updated local smoke harness (`api/e2e/run-local.mjs`) to default to a fast profile in short-TTL mode and log active local speed profile.
+- Updated smoke startup output (`api/e2e/smoke.mjs`) to print speed + timeout diagnostics and support optional `E2E_EXPECT_SPEED_PROFILE` assertions.
+- Added frontend env plumbing for demo-mode badging:
+  - `VITE_MULTIPLAYER_DEMO_SPEED_MODE_ENABLED`
+  - `VITE_MULTIPLAYER_DEMO_SPEED_LABEL`
+- Added splash multiplayer panel demo badge (flagged, default off): `${label} (private rooms only)`.
+
 ---
 
 ## Validation Snapshot
@@ -74,6 +93,7 @@
 - `npm run test:e2e:api:local` passes, including winner queue lifecycle auto-restart checks.
 - GitHub Actions `deploy-api` completed successfully on February 28, 2026 after smoke hardening and transient distributed-flow guards.
 - Latest successful `deploy-api` run retained queue lifecycle + timeout-strike observer segments as inconclusive (non-fatal) under repeated transient distributed `session_expired`, then continued to full smoke pass.
+- Follow-up successful `deploy-api` run (Cloud Run revision `biscuits-api-00161-868`) verified end-to-end deploy viability after realtime-relay transient recovery hardening.
 - Latest successful `deploy-api` run still skipped optional smoke lanes that require additional CI config/auth:
   - admin storage cutover/admin monitor/admin moderation-term assertions
   - chat-conduct admin clear verification

@@ -272,6 +272,9 @@ Notes:
 - `E2E_ASSERT_CHAT_CONDUCT` is opt-in for deployed smoke.
 - local harness (`npm run test:e2e:api:local`) enables it by default with a deterministic test term.
 - local harness defaults `E2E_ASSERT_ROOM_EXPIRY=1` only when short TTL mode is enabled (`E2E_SHORT_TTLS!=0`); otherwise it defaults to `0` to match long-lived production TTLs.
+- local harness defaults to `MULTIPLAYER_SPEED_PROFILE=fast` when short TTL mode is enabled, and `normal` otherwise.
+- override local speed profile with `E2E_MULTIPLAYER_SPEED_PROFILE=normal|fast` (or set `MULTIPLAYER_SPEED_PROFILE` explicitly).
+- smoke startup logs active speed/timer diagnostics from `/api/health`; set `E2E_EXPECT_SPEED_PROFILE=normal|fast` for strict assertion.
 
 Optional timeout-strike observer/lounge assertion segment:
 

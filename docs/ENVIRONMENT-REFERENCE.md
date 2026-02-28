@@ -32,6 +32,8 @@ Use these in `.env.local` for local dev and GitHub deploy environment values for
 | `VITE_FEEDBACK_FORM_URL` | `https://docs.google.com/forms/...` | Team feedback form URL |
 | `VITE_ENABLE_ADMIN_UI` | `0` or `1` | Team-controlled feature flag |
 | `VITE_MULTIPLAYER_AUTO_SEAT_READY_ENABLED` | `0` or `1` | Team-controlled kill switch for auto-seat/auto-ready |
+| `VITE_MULTIPLAYER_DEMO_SPEED_MODE_ENABLED` | `0` or `1` | Show/hide UI demo-speed badge in multiplayer panel |
+| `VITE_MULTIPLAYER_DEMO_SPEED_LABEL` | text like `Demo Speed Mode` | Label text for demo-speed badge |
 | `VITE_OG_IMAGE_URL` | `https://.../assets/ads/betahelp_ad.png` | CDN/Storage image URL for share metadata |
 | `VITE_FACEBOOK_APP_ID` | numeric string | Facebook Developer app settings |
 
@@ -117,6 +119,8 @@ Optional but recommended:
 | --- | --- | --- |
 | `VITE_ENABLE_ADMIN_UI` | `0` or `1` | Team feature flag |
 | `VITE_MULTIPLAYER_AUTO_SEAT_READY_ENABLED` | `0` or `1` | Global deploy kill switch for join auto-seat/auto-ready |
+| `VITE_MULTIPLAYER_DEMO_SPEED_MODE_ENABLED` | `0` or `1` | Toggle splash multiplayer demo-speed badge |
+| `VITE_MULTIPLAYER_DEMO_SPEED_LABEL` | text like `Demo Speed Mode` | UI label for demo-speed badge |
 | `VITE_OG_IMAGE_URL` | `https://...` | CDN/Storage image URL |
 | `VITE_FACEBOOK_APP_ID` | numeric string | Facebook Developer app |
 | `API_FIRESTORE_PREFIX` | `api_v1` | Team-chosen Firestore namespace |
@@ -125,6 +129,18 @@ Optional but recommended:
 | `API_MIN_INSTANCES` | `1` | Cloud Run capacity target |
 | `API_MAX_INSTANCES` | `1` | Keep `1` for current single-instance multiplayer architecture |
 | `MULTIPLAYER_SESSION_IDLE_TTL_MS` | integer ms like `1800000` | Session expiry policy |
+| `MULTIPLAYER_SPEED_PROFILE` | `normal` or `fast` | API bot-pacing speed profile (`demo` alias maps to `fast`) |
+| `MULTIPLAYER_ALLOW_FAST_PROFILE_IN_PRODUCTION` | `0` or `1` | Allow fast speed profile in production (`0` keeps production on normal) |
+| `MULTIPLAYER_BOT_TICK_MIN_MS` | integer ms like `4500` (normal) or `900` (fast) | Bot ambient-message tick minimum |
+| `MULTIPLAYER_BOT_TICK_MAX_MS` | integer ms like `9000` (normal) or `1800` (fast) | Bot ambient-message tick maximum |
+| `MULTIPLAYER_BOT_TURN_ADVANCE_MIN_MS` | integer ms like `1600` | Bot turn-advance minimum delay |
+| `MULTIPLAYER_BOT_TURN_ADVANCE_MAX_MS` | integer ms like `3200` | Bot turn-advance maximum delay |
+| `MULTIPLAYER_BOT_TURN_ADVANCE_CAUTIOUS_MIN_MS` | integer ms like `2300` | Cautious-profile bot delay minimum |
+| `MULTIPLAYER_BOT_TURN_ADVANCE_CAUTIOUS_MAX_MS` | integer ms like `4200` | Cautious-profile bot delay maximum |
+| `MULTIPLAYER_BOT_TURN_ADVANCE_BALANCED_MIN_MS` | integer ms like `1500` | Balanced-profile bot delay minimum |
+| `MULTIPLAYER_BOT_TURN_ADVANCE_BALANCED_MAX_MS` | integer ms like `3100` | Balanced-profile bot delay maximum |
+| `MULTIPLAYER_BOT_TURN_ADVANCE_AGGRESSIVE_MIN_MS` | integer ms like `900` | Aggressive-profile bot delay minimum |
+| `MULTIPLAYER_BOT_TURN_ADVANCE_AGGRESSIVE_MAX_MS` | integer ms like `2200` | Aggressive-profile bot delay maximum |
 | `MULTIPLAYER_CHAT_CONDUCT_ENABLED` | `0` or `1` | Enable/disable chat conduct middleware |
 | `MULTIPLAYER_CHAT_CONDUCT_PUBLIC_ONLY` | `0` or `1` | Enforce profanity checks only on public channel (`1` default) |
 | `MULTIPLAYER_CHAT_BANNED_TERMS` | comma/space delimited terms | Team-owned initial profanity/blocked term list |
@@ -141,6 +157,8 @@ Optional but recommended:
 | `MULTIPLAYER_CHAT_TERMS_MAX_MANAGED` | integer like `2048` | Max in-API managed moderation terms |
 | `MULTIPLAYER_CHAT_TERMS_MAX_REMOTE` | integer like `4096` | Max remote moderation terms per refresh |
 | `E2E_QUEUE_LIFECYCLE_WAIT_MS` | integer ms like `90000` | CI smoke tolerance |
+| `E2E_EXPECT_SPEED_PROFILE` | `normal` or `fast` | Optional smoke assertion for `/api/health.multiplayer.speedProfile` |
+| `E2E_MULTIPLAYER_SPEED_PROFILE` | `normal` or `fast` | Local harness speed-profile override (`api/e2e/run-local.mjs`) |
 | `E2E_ASSERT_TIMEOUT_STRIKE_OBSERVER` | `0` or `1` | Toggle dedicated timeout-strike observer/lounge smoke segment (`1` default; set `0` to disable) |
 | `E2E_TIMEOUT_STRIKE_WAIT_BUFFER_MS` | integer ms like `7000` | Extra timeout-strike auto-advance wait buffer |
 | `E2E_TIMEOUT_STRIKE_POLL_INTERVAL_MS` | integer ms like `250` | Timeout-strike polling cadence |
