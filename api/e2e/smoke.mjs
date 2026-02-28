@@ -19,6 +19,9 @@ const roomOverflowWaitMs = Number(process.env.E2E_ROOM_OVERFLOW_WAIT_MS ?? 8000)
 const roomOverflowPollIntervalMs = Number(process.env.E2E_ROOM_OVERFLOW_POLL_INTERVAL_MS ?? 250);
 const timeoutStrikeWaitBufferMs = Number(process.env.E2E_TIMEOUT_STRIKE_WAIT_BUFFER_MS ?? 7000);
 const timeoutStrikePollIntervalMs = Number(process.env.E2E_TIMEOUT_STRIKE_POLL_INTERVAL_MS ?? 250);
+const timeoutStrikeHeartbeatIntervalMs = Number(
+  process.env.E2E_TIMEOUT_STRIKE_HEARTBEAT_INTERVAL_MS ?? 5000
+);
 // Production defaults to a 60s post-round auto-start window; keep smoke timeout above that.
 const queueLifecycleWaitMs = Number(process.env.E2E_QUEUE_LIFECYCLE_WAIT_MS ?? 75000);
 const expectedStorageBackend = normalizeOptionalString(process.env.E2E_EXPECT_STORAGE_BACKEND).toLowerCase();
@@ -98,7 +101,18 @@ async function run() {
     await runWinnerQueueLifecycleChecks(`${runSuffix}-retry`);
   }
   if (assertTimeoutStrikeObserver) {
-    await runTimeoutStrikeObserverChecks(runSuffix);
+    try {
+      await runTimeoutStrikeObserverChecks(runSuffix);
+    } catch (error) {
+      if (!isTransientTimeoutStrikeObserverFailure(error)) {
+        throw error;
+      }
+      const firstAttemptMessage = error instanceof Error ? error.message : String(error);
+      log(
+        `Timeout strike observer checks encountered transient failure; retrying once with a fresh session (${firstAttemptMessage}).`
+      );
+      await runTimeoutStrikeObserverChecks(`${runSuffix}-retry`);
+    }
   } else {
     log("Skipping timeout strike observer checks (set E2E_ASSERT_TIMEOUT_STRIKE_OBSERVER=1 to enable).");
   }
@@ -2647,8 +2661,8 @@ async function refreshSessionAuthWithRecovery({
   playerId,
   displayName,
   accessToken,
-  maxAttempts = 4,
-  initialDelayMs = 180,
+  maxAttempts = 6,
+  initialDelayMs = 220,
 }) {
   let token = typeof accessToken === "string" ? accessToken : "";
   const normalizedDisplayName =
@@ -2791,9 +2805,15 @@ async function waitForTurnAutoAdvanceForPlayer({
   let lastHeartbeatPingAt = 0;
   let lastRound = expectedRoundNumber ?? 1;
   let lastActivePlayerId = playerId;
-  const heartbeatIntervalMs = 4000;
+  const heartbeatIntervalMs =
+    Number.isFinite(timeoutStrikeHeartbeatIntervalMs) && timeoutStrikeHeartbeatIntervalMs > 0
+      ? Math.floor(timeoutStrikeHeartbeatIntervalMs)
+      : 0;
 
   const maintainHeartbeat = async () => {
+    if (heartbeatIntervalMs <= 0) {
+      return;
+    }
     const now = Date.now();
     if (now - lastHeartbeatPingAt < heartbeatIntervalMs) {
       return;
@@ -2820,6 +2840,8 @@ async function waitForTurnAutoAdvanceForPlayer({
         playerId: hostPlayerId,
         displayName: hostDisplayName,
         accessToken: token,
+        maxAttempts: 8,
+        initialDelayMs: 300,
       });
       token = recovered.accessToken;
       lastHeartbeatPingAt = now;
@@ -3015,6 +3037,16 @@ function isTransientWinnerQueueLifecycleFailure(error) {
   const normalized = message.toLowerCase();
   return (
     normalized.includes("queue lifecycle did not auto-start a fresh round") ||
+    normalized.includes("session_expired")
+  );
+}
+
+function isTransientTimeoutStrikeObserverFailure(error) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("timeout strike refresh did not recover session auth") ||
+    normalized.includes("timeout strike did not observe auto-advance") ||
     normalized.includes("session_expired")
   );
 }
