@@ -28,6 +28,7 @@ export interface SplashStartOptions {
     gameDifficulty?: MultiplayerGameDifficulty;
     sessionId?: string;
     roomCode?: string;
+    autoSeatReady?: boolean;
   };
 }
 
@@ -41,6 +42,7 @@ export class SplashScreen {
   private botCount = 0;
   private joinBotCount = 1;
   private seedBotsOnJoin = false;
+  private autoSeatReadyOnJoin = environment.features.multiplayerAutoSeatReady;
   private privateRoomMode = false;
   private privateRoomName = "";
   private privateRoomMaxPlayers = 8;
@@ -318,6 +320,23 @@ export class SplashScreen {
                   <option value="4">${t("splash.multiplayer.botOption.4")}</option>
                 </select>
                 <p class="splash-join-bot-seed-note">${t("splash.multiplayer.joinBotSeedNote")}</p>
+                <div class="splash-auto-seat-ready-toggle">
+                  <label for="splash-auto-seat-ready">
+                    <input
+                      id="splash-auto-seat-ready"
+                      type="checkbox"
+                      ${this.autoSeatReadyOnJoin ? "checked" : ""}
+                      ${environment.features.multiplayerAutoSeatReady ? "" : "disabled"}
+                    />
+                    ${t("splash.multiplayer.autoSeatReadyToggle")}
+                  </label>
+                </div>
+                <p class="splash-auto-seat-ready-note">
+                  ${t("splash.multiplayer.autoSeatReadyNote")}
+                  ${environment.features.multiplayerAutoSeatReady
+                    ? ""
+                    : ` ${t("splash.multiplayer.autoSeatReadyDisabledNote")}`}
+                </p>
               </div>
             </div>
 
@@ -378,6 +397,12 @@ export class SplashScreen {
       this.container.querySelector<HTMLInputElement>("#splash-seed-join-bots");
     const joinBotCountSelect =
       this.container.querySelector<HTMLSelectElement>("#splash-join-bot-count");
+    const autoSeatReadyCheckbox =
+      this.container.querySelector<HTMLInputElement>("#splash-auto-seat-ready");
+    if (autoSeatReadyCheckbox) {
+      autoSeatReadyCheckbox.checked = this.autoSeatReadyOnJoin;
+      autoSeatReadyCheckbox.disabled = !environment.features.multiplayerAutoSeatReady;
+    }
     const roomGrid = this.container.querySelector<HTMLElement>("#splash-room-grid");
     const roomFilterSearchInput =
       this.container.querySelector<HTMLInputElement>("#splash-room-filter-search");
@@ -514,6 +539,9 @@ export class SplashScreen {
       const parsed = Number(joinBotCountSelect.value);
       this.joinBotCount = Number.isFinite(parsed) ? Math.max(1, Math.min(4, Math.floor(parsed))) : 1;
       this.updateRoomStatus();
+    });
+    autoSeatReadyCheckbox?.addEventListener("change", () => {
+      this.autoSeatReadyOnJoin = autoSeatReadyCheckbox.checked === true;
     });
 
     roomGrid?.addEventListener("click", (event) => {
@@ -670,6 +698,7 @@ export class SplashScreen {
               roomCode: privateModeEnabled
                 ? this.privateRoomCode || undefined
                 : selectedRoomCode || undefined,
+              autoSeatReady: this.autoSeatReadyOnJoin,
             }
           : undefined,
       });
@@ -1464,6 +1493,7 @@ export class SplashScreen {
           gameDifficulty: this.multiplayerDifficulty,
           sessionId: joinedSessionId,
           roomCode: targetRoomCode,
+          autoSeatReady: this.autoSeatReadyOnJoin,
         },
       });
 

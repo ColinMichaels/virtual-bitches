@@ -237,6 +237,7 @@ async function maybeAutoStartFromMultiplayerInvite(): Promise<void> {
       botCount: 0,
       sessionId: invite.sessionId,
       roomCode: invite.roomCode,
+      autoSeatReady: true,
     },
   });
   if (started) {

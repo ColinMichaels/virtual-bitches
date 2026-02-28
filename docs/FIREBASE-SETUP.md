@@ -8,6 +8,9 @@ This project now includes base Firebase config files:
 - `firestore.indexes.json`
 - `.env.firebase.example`
 
+Full key-by-key environment and GitHub secret/variable reference:
+- [`docs/ENVIRONMENT-REFERENCE.md`](./ENVIRONMENT-REFERENCE.md)
+
 ## 1) Copy environment values
 
 Create `.env.local` from `.env.firebase.example` and fill values:
@@ -29,6 +32,7 @@ Required keys:
 - `VITE_FIREBASE_APP_ID`
 - `VITE_FIREBASE_MEASUREMENT_ID` (optional but recommended)
 - `VITE_ENABLE_ADMIN_UI` (optional, default `0` in production; set `1` to expose in-app admin monitor UI)
+- `VITE_MULTIPLAYER_AUTO_SEAT_READY_ENABLED` (optional, default `1`; set `0` to globally disable auto-seat/auto-ready helper)
 - `VITE_FACEBOOK_APP_ID` (optional, recommended for richer Facebook share insights/debugging)
 
 Optional direct asset overrides:
@@ -167,6 +171,7 @@ Recommended setup (GitHub Environments):
   - `VITE_FIREBASE_APP_ID`
   - `VITE_FIREBASE_MEASUREMENT_ID` (optional)
   - `VITE_ENABLE_ADMIN_UI` (optional)
+  - `VITE_MULTIPLAYER_AUTO_SEAT_READY_ENABLED` (optional; default `1`)
   - `CDN_ASSET_CACHE_CONTROL` (optional; default `public,max-age=86400`)
   - `CDN_CONTENT_CACHE_CONTROL` (optional; default `public,max-age=300,must-revalidate`)
   - `CDN_VERIFY_RETRIES` (optional; default `8`)

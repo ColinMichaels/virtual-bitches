@@ -1,8 +1,176 @@
 {
-  "generatedAt": "2026-02-27T22:58:36.344Z",
+  "generatedAt": "2026-02-28T01:46:24.031Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-435e0e4",
+      "date": "2026-02-28T01:34:07.000Z",
+      "title": "Adjust session TTL logic, HTTP responses, and multiplayer diagnostics",
+      "content": "<p>Adjust session TTL logic, HTTP responses, and multiplayer diagnostics</p><p><strong>Commit:</strong> <code>435e0e4</code></p><p>- Refined session TTL handling based on `NODE_ENV` for better production and development differentiation.</p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "435e0e4f7a48d73bd0e2d8d84eceb7dda386e3ea",
+        "shortHash": "435e0e4",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/435e0e4f7a48d73bd0e2d8d84eceb7dda386e3ea"
+      }
+    },
+    {
+      "id": "git-fe2ad82",
+      "date": "2026-02-28T01:23:53.000Z",
+      "title": "Add `sit` and `ready` participant-state actions to smoke tests",
+      "content": "<p>Add `sit` and `ready` participant-state actions to smoke tests</p><p><strong>Commit:</strong> <code>fe2ad82</code></p><p>- Implemented tests for `sit` and `ready` actions to validate multiplayer session transitions.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "fe2ad827ebb76c503f1d3d09e8773bc15db37094",
+        "shortHash": "fe2ad82",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/fe2ad827ebb76c503f1d3d09e8773bc15db37094"
+      }
+    },
+    {
+      "id": "git-0380dcd",
+      "date": "2026-02-28T01:10:36.000Z",
+      "title": "Add host and guest `sit` actions to queue lifecycle smoke tests",
+      "content": "<p>Add host and guest `sit` actions to queue lifecycle smoke tests</p><p><strong>Commit:</strong> <code>0380dcd</code></p><p>- Validated `sit` actions for both host and guest during multiplayer queue lifecycle.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "0380dcd29d0bef6521639c0a17cceafc044c8b7f",
+        "shortHash": "0380dcd",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/0380dcd29d0bef6521639c0a17cceafc044c8b7f"
+      }
+    },
+    {
+      "id": "git-00bc7fd",
+      "date": "2026-02-28T00:46:57.000Z",
+      "title": "Multiplayer sit/stand + websocket stability hardening\"",
+      "content": "<p>Multiplayer sit/stand + websocket stability hardening&quot;</p><p><strong>Commit:</strong> <code>00bc7fd</code></p><p>Add sit/stand/ready actions to multiplayer sessions</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "00bc7fd22a8e080da7cdb75da5080a2bc68efbdf",
+        "shortHash": "00bc7fd",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/00bc7fd22a8e080da7cdb75da5080a2bc68efbdf"
+      }
+    },
+    {
+      "id": "git-36614c2",
+      "date": "2026-02-28T00:33:58.000Z",
+      "title": "Refine Firebase deploy smoke tests and URL parsing logic",
+      "content": "<p>Refine Firebase deploy smoke tests and URL parsing logic</p><p><strong>Commit:</strong> <code>36614c2</code></p><p>- Enhanced smoke tests in Firebase deploy workflow to validate Hosting rewrite URLs conditionally.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "36614c28c823fd50ab3cbcbc28d87c0caf2ab052",
+        "shortHash": "36614c2",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/36614c28c823fd50ab3cbcbc28d87c0caf2ab052"
+      }
+    },
+    {
+      "id": "git-813a5d3",
+      "date": "2026-02-28T00:26:54.000Z",
+      "title": "Expose runtime metadata, refine session ID logic, and enhance smoke tests",
+      "content": "<p>Expose runtime metadata, refine session ID logic, and enhance smoke tests</p><p><strong>Commit:</strong> <code>813a5d3</code></p><p>- Added runtime metadata (service, revision, region) to `/healthz` API responses.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "813a5d3a8d98df65b9a77bfada1b7f60e5a18d30",
+        "shortHash": "813a5d3",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/813a5d3a8d98df65b9a77bfada1b7f60e5a18d30"
+      }
+    },
+    {
+      "id": "git-abede84",
+      "date": "2026-02-28T00:16:35.000Z",
+      "title": "Update session join handling with forced rehydration and retry improvements",
+      "content": "<p>Update session join handling with forced rehydration and retry improvements</p><p><strong>Commit:</strong> <code>abede84</code></p><p>- Added `force: true` option to `rehydrateStoreFromAdapter` calls for improved session recovery.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "abede845927a2223cfa485b387c7ca3d0c1b1b06",
+        "shortHash": "abede84",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/abede845927a2223cfa485b387c7ca3d0c1b1b06"
+      }
+    },
+    {
+      "id": "git-b5583c1",
+      "date": "2026-02-28T00:04:52.000Z",
+      "title": "Update session join handling with forced rehydration and retry improvements",
+      "content": "<p>Update session join handling with forced rehydration and retry improvements</p><p><strong>Commit:</strong> <code>b5583c1</code></p><p>- Added `force: true` option to `rehydrateStoreFromAdapter` calls for improved session recovery.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "b5583c1a237c2f54ab8802dde087d5296dfa2744",
+        "shortHash": "b5583c1",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/b5583c1a237c2f54ab8802dde087d5296dfa2744"
+      }
+    },
+    {
+      "id": "git-70ef069",
+      "date": "2026-02-27T23:57:28.000Z",
+      "title": "Improve session join logic, WebSocket upgrade handling, and workflow configs",
+      "content": "<p>Improve session join logic, WebSocket upgrade handling, and workflow configs</p><p><strong>Commit:</strong> <code>70ef069</code></p><p>- Enhanced WebSocket rejection logs to include session and player context.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "70ef069177b4b44860137e6a1fafd6836b7f039d",
+        "shortHash": "70ef069",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/70ef069177b4b44860137e6a1fafd6836b7f039d"
+      }
+    },
+    {
+      "id": "git-33fbca5",
+      "date": "2026-02-27T23:48:59.000Z",
+      "title": "Improve session join logic, WebSocket upgrade handling, and workflow configs",
+      "content": "<p>Improve session join logic, WebSocket upgrade handling, and workflow configs</p><p><strong>Commit:</strong> <code>33fbca5</code></p><p>- Enhanced WebSocket rejection logs to include session and player context.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "33fbca5d2ce86eda5d300d52de4c09a5fe77853e",
+        "shortHash": "33fbca5",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/33fbca5d2ce86eda5d300d52de4c09a5fe77853e"
+      }
+    },
+    {
+      "id": "git-9788802",
+      "date": "2026-02-27T23:14:41.000Z",
+      "title": "Fix diagnostic commands in Firebase deploy workflow",
+      "content": "<p>Fix diagnostic commands in Firebase deploy workflow</p><p><strong>Commit:</strong> <code>9788802</code></p><p>- Added fallback `|| true` to prevent failures during diagnostic steps.</p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "9788802cdb94a108464e7afcbf3e37691b1cbb0f",
+        "shortHash": "9788802",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9788802cdb94a108464e7afcbf3e37691b1cbb0f"
+      }
+    },
+    {
+      "id": "git-1bccc8f",
+      "date": "2026-02-27T23:06:17.000Z",
+      "title": "Add rehydration logic for multiplayer session recovery and WebSocket upgrades",
+      "content": "<p>Add rehydration logic for multiplayer session recovery and WebSocket upgrades</p><p><strong>Commit:</strong> <code>1bccc8f</code></p><p>- Implemented `rehydrateStoreFromAdapter` to reload session data dynamically during client interactions.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "1bccc8ff8167d7aaea010f1cf6c58cd1ab53074a",
+        "shortHash": "1bccc8f",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/1bccc8ff8167d7aaea010f1cf6c58cd1ab53074a"
+      }
+    },
     {
       "id": "git-951c31c",
       "date": "2026-02-27T22:44:51.000Z",
@@ -393,174 +561,6 @@
         "hash": "9acfb0c004e9d97313e1f12731990a5066bd50f2",
         "shortHash": "9acfb0c",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9acfb0c004e9d97313e1f12731990a5066bd50f2"
-      }
-    },
-    {
-      "id": "git-1b4e000",
-      "date": "2026-02-27T14:06:31.000Z",
-      "title": "Add retry mechanisms for profile and avatar texture fetching",
-      "content": "<p>Add retry mechanisms for profile and avatar texture fetching</p><p><strong>Commit:</strong> <code>1b4e000</code></p><p>- Introduced retry logic with cooldowns for user profile (`ACCOUNT_PROFILE_RETRY_COOLDOWN_MS`) and avatar textures (`AVATAR_TEXTURE_RETRY_BASE_MS` and `AVATAR_TEXTURE_RETRY_MAX_MS`) to handle intermittent failures.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "1b4e0006e3da807c985449e64d476ca1e0301af1",
-        "shortHash": "1b4e000",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/1b4e0006e3da807c985449e64d476ca1e0301af1"
-      }
-    },
-    {
-      "id": "git-f6e7245",
-      "date": "2026-02-27T13:16:46.000Z",
-      "title": "Improve RNG seeding strategy and enhance dice rotation logic",
-      "content": "<p>Improve RNG seeding strategy and enhance dice rotation logic</p><p><strong>Commit:</strong> <code>f6e7245</code></p><p>- Updated `RNG` to derive independent 32-bit states using salted seed variants for better entropy.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "f6e72458715258c78b81f9cb61e09432b349a5f8",
-        "shortHash": "f6e7245",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/f6e72458715258c78b81f9cb61e09432b349a5f8"
-      }
-    },
-    {
-      "id": "git-0875032",
-      "date": "2026-02-27T12:55:34.000Z",
-      "title": "Integrate new features and fixes for leaderboard, proxy, and UI",
-      "content": "<p>Integrate new features and fixes for leaderboard, proxy, and UI</p><p><strong>Commit:</strong> <code>0875032</code></p><p>- Updated leaderboard logic to handle anonymous users and initialize user profiles securely.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "0875032ad76f74ffe05eaac27a94ac76a64c9a1d",
-        "shortHash": "0875032",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/0875032ad76f74ffe05eaac27a94ac76a64c9a1d"
-      }
-    },
-    {
-      "id": "git-e75cfcf",
-      "date": "2026-02-27T12:46:58.000Z",
-      "title": "Integrate new features and fixes for leaderboard, proxy, and UI",
-      "content": "<p>Integrate new features and fixes for leaderboard, proxy, and UI</p><p><strong>Commit:</strong> <code>e75cfcf</code></p><p>- Updated leaderboard logic to handle anonymous users and initialize user profiles securely.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "e75cfcf9a72c064e3b15f70e80a7301efe08850f",
-        "shortHash": "e75cfcf",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/e75cfcf9a72c064e3b15f70e80a7301efe08850f"
-      }
-    },
-    {
-      "id": "git-730d6b0",
-      "date": "2026-02-27T12:38:19.000Z",
-      "title": "Update global leaderboard fetch logic and improve API payload handling",
-      "content": "<p>Update global leaderboard fetch logic and improve API payload handling</p><p><strong>Commit:</strong> <code>730d6b0</code></p><p>- Added support for legacy array-based responses in `getGlobalLeaderboard`.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "730d6b0432a50702d68e4d4f2dcc128775aa70c0",
-        "shortHash": "730d6b0",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/730d6b0432a50702d68e4d4f2dcc128775aa70c0"
-      }
-    },
-    {
-      "id": "git-094c065",
-      "date": "2026-02-27T05:23:32.000Z",
-      "title": "Update bot avatar selection and improve randomness logic",
-      "content": "<p>Update bot avatar selection and improve randomness logic</p><p><strong>Commit:</strong> <code>094c065</code></p><p>- Adjusted bot avatar rotation to ensure unique assignment using retries (`BOT_MEME_UNIQUE_ATTEMPTS`).</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "094c065fb25258e352a0de702c0abd4da6a73048",
-        "shortHash": "094c065",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/094c065fb25258e352a0de702c0abd4da6a73048"
-      }
-    },
-    {
-      "id": "git-03a1316",
-      "date": "2026-02-27T05:16:40.000Z",
-      "title": "Make `/api/players/:playerId/scores` endpoint public",
-      "content": "<p>Make `/api/players/:playerId/scores` endpoint public</p><p><strong>Commit:</strong> <code>03a1316</code></p><p>- Removed auth requirement for score history reads to ensure leaderboard and personal history views remain accessible for guests and clients with stale session tokens.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "03a131609aeb257f269f8caa2259948badec15fc",
-        "shortHash": "03a1316",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/03a131609aeb257f269f8caa2259948badec15fc"
-      }
-    },
-    {
-      "id": "git-87614b3",
-      "date": "2026-02-27T05:09:53.000Z",
-      "title": "Add image proxy support for bot meme avatars and backend fetch handling",
-      "content": "<p>Add image proxy support for bot meme avatars and backend fetch handling</p><p><strong>Commit:</strong> <code>87614b3</code></p><p>- Implemented `/api/media/image-proxy` endpoint for secure image fetching and CORS mitigation.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "87614b31ad67a3efd79d83255fc4253345621a83",
-        "shortHash": "87614b3",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/87614b31ad67a3efd79d83255fc4253345621a83"
-      }
-    },
-    {
-      "id": "git-9fe47e9",
-      "date": "2026-02-27T04:59:34.000Z",
-      "title": "Add multi-provider support for bot meme avatars and improve API key handling",
-      "content": "<p>Add multi-provider support for bot meme avatars and improve API key handling</p><p><strong>Commit:</strong> <code>9fe47e9</code></p><p>- Added support for multiple meme API providers (`humorapi` and `apileague`) with failover capabilities.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "9fe47e943d2a5cb9aa9c1a27fa945c366e88cced",
-        "shortHash": "9fe47e9",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9fe47e943d2a5cb9aa9c1a27fa945c366e88cced"
-      }
-    },
-    {
-      "id": "git-e702f53",
-      "date": "2026-02-27T04:52:18.000Z",
-      "title": "Update rules and documentation for camera assist and focus cycling",
-      "content": "<p>Update rules and documentation for camera assist and focus cycling</p><p><strong>Commit:</strong> <code>e702f53</code></p><p>- Adjusted keyboard focus navigation instructions to include +/- keys alongside arrow keys.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "e702f539ea4adb819590e83f4c8fb4820e32438e",
-        "shortHash": "e702f53",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/e702f539ea4adb819590e83f4c8fb4820e32438e"
-      }
-    },
-    {
-      "id": "git-9039094",
-      "date": "2026-02-27T04:49:39.000Z",
-      "title": "**[feature/api-testing] Tokenize global styles and enhance camera focus behaviors**",
-      "content": "<p>**[feature/api-testing] Tokenize global styles and enhance camera focus behaviors**</p><p><strong>Commit:</strong> <code>9039094</code></p><p>- Replaced hardcoded CSS styles with reusable global variables for colors, gradients, shadows, and borders.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "90390942a89de6a2c78a1c2086dec58d01c57be0",
-        "shortHash": "9039094",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/90390942a89de6a2c78a1c2086dec58d01c57be0"
-      }
-    },
-    {
-      "id": "git-2864348",
-      "date": "2026-02-27T04:30:51.000Z",
-      "title": "Add camera assist feature and improve keyboard focus navigation",
-      "content": "<p>Add camera assist feature and improve keyboard focus navigation</p><p><strong>Commit:</strong> <code>2864348</code></p><p>- Introduced camera assist toggle for Easy mode with automated camera movements after scoring.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "2864348c91f81208c9c06924ea56ddad0297bb00",
-        "shortHash": "2864348",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/2864348c91f81208c9c06924ea56ddad0297bb00"
       }
     }
   ]

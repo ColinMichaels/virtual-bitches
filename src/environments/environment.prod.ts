@@ -28,6 +28,10 @@ export const environment: Environment = {
     leaderboard: true,
     multiplayer: true,
     analytics: true,
+    multiplayerAutoSeatReady: parseBooleanFlag(
+      env.VITE_MULTIPLAYER_AUTO_SEAT_READY_ENABLED,
+      true
+    ),
   },
   storage: {
     prefix: "biscuits",
