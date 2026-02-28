@@ -5736,7 +5736,7 @@ function ensureSessionTurnState(session) {
   let turnExpiresAt =
     typeof currentState?.turnExpiresAt === "number" &&
     Number.isFinite(currentState.turnExpiresAt) &&
-    currentState.turnExpiresAt > now
+    currentState.turnExpiresAt > 0
       ? Math.floor(currentState.turnExpiresAt)
       : null;
 
@@ -5772,7 +5772,7 @@ function ensureSessionTurnState(session) {
     allHumansReady &&
     nextOrder.length > 0 &&
     activeTurnPlayerId &&
-    (!turnExpiresAt || turnExpiresAt <= now)
+    !turnExpiresAt
   ) {
     turnExpiresAt = now + turnTimeoutMs;
   } else if (!allHumansReady || !activeTurnPlayerId || nextOrder.length === 0) {
