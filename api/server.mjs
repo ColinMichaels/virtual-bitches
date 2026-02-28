@@ -323,6 +323,13 @@ async function handleRequest(req, res) {
       sendJson(res, 200, {
         ok: true,
         now: Date.now(),
+        runtime: {
+          service: process.env.K_SERVICE ?? null,
+          revision: process.env.K_REVISION ?? null,
+          region: process.env.K_REGION ?? null,
+          nodeEnv: NODE_ENV,
+          wsBaseUrl: WS_BASE_URL,
+        },
         players: Object.keys(store.players).length,
         playerScoreEntries: Object.keys(store.playerScores).length,
         sessions: Object.keys(store.multiplayerSessions).length,

@@ -19,8 +19,7 @@
         "source": "/api/**",
         "run": {
           "serviceId": "biscuits-api",
-          "region": "us-central1",
-          "pinTag": true
+          "region": "us-central1"
         }
       },
       {

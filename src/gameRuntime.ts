@@ -1119,7 +1119,9 @@ class Game implements GameCallbacks {
         ? this.multiplayerOptions.sessionId.trim()
         : "";
     const roomCodeFromOption = this.normalizeInviteRoomCode(this.multiplayerOptions.roomCode);
-    const targetSessionId = sessionIdFromOption || sessionIdFromUrl;
+    const shouldIgnoreSessionIdFromUrl =
+      !sessionIdFromOption && roomCodeFromOption.length > 0;
+    const targetSessionId = sessionIdFromOption || (shouldIgnoreSessionIdFromUrl ? "" : sessionIdFromUrl);
     const targetRoomCode = roomCodeFromOption || roomCodeFromUrl;
     const fromInviteLink = targetSessionId.length > 0 && targetSessionId === sessionIdFromUrl;
     const fromRoomCodeInviteLink =

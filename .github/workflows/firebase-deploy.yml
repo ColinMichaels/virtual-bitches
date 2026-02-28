@@ -397,6 +397,7 @@ jobs:
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_api_smoke }}
         env:
           E2E_API_BASE_URL: ${{ steps.deploy-api.outputs.url }}
+          E2E_HOSTING_API_BASE_URL: ${{ steps.target.outputs.api_base_url }}
           E2E_FIREBASE_ID_TOKEN: ${{ secrets.E2E_FIREBASE_ID_TOKEN }}
           E2E_ADMIN_TOKEN: ${{ secrets.API_ADMIN_TOKEN }}
           E2E_QUEUE_LIFECYCLE_WAIT_MS: ${{ vars.E2E_QUEUE_LIFECYCLE_WAIT_MS || '90000' }}
@@ -413,7 +414,12 @@ jobs:
           if [ "${E2E_ASSERT_STORAGE_CUTOVER}" = "0" ]; then
             echo "Skipping admin storage cutover assertion (no API_ADMIN_TOKEN or E2E_FIREBASE_ID_TOKEN configured)."
           fi
+          echo "Running smoke against Cloud Run URL..."
           node api/e2e/smoke.mjs
+          if [ -n "${E2E_HOSTING_API_BASE_URL:-}" ] && [ "${E2E_HOSTING_API_BASE_URL}" != "${E2E_API_BASE_URL}" ]; then
+            echo "Running smoke against Hosting rewrite URL..."
+            E2E_API_BASE_URL="${E2E_HOSTING_API_BASE_URL}" node api/e2e/smoke.mjs
+          fi
 
       - name: API smoke diagnostics (on failure)
         if: ${{ failure() && (github.event_name != 'workflow_dispatch' || inputs.run_api_smoke) }}
