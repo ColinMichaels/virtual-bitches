@@ -3,8 +3,8 @@
  * Provides offline caching and improves load performance
  */
 
-const CACHE_NAME = 'biscuits-v3';
-const RUNTIME_CACHE = 'biscuits-runtime-v3';
+const CACHE_NAME = 'biscuits-v4';
+const RUNTIME_CACHE = 'biscuits-runtime-v4';
 
 // Assets to cache on install
 const PRECACHE_ASSETS = [
