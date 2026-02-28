@@ -143,6 +143,12 @@ Planned (not implemented yet):
 - `POST /api/multiplayer/sessions` accepts optional `displayName`, `avatarUrl`, `providerId`, and `botCount` (`0..4`) to seed the local participant profile and bot seats.
 - `POST /api/multiplayer/sessions/:sessionId/join` and `POST /api/multiplayer/rooms/:roomCode/join` accept optional `displayName`, `avatarUrl`, `providerId`, and `botCount` (`0..4`) to update joining participant profile data and seed bots into an existing room.
 - Join can return `room_banned` when the player has been room-banned by the room owner/admin.
+- Multiplayer mutation endpoints now require a valid session bearer token:
+  - `POST /api/multiplayer/sessions/:sessionId/heartbeat`
+  - `POST /api/multiplayer/sessions/:sessionId/participant-state`
+  - `POST /api/multiplayer/sessions/:sessionId/queue-next`
+  - `POST /api/multiplayer/sessions/:sessionId/auth/refresh`
+  - owner path for `POST /api/multiplayer/sessions/:sessionId/moderate`
 - `POST /api/multiplayer/sessions/:sessionId/moderate` accepts:
   - `{ requesterPlayerId, targetPlayerId, action }`
   - `action`: `kick` or `ban`
@@ -243,6 +249,7 @@ Moderation assertion segment (enabled by default) covers:
 - `kick` / `ban` moderation endpoint
 - `room_banned` join rejection
 - `interaction_blocked` realtime rejection
+- missing-auth rejection for multiplayer participant-state mutation
 
 Disable that segment when isolating other failures:
 
@@ -259,6 +266,11 @@ E2E_ASSERT_CHAT_CONDUCT=1 E2E_CHAT_CONDUCT_TEST_TERM=e2e-term-blocked npm run te
 Notes:
 - `E2E_ASSERT_CHAT_CONDUCT` is opt-in for deployed smoke.
 - local harness (`npm run test:e2e:api:local`) enables it by default with a deterministic test term.
+- local harness defaults `E2E_ASSERT_ROOM_EXPIRY=1` only when short TTL mode is enabled (`E2E_SHORT_TTLS!=0`); otherwise it defaults to `0` to match long-lived production TTLs.
+
+Baseline smoke also validates:
+- player score batch write + read-back sync (`/players/:playerId/scores/batch` + `/players/:playerId/scores`)
+- `GET /auth/me` authorized and unauthorized behavior when `E2E_FIREBASE_ID_TOKEN` is provided
 
 Optional admin monitor assertion segment:
 
