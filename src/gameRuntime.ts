@@ -1729,6 +1729,9 @@ class Game implements GameCallbacks {
       )
         .length > 1;
     seatedParticipants.forEach((participant) => {
+      if (!participant.isSeated) {
+        return;
+      }
       participantBySeat.set(participant.seatIndex, participant);
       const isCurrentPlayer = participant.playerId === this.localPlayerId;
       this.participantSeatById.set(participant.playerId, participant.seatIndex);
@@ -1771,14 +1774,15 @@ class Game implements GameCallbacks {
       }
 
       const isCurrentSeat = seatIndex === currentSeatIndex;
+      const showCurrentSeatOccupant = isCurrentSeat && localSeatState?.isSeated === true;
       this.scene.playerSeatRenderer.updateSeat(seatIndex, {
-        occupied: isCurrentSeat,
-        isCurrentPlayer: isCurrentSeat,
+        occupied: showCurrentSeatOccupant,
+        isCurrentPlayer: showCurrentSeatOccupant,
         isBot: false,
-        playerName: isCurrentSeat ? "YOU" : "Empty",
-        avatarUrl: isCurrentSeat ? this.localAvatarUrl : undefined,
-        avatarColor: isCurrentSeat ? new Color3(0.24, 0.84, 0.36) : undefined,
-        score: isCurrentSeat ? this.state.score : undefined,
+        playerName: showCurrentSeatOccupant ? "YOU" : "Empty",
+        avatarUrl: showCurrentSeatOccupant ? this.localAvatarUrl : undefined,
+        avatarColor: showCurrentSeatOccupant ? new Color3(0.24, 0.84, 0.36) : undefined,
+        score: showCurrentSeatOccupant ? this.state.score : undefined,
         isComplete: false,
       });
     }
@@ -3813,6 +3817,17 @@ class Game implements GameCallbacks {
       this.scheduleTurnTransitionSyncRecovery("turn_auto_advanced_waiting_for_next", playerId);
     }
     this.clearSpectatorRollingPreviewForPlayer(playerId);
+    const autoStandReason =
+      typeof message.reason === "string" &&
+      (message.reason.includes("turn_timeout_stand") ||
+        message.reason.includes("turn_timeout_auto_score_stand"));
+    if (autoStandReason && playerId === this.localPlayerId) {
+      notificationService.show(
+        "Timed out twice this round. You were moved to observer lounge.",
+        "warning",
+        2600
+      );
+    }
     this.showSeatBubbleForPlayer(playerId, "Turn timed out", {
       tone: "warning",
       durationMs: 2000,
