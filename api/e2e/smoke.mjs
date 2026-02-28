@@ -1334,8 +1334,10 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
     const deadline = Date.now() + Math.max(5000, queueLifecycleWaitMs);
     let restarted = null;
     let lastHeartbeatPingAt = 0;
+    let lastRefreshAttemptAt = 0;
     let lastRefreshFailure = null;
     while (Date.now() < deadline) {
+      const now = Date.now();
       const wsRestarted =
         queueHostMessageBuffer &&
         consumeQueueLifecycleRestartFromBuffer(
@@ -1349,7 +1351,6 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
         break;
       }
 
-      const now = Date.now();
       if (now - lastHeartbeatPingAt >= 5000) {
         const heartbeat = await apiRequestWithStatus(
           `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/heartbeat`,
@@ -1375,6 +1376,12 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
           );
         }
       }
+
+      if (now - lastRefreshAttemptAt < 1000) {
+        await waitMs(250);
+        continue;
+      }
+      lastRefreshAttemptAt = now;
 
       const requestAuthRefresh = () =>
         apiRequestWithStatus(`/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/auth/refresh`, {
@@ -1447,11 +1454,7 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
         refreshedHost.isComplete !== true &&
         Number(refreshedHost.score ?? 0) === 0 &&
         Number(refreshedHost.remainingDice ?? -1) === 15;
-      const turnReady =
-        refreshed?.sessionComplete !== true &&
-        typeof refreshed?.turnState?.activeTurnPlayerId === "string" &&
-        refreshed.turnState.activeTurnPlayerId === queueHostPlayerId;
-      if (hostReadyForFreshRound && turnReady) {
+      if (hostReadyForFreshRound && refreshed?.sessionComplete !== true) {
         restarted = refreshed;
         break;
       }
@@ -2102,11 +2105,7 @@ function consumeQueueLifecycleRestartFromBuffer(buffer, sessionId, hostPlayerId)
       refreshedHost.isComplete !== true &&
       Number(refreshedHost.score ?? 0) === 0 &&
       Number(refreshedHost.remainingDice ?? -1) === 15;
-    const turnReady =
-      payload?.sessionComplete !== true &&
-      typeof payload?.turnState?.activeTurnPlayerId === "string" &&
-      payload.turnState.activeTurnPlayerId === hostPlayerId;
-    return hostReadyForFreshRound && turnReady;
+    return hostReadyForFreshRound && payload?.sessionComplete !== true;
   });
   if (index < 0) {
     return null;
