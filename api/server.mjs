@@ -6514,7 +6514,11 @@ function scheduleSessionPostGameLifecycle(session, timestamp = Date.now()) {
   }
 
   const completedAt = Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
-  const nextGameStartsAt = completedAt + NEXT_GAME_AUTO_START_DELAY_MS;
+  const currentNextGameStartsAt = normalizePostGameTimestamp(session?.nextGameStartsAt);
+  const nextGameStartsAt =
+    currentNextGameStartsAt !== null
+      ? currentNextGameStartsAt
+      : completedAt + NEXT_GAME_AUTO_START_DELAY_MS;
   const postGameIdleFloor = nextGameStartsAt + 1000;
   const currentPostGameActivityAt = normalizePostGameTimestamp(session?.postGameActivityAt);
   const postGameActivityAt =

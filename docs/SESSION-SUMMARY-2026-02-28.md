@@ -23,6 +23,8 @@
 - Fixed next-game scheduling baseline so `nextGameStartsAt` is now computed from **round completion time** instead of prior `gameStartedAt`.
 - Updated fallback next-game timestamp resolution to use the supplied event timestamp (`fallback + delay`) when no explicit post-game schedule exists.
 - Eliminated active-round synthetic next-game timestamps from session snapshots, so clients only receive `nextGameStartsAt` when a real post-game schedule exists.
+- Fixed post-game schedule drift: `scheduleSessionPostGameLifecycle` now preserves an existing `nextGameStartsAt` instead of recalculating it on every lifecycle reconcile call.
+- Impact: heartbeat/auth-refresh activity during winner queue no longer keeps pushing auto-start forward, so fresh rounds start on schedule.
 
 ### Difficulty-Based Turn Timeout Policy
 - Added per-difficulty multiplayer turn timeout configuration on API:
@@ -48,6 +50,7 @@
 ### Confirmed
 - `node --check api/server.mjs` passes.
 - `npm run build` passes (`tsc` + `vite build`).
+- `npm run test:e2e:api:local` passes, including winner queue lifecycle auto-restart checks.
 
 ### Environment-Limited
 - `npm run test:session-service` cannot run in this sandbox due local IPC/listen restriction (`EPERM` from `tsx` pipe listener).
