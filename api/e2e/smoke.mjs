@@ -126,6 +126,22 @@ async function run() {
   );
   guestMessageBuffer = createSocketMessageBuffer(guestSocket);
 
+  const unauthorizedParticipantState = await apiRequestWithStatus(
+    `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
+    {
+      method: "POST",
+      body: {
+        playerId: hostPlayerId,
+        action: "sit",
+      },
+    }
+  );
+  assertEqual(
+    unauthorizedParticipantState.status,
+    401,
+    "participant-state should reject missing session auth token"
+  );
+
   const hostSit = await apiRequest(
     `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
     {
@@ -830,7 +846,75 @@ async function run() {
   );
   assert(heartbeat?.ok === true, "heartbeat response was not ok=true");
 
+  const playerScoreA = `e2e-score-sync-${runSuffix}-a`;
+  const playerScoreB = `e2e-score-sync-${runSuffix}-b`;
+  const scoreBatchWrite = await apiRequest(
+    `/players/${encodeURIComponent(hostPlayerId)}/scores/batch`,
+    {
+      method: "POST",
+      accessToken: hostAccessToken,
+      body: {
+        scores: [
+          {
+            scoreId: playerScoreA,
+            score: 118,
+            timestamp: Date.now(),
+            duration: 185000,
+            rollCount: 16,
+            mode: { difficulty: "normal", variant: "classic" },
+          },
+          {
+            scoreId: playerScoreB,
+            score: 104,
+            timestamp: Date.now(),
+            duration: 162000,
+            rollCount: 14,
+            mode: { difficulty: "normal", variant: "classic" },
+          },
+        ],
+      },
+    }
+  );
+  assertEqual(scoreBatchWrite?.accepted, 2, "player score batch write accepted count mismatch");
+  assertEqual(scoreBatchWrite?.failed, 0, "player score batch write failed count mismatch");
+
+  const scoreHistory = await apiRequest(
+    `/players/${encodeURIComponent(hostPlayerId)}/scores?limit=30`,
+    {
+      method: "GET",
+    }
+  );
+  assert(Array.isArray(scoreHistory?.entries), "player score history missing entries[]");
+  const entryIds = scoreHistory.entries.map((entry) => String(entry?.scoreId ?? ""));
+  assert(
+    entryIds.includes(playerScoreA) && entryIds.includes(playerScoreB),
+    "player score history missing recently written score entries"
+  );
+  if (scoreHistory?.stats && scoreHistory.stats.played !== undefined) {
+    assert(
+      Number.isFinite(Number(scoreHistory.stats.played)) && Number(scoreHistory.stats.played) >= 0,
+      "player score history stats.played should be a non-negative number when provided"
+    );
+  }
+
   if (firebaseIdToken) {
+    const authMe = await apiRequest("/auth/me", {
+      method: "GET",
+      accessToken: firebaseIdToken,
+    });
+    assert(
+      typeof authMe?.uid === "string" && authMe.uid.length > 0,
+      "auth/me expected a non-empty uid"
+    );
+    const unauthorizedAuthMe = await apiRequestWithStatus("/auth/me", {
+      method: "GET",
+    });
+    assertEqual(
+      unauthorizedAuthMe.status,
+      401,
+      "auth/me should reject requests without auth header"
+    );
+
     const scoreSubmission = await apiRequest("/leaderboard/scores", {
       method: "POST",
       accessToken: firebaseIdToken,

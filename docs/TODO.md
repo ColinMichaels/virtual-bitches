@@ -61,6 +61,8 @@ Reference docs:
   - [x] Added admin moderation-term smoke segment (`E2E_ASSERT_ADMIN_MODERATION_TERMS`) in `api/e2e/smoke.mjs`.
   - [x] Wired smoke toggles for admin monitor + admin moderation terms in `.github/workflows/firebase-deploy.yml`.
   - [x] Added separate admin deploy workflow scaffold (`.github/workflows/admin-deploy.yml`) for independent Firebase project lane.
+  - [x] Enforced session bearer-token auth on critical multiplayer mutation endpoints (heartbeat, participant state, queue-next, auth refresh, owner moderation path).
+  - [x] Extended e2e smoke with player-score write/read-back sync assertions and auth-required mutation assertions.
 - **P0 Before Beta Invite**:
   - [ ] Configure dedicated admin Firebase project credentials/secrets (`ADMIN_FIREBASE_PROJECT_ID_*`, `ADMIN_GCP_SA_KEY*`) and run first manual admin deploy.
   - [ ] Confirm prod admin access policy (`API_ADMIN_ACCESS_MODE`) and bootstrap owner allowlists match intended operator model.

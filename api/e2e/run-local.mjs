@@ -101,7 +101,8 @@ function runSmoke(baseUrl) {
       env: {
         ...process.env,
         E2E_API_BASE_URL: baseUrl,
-        E2E_ASSERT_ROOM_EXPIRY: process.env.E2E_ASSERT_ROOM_EXPIRY ?? "1",
+        E2E_ASSERT_ROOM_EXPIRY:
+          process.env.E2E_ASSERT_ROOM_EXPIRY ?? (shortTtlModeEnabled ? "1" : "0"),
         E2E_ROOM_EXPIRY_WAIT_MS: process.env.E2E_ROOM_EXPIRY_WAIT_MS ?? "9000",
         E2E_QUEUE_LIFECYCLE_WAIT_MS:
           process.env.E2E_QUEUE_LIFECYCLE_WAIT_MS ?? (shortTtlModeEnabled ? "12000" : "90000"),

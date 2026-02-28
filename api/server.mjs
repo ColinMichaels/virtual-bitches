@@ -1314,13 +1314,13 @@ async function handleSessionHeartbeat(req, res, pathname) {
     return;
   }
 
-  let authCheck = authorizeRequest(req, playerId, sessionId);
+  let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
   if (!authCheck.ok) {
     await rehydrateStoreFromAdapter(`heartbeat_auth:${sessionId}:${playerId}`, { force: true });
-    authCheck = authorizeRequest(req, playerId, sessionId);
+    authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
   }
   if (!authCheck.ok) {
-    sendJson(res, 401, { error: "Unauthorized" });
+    sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "unauthorized" });
     return;
   }
 
@@ -1372,13 +1372,13 @@ async function handleUpdateParticipantState(req, res, pathname) {
     return;
   }
 
-  let authCheck = authorizeRequest(req, playerId, sessionId);
+  let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
   if (!authCheck.ok) {
     await rehydrateStoreFromAdapter(`participant_state_auth:${sessionId}:${playerId}`, { force: true });
-    authCheck = authorizeRequest(req, playerId, sessionId);
+    authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
   }
   if (!authCheck.ok) {
-    sendJson(res, 401, { error: "Unauthorized", reason: "unauthorized" });
+    sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "unauthorized" });
     return;
   }
 
@@ -1527,13 +1527,13 @@ async function handleQueueParticipantForNextGame(req, res, pathname) {
     return;
   }
 
-  let authCheck = authorizeRequest(req, playerId, sessionId);
+  let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
   if (!authCheck.ok) {
     await rehydrateStoreFromAdapter(`queue_next_auth:${sessionId}:${playerId}`, { force: true });
-    authCheck = authorizeRequest(req, playerId, sessionId);
+    authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
   }
   if (!authCheck.ok) {
-    sendJson(res, 401, { error: "Unauthorized", reason: "unauthorized" });
+    sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "unauthorized" });
     return;
   }
 
@@ -1675,7 +1675,7 @@ async function handleModerateSessionParticipant(req, res, pathname) {
     ensureSessionOwner(session);
   }
   const requesterParticipant = session.participants?.[requesterPlayerId] ?? null;
-  const requesterAuth = authorizeRequest(req, requesterPlayerId, sessionId);
+  const requesterAuth = authorizeSessionActionRequest(req, requesterPlayerId, sessionId);
   const requesterIsOwner =
     requesterAuth.ok &&
     requesterParticipant &&
@@ -1894,6 +1894,16 @@ async function handleRefreshSessionAuth(req, res, pathname) {
   }
   if (!session || !playerId || !session.participants[playerId]) {
     sendJson(res, 404, { error: "Player not in session" });
+    return;
+  }
+
+  let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
+  if (!authCheck.ok) {
+    await rehydrateStoreFromAdapter(`refresh_auth_authorize:${sessionId}:${playerId}`, { force: true });
+    authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
+  }
+  if (!authCheck.ok) {
+    sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "unauthorized" });
     return;
   }
 
@@ -3589,6 +3599,32 @@ function authorizeRequest(req, expectedPlayerId, expectedSessionId) {
   }
   if (expectedSessionId && record.sessionId !== expectedSessionId) {
     return { ok: false };
+  }
+
+  return { ok: true, playerId: record.playerId, sessionId: record.sessionId };
+}
+
+function authorizeSessionActionRequest(req, expectedPlayerId, expectedSessionId) {
+  const header = req.headers.authorization;
+  if (!header) {
+    return { ok: false, reason: "missing_authorization_header" };
+  }
+
+  const token = extractBearerToken(header);
+  if (!token) {
+    return { ok: false, reason: "invalid_bearer_header" };
+  }
+
+  const record = verifyAccessToken(token);
+  if (!record) {
+    return { ok: false, reason: "invalid_or_expired_access_token" };
+  }
+
+  if (expectedPlayerId && record.playerId !== expectedPlayerId) {
+    return { ok: false, reason: "player_mismatch" };
+  }
+  if (expectedSessionId && record.sessionId !== expectedSessionId) {
+    return { ok: false, reason: "session_mismatch" };
   }
 
   return { ok: true, playerId: record.playerId, sessionId: record.sessionId };
@@ -9235,8 +9271,10 @@ async function refreshChatModerationTermsFromRemote(options = {}) {
   const persistOnNoChange = options.persistOnNoChange === true;
   const result = await CHAT_CONDUCT_TERM_SERVICE.refreshFromRemote(globalThis.fetch, Date.now());
   if (!result.ok) {
-    if (source !== "interval") {
+    if (source !== "interval" && result.reason !== "remote_not_configured") {
       log.warn(`Chat moderation term refresh failed (${source}): ${result.reason ?? "unknown"}`);
+    } else if (source !== "interval" && result.reason === "remote_not_configured") {
+      log.info(`Chat moderation term refresh skipped (${source}): remote_not_configured`);
     }
     return result;
   }
