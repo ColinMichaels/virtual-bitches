@@ -983,7 +983,7 @@ async function runRoomLifecycleChecks(runSuffix) {
 
   const targetRoom = joinablePublicRooms[0];
   let targetRoomId = String(targetRoom.sessionId ?? "");
-  const targetRoomCode = String(targetRoom.roomCode ?? "");
+  let targetRoomCode = String(targetRoom.roomCode ?? "");
   assert(targetRoomId.length > 0, "target public room missing sessionId");
   assert(targetRoomCode.length > 0, "target public room missing roomCode");
 
@@ -994,10 +994,20 @@ async function runRoomLifecycleChecks(runSuffix) {
   let roomFullObserved = false;
   for (let index = 0; index < maxHumans + 2; index += 1) {
     const playerId = `e2e-roomfill-${runSuffix}-${index + 1}`;
-    let joinAttempt = null;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      joinAttempt = await apiRequestWithStatus(
-        `/multiplayer/rooms/${encodeURIComponent(targetRoomCode)}/join`,
+    let joinAttempt = await joinRoomByCodeWithTransientRetry(
+      targetRoomCode,
+      {
+        playerId,
+        displayName: `E2E Fill ${index + 1}`,
+      },
+      {
+        maxAttempts: 5,
+        initialDelayMs: 150,
+      }
+    );
+    if (!joinAttempt.ok && isTransientRoomLookupFailure(joinAttempt)) {
+      const sessionJoinAttempt = await apiRequestWithStatus(
+        `/multiplayer/sessions/${encodeURIComponent(targetRoomId)}/join`,
         {
           method: "POST",
           body: {
@@ -1006,14 +1016,14 @@ async function runRoomLifecycleChecks(runSuffix) {
           },
         }
       );
-
-      const transientRoomLookupFailure =
-        (joinAttempt.status === 410 && joinAttempt.body?.reason === "session_expired") ||
-        (joinAttempt.status === 404 && joinAttempt.body?.reason === "room_not_found");
-      if (!transientRoomLookupFailure) {
-        break;
+      if (
+        sessionJoinAttempt.ok &&
+        typeof sessionJoinAttempt.body?.roomCode === "string" &&
+        sessionJoinAttempt.body.roomCode.length > 0
+      ) {
+        targetRoomCode = String(sessionJoinAttempt.body.roomCode);
       }
-      await waitMs(150);
+      joinAttempt = sessionJoinAttempt;
     }
     assert(joinAttempt, "missing room fill join attempt result");
     if (joinAttempt.ok) {
@@ -1060,16 +1070,38 @@ async function runRoomLifecycleChecks(runSuffix) {
   );
   assert(!privateRoomListed, "expected private room to be excluded from public room listing");
   const privateJoinerId = `e2e-private-join-${runSuffix}`;
-  const privateJoinedByCode = await apiRequest(
-    `/multiplayer/rooms/${encodeURIComponent(privateCreated.roomCode)}/join`,
+  let privateJoinAttempt = await joinRoomByCodeWithTransientRetry(
+    privateCreated.roomCode,
     {
-      method: "POST",
-      body: {
-        playerId: privateJoinerId,
-        displayName: "E2E Private Joiner",
-      },
+      playerId: privateJoinerId,
+      displayName: "E2E Private Joiner",
+    },
+    {
+      maxAttempts: 8,
+      initialDelayMs: 200,
     }
   );
+  if (!privateJoinAttempt.ok && isTransientRoomLookupFailure(privateJoinAttempt)) {
+    privateJoinAttempt = await apiRequestWithStatus(
+      `/multiplayer/sessions/${encodeURIComponent(privateCreated.sessionId)}/join`,
+      {
+        method: "POST",
+        body: {
+          playerId: privateJoinerId,
+          displayName: "E2E Private Joiner",
+        },
+      }
+    );
+    if (privateJoinAttempt.ok) {
+      log("Private room join-by-code fallback resolved via sessionId join.");
+    }
+  }
+  assert(privateJoinAttempt, "missing private room join attempt result");
+  assert(
+    privateJoinAttempt.ok,
+    `expected private room join to succeed (status=${privateJoinAttempt.status} body=${JSON.stringify(privateJoinAttempt.body)})`
+  );
+  const privateJoinedByCode = privateJoinAttempt.body;
   assertEqual(
     privateJoinedByCode?.sessionId,
     privateCreated.sessionId,
@@ -1943,6 +1975,44 @@ function waitMs(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function isTransientRoomLookupFailure(result) {
+  return Boolean(
+    result &&
+      ((result.status === 410 && result.body?.reason === "session_expired") ||
+        (result.status === 404 && result.body?.reason === "room_not_found"))
+  );
+}
+
+async function joinRoomByCodeWithTransientRetry(roomCode, payload, options = {}) {
+  const maxAttempts = Number.isFinite(options?.maxAttempts)
+    ? Math.max(1, Math.floor(options.maxAttempts))
+    : 3;
+  const initialDelayMs = Number.isFinite(options?.initialDelayMs)
+    ? Math.max(0, Math.floor(options.initialDelayMs))
+    : 150;
+  let lastAttempt = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    lastAttempt = await apiRequestWithStatus(
+      `/multiplayer/rooms/${encodeURIComponent(roomCode)}/join`,
+      {
+        method: "POST",
+        body: payload,
+      }
+    );
+    if (!isTransientRoomLookupFailure(lastAttempt)) {
+      break;
+    }
+    if (attempt >= maxAttempts - 1) {
+      break;
+    }
+    const backoffMs = initialDelayMs * (attempt + 1);
+    if (backoffMs > 0) {
+      await waitMs(backoffMs);
+    }
+  }
+  return lastAttempt;
 }
 
 async function safeLeave(sessionId, playerId) {
