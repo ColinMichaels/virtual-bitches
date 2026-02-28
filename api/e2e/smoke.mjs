@@ -630,108 +630,168 @@ async function run() {
     "session_state active turn mismatch after turn advance"
   );
 
-  const chaosAttack = createChaosAttack(runSuffix);
-  hostSocket.send(JSON.stringify(chaosAttack));
-  const guestChaosMessage = await waitForMessage(
-    guestSocket,
-    (payload) =>
-      payload?.type === "chaos_attack" && payload?.abilityId === chaosAttack.abilityId,
-    "guest chaos attack receive"
-  );
-  assert(
-    guestChaosMessage.targetId === chaosAttack.targetId,
-    "chaos attack targetId mismatch on guest receive"
-  );
+  const isTransientRealtimeRelayFailure = (error) => {
+    const message = error instanceof Error ? error.message : String(error ?? "");
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes("timed out after") ||
+      normalized.includes("socket closed") ||
+      normalized.includes("session_expired")
+    );
+  };
 
-  const particleEmit = createParticleEmit(runSuffix);
-  guestSocket.send(JSON.stringify(particleEmit));
-  const hostParticleMessage = await waitForMessage(
-    hostSocket,
-    (payload) =>
-      payload?.type === "particle:emit" && payload?.effectId === particleEmit.effectId,
-    "host particle receive"
-  );
-  assert(
-    hostParticleMessage.effectId === particleEmit.effectId,
-    "particle effectId mismatch on host receive"
-  );
+  const recoverRealtimeRelaySockets = async () => {
+    const refreshedHost = await refreshSessionAuthWithRecovery({
+      sessionId: activeSessionId,
+      playerId: hostPlayerId,
+      displayName: "E2E Host",
+      accessToken: hostAccessToken,
+      maxAttempts: 8,
+      initialDelayMs: 220,
+    });
+    hostAccessToken = refreshedHost.accessToken;
+    const refreshedGuest = await refreshSessionAuthWithRecovery({
+      sessionId: activeSessionId,
+      playerId: guestPlayerId,
+      displayName: "E2E Guest",
+      accessToken: guestAccessToken,
+      maxAttempts: 8,
+      initialDelayMs: 220,
+    });
+    guestAccessToken = refreshedGuest.accessToken;
 
-  const gameUpdate = createGameUpdate(runSuffix);
-  hostSocket.send(JSON.stringify(gameUpdate));
-  const guestGameUpdate = await waitForMessage(
-    guestSocket,
-    (payload) => payload?.type === "game_update" && payload?.id === gameUpdate.id,
-    "guest game update receive"
-  );
-  assert(
-    guestGameUpdate.title === gameUpdate.title,
-    "game update title mismatch on guest receive"
-  );
+    await safeCloseSocket(hostSocket);
+    await safeCloseSocket(guestSocket);
+    hostSocket = await openSocket(
+      "host_recovered",
+      buildSocketUrl(activeSessionId, hostPlayerId, hostAccessToken)
+    );
+    hostMessageBuffer = createSocketMessageBuffer(hostSocket);
+    guestSocket = await openSocket(
+      "guest_recovered",
+      buildSocketUrl(activeSessionId, guestPlayerId, guestAccessToken)
+    );
+    guestMessageBuffer = createSocketMessageBuffer(guestSocket);
+  };
 
-  const playerNotification = createPlayerNotification(runSuffix);
-  guestSocket.send(JSON.stringify(playerNotification));
-  const hostPlayerNotification = await waitForMessage(
-    hostSocket,
-    (payload) =>
-      payload?.type === "player_notification" && payload?.id === playerNotification.id,
-    "host player notification receive"
-  );
-  assert(
-    hostPlayerNotification.message === playerNotification.message,
-    "player notification message mismatch on host receive"
-  );
+  const runRealtimeRelayChecks = async (suffix) => {
+    const chaosAttack = createChaosAttack(`${runSuffix}-${suffix}`);
+    hostSocket.send(JSON.stringify(chaosAttack));
+    const guestChaosMessage = await waitForMessage(
+      guestSocket,
+      (payload) =>
+        payload?.type === "chaos_attack" && payload?.abilityId === chaosAttack.abilityId,
+      "guest chaos attack receive"
+    );
+    assert(
+      guestChaosMessage.targetId === chaosAttack.targetId,
+      "chaos attack targetId mismatch on guest receive"
+    );
 
-  const publicRoomChannel = createRoomChannelMessage(runSuffix, {
-    channel: "public",
-    topic: "chat",
-    title: "E2E Public Chat",
-    message: "Public room channel relay test",
-  });
-  hostSocket.send(JSON.stringify(publicRoomChannel));
-  const guestRoomChannel = await waitForMessage(
-    guestSocket,
-    (payload) =>
-      payload?.type === "room_channel" && payload?.id === publicRoomChannel.id,
-    "guest room channel public receive"
-  );
-  assertEqual(
-    guestRoomChannel.channel,
-    "public",
-    "room channel public routing mismatch on guest receive"
-  );
-  assert(
-    guestRoomChannel.message === publicRoomChannel.message,
-    "room channel public message mismatch on guest receive"
-  );
+    const particleEmit = createParticleEmit(`${runSuffix}-${suffix}`);
+    guestSocket.send(JSON.stringify(particleEmit));
+    const hostParticleMessage = await waitForMessage(
+      hostSocket,
+      (payload) =>
+        payload?.type === "particle:emit" && payload?.effectId === particleEmit.effectId,
+      "host particle receive"
+    );
+    assert(
+      hostParticleMessage.effectId === particleEmit.effectId,
+      "particle effectId mismatch on host receive"
+    );
 
-  const directRoomChannel = createRoomChannelMessage(runSuffix, {
-    channel: "direct",
-    topic: "whisper",
-    title: "E2E Whisper",
-    message: "Direct room channel relay test",
-    targetPlayerId: hostPlayerId,
-  });
-  guestSocket.send(JSON.stringify(directRoomChannel));
-  const hostRoomChannel = await waitForMessage(
-    hostSocket,
-    (payload) =>
-      payload?.type === "room_channel" && payload?.id === directRoomChannel.id,
-    "host room channel direct receive"
-  );
-  assertEqual(
-    hostRoomChannel.channel,
-    "direct",
-    "room channel direct routing mismatch on host receive"
-  );
-  assertEqual(
-    hostRoomChannel.targetPlayerId,
-    hostPlayerId,
-    "room channel direct target mismatch on host receive"
-  );
-  assert(
-    hostRoomChannel.message === directRoomChannel.message,
-    "room channel direct message mismatch on host receive"
-  );
+    const gameUpdate = createGameUpdate(`${runSuffix}-${suffix}`);
+    hostSocket.send(JSON.stringify(gameUpdate));
+    const guestGameUpdate = await waitForMessage(
+      guestSocket,
+      (payload) => payload?.type === "game_update" && payload?.id === gameUpdate.id,
+      "guest game update receive"
+    );
+    assert(
+      guestGameUpdate.title === gameUpdate.title,
+      "game update title mismatch on guest receive"
+    );
+
+    const playerNotification = createPlayerNotification(`${runSuffix}-${suffix}`);
+    guestSocket.send(JSON.stringify(playerNotification));
+    const hostPlayerNotification = await waitForMessage(
+      hostSocket,
+      (payload) =>
+        payload?.type === "player_notification" && payload?.id === playerNotification.id,
+      "host player notification receive"
+    );
+    assert(
+      hostPlayerNotification.message === playerNotification.message,
+      "player notification message mismatch on host receive"
+    );
+
+    const publicRoomChannel = createRoomChannelMessage(`${runSuffix}-${suffix}`, {
+      channel: "public",
+      topic: "chat",
+      title: "E2E Public Chat",
+      message: "Public room channel relay test",
+    });
+    hostSocket.send(JSON.stringify(publicRoomChannel));
+    const guestRoomChannel = await waitForMessage(
+      guestSocket,
+      (payload) =>
+        payload?.type === "room_channel" && payload?.id === publicRoomChannel.id,
+      "guest room channel public receive"
+    );
+    assertEqual(
+      guestRoomChannel.channel,
+      "public",
+      "room channel public routing mismatch on guest receive"
+    );
+    assert(
+      guestRoomChannel.message === publicRoomChannel.message,
+      "room channel public message mismatch on guest receive"
+    );
+
+    const directRoomChannel = createRoomChannelMessage(`${runSuffix}-${suffix}`, {
+      channel: "direct",
+      topic: "whisper",
+      title: "E2E Whisper",
+      message: "Direct room channel relay test",
+      targetPlayerId: hostPlayerId,
+    });
+    guestSocket.send(JSON.stringify(directRoomChannel));
+    const hostRoomChannel = await waitForMessage(
+      hostSocket,
+      (payload) =>
+        payload?.type === "room_channel" && payload?.id === directRoomChannel.id,
+      "host room channel direct receive"
+    );
+    assertEqual(
+      hostRoomChannel.channel,
+      "direct",
+      "room channel direct routing mismatch on host receive"
+    );
+    assertEqual(
+      hostRoomChannel.targetPlayerId,
+      hostPlayerId,
+      "room channel direct target mismatch on host receive"
+    );
+    assert(
+      hostRoomChannel.message === directRoomChannel.message,
+      "room channel direct message mismatch on host receive"
+    );
+  };
+
+  try {
+    await runRealtimeRelayChecks("primary");
+  } catch (error) {
+    if (!isTransientRealtimeRelayFailure(error)) {
+      throw error;
+    }
+    const firstAttemptMessage = error instanceof Error ? error.message : String(error);
+    log(
+      `Realtime relay checks encountered transient failure; recovering sockets and retrying once (${firstAttemptMessage}).`
+    );
+    await recoverRealtimeRelaySockets();
+    await runRealtimeRelayChecks("retry");
+  }
 
   if (assertChatConductFlow) {
     log("Running multiplayer chat-conduct strike/mute checks...");
