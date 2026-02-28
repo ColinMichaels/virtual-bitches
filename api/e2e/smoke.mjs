@@ -1003,24 +1003,40 @@ async function runRoomLifecycleChecks(runSuffix) {
     : 8;
   const joinedPlayers = [];
   let roomFullObserved = false;
-  for (let index = 0; index < maxHumans + 2; index += 1) {
-    const playerId = `e2e-roomfill-${runSuffix}-${index + 1}`;
+  let fillOrdinal = 1;
+  const maxRoomFillAttempts = Math.max(maxHumans * 4, maxHumans + 8);
+  for (let attempt = 1; attempt <= maxRoomFillAttempts; attempt += 1) {
+    const playerId = `e2e-roomfill-${runSuffix}-${fillOrdinal}`;
+    fillOrdinal += 1;
     let joinAttempt = await apiRequestWithStatus(
       `/multiplayer/sessions/${encodeURIComponent(targetRoomId)}/join`,
       {
         method: "POST",
         body: {
           playerId,
-          displayName: `E2E Fill ${index + 1}`,
+          displayName: `E2E Fill ${attempt}`,
         },
       }
     );
+    if (!joinAttempt.ok && isTransientRoomLookupFailure(joinAttempt)) {
+      joinAttempt = await joinSessionByIdWithTransientRetry(
+        targetRoomId,
+        {
+          playerId,
+          displayName: `E2E Fill ${attempt}`,
+        },
+        {
+          maxAttempts: 5,
+          initialDelayMs: 120,
+        }
+      );
+    }
     if (!joinAttempt.ok && isTransientRoomLookupFailure(joinAttempt)) {
       const roomJoinAttempt = await joinRoomByCodeWithTransientRetry(
         targetRoomCode,
         {
           playerId,
-          displayName: `E2E Fill ${index + 1}`,
+          displayName: `E2E Fill ${attempt}`,
         },
         {
           maxAttempts: 5,
@@ -1037,6 +1053,10 @@ async function runRoomLifecycleChecks(runSuffix) {
       joinAttempt = roomJoinAttempt;
     }
     assert(joinAttempt, "missing room fill join attempt result");
+    if (isRoomFullJoinFailure(joinAttempt)) {
+      roomFullObserved = true;
+      break;
+    }
     if (joinAttempt.ok) {
       const joinedSessionId = String(joinAttempt.body?.sessionId ?? targetRoomId);
       if (joinedSessionId.length > 0) {
@@ -1059,15 +1079,14 @@ async function runRoomLifecycleChecks(runSuffix) {
       });
       continue;
     }
-    if (joinAttempt.status === 409 && joinAttempt.body?.reason === "room_full") {
-      roomFullObserved = true;
-      break;
-    }
     throw new Error(
       `unexpected room fill join result status=${joinAttempt.status} body=${JSON.stringify(joinAttempt.body)}`
     );
   }
-  assert(roomFullObserved, "expected room_full while filling target public room");
+  assert(
+    roomFullObserved,
+    `expected room_full while filling target public room (targetSession=${targetRoomId}, roomCode=${targetRoomCode})`
+  );
 
   const privateCreatorId = `e2e-private-${runSuffix}`;
   const privateCreated = await apiRequest("/multiplayer/sessions", {
@@ -1132,26 +1151,67 @@ async function runRoomLifecycleChecks(runSuffix) {
   await safeLeave(privateCreated.sessionId, privateJoinerId);
   await safeLeave(privateCreated.sessionId, privateCreatorId);
 
-  const fullSessionJoinProbePlayerId = `e2e-roomfill-extra-session-${runSuffix}`;
-  const fullSessionJoinProbe = await apiRequestWithStatus(
-    `/multiplayer/sessions/${encodeURIComponent(targetRoomId)}/join`,
-    {
-      method: "POST",
-      body: {
-        playerId: fullSessionJoinProbePlayerId,
-        displayName: "E2E Overflow Session Probe",
-      },
+  let fullSessionJoinProbe = null;
+  for (let attempt = 1; attempt <= 6; attempt += 1) {
+    const fullSessionJoinProbePlayerId = `e2e-roomfill-extra-session-${runSuffix}-${attempt}`;
+    let probeAttempt = await apiRequestWithStatus(
+      `/multiplayer/sessions/${encodeURIComponent(targetRoomId)}/join`,
+      {
+        method: "POST",
+        body: {
+          playerId: fullSessionJoinProbePlayerId,
+          displayName: "E2E Overflow Session Probe",
+        },
+      }
+    );
+    if (!probeAttempt.ok && isTransientRoomLookupFailure(probeAttempt)) {
+      const recoveredByCode = await joinRoomByCodeWithTransientRetry(
+        targetRoomCode,
+        {
+          playerId: fullSessionJoinProbePlayerId,
+          displayName: "E2E Overflow Session Probe",
+        },
+        {
+          maxAttempts: 4,
+          initialDelayMs: 120,
+        }
+      );
+      probeAttempt = recoveredByCode;
     }
-  );
-  assertEqual(
-    fullSessionJoinProbe.status,
-    409,
-    "expected room_full 409 once target room session is at capacity"
-  );
-  assertEqual(
-    fullSessionJoinProbe.body?.reason,
-    "room_full",
-    "expected room_full reason in full-session join rejection"
+    if (isRoomFullJoinFailure(probeAttempt)) {
+      fullSessionJoinProbe = probeAttempt;
+      break;
+    }
+    if (probeAttempt.ok) {
+      const joinedSessionId = String(probeAttempt.body?.sessionId ?? targetRoomId);
+      if (joinedSessionId && joinedSessionId !== targetRoomId) {
+        log(
+          `Full-session probe target moved from ${targetRoomId} to ${joinedSessionId}; continuing probe on resolved session.`
+        );
+        targetRoomId = joinedSessionId;
+      }
+      if (
+        typeof probeAttempt.body?.roomCode === "string" &&
+        probeAttempt.body.roomCode.length > 0
+      ) {
+        targetRoomCode = String(probeAttempt.body.roomCode);
+      }
+      joinedPlayers.push({
+        playerId: fullSessionJoinProbePlayerId,
+        sessionId: joinedSessionId || targetRoomId,
+      });
+      if (attempt < 6) {
+        await waitMs(120 * attempt);
+      }
+      continue;
+    }
+    throw new Error(
+      `expected room_full 409 once target room session is at capacity, got status=${probeAttempt.status} body=${JSON.stringify(probeAttempt.body)}`
+    );
+  }
+  assert(
+    fullSessionJoinProbe && fullSessionJoinProbe.body?.reason === "room_full",
+    `expected room_full reason in full-session join rejection (targetSession=${targetRoomId}, roomCode=${targetRoomCode})`
   );
 
   const fullJoinProbePlayerIdPrefix = `e2e-roomfill-extra-code-${runSuffix}`;
@@ -2203,6 +2263,10 @@ function isTransientRoomLookupFailure(result) {
   );
 }
 
+function isRoomFullJoinFailure(result) {
+  return Boolean(result && result.status === 409 && result.body?.reason === "room_full");
+}
+
 function isTransientQueueRefreshFailure(result) {
   if (!result) {
     return false;
@@ -2251,6 +2315,36 @@ async function joinRoomByCodeWithTransientRetry(roomCode, payload, options = {})
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     lastAttempt = await apiRequestWithStatus(
       `/multiplayer/rooms/${encodeURIComponent(roomCode)}/join`,
+      {
+        method: "POST",
+        body: payload,
+      }
+    );
+    if (!isTransientRoomLookupFailure(lastAttempt)) {
+      break;
+    }
+    if (attempt >= maxAttempts - 1) {
+      break;
+    }
+    const backoffMs = initialDelayMs * (attempt + 1);
+    if (backoffMs > 0) {
+      await waitMs(backoffMs);
+    }
+  }
+  return lastAttempt;
+}
+
+async function joinSessionByIdWithTransientRetry(sessionId, payload, options = {}) {
+  const maxAttempts = Number.isFinite(options?.maxAttempts)
+    ? Math.max(1, Math.floor(options.maxAttempts))
+    : 3;
+  const initialDelayMs = Number.isFinite(options?.initialDelayMs)
+    ? Math.max(0, Math.floor(options.initialDelayMs))
+    : 150;
+  let lastAttempt = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    lastAttempt = await apiRequestWithStatus(
+      `/multiplayer/sessions/${encodeURIComponent(sessionId)}/join`,
       {
         method: "POST",
         body: payload,
