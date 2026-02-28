@@ -400,6 +400,8 @@ jobs:
               "resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE_NAME AND resource.labels.revision_name=$REVISION_NAME" \
               --limit=200 \
               --format='table(timestamp,severity,textPayload,jsonPayload.message)' || true
+            echo "Fallback logs via Cloud Run service reader:"
+            gcloud run services logs read "$SERVICE_NAME" --region "$REGION" --limit=200 || true
           else
             echo "No created revision found; dumping recent service logs."
             gcloud run services logs read "$SERVICE_NAME" --region "$REGION" --limit=200 || true
@@ -433,11 +435,39 @@ jobs:
           if [ "${E2E_ASSERT_STORAGE_CUTOVER}" = "0" ]; then
             echo "Skipping admin storage cutover assertion (no API_ADMIN_TOKEN or E2E_FIREBASE_ID_TOKEN configured)."
           fi
+          echo "Cloud Run health snapshot:"
+          curl -fsS "${E2E_API_BASE_URL%/}/api/health" || true
+          echo "Waiting for Cloud Run readiness..."
+          READY=0
+          for attempt in $(seq 1 30); do
+            if curl -fsS "${E2E_API_BASE_URL%/}/api/ready"; then
+              READY=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$READY" != "1" ]; then
+            echo "Cloud Run readiness probe failed before smoke; continuing to capture smoke failure diagnostics."
+          fi
           echo "Running smoke against Cloud Run URL..."
           node api/e2e/smoke.mjs
           if [ -n "${E2E_HOSTING_API_BASE_URL:-}" ] && [ "${E2E_HOSTING_API_BASE_URL}" != "${E2E_API_BASE_URL}" ]; then
             case "${E2E_HOSTING_API_BASE_URL}" in
               http://*|https://*)
+                echo "Hosting rewrite health snapshot:"
+                curl -fsS "${E2E_HOSTING_API_BASE_URL%/}/api/health" || true
+                echo "Waiting for Hosting rewrite readiness..."
+                HOSTING_READY=0
+                for attempt in $(seq 1 30); do
+                  if curl -fsS "${E2E_HOSTING_API_BASE_URL%/}/api/ready"; then
+                    HOSTING_READY=1
+                    break
+                  fi
+                  sleep 2
+                done
+                if [ "$HOSTING_READY" != "1" ]; then
+                  echo "Hosting rewrite readiness probe failed before smoke; continuing to capture smoke failure diagnostics."
+                fi
                 echo "Running smoke against Hosting rewrite URL..."
                 E2E_API_BASE_URL="${E2E_HOSTING_API_BASE_URL}" node api/e2e/smoke.mjs
                 ;;
