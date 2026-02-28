@@ -1014,7 +1014,7 @@ async function handleJoinSessionByTarget(req, res, target) {
     const sessionId = target.sessionId.trim();
     let sessionById = store.multiplayerSessions[sessionId];
     if (!sessionById || sessionById.expiresAt <= now) {
-      await rehydrateStoreFromAdapter(`join_session:${sessionId}`);
+      await rehydrateStoreFromAdapter(`join_session:${sessionId}`, { force: true });
       sessionById = store.multiplayerSessions[sessionId];
     }
     if (!sessionById || sessionById.expiresAt <= now) {
@@ -1030,7 +1030,7 @@ async function handleJoinSessionByTarget(req, res, target) {
     }
     let sessionByRoomCode = findJoinableSessionByRoomCode(normalizedRoomCode, now);
     if (!sessionByRoomCode) {
-      await rehydrateStoreFromAdapter(`join_room_code:${normalizedRoomCode}`);
+      await rehydrateStoreFromAdapter(`join_room_code:${normalizedRoomCode}`, { force: true });
       sessionByRoomCode = findJoinableSessionByRoomCode(normalizedRoomCode, now);
     }
     if (!sessionByRoomCode) {
