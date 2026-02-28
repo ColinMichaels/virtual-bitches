@@ -1290,36 +1290,50 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
         lastHeartbeatPingAt = now;
       }
 
-      let refreshedAttempt = await apiRequestWithStatus(
-        `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/auth/refresh`,
-        {
+      const requestAuthRefresh = () =>
+        apiRequestWithStatus(`/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/auth/refresh`, {
           method: "POST",
           accessToken: hostAccessToken,
           body: { playerId: queueHostPlayerId },
-        }
-      );
+        });
+
+      let refreshedAttempt = await requestAuthRefresh();
       if (refreshedAttempt.ok !== true && isTransientQueueRefreshFailure(refreshedAttempt)) {
-        const rejoinAttempt = await apiRequestWithStatus(
-          `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/join`,
-          {
-            method: "POST",
-            body: {
-              playerId: queueHostPlayerId,
-              displayName: "E2E Queue Host",
-            },
+        for (let recoveryAttempt = 1; recoveryAttempt <= 3; recoveryAttempt += 1) {
+          const rejoinAttempt = await apiRequestWithStatus(
+            `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/join`,
+            {
+              method: "POST",
+              body: {
+                playerId: queueHostPlayerId,
+                displayName: "E2E Queue Host",
+              },
+            }
+          );
+          if (rejoinAttempt.ok === true) {
+            refreshedAttempt = rejoinAttempt;
+            log(
+              `Queue lifecycle auth refresh recovered via session rejoin fallback (attempt ${recoveryAttempt}).`
+            );
+            break;
           }
-        );
-        if (rejoinAttempt.ok === true) {
-          refreshedAttempt = rejoinAttempt;
-          log("Queue lifecycle auth refresh recovered via session rejoin fallback.");
-        } else if (isTransientQueueRefreshFailure(rejoinAttempt)) {
-          lastRefreshFailure = rejoinAttempt;
-          await waitMs(250);
-          continue;
-        } else {
+          if (!isTransientQueueRefreshFailure(rejoinAttempt)) {
+            refreshedAttempt = rejoinAttempt;
           throw new Error(
             `request failed (POST /multiplayer/sessions/${queueSessionId}/join) status=${rejoinAttempt.status} body=${JSON.stringify(rejoinAttempt.body)}`
           );
+          }
+          if (recoveryAttempt >= 3) {
+            refreshedAttempt = rejoinAttempt;
+            break;
+          }
+
+          lastRefreshFailure = rejoinAttempt;
+          await waitMs(150 * recoveryAttempt);
+          refreshedAttempt = await requestAuthRefresh();
+          if (!isTransientQueueRefreshFailure(refreshedAttempt)) {
+            break;
+          }
         }
       }
       if (!refreshedAttempt.ok) {

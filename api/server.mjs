@@ -2113,8 +2113,10 @@ async function handleRefreshSessionAuth(req, res, pathname) {
 
   let session = store.multiplayerSessions[sessionId];
   if (!session || session.expiresAt <= Date.now()) {
-    await rehydrateStoreFromAdapter(`refresh_auth_session:${sessionId}`, { force: true });
-    session = store.multiplayerSessions[sessionId];
+    session = await rehydrateSessionWithRetry(sessionId, "refresh_auth_session", {
+      attempts: 4,
+      baseDelayMs: 120,
+    });
   }
   if (!session) {
     sendJson(res, 410, { error: "Session expired", reason: "session_expired" });
@@ -2123,11 +2125,17 @@ async function handleRefreshSessionAuth(req, res, pathname) {
 
   let participant = session.participants[playerId];
   if (!participant) {
-    await rehydrateStoreFromAdapter(`refresh_auth_participant:${sessionId}:${playerId || "unknown"}`, {
-      force: true,
-    });
-    session = store.multiplayerSessions[sessionId];
-    participant = session?.participants?.[playerId];
+    const recovered = await rehydrateSessionParticipantWithRetry(
+      sessionId,
+      playerId,
+      "refresh_auth_participant",
+      {
+        attempts: 4,
+        baseDelayMs: 120,
+      }
+    );
+    session = recovered.session;
+    participant = recovered.participant;
   }
 
   if (!session || !participant) {
@@ -2142,9 +2150,17 @@ async function handleRefreshSessionAuth(req, res, pathname) {
   if (sessionExpired) {
     let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
     if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
-      await rehydrateStoreFromAdapter(`refresh_auth_expired_retry:${sessionId}:${playerId}`, { force: true });
-      session = store.multiplayerSessions[sessionId];
-      participant = session?.participants?.[playerId];
+      const recovered = await rehydrateSessionParticipantWithRetry(
+        sessionId,
+        playerId,
+        "refresh_auth_expired_retry",
+        {
+          attempts: 3,
+          baseDelayMs: 100,
+        }
+      );
+      session = recovered.session;
+      participant = recovered.participant;
       authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
     }
     if (!session || !participant || !authCheck.ok) {
@@ -2155,9 +2171,17 @@ async function handleRefreshSessionAuth(req, res, pathname) {
 
   let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
   if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
-    await rehydrateStoreFromAdapter(`refresh_auth_authorize:${sessionId}:${playerId}`, { force: true });
-    session = store.multiplayerSessions[sessionId];
-    participant = session?.participants?.[playerId];
+    const recovered = await rehydrateSessionParticipantWithRetry(
+      sessionId,
+      playerId,
+      "refresh_auth_authorize",
+      {
+        attempts: 3,
+        baseDelayMs: 100,
+      }
+    );
+    session = recovered.session;
+    participant = recovered.participant;
     authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
   }
   if (!session || !participant) {
@@ -2182,6 +2206,90 @@ async function handleRefreshSessionAuth(req, res, pathname) {
   const response = buildSessionResponse(session, playerId, auth);
   await persistStore();
   sendJson(res, 200, response);
+}
+
+async function rehydrateSessionWithRetry(sessionId, reasonPrefix, options = {}) {
+  const normalizedSessionId =
+    typeof sessionId === "string" ? sessionId.trim() : "";
+  if (!normalizedSessionId) {
+    return null;
+  }
+  const attempts = Number.isFinite(options.attempts)
+    ? Math.max(1, Math.floor(options.attempts))
+    : 3;
+  const baseDelayMs = Number.isFinite(options.baseDelayMs)
+    ? Math.max(0, Math.floor(options.baseDelayMs))
+    : 100;
+
+  let session = store.multiplayerSessions[normalizedSessionId] ?? null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (session) {
+      return session;
+    }
+    if (attempt > 0 && baseDelayMs > 0) {
+      await delayMs(baseDelayMs * attempt);
+    }
+    await rehydrateStoreFromAdapter(`${reasonPrefix}:${normalizedSessionId}:attempt_${attempt + 1}`, {
+      force: true,
+    });
+    session = store.multiplayerSessions[normalizedSessionId] ?? null;
+  }
+  return session;
+}
+
+async function rehydrateSessionParticipantWithRetry(sessionId, playerId, reasonPrefix, options = {}) {
+  const normalizedSessionId =
+    typeof sessionId === "string" ? sessionId.trim() : "";
+  const normalizedPlayerId =
+    typeof playerId === "string" ? playerId.trim() : "";
+  if (!normalizedSessionId || !normalizedPlayerId) {
+    return {
+      session: null,
+      participant: null,
+    };
+  }
+  const attempts = Number.isFinite(options.attempts)
+    ? Math.max(1, Math.floor(options.attempts))
+    : 3;
+  const baseDelayMs = Number.isFinite(options.baseDelayMs)
+    ? Math.max(0, Math.floor(options.baseDelayMs))
+    : 100;
+
+  let session = store.multiplayerSessions[normalizedSessionId] ?? null;
+  let participant = session?.participants?.[normalizedPlayerId] ?? null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (session && participant) {
+      return {
+        session,
+        participant,
+      };
+    }
+    if (attempt > 0 && baseDelayMs > 0) {
+      await delayMs(baseDelayMs * attempt);
+    }
+    await rehydrateStoreFromAdapter(
+      `${reasonPrefix}:${normalizedSessionId}:${normalizedPlayerId}:attempt_${attempt + 1}`,
+      { force: true }
+    );
+    session = store.multiplayerSessions[normalizedSessionId] ?? null;
+    participant = session?.participants?.[normalizedPlayerId] ?? null;
+  }
+  return {
+    session,
+    participant,
+  };
+}
+
+async function delayMs(durationMs) {
+  const delay = Number.isFinite(durationMs)
+    ? Math.max(0, Math.floor(durationMs))
+    : 0;
+  if (delay <= 0) {
+    return;
+  }
+  await new Promise((resolve) => {
+    setTimeout(resolve, delay);
+  });
 }
 
 async function handleAdminOverview(req, res, url) {
