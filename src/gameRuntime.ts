@@ -12,6 +12,11 @@ import { ChaosUpgradeMenu } from "./ui/chaosUpgradeMenu.js";
 import { EffectHUD } from "./ui/effectHUD.js";
 import { ProfileModal } from "./ui/profile.js";
 import { SessionExpiryModal } from "./ui/sessionExpiryModal.js";
+import {
+  PlayerInteractionsPanel,
+  type PlayerInteractionParticipant,
+  type PlayerInteractionProfileData,
+} from "./ui/playerInteractions.js";
 import { confirmAction } from "./ui/confirmModal.js";
 import { notificationService } from "./ui/notifications.js";
 import { reduce, undo, canUndo } from "./game/state.js";
@@ -32,6 +37,8 @@ import { GameOverController } from "./controllers/GameOverController.js";
 import { CameraEffectsService } from "./services/cameraEffects.js";
 import { CameraAttackExecutor } from "./chaos/cameraAttackExecutor.js";
 import type { CameraAttackMessage } from "./chaos/types.js";
+import { buildCameraAttackMessageFromProgression } from "./chaos/upgrades/executionProfile.js";
+import type { CameraAbilityId } from "./chaos/upgrades/types.js";
 import type { ParticleNetworkEvent } from "./services/particleService.js";
 import { playerDataSyncService } from "./services/playerDataSync.js";
 import { getLocalPlayerId } from "./services/playerIdentity.js";
@@ -194,6 +201,7 @@ const TURN_SYNC_STALE_RECOVERY_MS = 4500;
 const MULTIPLAYER_IDENTITY_CACHE_MS = 30000;
 const TURN_SELECTION_SYNC_DEBOUNCE_MS = 80;
 const DEFAULT_MULTIPLAYER_ROUND_CYCLE_MS = 60 * 1000;
+const PLAYER_INTERACTION_COMING_SOON_TOOLTIP = "Coming soon";
 
 class Game implements GameCallbacks {
   private state: GameState;
@@ -276,6 +284,7 @@ class Game implements GameCallbacks {
   private inviteLinkBtn: HTMLButtonElement | null = null;
   private mobileInviteLinkBtn: HTMLButtonElement | null = null;
   private turnActionBannerEl: HTMLElement | null = null;
+  private playerInteractions: PlayerInteractionsPanel | null = null;
 
   private normalizeMultiplayerDifficulty(
     value: unknown
@@ -543,6 +552,37 @@ class Game implements GameCallbacks {
     this.inviteLinkBtn = document.getElementById("invite-link-btn") as HTMLButtonElement | null;
     this.mobileInviteLinkBtn = document.getElementById("mobile-invite-link-btn") as HTMLButtonElement | null;
     this.turnActionBannerEl = this.ensureTurnActionBanner();
+    this.playerInteractions = new PlayerInteractionsPanel({
+      mountRoot: document.getElementById("unified-hud"),
+      localPlayerId: this.localPlayerId,
+      comingSoonTooltip: PLAYER_INTERACTION_COMING_SOON_TOOLTIP,
+      onInfo: (message) => {
+        notificationService.show(message, "info", 1700);
+      },
+      onWhisper: (playerId) => {
+        this.openWhisperComposerForTarget(playerId);
+      },
+      onCauseChaos: (playerId) => {
+        this.sendChaosAttackToPlayer(playerId);
+      },
+      onNudge: (playerId) => {
+        this.triggerTurnNudge(playerId);
+      },
+      loadProfile: (playerId) => this.loadPlayerInteractionProfileData(playerId),
+      resolveChaosDisabledReason: (participant) => {
+        if (!participant.isSeated) {
+          return "Player must be seated to target chaos.";
+        }
+        if (!this.multiplayerNetwork?.isConnected()) {
+          return "Reconnect to multiplayer before sending chaos.";
+        }
+        return "";
+      },
+      resolveNudgeDisabledReason: (participant, activeTurnPlayerId) =>
+        activeTurnPlayerId === participant.playerId
+          ? ""
+          : "Nudge unlocks when this player is active.",
+    });
 
     // Initialize modals (shared with splash)
     this.settingsModal = settingsModal;
@@ -656,20 +696,9 @@ class Game implements GameCallbacks {
         if (
           this.playMode === "multiplayer" &&
           targetPlayerId &&
-          targetPlayerId !== this.localPlayerId &&
-          this.activeTurnPlayerId === targetPlayerId
+          targetPlayerId !== this.localPlayerId
         ) {
-          this.triggerTurnNudge(targetPlayerId);
-          return;
-        }
-
-        if (targetPlayerId && targetPlayerId !== this.localPlayerId) {
-          const targetLabel = this.getParticipantLabel(targetPlayerId);
-          notificationService.show(
-            `${targetLabel} is waiting for their turn.`,
-            "info",
-            2000
-          );
+          this.playerInteractions?.open(targetPlayerId);
           return;
         }
 
@@ -1680,6 +1709,10 @@ class Game implements GameCallbacks {
 
     this.updateMultiplayerStandingsHud(session, seatedParticipants);
     this.applyTurnStateFromSession(session);
+    this.playerInteractions?.updateParticipants(
+      this.buildPlayerInteractionParticipants(seatedParticipants),
+      this.activeTurnPlayerId
+    );
     this.updateUI();
   }
 
@@ -1865,6 +1898,7 @@ class Game implements GameCallbacks {
 
   private applySoloSeatState(): void {
     this.clearSelectionSyncDebounce();
+    this.playerInteractions?.clear();
     this.participantSeatById.clear();
     this.participantIdBySeat.clear();
     this.participantLabelById.clear();
@@ -2129,6 +2163,29 @@ class Game implements GameCallbacks {
       return new Color3(0.44, 0.48, 0.56);
     }
     return new Color3(0.36, 0.62, 0.9);
+  }
+
+  private buildPlayerInteractionParticipants(
+    seatedParticipants: SeatedMultiplayerParticipant[]
+  ): PlayerInteractionParticipant[] {
+    return seatedParticipants
+      .filter(
+        (participant) =>
+          participant.playerId !== this.localPlayerId &&
+          participant.isSeated &&
+          !participant.queuedForNextGame
+      )
+      .map((participant) => ({
+        playerId: participant.playerId,
+        label: this.getParticipantBroadcastLabel(participant.playerId),
+        avatarUrl: participant.avatarUrl,
+        isBot: participant.isBot,
+        isSeated: participant.isSeated,
+        isReady: participant.isReady,
+        queuedForNextGame: participant.queuedForNextGame,
+        isComplete: participant.isComplete,
+        score: participant.score,
+      }));
   }
 
   private buildTurnPlanPreview(plan: MultiplayerTurnPlan): string {
@@ -2523,6 +2580,7 @@ class Game implements GameCallbacks {
   }
 
   private updateTurnSeatHighlight(activePlayerId: string | null): void {
+    this.playerInteractions?.setActiveTurnPlayer(activePlayerId);
     if (!activePlayerId) {
       this.selectedSeatFocusIndex = -1;
       this.scene.playerSeatRenderer.highlightSeat(this.scene.currentPlayerSeat);
@@ -2716,6 +2774,114 @@ class Game implements GameCallbacks {
     }
 
     return null;
+  }
+
+  private openWhisperComposerForTarget(targetPlayerId: string): void {
+    if (!this.canComposeRoomChannelMessage()) {
+      return;
+    }
+    if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
+      notificationService.show("Pick another player to whisper.", "warning", 1800);
+      return;
+    }
+    if (this.isBotParticipant(targetPlayerId)) {
+      notificationService.show("Bots cannot receive whispers yet.", "info", 1800);
+      return;
+    }
+
+    const targetLabel = this.getParticipantBroadcastLabel(targetPlayerId);
+    const message = this.normalizeComposedRoomChannelMessage(
+      window.prompt(`Whisper to ${targetLabel}:`, "")
+    );
+    if (!message) {
+      return;
+    }
+
+    const sourceLabel = this.getParticipantBroadcastLabel(this.localPlayerId);
+    const sent = this.sendPlayerRoomChannelMessage({
+      idPrefix: `chat-whisper-${targetPlayerId}`,
+      channel: "direct",
+      topic: "whisper",
+      title: `Whisper from ${sourceLabel}`,
+      message,
+      severity: "info",
+      targetPlayerId,
+    });
+
+    if (!sent) {
+      notificationService.show("Unable to send whisper.", "warning", 1800);
+      return;
+    }
+    notificationService.show(`Whisper sent to ${targetLabel}.`, "success", 1400);
+  }
+
+  private async loadPlayerInteractionProfileData(
+    targetPlayerId: string
+  ): Promise<PlayerInteractionProfileData | null> {
+    const [profile, scoreList] = await Promise.all([
+      backendApiService.getPlayerProfile(targetPlayerId),
+      backendApiService.getPlayerScores(targetPlayerId, 80),
+    ]);
+
+    const stats = scoreList?.stats;
+    const totalGames =
+      typeof stats?.totalGames === "number" && Number.isFinite(stats.totalGames)
+        ? Math.max(0, Math.floor(stats.totalGames))
+        : 0;
+    const bestScore =
+      typeof stats?.bestScore === "number" && Number.isFinite(stats.bestScore)
+        ? Math.floor(stats.bestScore)
+        : null;
+    const averageScore =
+      typeof stats?.averageScore === "number" && Number.isFinite(stats.averageScore)
+        ? Math.round(stats.averageScore)
+        : null;
+    const totalPlayTimeMs =
+      typeof stats?.totalPlayTime === "number" && Number.isFinite(stats.totalPlayTime)
+        ? Math.max(0, Math.floor(stats.totalPlayTime))
+        : 0;
+
+    const recentRuns = Array.isArray(scoreList?.entries)
+      ? scoreList.entries.slice(0, 3).map((entry) => {
+          const difficulty: PlayerInteractionProfileData["recentRuns"][number]["difficulty"] =
+            entry.mode?.difficulty === "easy" || entry.mode?.difficulty === "hard"
+              ? entry.mode.difficulty
+              : "normal";
+          return {
+            score:
+              typeof entry.score === "number" && Number.isFinite(entry.score)
+                ? Math.floor(entry.score)
+                : 0,
+            difficulty,
+            durationMs:
+              typeof entry.duration === "number" && Number.isFinite(entry.duration)
+                ? Math.max(0, Math.floor(entry.duration))
+                : 0,
+          };
+        })
+      : [];
+
+    const hasAnyData =
+      Boolean(profile) ||
+      Boolean(scoreList) ||
+      totalGames > 0 ||
+      recentRuns.length > 0;
+    if (!hasAnyData) {
+      return null;
+    }
+
+    return {
+      playerId: targetPlayerId,
+      totalGames,
+      bestScore,
+      averageScore,
+      totalPlayTimeMs,
+      recentRuns,
+      profileUpdatedAt:
+        typeof profile?.updatedAt === "number" && Number.isFinite(profile.updatedAt)
+          ? profile.updatedAt
+          : undefined,
+    };
   }
 
   private sendPlayerRoomChannelMessage(
@@ -4017,6 +4183,7 @@ class Game implements GameCallbacks {
       return;
     }
     this.clearSelectionSyncDebounce();
+    this.playerInteractions?.clear();
     this.lobbyRedirectInProgress = true;
     this.sessionExpiryPromptActive = false;
     try {
@@ -4218,30 +4385,7 @@ class Game implements GameCallbacks {
       notificationService.show("Whisper target not recognized.", "warning", 2000);
       return;
     }
-    const targetLabel = this.getParticipantBroadcastLabel(targetPlayerId);
-    const message = this.normalizeComposedRoomChannelMessage(
-      window.prompt(`Whisper to ${targetLabel}:`, "")
-    );
-    if (!message) {
-      return;
-    }
-
-    const sourceLabel = this.getParticipantBroadcastLabel(this.localPlayerId);
-    const sent = this.sendPlayerRoomChannelMessage({
-      idPrefix: `chat-whisper-${targetPlayerId}`,
-      channel: "direct",
-      topic: "whisper",
-      title: `Whisper from ${sourceLabel}`,
-      message,
-      severity: "info",
-      targetPlayerId,
-    });
-
-    if (!sent) {
-      notificationService.show("Unable to send whisper.", "warning", 1800);
-      return;
-    }
-    notificationService.show(`Whisper sent to ${targetLabel}.`, "success", 1400);
+    this.openWhisperComposerForTarget(targetPlayerId);
   }
 
   private focusCameraOnSeat(seatIndex: number): void {
@@ -4412,6 +4556,7 @@ class Game implements GameCallbacks {
     // Hide game UI when debug mode is active
     const hudEl = document.getElementById("hud");
     const diceRowEl = document.getElementById("dice-row");
+    const playerChipRailEl = document.getElementById("multiplayer-player-chip-rail");
     const turnActionBannerEl = document.getElementById("turn-action-banner");
     const controlsEl = document.getElementById("controls");
     const cameraControlsEl = document.getElementById("camera-controls");
@@ -4421,6 +4566,7 @@ class Game implements GameCallbacks {
       // Hide game UI
       if (hudEl) hudEl.style.display = "none";
       if (diceRowEl) diceRowEl.style.display = "none";
+      if (playerChipRailEl) playerChipRailEl.style.display = "none";
       if (turnActionBannerEl) turnActionBannerEl.style.display = "none";
       if (controlsEl) controlsEl.style.display = "none";
       if (cameraControlsEl) cameraControlsEl.style.display = "none";
@@ -4434,6 +4580,9 @@ class Game implements GameCallbacks {
       // Restore game UI
       if (hudEl) hudEl.style.display = "block";
       if (diceRowEl) diceRowEl.style.display = "flex";
+      if (playerChipRailEl) {
+        playerChipRailEl.style.display = this.playMode === "multiplayer" ? "flex" : "none";
+      }
       if (turnActionBannerEl) turnActionBannerEl.style.display = "";
       if (controlsEl) controlsEl.style.display = "flex";
       if (cameraControlsEl) cameraControlsEl.style.display = "flex";
@@ -4865,6 +5014,64 @@ class Game implements GameCallbacks {
     }
 
     return banner;
+  }
+
+  private resolveChaosAbilityIdFromInput(rawValue: string): CameraAbilityId | null {
+    const normalized = rawValue.trim().toLowerCase();
+    if (!normalized) {
+      return "screen_shake";
+    }
+    if (normalized === "1" || normalized.includes("shake")) {
+      return "screen_shake";
+    }
+    if (normalized === "2" || normalized.includes("drunk")) {
+      return "drunk_vision";
+    }
+    if (normalized === "3" || normalized.includes("spin")) {
+      return "camera_spin";
+    }
+    return null;
+  }
+
+  private sendChaosAttackToPlayer(targetPlayerId: string): void {
+    if (this.playMode !== "multiplayer") {
+      notificationService.show("Chaos interactions are multiplayer-only.", "warning", 1800);
+      return;
+    }
+    if (!this.multiplayerNetwork?.isConnected()) {
+      notificationService.show("Reconnect before sending chaos.", "warning", 1800);
+      return;
+    }
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession?.sessionId) {
+      notificationService.show("No active multiplayer room found.", "warning", 1800);
+      return;
+    }
+
+    const rawChoice = window.prompt(
+      "Chaos attack:\n1. Screen Shake\n2. Drunk Vision\n3. Camera Spin",
+      "1"
+    );
+    if (rawChoice === null) {
+      return;
+    }
+    const abilityId = this.resolveChaosAbilityIdFromInput(rawChoice);
+    if (!abilityId) {
+      notificationService.show("Chaos choice not recognized.", "warning", 1800);
+      return;
+    }
+
+    const message = buildCameraAttackMessageFromProgression(abilityId, {
+      gameId: activeSession.sessionId,
+      attackerId: this.localPlayerId,
+      targetId: targetPlayerId,
+    });
+
+    document.dispatchEvent(
+      new CustomEvent<CameraAttackMessage>("chaos:cameraAttack:send", {
+        detail: message,
+      })
+    );
   }
 
   private getActivePlayableDiceCount(): number {

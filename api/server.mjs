@@ -1148,7 +1148,7 @@ async function handleSessionHeartbeat(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
   let session = store.multiplayerSessions[sessionId];
   if (!session || session.expiresAt <= Date.now()) {
-    await rehydrateStoreFromAdapter(`heartbeat_session:${sessionId}`);
+    await rehydrateStoreFromAdapter(`heartbeat_session:${sessionId}`, { force: true });
     session = store.multiplayerSessions[sessionId];
   }
   if (!session || session.expiresAt <= Date.now()) {
@@ -1159,7 +1159,9 @@ async function handleSessionHeartbeat(req, res, pathname) {
   const body = await parseJsonBody(req);
   const playerId = typeof body?.playerId === "string" ? body.playerId : "";
   if (!playerId || !session.participants[playerId]) {
-    await rehydrateStoreFromAdapter(`heartbeat_participant:${sessionId}:${playerId || "unknown"}`);
+    await rehydrateStoreFromAdapter(`heartbeat_participant:${sessionId}:${playerId || "unknown"}`, {
+      force: true,
+    });
     session = store.multiplayerSessions[sessionId];
   }
   if (!session || !playerId || !session.participants[playerId]) {
@@ -1169,7 +1171,7 @@ async function handleSessionHeartbeat(req, res, pathname) {
 
   let authCheck = authorizeRequest(req, playerId, sessionId);
   if (!authCheck.ok) {
-    await rehydrateStoreFromAdapter(`heartbeat_auth:${sessionId}:${playerId}`);
+    await rehydrateStoreFromAdapter(`heartbeat_auth:${sessionId}:${playerId}`, { force: true });
     authCheck = authorizeRequest(req, playerId, sessionId);
   }
   if (!authCheck.ok) {
@@ -1188,7 +1190,7 @@ async function handleUpdateParticipantState(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
   let session = store.multiplayerSessions[sessionId];
   if (!session || session.expiresAt <= Date.now()) {
-    await rehydrateStoreFromAdapter(`participant_state_session:${sessionId}`);
+    await rehydrateStoreFromAdapter(`participant_state_session:${sessionId}`, { force: true });
     session = store.multiplayerSessions[sessionId];
   }
   if (!session || session.expiresAt <= Date.now()) {
@@ -1204,7 +1206,9 @@ async function handleUpdateParticipantState(req, res, pathname) {
   const action = normalizeParticipantStateAction(body?.action);
   let participant = playerId ? session.participants[playerId] : null;
   if (!playerId || !participant || isBotParticipant(participant)) {
-    await rehydrateStoreFromAdapter(`participant_state_participant:${sessionId}:${playerId || "unknown"}`);
+    await rehydrateStoreFromAdapter(`participant_state_participant:${sessionId}:${playerId || "unknown"}`, {
+      force: true,
+    });
     session = store.multiplayerSessions[sessionId];
     participant = playerId && session ? session.participants[playerId] : null;
   }
@@ -1225,7 +1229,7 @@ async function handleUpdateParticipantState(req, res, pathname) {
 
   let authCheck = authorizeRequest(req, playerId, sessionId);
   if (!authCheck.ok) {
-    await rehydrateStoreFromAdapter(`participant_state_auth:${sessionId}:${playerId}`);
+    await rehydrateStoreFromAdapter(`participant_state_auth:${sessionId}:${playerId}`, { force: true });
     authCheck = authorizeRequest(req, playerId, sessionId);
   }
   if (!authCheck.ok) {
@@ -1347,7 +1351,7 @@ async function handleQueueParticipantForNextGame(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
   let session = store.multiplayerSessions[sessionId];
   if (!session || session.expiresAt <= Date.now()) {
-    await rehydrateStoreFromAdapter(`queue_next_session:${sessionId}`);
+    await rehydrateStoreFromAdapter(`queue_next_session:${sessionId}`, { force: true });
     session = store.multiplayerSessions[sessionId];
   }
   if (!session || session.expiresAt <= Date.now()) {
@@ -1363,7 +1367,9 @@ async function handleQueueParticipantForNextGame(req, res, pathname) {
   const playerId = typeof body?.playerId === "string" ? body.playerId : "";
   let participant = playerId ? session.participants[playerId] : null;
   if (!playerId || !participant || isBotParticipant(participant)) {
-    await rehydrateStoreFromAdapter(`queue_next_participant:${sessionId}:${playerId || "unknown"}`);
+    await rehydrateStoreFromAdapter(`queue_next_participant:${sessionId}:${playerId || "unknown"}`, {
+      force: true,
+    });
     session = store.multiplayerSessions[sessionId];
     participant = playerId && session ? session.participants[playerId] : null;
   }
@@ -1378,7 +1384,7 @@ async function handleQueueParticipantForNextGame(req, res, pathname) {
 
   let authCheck = authorizeRequest(req, playerId, sessionId);
   if (!authCheck.ok) {
-    await rehydrateStoreFromAdapter(`queue_next_auth:${sessionId}:${playerId}`);
+    await rehydrateStoreFromAdapter(`queue_next_auth:${sessionId}:${playerId}`, { force: true });
     authCheck = authorizeRequest(req, playerId, sessionId);
   }
   if (!authCheck.ok) {
@@ -1439,7 +1445,7 @@ async function handleLeaveSession(req, res, pathname) {
     socketReason: "left_session",
   });
   if (!removal.ok && (removal.reason === "unknown_session" || removal.reason === "unknown_player")) {
-    await rehydrateStoreFromAdapter(`leave_session:${sessionId}:${playerId}`);
+    await rehydrateStoreFromAdapter(`leave_session:${sessionId}:${playerId}`, { force: true });
     removal = removeParticipantFromSession(sessionId, playerId, {
       source: "leave",
       socketReason: "left_session",
@@ -1524,7 +1530,7 @@ async function handleRefreshSessionAuth(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
   let session = store.multiplayerSessions[sessionId];
   if (!session || session.expiresAt <= Date.now()) {
-    await rehydrateStoreFromAdapter(`refresh_auth_session:${sessionId}`);
+    await rehydrateStoreFromAdapter(`refresh_auth_session:${sessionId}`, { force: true });
     session = store.multiplayerSessions[sessionId];
   }
   if (!session || session.expiresAt <= Date.now()) {
@@ -1535,7 +1541,9 @@ async function handleRefreshSessionAuth(req, res, pathname) {
   const body = await parseJsonBody(req);
   const playerId = typeof body?.playerId === "string" ? body.playerId : "";
   if (!playerId || !session.participants[playerId]) {
-    await rehydrateStoreFromAdapter(`refresh_auth_participant:${sessionId}:${playerId || "unknown"}`);
+    await rehydrateStoreFromAdapter(`refresh_auth_participant:${sessionId}:${playerId || "unknown"}`, {
+      force: true,
+    });
     session = store.multiplayerSessions[sessionId];
   }
   if (!session || !playerId || !session.participants[playerId]) {
