@@ -170,7 +170,16 @@ const BOT_TURN_ADVANCE_DELAY_BY_PROFILE = {
 };
 const DEFAULT_PARTICIPANT_DICE_COUNT = 15;
 const BOT_ROLL_DICE_SIDES = [8, 12, 10, 6, 6, 6, 20, 6, 4, 6, 6, 6, 10, 6, 6];
-const TURN_TIMEOUT_MS = normalizeTurnTimeoutValue(process.env.TURN_TIMEOUT_MS, 45000);
+const DEFAULT_TURN_TIMEOUT_MS = normalizeTurnTimeoutValue(process.env.TURN_TIMEOUT_MS, 30000);
+const TURN_TIMEOUT_BY_DIFFICULTY_MS = Object.freeze({
+  easy: normalizeTurnTimeoutValue(process.env.MULTIPLAYER_TURN_TIMEOUT_EASY_MS, 40000),
+  normal: normalizeTurnTimeoutValue(
+    process.env.MULTIPLAYER_TURN_TIMEOUT_NORMAL_MS,
+    DEFAULT_TURN_TIMEOUT_MS
+  ),
+  hard: normalizeTurnTimeoutValue(process.env.MULTIPLAYER_TURN_TIMEOUT_HARD_MS, 15000),
+});
+const TURN_TIMEOUT_MS = TURN_TIMEOUT_BY_DIFFICULTY_MS.normal;
 const MULTIPLAYER_PARTICIPANT_STALE_MS = normalizeTurnTimeoutValue(
   process.env.MULTIPLAYER_PARTICIPANT_STALE_MS,
   2 * 60 * 1000
@@ -556,6 +565,7 @@ async function handleRequest(req, res) {
           participantStaleMs: MULTIPLAYER_PARTICIPANT_STALE_MS,
           cleanupIntervalMs: MULTIPLAYER_CLEANUP_INTERVAL_MS,
           turnTimeoutMs: TURN_TIMEOUT_MS,
+          turnTimeoutByDifficultyMs: TURN_TIMEOUT_BY_DIFFICULTY_MS,
           nextGameAutoStartDelayMs: NEXT_GAME_AUTO_START_DELAY_MS,
           chatConduct: buildAdminChatConductPolicySummary(),
         },
@@ -3354,7 +3364,7 @@ function buildAdminRoomDiagnostic(sessionId, session, now = Date.now()) {
             typeof turnState.turnExpiresAt === "number" && Number.isFinite(turnState.turnExpiresAt)
               ? Math.floor(turnState.turnExpiresAt)
               : null,
-          turnTimeoutMs: normalizeTurnTimeoutMs(turnState.turnTimeoutMs),
+          turnTimeoutMs: resolveSessionTurnTimeoutMs(session, turnState.turnTimeoutMs),
         }
       : null,
   };
@@ -4416,7 +4426,7 @@ function buildSessionSnapshot(session) {
   const participants = serializeSessionParticipants(session);
   const standings = buildSessionStandings(session);
   const gameStartedAt = resolveSessionGameStartedAt(session);
-  const nextGameStartsAt = resolveSessionNextGameStartsAt(session, gameStartedAt);
+  const nextGameStartsAt = normalizePostGameTimestamp(session?.nextGameStartsAt);
   const humanCount = participants.filter((participant) => !isBotParticipant(participant)).length;
   const activeGameParticipants = participants.filter(
     (participant) => participant.isSeated === true && participant.queuedForNextGame !== true
@@ -4926,14 +4936,25 @@ function resolveSessionGameStartedAt(session, fallback = Date.now()) {
   return gameStartedAt;
 }
 
+function resolveTurnTimeoutMsForDifficulty(difficulty) {
+  const normalizedDifficulty = normalizeGameDifficulty(difficulty);
+  const configuredTimeoutMs = TURN_TIMEOUT_BY_DIFFICULTY_MS[normalizedDifficulty];
+  return normalizeTurnTimeoutMs(configuredTimeoutMs, TURN_TIMEOUT_MS);
+}
+
+function resolveSessionTurnTimeoutMs(session, value) {
+  const fallbackTimeoutMs = resolveTurnTimeoutMsForDifficulty(resolveSessionGameDifficulty(session));
+  return normalizeTurnTimeoutMs(value, fallbackTimeoutMs);
+}
+
 function resolveSessionNextGameStartsAt(session, fallback = Date.now()) {
-  const gameStartedAt = resolveSessionGameStartedAt(session, fallback);
-  const defaultNextGameStartsAt = gameStartedAt + NEXT_GAME_AUTO_START_DELAY_MS;
+  const fallbackTimestamp =
+    Number.isFinite(fallback) && fallback > 0 ? Math.floor(fallback) : Date.now();
   const scheduledNextGameStartsAt = normalizePostGameTimestamp(session?.nextGameStartsAt);
   if (scheduledNextGameStartsAt !== null) {
     return scheduledNextGameStartsAt;
   }
-  return defaultNextGameStartsAt;
+  return fallbackTimestamp + NEXT_GAME_AUTO_START_DELAY_MS;
 }
 
 function isRoomParticipantActive(sessionId, participant, now = Date.now()) {
@@ -5637,7 +5658,7 @@ function ensureSessionTurnState(session) {
     currentState.turnNumber > 0
       ? Math.floor(currentState.turnNumber)
       : 1;
-  const turnTimeoutMs = normalizeTurnTimeoutMs(currentState?.turnTimeoutMs);
+  const turnTimeoutMs = resolveSessionTurnTimeoutMs(session);
   let phase = normalizeTurnPhase(currentState?.phase);
   let lastRollSnapshot = normalizeTurnRollSnapshot(currentState?.lastRollSnapshot);
   let lastScoreSummary = normalizeTurnScoreSummary(currentState?.lastScoreSummary);
@@ -5719,7 +5740,7 @@ function buildTurnStartMessage(session, options = {}) {
   const now = Date.now();
 
   const activeRoll = serializeTurnRollSnapshot(turnState.lastRollSnapshot);
-  const turnTimeoutMs = normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
+  const turnTimeoutMs = resolveSessionTurnTimeoutMs(session, turnState.turnTimeoutMs);
   const turnExpiresAt =
     typeof turnState.turnExpiresAt === "number" &&
     Number.isFinite(turnState.turnExpiresAt) &&
@@ -5813,7 +5834,7 @@ function advanceSessionTurn(session, endedByPlayerId, options = {}) {
     source: options.source ?? "player",
   };
 
-  const timeoutMs = normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
+  const timeoutMs = resolveSessionTurnTimeoutMs(session, turnState.turnTimeoutMs);
   const nextOrder = turnState.order.filter((playerId) => {
     const participant = session.participants?.[playerId];
     return Boolean(participant) && !isParticipantComplete(participant);
@@ -6176,10 +6197,15 @@ function normalizeTurnWarningValue(rawValue, timeoutMs, fallback) {
   return Math.max(1000, Math.min(timeoutMs - 500, defaultValue));
 }
 
-function normalizeTurnTimeoutMs(value) {
+function normalizeTurnTimeoutMs(value, fallback = TURN_TIMEOUT_MS) {
+  const fallbackParsed = Number(fallback);
+  const fallbackMs =
+    Number.isFinite(fallbackParsed) && fallbackParsed > 0
+      ? Math.max(5000, Math.floor(fallbackParsed))
+      : TURN_TIMEOUT_MS;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    return TURN_TIMEOUT_MS;
+    return fallbackMs;
   }
   return Math.max(5000, Math.floor(parsed));
 }
@@ -6488,8 +6514,7 @@ function scheduleSessionPostGameLifecycle(session, timestamp = Date.now()) {
   }
 
   const completedAt = Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
-  const gameStartedAt = resolveSessionGameStartedAt(session, completedAt);
-  const nextGameStartsAt = gameStartedAt + NEXT_GAME_AUTO_START_DELAY_MS;
+  const nextGameStartsAt = completedAt + NEXT_GAME_AUTO_START_DELAY_MS;
   const postGameIdleFloor = nextGameStartsAt + 1000;
   const currentPostGameActivityAt = normalizePostGameTimestamp(session?.postGameActivityAt);
   const postGameActivityAt =
@@ -7350,7 +7375,7 @@ function reconcileTurnTimeoutLoop(sessionId) {
     return;
   }
 
-  const timeoutMs = normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
+  const timeoutMs = resolveSessionTurnTimeoutMs(session, turnState.turnTimeoutMs);
   turnState.turnTimeoutMs = timeoutMs;
   const now = Date.now();
   const turnKey = `${turnState.activeTurnPlayerId}:${turnState.round}:${turnState.turnNumber}`;
@@ -7681,10 +7706,11 @@ function dispatchTurnTimeoutWarning(sessionId, expectedTurnKey) {
     return;
   }
 
+  const timeoutMs = resolveSessionTurnTimeoutMs(session, turnState.turnTimeoutMs);
   const turnExpiresAt =
     typeof turnState.turnExpiresAt === "number" && Number.isFinite(turnState.turnExpiresAt)
       ? Math.floor(turnState.turnExpiresAt)
-      : Date.now() + normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
+      : Date.now() + timeoutMs;
   const remainingMs = Math.max(0, turnExpiresAt - Date.now());
   if (remainingMs <= 0) {
     return;
@@ -7700,7 +7726,7 @@ function dispatchTurnTimeoutWarning(sessionId, expectedTurnKey) {
       turnNumber: turnState.turnNumber,
       turnExpiresAt,
       remainingMs,
-      timeoutMs: normalizeTurnTimeoutMs(turnState.turnTimeoutMs),
+      timeoutMs,
       timestamp: Date.now(),
       source: "server",
     }),
@@ -7761,7 +7787,7 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
     }
   }
 
-  const timeoutMs = normalizeTurnTimeoutMs(turnState.turnTimeoutMs);
+  const timeoutMs = resolveSessionTurnTimeoutMs(session, turnState.turnTimeoutMs);
   const previousRound = turnState.round;
   const previousTurnNumber = turnState.turnNumber;
   const advanced = advanceSessionTurn(session, timedOutPlayerId, {

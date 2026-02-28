@@ -248,7 +248,7 @@ export interface MultiplayerSessionStateMessage {
   completedAt?: number | null;
   createdAt: number;
   gameStartedAt?: number;
-  nextGameStartsAt?: number;
+  nextGameStartsAt?: number | null;
   nextGameAutoStartDelayMs?: number;
   expiresAt?: number;
   serverNow?: number;
