@@ -1,6 +1,14 @@
 {
   "updates": [
     {
+      "id": "feature-private-room-flow-refresh-2026-02-28",
+      "date": "2026-02-28",
+      "title": "🚪 Private Room Flow Refresh",
+      "content": "<p>Private multiplayer setup got a focused UX and logic cleanup pass.</p><p><strong>What Changed:</strong></p><ul style=\"margin: 10px 0; padding-left: 20px;\"><li>Private room controls now split cleanly into <strong>Create Room</strong> and <strong>Join by Invite Code</strong> sections</li><li>Join/Create submission logic now uses one shared path to reduce edge-case mismatches</li><li>Primary multiplayer action now adapts to context: <strong>Join Game</strong>, <strong>Create Private Room</strong>, or <strong>Join Code</strong></li><li>Updated private-room status text and helper hints for clearer next steps</li><li>Refined panel styling and input treatment for a cleaner, modern feel</li></ul><p>Result: fewer confusing transitions, faster room setup, and smoother invite-code joins.</p>",
+      "version": "1.0.0",
+      "type": "feature"
+    },
+    {
       "id": "feature-multiplayer-next-game-queue-2026-02-27",
       "date": "2026-02-27",
       "title": "🏁 Multiplayer Round Queue + Auto-Restart",

@@ -64,6 +64,12 @@ export const enUS = {
   "splash.multiplayer.filters.pageIndicator": "Page {{page}} / {{total}}",
   "splash.multiplayer.filters.resultsCount": "Showing {{shown}} of {{total}} rooms",
   "splash.multiplayer.privateToggle": "Create or join a private room",
+  "splash.multiplayer.privateCreateHeading": "Create a fresh private room",
+  "splash.multiplayer.privateCreateHint":
+    "No code needed. We will spin up a new room when you hit Join Game.",
+  "splash.multiplayer.privateJoinHeading": "Use an invite code",
+  "splash.multiplayer.privateJoinHint":
+    "Enter a code to join an existing room, or claim it if it is brand new.",
   "splash.multiplayer.privateRoomName": "Private room name",
   "splash.multiplayer.privateRoomNamePlaceholder": "Totally Serious Lobby",
   "splash.multiplayer.privatePlayerLimit": "Allowed players",
@@ -80,6 +86,9 @@ export const enUS = {
   "splash.multiplayer.roomCard.join": "Tap to join",
   "splash.multiplayer.roomCard.full": "Full",
   "splash.multiplayer.pickLobbyHint": "Pick a lobby from the list or enter a room code.",
+  "splash.multiplayer.pickLobbyHintPrivateCreate": "Create a private room with current settings.",
+  "splash.multiplayer.pickLobbyHintPrivateCode":
+    "Join room code, or create it if no one has claimed it yet.",
   "splash.multiplayer.joinSeedStatus": "+ seed {{count}} bot(s) if room is created",
   "splash.multiplayer.joinability.openSeats": "{{count}} open seat(s)",
   "splash.multiplayer.joinability.full": "Room full",
@@ -102,6 +111,14 @@ export const enUS = {
     "Private room mode ready. Start to create a new room. {{note}}",
   "splash.multiplayer.status.privateReady":
     "Private room mode ready. Start to create a new room.",
+  "splash.multiplayer.status.privateReadyNamedWithNote":
+    "Private room {{roomName}} ({{maxPlayers}} players) is ready. Start to create it. {{note}}",
+  "splash.multiplayer.status.privateReadyNamed":
+    "Private room {{roomName}} ({{maxPlayers}} players) is ready. Start to create it.",
+  "splash.multiplayer.status.privateInviteReadyWithNote":
+    "Invite code {{roomCode}} ready. Join it if it exists, or create it. {{note}}",
+  "splash.multiplayer.status.privateInviteReady":
+    "Invite code {{roomCode}} ready. Join it if it exists, or create it.",
   "splash.multiplayer.status.joiningRoomOpen":
     "Joining room {{roomCode}} ({{joinability}}), expires in {{expiresMinutes}}m.{{note}}",
   "splash.multiplayer.status.joiningRoomFull": "Room {{roomCode}} is full ({{joinability}}).",
@@ -113,7 +130,7 @@ export const enUS = {
   "splash.multiplayer.joinFailure.roomFull": "That room is full.",
   "splash.multiplayer.joinFailure.sessionExpired": "That room has expired.",
   "splash.multiplayer.joinFailure.default": "Unable to join room right now.",
-  "splash.multiplayer.joinCodeChecking": "Checking invite code...",
+  "splash.multiplayer.joinCodeChecking": "Launching room {{roomCode}}...",
   "splash.multiplayer.joinCodeFound": "Found room {{roomCode}}. Joining...",
   "splash.multiplayer.joinCodeUnableStart": "Unable to start join flow.",
   "splash.multiplayer.joinCodeUnableValidate": "Unable to validate invite code.",

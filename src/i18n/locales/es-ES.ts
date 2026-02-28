@@ -67,6 +67,12 @@ export const esES: TranslationDictionary = {
   "splash.multiplayer.filters.pageIndicator": "Pagina {{page}} / {{total}}",
   "splash.multiplayer.filters.resultsCount": "Mostrando {{shown}} de {{total}} salas",
   "splash.multiplayer.privateToggle": "Crear o unirse a una sala privada",
+  "splash.multiplayer.privateCreateHeading": "Crear una sala privada nueva",
+  "splash.multiplayer.privateCreateHint":
+    "No necesitas codigo. Se creara una sala nueva al pulsar Unirse.",
+  "splash.multiplayer.privateJoinHeading": "Usar codigo de invitacion",
+  "splash.multiplayer.privateJoinHint":
+    "Ingresa un codigo para unirte a una sala existente, o reclamarlo si es nuevo.",
   "splash.multiplayer.privateRoomName": "Nombre de sala privada",
   "splash.multiplayer.privateRoomNamePlaceholder": "Lobby super serio",
   "splash.multiplayer.privatePlayerLimit": "Jugadores permitidos",
@@ -83,6 +89,10 @@ export const esES: TranslationDictionary = {
   "splash.multiplayer.roomCard.join": "Toca para unirte",
   "splash.multiplayer.roomCard.full": "Llena",
   "splash.multiplayer.pickLobbyHint": "Elige un lobby de la lista o ingresa un codigo.",
+  "splash.multiplayer.pickLobbyHintPrivateCreate":
+    "Crear una sala privada con la configuracion actual.",
+  "splash.multiplayer.pickLobbyHintPrivateCode":
+    "Unirse por codigo de sala, o crearla si aun no existe.",
   "splash.multiplayer.joinSeedStatus": "+ sembrar {{count}} bot(s) si se crea sala",
   "splash.multiplayer.joinability.openSeats": "{{count}} asiento(s) libre(s)",
   "splash.multiplayer.joinability.full": "Sala llena",
@@ -105,6 +115,14 @@ export const esES: TranslationDictionary = {
     "Modo de sala privada listo. Inicia para crear una sala nueva. {{note}}",
   "splash.multiplayer.status.privateReady":
     "Modo de sala privada listo. Inicia para crear una sala nueva.",
+  "splash.multiplayer.status.privateReadyNamedWithNote":
+    "Sala privada {{roomName}} ({{maxPlayers}} jugadores) lista. Inicia para crearla. {{note}}",
+  "splash.multiplayer.status.privateReadyNamed":
+    "Sala privada {{roomName}} ({{maxPlayers}} jugadores) lista. Inicia para crearla.",
+  "splash.multiplayer.status.privateInviteReadyWithNote":
+    "Codigo {{roomCode}} listo. Unete si existe o crealo. {{note}}",
+  "splash.multiplayer.status.privateInviteReady":
+    "Codigo {{roomCode}} listo. Unete si existe o crealo.",
   "splash.multiplayer.status.joiningRoomOpen":
     "Uniendo a sala {{roomCode}} ({{joinability}}), expira en {{expiresMinutes}}m.{{note}}",
   "splash.multiplayer.status.joiningRoomFull": "La sala {{roomCode}} esta llena ({{joinability}}).",
@@ -116,7 +134,7 @@ export const esES: TranslationDictionary = {
   "splash.multiplayer.joinFailure.roomFull": "Esa sala esta llena.",
   "splash.multiplayer.joinFailure.sessionExpired": "Esa sala expiro.",
   "splash.multiplayer.joinFailure.default": "No se pudo unir a la sala ahora.",
-  "splash.multiplayer.joinCodeChecking": "Validando codigo de invitacion...",
+  "splash.multiplayer.joinCodeChecking": "Iniciando sala {{roomCode}}...",
   "splash.multiplayer.joinCodeFound": "Sala {{roomCode}} encontrada. Uniendo...",
   "splash.multiplayer.joinCodeUnableStart": "No se pudo iniciar el flujo de union.",
   "splash.multiplayer.joinCodeUnableValidate":

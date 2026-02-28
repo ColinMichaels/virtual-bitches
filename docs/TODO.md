@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-28 (player interactions refactor extracted + backlog archive cleanup)
+**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-28 (private-room create/join UX refresh + game updates entry)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -302,6 +302,32 @@ Reference docs:
   - [ ] Add targeted integration tests for difficulty inheritance/enforcement on room join and restart flows.
   - [ ] Add targeted API/service tests for queue replenishment guarantees per difficulty tier.
   - [ ] Run focused mobile-device QA for long room lists and extreme filter/no-result combinations.
+
+### Private Room Create/Join UX + Submission Flow Refresh (2026-02-28)
+- **Status**: ✅ Complete
+- **Scope**: Simplify private room submission logic and give private-room controls a clearer, modern flow.
+- **Completed**:
+  - ✅ Unified multiplayer start payload generation in splash UI, so main CTA and quick-join share the same submission path.
+  - ✅ Removed divergent invite-code precheck behavior and routed invite-code quick action through the same runtime join-or-create flow as normal join.
+  - ✅ Improved private room status messaging for:
+    - named private room creation readiness
+    - invite-code join/create readiness
+  - ✅ Added dynamic multiplayer CTA labels/hints:
+    - `Join Game` for public-room flow
+    - `Create private room` when private mode is active with no code
+    - `Join Code` when a valid private invite code is present
+  - ✅ Refreshed private-room panel UX into distinct create vs invite-code sections with intent highlighting and improved input/button treatment.
+  - ✅ Added i18n coverage for new private-room labels and status copy in both `en-US` and `es-ES`.
+  - ✅ Published corresponding in-game update note in `public/updates.json`.
+- **Files Updated**:
+  - `src/ui/splash.ts`
+  - `src/styles.css`
+  - `src/i18n/locales/en-US.ts`
+  - `src/i18n/locales/es-ES.ts`
+  - `public/updates.json`
+- **Follow-up TODO**:
+  - [ ] Persist private room name and desired max-player metadata server-side for room diagnostics/listing display.
+  - [ ] Add focused UI regression test coverage for private CTA/hint state transitions (`create` vs `join-by-code` vs `public-room`).
 
 ### Mobile Menu + iOS Responsive + Admin Console UX Pass (2026-02-26)
 - **Status**: ✅ Complete
