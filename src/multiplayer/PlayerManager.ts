@@ -209,6 +209,7 @@ export class PlayerManager {
       index: player.seatIndex,
       occupied: true,
       isCurrentPlayer: player.isLocal,
+      isInLounge: false,
       playerName: player.profile.name,
       avatarUrl: player.profile.avatarUrl,
       avatarColor: avatarColor,
@@ -223,6 +224,7 @@ export class PlayerManager {
       index: seatIndex,
       occupied: false,
       isCurrentPlayer: false,
+      isInLounge: false,
       playerName: undefined,
     });
   }

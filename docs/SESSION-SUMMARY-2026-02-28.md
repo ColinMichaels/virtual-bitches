@@ -26,6 +26,9 @@
 - Increased winner-queue heartbeat/refresh polling intervals to reduce cross-instance auth-refresh churn in Cloud Run while still maintaining liveness coverage.
 - Added winner-queue failure diagnostics output (`Queue lifecycle diagnostics`) including recent event timeline, socket close counts, last refresh failure, and current `/health` runtime snapshot.
 - Added temporary transient-failure handling for repeated winner-queue `410 session_expired` churn in distributed Cloud Run paths: smoke marks the check inconclusive (non-fatal) unless `E2E_FAIL_ON_TRANSIENT_QUEUE_SESSION_EXPIRED=1` is set.
+- Added dedicated timeout-strike smoke assertion for "two turn timeouts in one round => observer/lounge" with explicit participant-state validation.
+- Added transient timeout-strike retry behavior plus Cloud Run distributed fallback: repeated transient `session_expired` can be marked inconclusive (non-fatal) unless `E2E_FAIL_ON_TRANSIENT_TIMEOUT_STRIKE_SESSION_EXPIRED=1` is set.
+- Hardened session-id join probes in smoke (main flow, queue lifecycle, and timeout-strike setup) with transient-aware retries to reduce false negatives from short-lived session-store drift.
 
 ### Multiplayer Post-Round Lifecycle Fixes
 - Fixed next-game scheduling baseline so `nextGameStartsAt` is now computed from **round completion time** instead of prior `gameStartedAt`.
@@ -69,6 +72,13 @@
 - `node --check api/server.mjs` passes.
 - `npm run build` passes (`tsc` + `vite build`).
 - `npm run test:e2e:api:local` passes, including winner queue lifecycle auto-restart checks.
+- GitHub Actions `deploy-api` completed successfully on February 28, 2026 after smoke hardening and transient distributed-flow guards.
+- Latest successful `deploy-api` run retained queue lifecycle + timeout-strike observer segments as inconclusive (non-fatal) under repeated transient distributed `session_expired`, then continued to full smoke pass.
+- Latest successful `deploy-api` run still skipped optional smoke lanes that require additional CI config/auth:
+  - admin storage cutover/admin monitor/admin moderation-term assertions
+  - chat-conduct admin clear verification
+  - leaderboard write verification
+  - hosting rewrite smoke (non-absolute `E2E_HOSTING_API_BASE_URL`)
 
 ### Environment-Limited
 - `npm run test:session-service` cannot run in this sandbox due local IPC/listen restriction (`EPERM` from `tsx` pipe listener).
