@@ -101,14 +101,6 @@ async function run() {
     "join session response missing guest participant"
   );
   assert(Array.isArray(joined?.turnState?.order), "join session missing turnState.order");
-  assert(
-    joined.turnState.order.includes(hostPlayerId),
-    "turnState.order missing host player"
-  );
-  assert(
-    joined.turnState.order.includes(guestPlayerId),
-    "turnState.order missing guest player"
-  );
 
   hostSocket = await openSocket(
     "host",
@@ -120,11 +112,79 @@ async function run() {
     buildSocketUrl(activeSessionId, guestPlayerId, joined.auth.accessToken)
   );
   guestMessageBuffer = createSocketMessageBuffer(guestSocket);
+
+  const hostSit = await apiRequest(
+    `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
+    {
+      method: "POST",
+      accessToken: created.auth.accessToken,
+      body: {
+        playerId: hostPlayerId,
+        action: "sit",
+      },
+    }
+  );
+  assert(
+    hostSit?.ok === true,
+    `host sit participant-state did not return ok=true (reason=${String(hostSit?.reason ?? "unknown")})`
+  );
+
+  const guestSit = await apiRequest(
+    `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
+    {
+      method: "POST",
+      accessToken: joined.auth.accessToken,
+      body: {
+        playerId: guestPlayerId,
+        action: "sit",
+      },
+    }
+  );
+  assert(
+    guestSit?.ok === true,
+    `guest sit participant-state did not return ok=true (reason=${String(guestSit?.reason ?? "unknown")})`
+  );
+
+  const hostReady = await apiRequest(
+    `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
+    {
+      method: "POST",
+      accessToken: created.auth.accessToken,
+      body: {
+        playerId: hostPlayerId,
+        action: "ready",
+      },
+    }
+  );
+  assert(
+    hostReady?.ok === true,
+    `host ready participant-state did not return ok=true (reason=${String(hostReady?.reason ?? "unknown")})`
+  );
+
+  const guestReady = await apiRequest(
+    `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
+    {
+      method: "POST",
+      accessToken: joined.auth.accessToken,
+      body: {
+        playerId: guestPlayerId,
+        action: "ready",
+      },
+    }
+  );
+  assert(
+    guestReady?.ok === true,
+    `guest ready participant-state did not return ok=true (reason=${String(guestReady?.reason ?? "unknown")})`
+  );
+
   const guestReadyState = await waitForBufferedMessage(
     guestMessageBuffer,
     (payload) =>
       payload?.type === "session_state" &&
       payload?.sessionId === activeSessionId &&
+      Array.isArray(payload?.turnState?.order) &&
+      payload.turnState.order.includes(hostPlayerId) &&
+      payload.turnState.order.includes(guestPlayerId) &&
       Array.isArray(payload?.participants) &&
       payload.participants
         .filter((participant) => participant && !participant.isBot)
@@ -137,10 +197,20 @@ async function run() {
       .every((participant) => participant?.isReady === true),
     "expected all human participants to be ready after socket connect"
   );
+  assert(
+    Array.isArray(guestReadyState?.turnState?.order) &&
+      guestReadyState.turnState.order.includes(hostPlayerId),
+    "ready session_state turnState.order missing host player"
+  );
+  assert(
+    Array.isArray(guestReadyState?.turnState?.order) &&
+      guestReadyState.turnState.order.includes(guestPlayerId),
+    "ready session_state turnState.order missing guest player"
+  );
 
   const expectedFirstTurnPlayerId =
-    typeof joined?.turnState?.activeTurnPlayerId === "string"
-      ? joined.turnState.activeTurnPlayerId
+    typeof guestReadyState?.turnState?.activeTurnPlayerId === "string"
+      ? guestReadyState.turnState.activeTurnPlayerId
       : hostPlayerId;
   assertEqual(expectedFirstTurnPlayerId, hostPlayerId, "expected host first turn");
 
@@ -174,9 +244,10 @@ async function run() {
   );
 
   const expectedSecondTurnPlayerId =
-    Array.isArray(joined?.turnState?.order) && joined.turnState.order.length > 1
-      ? joined.turnState.order[1]
-      : (joined?.turnState?.order?.[0] ?? guestPlayerId);
+    Array.isArray(guestReadyState?.turnState?.order) &&
+    guestReadyState.turnState.order.length > 1
+      ? guestReadyState.turnState.order[1]
+      : (guestReadyState?.turnState?.order?.[0] ?? guestPlayerId);
   hostSocket.send(JSON.stringify({ type: "turn_end" }));
   const prematureTurnEndError = await waitForBufferedMessage(
     hostMessageBuffer,
