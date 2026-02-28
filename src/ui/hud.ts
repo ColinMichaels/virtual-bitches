@@ -27,12 +27,14 @@ export class HUD {
   private multiplayerStandingsEl: HTMLElement | null;
   private isDropdownOpen: boolean = false;
   private onModeChange: ((difficulty: GameDifficulty) => void) | null = null;
+  private onMultiplayerPlayerSelect: ((playerId: string) => void) | null = null;
   private gameStartAtMs = Date.now();
   private roundCountdownDeadlineAtMs: number | null = null;
   private turnDeadlineAtMs: number | null = null;
   private currentVariant: GameState["mode"]["variant"] = "classic";
   private multiplayerStandings: MultiplayerHudStandingEntry[] = [];
   private multiplayerActivePlayerId: string | null = null;
+  private multiplayerSelectedPlayerId: string | null = null;
 
   constructor() {
     this.rollCountEl = document.getElementById("roll-count")!;
@@ -89,6 +91,17 @@ export class HUD {
     this.onModeChange = callback;
   }
 
+  setOnMultiplayerPlayerSelect(callback: ((playerId: string) => void) | null): void {
+    this.onMultiplayerPlayerSelect = callback;
+    this.renderMultiplayerStandings();
+  }
+
+  setMultiplayerSelectedPlayer(playerId: string | null): void {
+    this.multiplayerSelectedPlayerId =
+      typeof playerId === "string" && playerId.trim().length > 0 ? playerId.trim() : null;
+    this.renderMultiplayerStandings();
+  }
+
   setMultiplayerStandings(
     entries: Array<{
       playerId: string;
@@ -129,6 +142,12 @@ export class HUD {
       typeof activePlayerId === "string" && activePlayerId.trim().length > 0
         ? activePlayerId
         : null;
+    if (
+      this.multiplayerSelectedPlayerId &&
+      !this.multiplayerStandings.some((entry) => entry.playerId === this.multiplayerSelectedPlayerId)
+    ) {
+      this.multiplayerSelectedPlayerId = null;
+    }
     this.renderMultiplayerStandings();
   }
 
@@ -387,8 +406,14 @@ export class HUD {
     this.multiplayerStandingsEl.innerHTML = "";
 
     this.multiplayerStandings.forEach((entry) => {
-      const row = document.createElement("div");
+      const selectable = Boolean(this.onMultiplayerPlayerSelect) && !entry.isCurrentPlayer;
+      const row = document.createElement(selectable ? "button" : "div");
       row.className = "multiplayer-scoreboard__row";
+      if (selectable) {
+        row.classList.add("is-clickable");
+        row.setAttribute("data-player-id", entry.playerId);
+        row.setAttribute("title", `Open interactions for ${entry.label}`);
+      }
       if (entry.isCurrentPlayer) {
         row.classList.add("is-self");
       }
@@ -397,6 +422,16 @@ export class HUD {
       }
       if (this.multiplayerActivePlayerId === entry.playerId) {
         row.classList.add("is-active-turn");
+      }
+      if (this.multiplayerSelectedPlayerId === entry.playerId) {
+        row.classList.add("is-selected");
+      }
+      if (selectable) {
+        const rowButton = row as HTMLButtonElement;
+        rowButton.type = "button";
+        rowButton.addEventListener("click", () => {
+          this.onMultiplayerPlayerSelect?.(entry.playerId);
+        });
       }
 
       const rank = document.createElement("span");
