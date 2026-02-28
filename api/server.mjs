@@ -1423,6 +1423,7 @@ async function handleCreateSession(req, res) {
   const sessionId = randomUUID();
   const botCount = normalizeBotCount(body?.botCount);
   const gameDifficulty = normalizeGameDifficulty(body?.gameDifficulty);
+  const demoSpeedMode = body?.demoSpeedMode === true;
   const now = Date.now();
   const requestedRoomCode = normalizeOptionalRoomCode(body?.roomCode);
   if (requestedRoomCode && isRoomCodeInUse(requestedRoomCode, now)) {
@@ -1469,6 +1470,7 @@ async function handleCreateSession(req, res) {
     sessionId,
     roomCode,
     gameDifficulty,
+    demoSpeedMode,
     wsUrl: WS_BASE_URL,
     roomKind: ROOM_KINDS.private,
     ownerPlayerId: playerId,
@@ -4490,6 +4492,7 @@ function buildSessionResponse(session, playerId, auth) {
     sessionId: snapshot.sessionId,
     roomCode: snapshot.roomCode,
     gameDifficulty: snapshot.gameDifficulty,
+    demoSpeedMode: snapshot.demoSpeedMode,
     ownerPlayerId: snapshot.ownerPlayerId,
     roomType: snapshot.roomType,
     isPublic: snapshot.isPublic,
@@ -4534,10 +4537,12 @@ function buildSessionSnapshot(session) {
   const sessionComplete =
     activeGameParticipants.length > 0 &&
     activeGameParticipants.every((participant) => participant.isComplete === true);
+  const demoSpeedMode = roomKind === ROOM_KINDS.private && session?.demoSpeedMode === true;
   return {
     sessionId: session.sessionId,
     roomCode: session.roomCode,
     gameDifficulty: resolveSessionGameDifficulty(session),
+    demoSpeedMode,
     ownerPlayerId: getSessionOwnerPlayerId(session),
     roomType: roomKind,
     isPublic: roomKind === ROOM_KINDS.publicDefault || roomKind === ROOM_KINDS.publicOverflow,
@@ -4734,6 +4739,7 @@ function createPublicRoom(roomKind, now = Date.now(), slot = null, options = {})
     sessionId,
     roomCode,
     gameDifficulty: sessionDifficulty,
+    demoSpeedMode: false,
     wsUrl: WS_BASE_URL,
     roomKind: normalizedKind,
     roomBans: {},
@@ -4770,6 +4776,7 @@ function resetPublicRoomForIdle(session, now = Date.now()) {
   session.chatConductState = createEmptyChatConductState();
   delete session.ownerPlayerId;
   session.turnState = null;
+  session.demoSpeedMode = false;
   session.gameDifficulty =
     roomKind === ROOM_KINDS.publicDefault
       ? resolveDefaultPublicRoomDifficulty(normalizedSlot)
@@ -6156,6 +6163,12 @@ function normalizeStoreConsistency(now = Date.now()) {
     const normalizedRoomKind = normalizeRoomKind(rawSession.roomKind);
     if (rawSession.roomKind !== normalizedRoomKind) {
       rawSession.roomKind = normalizedRoomKind;
+      changed = true;
+    }
+    const normalizedDemoSpeedMode =
+      normalizedRoomKind === ROOM_KINDS.private && rawSession.demoSpeedMode === true;
+    if (rawSession.demoSpeedMode !== normalizedDemoSpeedMode) {
+      rawSession.demoSpeedMode = normalizedDemoSpeedMode;
       changed = true;
     }
 

@@ -3349,6 +3349,24 @@ body.splash-active :is(
   color: var(--ui-text-dim);
 }
 
+.splash-private-demo-speed-toggle {
+  display: flex;
+}
+
+.splash-private-demo-speed-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: none;
+  letter-spacing: 0.04em;
+}
+
+.splash-private-demo-speed-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ui-text-dim);
+}
+
 .splash-bot-seed-toggle {
   display: flex;
 }

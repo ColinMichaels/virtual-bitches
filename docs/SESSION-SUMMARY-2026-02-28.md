@@ -82,6 +82,10 @@
   - `VITE_MULTIPLAYER_DEMO_SPEED_MODE_ENABLED`
   - `VITE_MULTIPLAYER_DEMO_SPEED_LABEL`
 - Added splash multiplayer panel demo badge (flagged, default off): `${label} (private rooms only)`.
+- Added private-room demo-speed toggle/reset UX path:
+  - toggle appears in private-room create intent when feature flag is enabled
+  - toggle auto-resets when switching to public room selection or invite-code join intent
+  - `demoSpeedMode` is now carried in multiplayer start/create payloads and surfaced in API session responses.
 
 ---
 

@@ -95,8 +95,7 @@ Reference docs:
   - [x] Keep production deploy workflow on normal speed unless an explicit CI variable enables the fast profile.
   - [x] Add smoke diagnostics that print active speed profile values at startup for easier debugging.
   - [x] Add docs for new speed knobs in `docs/ENVIRONMENT-REFERENCE.md`.
-  - [ ] Add an optional UI-facing "Demo Speed Mode" (private room only) behind a flag, with clear visual badge + reset path.
-  - Progress (2026-02-28): added frontend env flags + multiplayer panel badge; private-room toggle/reset UX still pending.
+  - [x] Add an optional UI-facing "Demo Speed Mode" (private room only) behind a flag, with clear visual badge + reset path.
   - [x] Add guardrails so demo/test speed settings cannot be accidentally enabled globally in production.
 
 ### Camera System & Machinima Tools (Phase 1 COMPLETE, Phase 2 PARTIAL) 📷

@@ -61,6 +61,7 @@ export class MultiplayerSessionService {
       blockedPlayerIds?: string[];
       botCount?: number;
       gameDifficulty?: MultiplayerGameDifficulty;
+      demoSpeedMode?: boolean;
     } = {}
   ): Promise<MultiplayerSessionRecord | null> {
     const created = await backendApiService.createMultiplayerSession({
@@ -72,6 +73,7 @@ export class MultiplayerSessionService {
       blockedPlayerIds: options.blockedPlayerIds,
       botCount: options.botCount,
       gameDifficulty: options.gameDifficulty,
+      demoSpeedMode: options.demoSpeedMode === true,
     });
     if (!created) return null;
 

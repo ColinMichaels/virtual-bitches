@@ -136,6 +136,7 @@ export interface MultiplayerSessionRecord {
   sessionId: string;
   roomCode: string;
   gameDifficulty?: MultiplayerGameDifficulty;
+  demoSpeedMode?: boolean;
   ownerPlayerId?: string;
   roomType?: "private" | "public_default" | "public_overflow";
   isPublic?: boolean;
@@ -186,6 +187,7 @@ export interface CreateMultiplayerSessionRequest {
   blockedPlayerIds?: string[];
   botCount?: number;
   gameDifficulty?: MultiplayerGameDifficulty;
+  demoSpeedMode?: boolean;
 }
 
 export interface JoinMultiplayerSessionRequest {

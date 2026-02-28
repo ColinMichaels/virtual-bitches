@@ -92,6 +92,7 @@ export interface MultiplayerBootstrapOptions {
   gameDifficulty?: MultiplayerGameDifficulty;
   sessionId?: string;
   autoSeatReady?: boolean;
+  demoSpeedMode?: boolean;
 }
 
 interface GameSessionBootstrapOptions {
@@ -1364,6 +1365,7 @@ class Game implements GameCallbacks {
       providerId: multiplayerIdentity.providerId,
       botCount: this.multiplayerOptions.botCount,
       gameDifficulty: requestedDifficulty,
+      demoSpeedMode: this.multiplayerOptions.demoSpeedMode === true,
     });
     if (!createdSession) {
       notificationService.show("Failed to create multiplayer session. Continuing in solo mode.", "warning", 2800);
