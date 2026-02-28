@@ -1058,6 +1058,205 @@ button.multiplayer-scoreboard__row {
   color: rgba(195, 217, 252, 0.84);
 }
 
+.multiplayer-chat-modal-content {
+  width: min(680px, calc(100vw - 28px));
+  max-height: min(88vh, calc(100dvh - 28px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.multiplayer-chat-modal-header h2 {
+  margin: 0;
+}
+
+.multiplayer-chat-status {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(208, 226, 255, 0.86);
+}
+
+.multiplayer-chat-status.is-online {
+  color: rgba(153, 255, 203, 0.94);
+}
+
+.multiplayer-chat-status.is-offline {
+  color: rgba(255, 219, 148, 0.9);
+}
+
+.multiplayer-chat-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.multiplayer-chat-tab {
+  border: 1px solid rgba(124, 164, 240, 0.3);
+  background: rgba(9, 19, 36, 0.76);
+  color: rgba(222, 236, 255, 0.9);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.multiplayer-chat-tab.is-active {
+  border-color: rgba(133, 208, 255, 0.82);
+  background: rgba(22, 43, 71, 0.92);
+  color: #f4faff;
+}
+
+.multiplayer-chat-tab.is-direct {
+  border-color: rgba(179, 150, 255, 0.34);
+}
+
+.multiplayer-chat-tab-label {
+  white-space: nowrap;
+}
+
+.multiplayer-chat-tab-badge {
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 126, 126, 0.9);
+  color: #1d0e0e;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.multiplayer-chat-feed {
+  border-radius: 12px;
+  border: 1px solid rgba(119, 160, 230, 0.26);
+  background: rgba(5, 12, 24, 0.8);
+  min-height: 220px;
+  max-height: min(52vh, 460px);
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.multiplayer-chat-empty {
+  margin: auto 0;
+  text-align: center;
+  color: rgba(193, 212, 241, 0.78);
+  font-size: 13px;
+  padding: 20px 12px;
+}
+
+.multiplayer-chat-message {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: min(88%, 460px);
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 163, 237, 0.28);
+  background: rgba(13, 24, 43, 0.82);
+}
+
+.multiplayer-chat-message.is-outgoing {
+  align-self: flex-end;
+  border-color: rgba(129, 218, 255, 0.42);
+  background: rgba(19, 39, 66, 0.88);
+}
+
+.multiplayer-chat-message.is-incoming {
+  align-self: flex-start;
+}
+
+.multiplayer-chat-message.tone-warning {
+  border-color: rgba(255, 205, 112, 0.44);
+}
+
+.multiplayer-chat-message.tone-error {
+  border-color: rgba(255, 152, 152, 0.5);
+}
+
+.multiplayer-chat-message.tone-success {
+  border-color: rgba(144, 255, 195, 0.46);
+}
+
+.multiplayer-chat-message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.multiplayer-chat-message-sender {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(218, 232, 255, 0.94);
+}
+
+.multiplayer-chat-message-time {
+  font-size: 10px;
+  color: rgba(168, 186, 214, 0.84);
+}
+
+.multiplayer-chat-message-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: rgba(239, 245, 255, 0.95);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.multiplayer-chat-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.multiplayer-chat-whisper-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.multiplayer-chat-whisper-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.multiplayer-chat-whisper-open {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.multiplayer-chat-input {
+  width: 100%;
+  min-height: 74px;
+  max-height: 124px;
+  resize: vertical;
+}
+
+.multiplayer-chat-compose-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.multiplayer-chat-send {
+  min-width: 88px;
+}
+
 @media (max-width: 760px) {
   #multiplayer-player-chip-rail {
     padding: 6px 8px 9px;
@@ -1077,6 +1276,36 @@ button.multiplayer-scoreboard__row {
 
   .player-interaction-actions {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .multiplayer-chat-modal-content {
+    width: min(96vw, 560px);
+    max-height: min(92vh, calc(100dvh - 16px));
+    gap: 8px;
+  }
+
+  .multiplayer-chat-feed {
+    min-height: 170px;
+    max-height: min(48vh, 350px);
+    padding: 8px;
+  }
+
+  .multiplayer-chat-message {
+    max-width: 100%;
+  }
+
+  .multiplayer-chat-whisper-picker {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .multiplayer-chat-whisper-open,
+  .multiplayer-chat-send {
+    width: 100%;
+  }
+
+  .multiplayer-chat-compose-actions {
+    justify-content: stretch;
   }
 }
 
@@ -1622,6 +1851,7 @@ button.multiplayer-scoreboard__row {
 /* Right rail controls (desktop) */
 :is(
   #settings-gear-btn,
+  #room-chat-btn,
   #invite-link-btn,
   #updates-toggle-btn,
   #chaos-upgrades-btn,
@@ -1648,6 +1878,7 @@ button.multiplayer-scoreboard__row {
 
 :is(
   #settings-gear-btn,
+  #room-chat-btn,
   #invite-link-btn,
   #updates-toggle-btn,
   #chaos-upgrades-btn,
@@ -1658,7 +1889,7 @@ button.multiplayer-scoreboard__row {
   color: #fff;
 }
 
-:is(#invite-link-btn, #updates-toggle-btn, #chaos-upgrades-btn, #leaderboard-btn):active {
+:is(#room-chat-btn, #invite-link-btn, #updates-toggle-btn, #chaos-upgrades-btn, #leaderboard-btn):active {
   transform: scale(0.95);
 }
 
@@ -1673,25 +1904,38 @@ button.multiplayer-scoreboard__row {
   );
 }
 
-#settings-gear-btn {
+#room-chat-btn {
   right: max(
     calc(var(--control-edge-gap) + 120px),
     calc(env(safe-area-inset-right) + 120px)
   );
 }
 
-#chaos-upgrades-btn {
+#settings-gear-btn {
   right: max(
     calc(var(--control-edge-gap) + 180px),
     calc(env(safe-area-inset-right) + 180px)
   );
 }
 
-#invite-link-btn {
+#chaos-upgrades-btn {
   right: max(
     calc(var(--control-edge-gap) + 240px),
     calc(env(safe-area-inset-right) + 240px)
   );
+}
+
+#invite-link-btn {
+  right: max(
+    calc(var(--control-edge-gap) + 300px),
+    calc(env(safe-area-inset-right) + 300px)
+  );
+}
+
+#room-chat-btn:hover {
+  background: rgba(84, 168, 255, 0.86);
+  border-color: rgba(156, 213, 255, 0.95);
+  transform: scale(1.1);
 }
 
 #settings-gear-btn:hover {
@@ -2053,6 +2297,8 @@ button.danger,
   .profile-name-row input,
   .settings-admin-remove-row select,
   .settings-admin-role-controls select,
+  .multiplayer-chat-whisper-select,
+  .multiplayer-chat-input,
   .theme-dropdown,
   .debug-theme-select
 ) {
@@ -2073,6 +2319,8 @@ button.danger,
   .profile-name-row input,
   .settings-admin-remove-row select,
   .settings-admin-role-controls select,
+  .multiplayer-chat-whisper-select,
+  .multiplayer-chat-input,
   .theme-dropdown,
   .debug-theme-select
 ):hover {
@@ -2089,6 +2337,8 @@ button.danger,
   .profile-name-row input,
   .settings-admin-remove-row select,
   .settings-admin-role-controls select,
+  .multiplayer-chat-whisper-select,
+  .multiplayer-chat-input,
   .theme-dropdown,
   .debug-theme-select
 ):focus-visible {
@@ -2101,7 +2351,8 @@ button.danger,
   .splash-multiplayer-options input:not([type="checkbox"]),
   .settings-account-name-inputs input,
   .global-name-row input,
-  .profile-name-row input
+  .profile-name-row input,
+  .multiplayer-chat-input
 )::placeholder {
   color: var(--control-placeholder);
 }
@@ -2250,6 +2501,7 @@ body.splash-active :is(
   #controls,
   #camera-controls,
   #settings-gear-btn,
+  #room-chat-btn,
   #invite-link-btn,
   #updates-toggle-btn,
   #chaos-upgrades-btn,
@@ -6426,7 +6678,7 @@ body.splash-active :is(
     width: 44px;
     height: 44px;
     bottom: 5px;
-    right: 107px;
+    right: 158px;
     padding: 10px;
   }
 
@@ -6439,11 +6691,24 @@ body.splash-active :is(
     width: 44px;
     height: 44px;
     bottom: 5px;
-    right: 158px;
+    right: 209px;
     padding: 10px;
   }
 
   #invite-link-btn svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  #room-chat-btn {
+    width: 44px;
+    height: 44px;
+    bottom: 5px;
+    right: 107px;
+    padding: 10px;
+  }
+
+  #room-chat-btn svg {
     width: 24px;
     height: 24px;
   }

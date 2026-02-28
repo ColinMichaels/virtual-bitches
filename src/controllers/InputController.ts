@@ -65,6 +65,7 @@ export class InputController {
   private returnMainMenuBtn: HTMLButtonElement | null;
   private viewLeaderboardBtn: HTMLButtonElement;
   private settingsGearBtn: HTMLButtonElement;
+  private roomChatBtn: HTMLButtonElement | null;
   private inviteLinkBtn: HTMLButtonElement | null;
   private leaderboardBtn: HTMLButtonElement;
   private profileBtn: HTMLButtonElement | null;
@@ -101,6 +102,7 @@ export class InputController {
     this.returnMainMenuBtn = document.getElementById("return-main-menu-btn") as HTMLButtonElement | null;
     this.viewLeaderboardBtn = document.getElementById("view-leaderboard-btn") as HTMLButtonElement;
     this.settingsGearBtn = document.getElementById("settings-gear-btn") as HTMLButtonElement;
+    this.roomChatBtn = document.getElementById("room-chat-btn") as HTMLButtonElement | null;
     this.inviteLinkBtn = document.getElementById("invite-link-btn") as HTMLButtonElement | null;
     this.leaderboardBtn = document.getElementById("leaderboard-btn") as HTMLButtonElement;
     this.profileBtn = document.getElementById("profile-btn") as HTMLButtonElement | null;
@@ -183,6 +185,12 @@ export class InputController {
       this.callbacks.togglePause();
     });
 
+    this.roomChatBtn?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      hapticsService.buttonPress();
+      this.callbacks.openMultiplayerPublicMessageComposer();
+    });
+
     this.inviteLinkBtn?.addEventListener("click", () => {
       audioService.playSfx("click");
       hapticsService.buttonPress();
@@ -248,6 +256,7 @@ export class InputController {
     const menuToggle = document.getElementById("mobile-menu-toggle");
     const mobileMenu = document.getElementById("mobile-controls-menu");
     const mobileSettingsBtn = document.getElementById("mobile-settings-btn");
+    const mobileRoomChatBtn = document.getElementById("mobile-room-chat-btn");
     const mobileInviteLinkBtn = document.getElementById("mobile-invite-link-btn");
     const mobileProfileBtn = document.getElementById("mobile-profile-btn");
     const mobileLeaderboardBtn = document.getElementById("mobile-leaderboard-btn");
@@ -286,6 +295,15 @@ export class InputController {
         audioService.playSfx("click");
         hapticsService.buttonPress();
         this.callbacks.handleCopyInviteLink();
+        this.closeMobileMenu();
+      });
+    }
+
+    if (mobileRoomChatBtn) {
+      mobileRoomChatBtn.addEventListener("click", () => {
+        audioService.playSfx("click");
+        hapticsService.buttonPress();
+        this.callbacks.openMultiplayerPublicMessageComposer();
         this.closeMobileMenu();
       });
     }
@@ -551,6 +569,11 @@ export class InputController {
       } else if (this.isElementVisibleById("player-interaction-modal")) {
         const closeButton = document.querySelector<HTMLButtonElement>(
           "#player-interaction-modal .player-interaction-close"
+        );
+        closeButton?.click();
+      } else if (this.isElementVisibleById("multiplayer-chat-modal")) {
+        const closeButton = document.querySelector<HTMLButtonElement>(
+          "#multiplayer-chat-modal .multiplayer-chat-close"
         );
         closeButton?.click();
       } else if (this.chaosUpgradeMenu.isVisible()) {
