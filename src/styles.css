@@ -405,6 +405,28 @@ h1, h2, h3, h4, h5, h6 {
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.92);
   min-width: 128px;
+  font: inherit;
+  text-align: left;
+}
+
+button.multiplayer-scoreboard__row {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.multiplayer-scoreboard__row.is-clickable {
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.multiplayer-scoreboard__row.is-clickable:hover {
+  transform: translateY(-1px);
+  border-color: rgba(139, 191, 255, 0.52);
+}
+
+.multiplayer-scoreboard__row.is-clickable:focus-visible {
+  outline: 2px solid rgba(148, 220, 255, 0.9);
+  outline-offset: 1px;
 }
 
 .multiplayer-scoreboard__row.is-self {
@@ -419,6 +441,11 @@ h1, h2, h3, h4, h5, h6 {
 .multiplayer-scoreboard__row.is-active-turn {
   border-color: rgba(255, 208, 115, 0.95);
   box-shadow: 0 0 10px rgba(255, 193, 83, 0.32);
+}
+
+.multiplayer-scoreboard__row.is-selected {
+  border-color: rgba(101, 229, 248, 0.92);
+  box-shadow: 0 0 0 1px rgba(101, 229, 248, 0.35), 0 0 12px rgba(77, 210, 238, 0.35);
 }
 
 .multiplayer-scoreboard__rank {

@@ -555,7 +555,11 @@ class Game implements GameCallbacks {
     this.playerInteractions = new PlayerInteractionsPanel({
       mountRoot: document.getElementById("unified-hud"),
       localPlayerId: this.localPlayerId,
+      enableChipRail: false,
       comingSoonTooltip: PLAYER_INTERACTION_COMING_SOON_TOOLTIP,
+      onSelectionChange: (playerId) => {
+        this.hud.setMultiplayerSelectedPlayer(playerId);
+      },
       onInfo: (message) => {
         notificationService.show(message, "info", 1700);
       },
@@ -582,6 +586,9 @@ class Game implements GameCallbacks {
         activeTurnPlayerId === participant.playerId
           ? ""
           : "Nudge unlocks when this player is active.",
+    });
+    this.hud.setOnMultiplayerPlayerSelect((playerId) => {
+      this.playerInteractions?.open(playerId);
     });
 
     // Initialize modals (shared with splash)

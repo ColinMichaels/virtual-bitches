@@ -29,7 +29,9 @@ export interface PlayerInteractionProfileData {
 export interface PlayerInteractionsPanelOptions {
   mountRoot: HTMLElement | null;
   localPlayerId: string;
+  enableChipRail?: boolean;
   comingSoonTooltip?: string;
+  onSelectionChange?: (playerId: string | null) => void;
   onInfo?: (message: string) => void;
   onWhisper: (playerId: string) => void;
   onCauseChaos: (playerId: string) => void;
@@ -47,6 +49,7 @@ const DEFAULT_COMING_SOON_TOOLTIP = "Coming soon";
 
 export class PlayerInteractionsPanel {
   private readonly options: PlayerInteractionsPanelOptions;
+  private readonly enableChipRail: boolean;
   private readonly comingSoonTooltip: string;
   private readonly participantsById = new Map<string, PlayerInteractionParticipant>();
   private participantOrder: string[] = [];
@@ -62,8 +65,11 @@ export class PlayerInteractionsPanel {
 
   constructor(options: PlayerInteractionsPanelOptions) {
     this.options = options;
+    this.enableChipRail = options.enableChipRail !== false;
     this.comingSoonTooltip = (options.comingSoonTooltip ?? DEFAULT_COMING_SOON_TOOLTIP).trim();
-    this.ensureChipRail();
+    if (this.enableChipRail) {
+      this.ensureChipRail();
+    }
     this.ensureModal();
   }
 
@@ -90,7 +96,12 @@ export class PlayerInteractionsPanel {
       this.participantOrder.push(normalizedId);
     });
 
-    this.renderChipRail();
+    if (this.enableChipRail) {
+      this.renderChipRail();
+    } else if (this.chipRailEl) {
+      this.chipRailEl.style.display = "none";
+      this.chipRailEl.innerHTML = "";
+    }
 
     if (!this.selectedPlayerId) {
       return;
@@ -136,6 +147,7 @@ export class PlayerInteractionsPanel {
     }
 
     this.selectedPlayerId = normalizedId;
+    this.options.onSelectionChange?.(normalizedId);
     modal.style.display = "flex";
     this.renderModalForParticipant(participant);
     this.syncChipSelectionState();
@@ -149,6 +161,7 @@ export class PlayerInteractionsPanel {
     }
     this.modalEl.style.display = "none";
     this.selectedPlayerId = null;
+    this.options.onSelectionChange?.(null);
     this.profileRequestToken += 1;
     this.syncChipSelectionState();
   }
