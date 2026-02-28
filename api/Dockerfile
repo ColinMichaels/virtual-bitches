@@ -9,7 +9,6 @@ COPY server.mjs ./
 COPY logger.mjs ./
 COPY bot ./bot
 COPY moderation ./moderation
-COPY db ./db
 COPY storage ./storage
 COPY data ./data
 

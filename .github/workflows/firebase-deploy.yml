@@ -388,6 +388,15 @@ jobs:
             --region "$REGION" \
             --format='yaml(status.conditions,status.latestCreatedRevisionName,status.latestReadyRevisionName)' || true
 
+          echo "Latest Cloud Build (if available):"
+          LATEST_BUILD_ID="$(gcloud builds list --sort-by=~createTime --limit=1 --format='value(id)' 2>/dev/null)"
+          if [ -n "$LATEST_BUILD_ID" ]; then
+            gcloud builds describe "$LATEST_BUILD_ID" \
+              --format='yaml(id,status,createTime,finishTime,logUrl,source)' || true
+          else
+            echo "No Cloud Build ID available from current credentials."
+          fi
+
           REVISION_NAME="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.latestCreatedRevisionName)')"
           if [ -n "$REVISION_NAME" ]; then
             echo "Cloud Run revision status for $REVISION_NAME:"
