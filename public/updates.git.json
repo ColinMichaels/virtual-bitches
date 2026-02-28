@@ -1,8 +1,274 @@
 {
-  "generatedAt": "2026-02-28T01:46:24.031Z",
+  "generatedAt": "2026-02-28T15:55:01.152Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-a4dc94f",
+      "date": "2026-02-28T07:48:53.000Z",
+      "title": "Extend post-game idle for recently active participants and add transient session expiry handling in e2e flows",
+      "content": "<p>Extend post-game idle for recently active participants and add transient session expiry handling in e2e flows</p><p><strong>Commit:</strong> <code>a4dc94f</code></p><p>- Implemented activity-based post-game idle extension for human participants to prevent premature session expiration.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "a4dc94f0f064c098fec5322cb39534949cb6591a",
+        "shortHash": "a4dc94f",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a4dc94f0f064c098fec5322cb39534949cb6591a"
+      }
+    },
+    {
+      "id": "git-d0756e3",
+      "date": "2026-02-28T07:36:00.000Z",
+      "title": "Ensure room code assignment for public overflow sessions",
+      "content": "<p>Ensure room code assignment for public overflow sessions</p><p><strong>Commit:</strong> <code>d0756e3</code></p><p>- Added `ensurePublicOverflowRoomCode` function to handle code normalization and reassignment for public overflow rooms.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "d0756e305006f6b7d3c324eb1122be0901b08725",
+        "shortHash": "d0756e3",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d0756e305006f6b7d3c324eb1122be0901b08725"
+      }
+    },
+    {
+      "id": "git-b24ff2e",
+      "date": "2026-02-28T07:23:52.000Z",
+      "title": "Refactor room joining logic and add retries for transient failures",
+      "content": "<p>Refactor room joining logic and add retries for transient failures</p><p><strong>Commit:</strong> <code>b24ff2e</code></p><p>- Introduced `joinRoomByCodeWithTransientRetry` to handle retries on transient room lookup failures.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "b24ff2e09e85ce8a4bdc7f39997667050d50c0cf",
+        "shortHash": "b24ff2e",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/b24ff2e09e85ce8a4bdc7f39997667050d50c0cf"
+      }
+    },
+    {
+      "id": "git-cc1ca11",
+      "date": "2026-02-28T06:50:41.000Z",
+      "title": "Refactor session and store persistence flow",
+      "content": "<p>Refactor session and store persistence flow</p><p><strong>Commit:</strong> <code>cc1ca11</code></p><p>- Updated `handleRefreshSessionAuth` to improve session and participant validation and retry expired sessions.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "cc1ca1108791cbe0608f0600a333f2c6b34bec4e",
+        "shortHash": "cc1ca11",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/cc1ca1108791cbe0608f0600a333f2c6b34bec4e"
+      }
+    },
+    {
+      "id": "git-8367832",
+      "date": "2026-02-28T06:28:59.000Z",
+      "title": "Revamp private room create/join flow",
+      "content": "<p>Revamp private room create/join flow</p><p><strong>Commit:</strong> <code>8367832</code></p><p>- Refactored private room functionality to split &quot;Create Room&quot; and &quot;Join by Invite Code&quot; into distinct workflows.</p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "8367832655a28e763af3b4a4ea1dc421cdb2baae",
+        "shortHash": "8367832",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8367832655a28e763af3b4a4ea1dc421cdb2baae"
+      }
+    },
+    {
+      "id": "git-607954d",
+      "date": "2026-02-28T06:10:15.000Z",
+      "title": "Normalize store and session data during bootstrap and rehydration processes to reduce payload inconsistencies, ensure participant/session integrity, and retry session auth on specific failures.",
+      "content": "<p>Normalize store and session data during bootstrap and rehydration processes to reduce payload inconsistencies, ensure participant/session integrity, and retry session auth on specific failures.</p><p><strong>Commit:</strong> <code>607954d</code></p><p>Ticket: SIT-stand-funciton</p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "607954dc344e7f7b28289d6794ced34de493c10d",
+        "shortHash": "607954d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/607954dc344e7f7b28289d6794ced34de493c10d"
+      }
+    },
+    {
+      "id": "git-8c04a81",
+      "date": "2026-02-28T06:00:15.000Z",
+      "title": "Fetch latest Cloud Build details in deployment workflow and remove unused `db` directory from `Dockerfile`.",
+      "content": "<p>Fetch latest Cloud Build details in deployment workflow and remove unused `db` directory from `Dockerfile`.</p><p><strong>Commit:</strong> <code>8c04a81</code></p><p>Ticket: SIT-stand-funciton</p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "8c04a814b5b7e81a838d61a83238257288a2222b",
+        "shortHash": "8c04a81",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8c04a814b5b7e81a838d61a83238257288a2222b"
+      }
+    },
+    {
+      "id": "git-b712873",
+      "date": "2026-02-28T05:56:04.000Z",
+      "title": "Add bootstrap process with readiness checks, shutdown handling, and diagnostics",
+      "content": "<p>Add bootstrap process with readiness checks, shutdown handling, and diagnostics</p><p><strong>Commit:</strong> <code>b712873</code></p><p>- Introduced `/api/ready` endpoint to monitor API readiness during bootstrap and shutdown phases.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "b712873ffe99a5cca6ef3311e17626fbf001753f",
+        "shortHash": "b712873",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/b712873ffe99a5cca6ef3311e17626fbf001753f"
+      }
+    },
+    {
+      "id": "git-b640f21",
+      "date": "2026-02-28T05:43:14.000Z",
+      "title": "Enforce session bearer-token authentication on critical multiplayer mutation endpoints and extend e2e tests for participant state rejections, score sync, and auth validations.",
+      "content": "<p>Enforce session bearer-token authentication on critical multiplayer mutation endpoints and extend e2e tests for participant state rejections, score sync, and auth validations.</p><p><strong>Commit:</strong> <code>b640f21</code></p><p>Ticket: SIT-stand-funciton</p>",
+      "version": "1.0.0",
+      "type": "alert",
+      "source": "commit",
+      "commit": {
+        "hash": "b640f21c6bbca9c66704167d7f42a9165c09c3e6",
+        "shortHash": "b640f21",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/b640f21c6bbca9c66704167d7f42a9165c09c3e6"
+      }
+    },
+    {
+      "id": "git-c06625d",
+      "date": "2026-02-28T05:28:35.000Z",
+      "title": "Add e2e assertions for admin moderation terms and update beta deployment review",
+      "content": "<p>Add e2e assertions for admin moderation terms and update beta deployment review</p><p><strong>Commit:</strong> <code>c06625d</code></p><p>- Introduced `E2E_ASSERT_ADMIN_MODERATION_TERMS` toggle in CI/CD workflows.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "c06625da8f285001ae3124eaa45b99776a4fbd76",
+        "shortHash": "c06625d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c06625da8f285001ae3124eaa45b99776a4fbd76"
+      }
+    },
+    {
+      "id": "git-407579d",
+      "date": "2026-02-28T05:19:51.000Z",
+      "title": "Add chat moderation term service and extend chat conduct functionality",
+      "content": "<p>Add chat moderation term service and extend chat conduct functionality</p><p><strong>Commit:</strong> <code>407579d</code></p><p>- Implemented `createChatModerationTermService` for managing seed, managed, and remote terms.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "407579dc5ab9930c3a10327a039e4878025473f7",
+        "shortHash": "407579d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/407579dc5ab9930c3a10327a039e4878025473f7"
+      }
+    },
+    {
+      "id": "git-f881364",
+      "date": "2026-02-28T04:58:03.000Z",
+      "title": "Document chat conduct service plan and implement moderation policy functionality",
+      "content": "<p>Document chat conduct service plan and implement moderation policy functionality</p><p><strong>Commit:</strong> <code>f881364</code></p><p>- Added `CHAT-CONDUCT-SERVICE-PLAN.md` to define the chat conduct moderation scope, policy, and future service extraction.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "f8813646a931f780c1679b7f5dda1909c2b41d10",
+        "shortHash": "f881364",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/f8813646a931f780c1679b7f5dda1909c2b41d10"
+      }
+    },
+    {
+      "id": "git-510e9a6",
+      "date": "2026-02-28T04:35:45.000Z",
+      "title": "Add moderation actions and chat conduct policy enforcement",
+      "content": "<p>Add moderation actions and chat conduct policy enforcement</p><p><strong>Commit:</strong> <code>510e9a6</code></p><p>- Introduced participant moderation functionality, including &quot;kick&quot; and &quot;ban&quot; actions, with authorization checks for owners and admins.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "510e9a6c157fc70950b28dfe721f6b66a296ebf3",
+        "shortHash": "510e9a6",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/510e9a6c157fc70950b28dfe721f6b66a296ebf3"
+      }
+    },
+    {
+      "id": "git-f0d4363",
+      "date": "2026-02-28T03:37:13.000Z",
+      "title": "Add seat status toggle to multiplayer controls and refine related UI/logic",
+      "content": "<p>Add seat status toggle to multiplayer controls and refine related UI/logic</p><p><strong>Commit:</strong> <code>f0d4363</code></p><p>- Integrated &quot;Sit/Stand&quot; toggle alongside multiplayer observer mode UI.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "f0d4363708e7ea671285677f3aecd75387838077",
+        "shortHash": "f0d4363",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/f0d4363708e7ea671285677f3aecd75387838077"
+      }
+    },
+    {
+      "id": "git-de7700a",
+      "date": "2026-02-28T03:15:00.000Z",
+      "title": "Integrate room chat UI and functionality",
+      "content": "<p>Integrate room chat UI and functionality</p><p><strong>Commit:</strong> <code>de7700a</code></p><p>- Added `MultiplayerChatPanel` component to handle room and direct chat threads in multiplayer sessions.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "de7700aa32704e1c93f28c257b0c93275e77b6d2",
+        "shortHash": "de7700a",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/de7700aa32704e1c93f28c257b0c93275e77b6d2"
+      }
+    },
+    {
+      "id": "git-8af82e8",
+      "date": "2026-02-28T02:52:10.000Z",
+      "title": "Refine post-game idle expiration logic and session activity marking",
+      "content": "<p>Refine post-game idle expiration logic and session activity marking</p><p><strong>Commit:</strong> <code>8af82e8</code></p><p>- Removed unused `countAsPlayerAction` flag from `markSessionActivity` calls.</p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "8af82e82ac652f2495f6356ef6b5007d0d716314",
+        "shortHash": "8af82e8",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8af82e82ac652f2495f6356ef6b5007d0d716314"
+      }
+    },
+    {
+      "id": "git-f1afbf3",
+      "date": "2026-02-28T02:43:43.000Z",
+      "title": "Add multiplayer player selection and interaction logic",
+      "content": "<p>Add multiplayer player selection and interaction logic</p><p><strong>Commit:</strong> <code>f1afbf3</code></p><p>- Introduced `setOnMultiplayerPlayerSelect` and `setMultiplayerSelectedPlayer` methods in `hud`.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "f1afbf34099d2c8ed78cd183537d922a18d0b1c0",
+        "shortHash": "f1afbf3",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/f1afbf34099d2c8ed78cd183537d922a18d0b1c0"
+      }
+    },
+    {
+      "id": "git-740f8af",
+      "date": "2026-02-28T02:26:43.000Z",
+      "title": "Refactor player interaction modals, multiplayer chip rail, and forced rehydration logic",
+      "content": "<p>Refactor player interaction modals, multiplayer chip rail, and forced rehydration logic</p><p><strong>Commit:</strong> <code>740f8af</code></p><p>- Added UI for player interaction modals and chip rail, supporting whisper, chaos, and profile actions.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "740f8af2cde8a1f90357f47b1caa949f95889228",
+        "shortHash": "740f8af",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/740f8af2cde8a1f90357f47b1caa949f95889228"
+      }
+    },
+    {
+      "id": "git-0a8cafa",
+      "date": "2026-02-28T01:48:25.000Z",
+      "title": "Introduce auto-seat and auto-ready functionality for multiplayer sessions",
+      "content": "<p>Introduce auto-seat and auto-ready functionality for multiplayer sessions</p><p><strong>Commit:</strong> <code>0a8cafa</code></p><p>- Added `autoSeatReady` toggle for multiplayer room join UI, with customizable config support via `VITE_MULTIPLAYER_AUTO_SEAT_READY_ENABLED`.</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "0a8cafa9220ee6a23e5ccf18bdf648af6e59e3ac",
+        "shortHash": "0a8cafa",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/0a8cafa9220ee6a23e5ccf18bdf648af6e59e3ac"
+      }
+    },
     {
       "id": "git-435e0e4",
       "date": "2026-02-28T01:34:07.000Z",
@@ -29,538 +295,6 @@
         "hash": "fe2ad827ebb76c503f1d3d09e8773bc15db37094",
         "shortHash": "fe2ad82",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/fe2ad827ebb76c503f1d3d09e8773bc15db37094"
-      }
-    },
-    {
-      "id": "git-0380dcd",
-      "date": "2026-02-28T01:10:36.000Z",
-      "title": "Add host and guest `sit` actions to queue lifecycle smoke tests",
-      "content": "<p>Add host and guest `sit` actions to queue lifecycle smoke tests</p><p><strong>Commit:</strong> <code>0380dcd</code></p><p>- Validated `sit` actions for both host and guest during multiplayer queue lifecycle.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "0380dcd29d0bef6521639c0a17cceafc044c8b7f",
-        "shortHash": "0380dcd",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/0380dcd29d0bef6521639c0a17cceafc044c8b7f"
-      }
-    },
-    {
-      "id": "git-00bc7fd",
-      "date": "2026-02-28T00:46:57.000Z",
-      "title": "Multiplayer sit/stand + websocket stability hardening\"",
-      "content": "<p>Multiplayer sit/stand + websocket stability hardening&quot;</p><p><strong>Commit:</strong> <code>00bc7fd</code></p><p>Add sit/stand/ready actions to multiplayer sessions</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "00bc7fd22a8e080da7cdb75da5080a2bc68efbdf",
-        "shortHash": "00bc7fd",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/00bc7fd22a8e080da7cdb75da5080a2bc68efbdf"
-      }
-    },
-    {
-      "id": "git-36614c2",
-      "date": "2026-02-28T00:33:58.000Z",
-      "title": "Refine Firebase deploy smoke tests and URL parsing logic",
-      "content": "<p>Refine Firebase deploy smoke tests and URL parsing logic</p><p><strong>Commit:</strong> <code>36614c2</code></p><p>- Enhanced smoke tests in Firebase deploy workflow to validate Hosting rewrite URLs conditionally.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "36614c28c823fd50ab3cbcbc28d87c0caf2ab052",
-        "shortHash": "36614c2",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/36614c28c823fd50ab3cbcbc28d87c0caf2ab052"
-      }
-    },
-    {
-      "id": "git-813a5d3",
-      "date": "2026-02-28T00:26:54.000Z",
-      "title": "Expose runtime metadata, refine session ID logic, and enhance smoke tests",
-      "content": "<p>Expose runtime metadata, refine session ID logic, and enhance smoke tests</p><p><strong>Commit:</strong> <code>813a5d3</code></p><p>- Added runtime metadata (service, revision, region) to `/healthz` API responses.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "813a5d3a8d98df65b9a77bfada1b7f60e5a18d30",
-        "shortHash": "813a5d3",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/813a5d3a8d98df65b9a77bfada1b7f60e5a18d30"
-      }
-    },
-    {
-      "id": "git-abede84",
-      "date": "2026-02-28T00:16:35.000Z",
-      "title": "Update session join handling with forced rehydration and retry improvements",
-      "content": "<p>Update session join handling with forced rehydration and retry improvements</p><p><strong>Commit:</strong> <code>abede84</code></p><p>- Added `force: true` option to `rehydrateStoreFromAdapter` calls for improved session recovery.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "abede845927a2223cfa485b387c7ca3d0c1b1b06",
-        "shortHash": "abede84",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/abede845927a2223cfa485b387c7ca3d0c1b1b06"
-      }
-    },
-    {
-      "id": "git-b5583c1",
-      "date": "2026-02-28T00:04:52.000Z",
-      "title": "Update session join handling with forced rehydration and retry improvements",
-      "content": "<p>Update session join handling with forced rehydration and retry improvements</p><p><strong>Commit:</strong> <code>b5583c1</code></p><p>- Added `force: true` option to `rehydrateStoreFromAdapter` calls for improved session recovery.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "b5583c1a237c2f54ab8802dde087d5296dfa2744",
-        "shortHash": "b5583c1",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/b5583c1a237c2f54ab8802dde087d5296dfa2744"
-      }
-    },
-    {
-      "id": "git-70ef069",
-      "date": "2026-02-27T23:57:28.000Z",
-      "title": "Improve session join logic, WebSocket upgrade handling, and workflow configs",
-      "content": "<p>Improve session join logic, WebSocket upgrade handling, and workflow configs</p><p><strong>Commit:</strong> <code>70ef069</code></p><p>- Enhanced WebSocket rejection logs to include session and player context.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "70ef069177b4b44860137e6a1fafd6836b7f039d",
-        "shortHash": "70ef069",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/70ef069177b4b44860137e6a1fafd6836b7f039d"
-      }
-    },
-    {
-      "id": "git-33fbca5",
-      "date": "2026-02-27T23:48:59.000Z",
-      "title": "Improve session join logic, WebSocket upgrade handling, and workflow configs",
-      "content": "<p>Improve session join logic, WebSocket upgrade handling, and workflow configs</p><p><strong>Commit:</strong> <code>33fbca5</code></p><p>- Enhanced WebSocket rejection logs to include session and player context.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "33fbca5d2ce86eda5d300d52de4c09a5fe77853e",
-        "shortHash": "33fbca5",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/33fbca5d2ce86eda5d300d52de4c09a5fe77853e"
-      }
-    },
-    {
-      "id": "git-9788802",
-      "date": "2026-02-27T23:14:41.000Z",
-      "title": "Fix diagnostic commands in Firebase deploy workflow",
-      "content": "<p>Fix diagnostic commands in Firebase deploy workflow</p><p><strong>Commit:</strong> <code>9788802</code></p><p>- Added fallback `|| true` to prevent failures during diagnostic steps.</p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "9788802cdb94a108464e7afcbf3e37691b1cbb0f",
-        "shortHash": "9788802",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9788802cdb94a108464e7afcbf3e37691b1cbb0f"
-      }
-    },
-    {
-      "id": "git-1bccc8f",
-      "date": "2026-02-27T23:06:17.000Z",
-      "title": "Add rehydration logic for multiplayer session recovery and WebSocket upgrades",
-      "content": "<p>Add rehydration logic for multiplayer session recovery and WebSocket upgrades</p><p><strong>Commit:</strong> <code>1bccc8f</code></p><p>- Implemented `rehydrateStoreFromAdapter` to reload session data dynamically during client interactions.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "1bccc8ff8167d7aaea010f1cf6c58cd1ab53074a",
-        "shortHash": "1bccc8f",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/1bccc8ff8167d7aaea010f1cf6c58cd1ab53074a"
-      }
-    },
-    {
-      "id": "git-951c31c",
-      "date": "2026-02-27T22:44:51.000Z",
-      "title": "Add auth recovery for tokenized handshake failures and refine API auth modes",
-      "content": "<p>Add auth recovery for tokenized handshake failures and refine API auth modes</p><p><strong>Commit:</strong> <code>951c31c</code></p><p>- Implemented logic for handling pre-open WebSocket token auth failures with retry and cooldowns.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "951c31c77e91b964bbcd20f321591b597a3e3f26",
-        "shortHash": "951c31c",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/951c31c77e91b964bbcd20f321591b597a3e3f26"
-      }
-    },
-    {
-      "id": "git-c306b55",
-      "date": "2026-02-27T22:33:12.000Z",
-      "title": "Add timing controls for multiplayer rounds",
-      "content": "<p>Add timing controls for multiplayer rounds</p><p><strong>Commit:</strong> <code>c306b55</code></p><p>- Added `nextGameStartsAt` and `nextGameAutoStartDelayMs` fields to multiplayer session state and API responses.</p>",
-      "version": "1.0.0",
-      "type": "alert",
-      "source": "commit",
-      "commit": {
-        "hash": "c306b5589be539e24eb74b099159ac65472b221a",
-        "shortHash": "c306b55",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c306b5589be539e24eb74b099159ac65472b221a"
-      }
-    },
-    {
-      "id": "git-01fe1f4",
-      "date": "2026-02-27T22:05:26.000Z",
-      "title": "Add dynamic difficulty balancing and room allocation for public multiplayer sessions",
-      "content": "<p>Add dynamic difficulty balancing and room allocation for public multiplayer sessions</p><p><strong>Commit:</strong> <code>01fe1f4</code></p><p>- Introduced dynamic minimum room allocation per difficulty level (`PUBLIC_ROOM_MIN_PER_DIFFICULTY`).</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "01fe1f4809ab01cc79e62d4b0ec0f24104e0b32f",
-        "shortHash": "01fe1f4",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/01fe1f4809ab01cc79e62d4b0ec0f24104e0b32f"
-      }
-    },
-    {
-      "id": "git-8a491f9",
-      "date": "2026-02-27T22:00:48.000Z",
-      "title": "Add session cleanup sweeps and improve timeout handling",
-      "content": "<p>Add session cleanup sweeps and improve timeout handling</p><p><strong>Commit:</strong> <code>8a491f9</code></p><p>- Introduced `MULTIPLAYER_CLEANUP_INTERVAL_MS` to configure periodic session cleanup intervals.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "8a491f936d394926da11001c2e2e0cb1820513a9",
-        "shortHash": "8a491f9",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8a491f936d394926da11001c2e2e0cb1820513a9"
-      }
-    },
-    {
-      "id": "git-38fb698",
-      "date": "2026-02-27T21:31:47.000Z",
-      "title": "Add session cleanup sweeps and improve timeout handling",
-      "content": "<p>Add session cleanup sweeps and improve timeout handling</p><p><strong>Commit:</strong> <code>38fb698</code></p><p>- Introduced `MULTIPLAYER_CLEANUP_INTERVAL_MS` to configure periodic session cleanup intervals.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "38fb698ec47a06a752fea4519107c72c49d9d0d4",
-        "shortHash": "38fb698",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/38fb698ec47a06a752fea4519107c72c49d9d0d4"
-      }
-    },
-    {
-      "id": "git-abd929e",
-      "date": "2026-02-27T20:57:25.000Z",
-      "title": "Add \"Join Game\" button to multiplayer splash screen and enhance UI actions",
-      "content": "<p>Add &quot;Join Game&quot; button to multiplayer splash screen and enhance UI actions</p><p><strong>Commit:</strong> <code>abd929e</code></p><p>- Added new &quot;Join Game&quot; button with updated localization for `en-US` and `es-ES`.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "abd929e33ff63c1a9fcd5223108b2023b9a9d3b6",
-        "shortHash": "abd929e",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/abd929e33ff63c1a9fcd5223108b2023b9a9d3b6"
-      }
-    },
-    {
-      "id": "git-59974f8",
-      "date": "2026-02-27T20:42:33.000Z",
-      "title": "Add difficulty support for multiplayer sessions and update UI",
-      "content": "<p>Add difficulty support for multiplayer sessions and update UI</p><p><strong>Commit:</strong> <code>59974f8</code></p><p>- Integrated `gameDifficulty` attribute into multiplayer session handling for session creation, joining, and updates.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "59974f8fa469b1bd3327b18f8896219a879348c3",
-        "shortHash": "59974f8",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/59974f8fa469b1bd3327b18f8896219a879348c3"
-      }
-    },
-    {
-      "id": "git-dd38fbf",
-      "date": "2026-02-27T20:01:20.000Z",
-      "title": "Add undo and deselect badge tooltips with styling",
-      "content": "<p>Add undo and deselect badge tooltips with styling</p><p><strong>Commit:</strong> <code>dd38fbf</code></p><p>- Introduced tooltips for undo and deselect badges (`undoBadgeTooltip`, `deselectAll`) with localization support.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "dd38fbfc3ec587f5f954aded73495743c3f12300",
-        "shortHash": "dd38fbf",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/dd38fbfc3ec587f5f954aded73495743c3f12300"
-      }
-    },
-    {
-      "id": "git-7acc14e",
-      "date": "2026-02-27T19:48:13.000Z",
-      "title": "Enhance dice UI styles and interactions",
-      "content": "<p>Enhance dice UI styles and interactions</p><p><strong>Commit:</strong> <code>7acc14e</code></p><p>- Added new visual cues for higher-face dice in the 2D row (`d8`, `d10`, `d12`) with unique tints and box shadows.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "7acc14ec7f6df4c076e87aa93bc076e27b245bfe",
-        "shortHash": "7acc14e",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/7acc14ec7f6df4c076e87aa93bc076e27b245bfe"
-      }
-    },
-    {
-      "id": "git-e55f6e2",
-      "date": "2026-02-27T19:33:24.000Z",
-      "title": "Add feedback form link and update documentation references",
-      "content": "<p>Add feedback form link and update documentation references</p><p><strong>Commit:</strong> <code>e55f6e2</code></p><p>- Added feedback form link to `README.md` for quick user access.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "e55f6e2e065268e62452d7b9da467dc94508a541",
-        "shortHash": "e55f6e2",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/e55f6e2e065268e62452d7b9da467dc94508a541"
-      }
-    },
-    {
-      "id": "git-f3a6411",
-      "date": "2026-02-27T19:27:07.000Z",
-      "title": "Add contributor invite documentation for onboarding details",
-      "content": "<p>Add contributor invite documentation for onboarding details</p><p><strong>Commit:</strong> <code>f3a6411</code></p><p>- Created `WIKI-CONTRIBUTOR-INVITE.md` for outlining project overview, gameplay mechanics, and key code entry points.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "f3a641151da7a7237ece32e63f4fc79d1fbd1ce5",
-        "shortHash": "f3a6411",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/f3a641151da7a7237ece32e63f4fc79d1fbd1ce5"
-      }
-    },
-    {
-      "id": "git-03570fd",
-      "date": "2026-02-27T19:22:49.000Z",
-      "title": "Update modal behavior and session expiry styling",
-      "content": "<p>Update modal behavior and session expiry styling</p><p><strong>Commit:</strong> <code>03570fd</code></p><p>- Refactored modal stack handling by introducing `preserveOpenIds` for selective modal preservation during transitions.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "03570fde2db107f893c2f9eee07bef8864c4e00b",
-        "shortHash": "03570fd",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/03570fde2db107f893c2f9eee07bef8864c4e00b"
-      }
-    },
-    {
-      "id": "git-66352fe",
-      "date": "2026-02-27T18:56:29.000Z",
-      "title": "Add feedback link and configuration",
-      "content": "<p>Add feedback link and configuration</p><p><strong>Commit:</strong> <code>66352fe</code></p><p>- Added &quot;Feedback&quot; button to the splash screen with localization support (`splash.button.feedback`).</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "66352feaebf39723c6e9e0f4864d602d10342f85",
-        "shortHash": "66352fe",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/66352feaebf39723c6e9e0f4864d602d10342f85"
-      }
-    },
-    {
-      "id": "git-61abdb1",
-      "date": "2026-02-27T18:44:54.000Z",
-      "title": "Simplify Firebase deployment workflow by replacing `needs` references with reusable steps and direct outputs",
-      "content": "<p>Simplify Firebase deployment workflow by replacing `needs` references with reusable steps and direct outputs</p><p><strong>Commit:</strong> <code>61abdb1</code></p><p>- Added reusable anchor for `Resolve Deployment Target` to streamline workflow.</p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "61abdb1458b09301e34e20c6cd8e8367af1828ab",
-        "shortHash": "61abdb1",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/61abdb1458b09301e34e20c6cd8e8367af1828ab"
-      }
-    },
-    {
-      "id": "git-69f9fd5",
-      "date": "2026-02-27T18:40:42.000Z",
-      "title": "Fix typo in Firebase deployment workflow job references",
-      "content": "<p>Fix typo in Firebase deployment workflow job references</p><p><strong>Commit:</strong> <code>69f9fd5</code></p><p>- Renamed `resolve-target` to `resolve_target` across `.github/workflows/firebase-deploy.yml`.</p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "69f9fd508047af497eb6c1a738b07d421ae14e84",
-        "shortHash": "69f9fd5",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/69f9fd508047af497eb6c1a738b07d421ae14e84"
-      }
-    },
-    {
-      "id": "git-bdcb2f7",
-      "date": "2026-02-27T18:19:01.000Z",
-      "title": "Refactor Firebase deployment workflows for modularity and selective deployment",
-      "content": "<p>Refactor Firebase deployment workflows for modularity and selective deployment</p><p><strong>Commit:</strong> <code>bdcb2f7</code></p><p>- Added workflow inputs for API, web, and CDN asset deployments.</p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "bdcb2f731c357cc72c5f27c8922bcf543efd9d5f",
-        "shortHash": "bdcb2f7",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/bdcb2f731c357cc72c5f27c8922bcf543efd9d5f"
-      }
-    },
-    {
-      "id": "git-fc9ad10",
-      "date": "2026-02-27T18:04:34.000Z",
-      "title": "Refresh participant liveness on `/auth/refresh` and add periodic heartbeat pings during queue lifecycle tests",
-      "content": "<p>Refresh participant liveness on `/auth/refresh` and add periodic heartbeat pings during queue lifecycle tests</p><p><strong>Commit:</strong> <code>fc9ad10</code></p><p>- Updated `/auth/refresh` to update participant liveness and session activity to prevent stale-heartbeat pruning.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "fc9ad1064630cf9a4f837dedd623cda0279e36f0",
-        "shortHash": "fc9ad10",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/fc9ad1064630cf9a4f837dedd623cda0279e36f0"
-      }
-    },
-    {
-      "id": "git-890be5d",
-      "date": "2026-02-27T17:59:50.000Z",
-      "title": "Refine splash actions and add language selector",
-      "content": "<p>Refine splash actions and add language selector</p><p><strong>Commit:</strong> <code>890be5d</code></p><p>- Removed splash screen &quot;Replay Tutorial&quot; button; tutorial replay is now accessible from the &quot;How to Play&quot; modal.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "890be5db47871adbec40c76aecd8e677ec397b83",
-        "shortHash": "890be5d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/890be5db47871adbec40c76aecd8e677ec397b83"
-      }
-    },
-    {
-      "id": "git-bb73068",
-      "date": "2026-02-27T17:47:57.000Z",
-      "title": "Update queue lifecycle timeout for CI stability and deployment mitigation",
-      "content": "<p>Update queue lifecycle timeout for CI stability and deployment mitigation</p><p><strong>Commit:</strong> <code>bb73068</code></p><p>- Increased default `queueLifecycleWaitMs` to align with production auto-start delay (60s).</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "bb73068c8fecac686c44833227a1b2d58d6756d3",
-        "shortHash": "bb73068",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/bb73068c8fecac686c44833227a1b2d58d6756d3"
-      }
-    },
-    {
-      "id": "git-4f1d3ae",
-      "date": "2026-02-27T17:43:34.000Z",
-      "title": "Centralize branding configuration and integrate runtime brand metadata application",
-      "content": "<p>Centralize branding configuration and integrate runtime brand metadata application</p><p><strong>Commit:</strong> <code>4f1d3ae</code></p><p>- Introduced `gameBrand` configuration with typed branding fields (`productName`, `ogTitle`, `ogDescription`, etc.).</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "4f1d3ae35fea5344bfbe067eae9afbda73d89186",
-        "shortHash": "4f1d3ae",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/4f1d3ae35fea5344bfbe067eae9afbda73d89186"
-      }
-    },
-    {
-      "id": "git-ba6a5ad",
-      "date": "2026-02-27T17:10:52.000Z",
-      "title": "Centralize branding configuration and integrate runtime brand metadata application",
-      "content": "<p>Centralize branding configuration and integrate runtime brand metadata application</p><p><strong>Commit:</strong> <code>ba6a5ad</code></p><p>- Introduced `gameBrand` configuration with typed branding fields (`productName`, `ogTitle`, `ogDescription`, etc.).</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "ba6a5adf375692d485182a9a54578a1a57a0ec0f",
-        "shortHash": "ba6a5ad",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/ba6a5adf375692d485182a9a54578a1a57a0ec0f"
-      }
-    },
-    {
-      "id": "git-9beabb4",
-      "date": "2026-02-27T16:55:23.000Z",
-      "title": "Add post-game lifecycle and next-game queuing logic",
-      "content": "<p>Add post-game lifecycle and next-game queuing logic</p><p><strong>Commit:</strong> <code>9beabb4</code></p><p>- Implemented lifecycle management for post-game sessions with inactivity handling and countdowns.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "9beabb472f11c1c5f5496e279a99a23a208f7c78",
-        "shortHash": "9beabb4",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9beabb472f11c1c5f5496e279a99a23a208f7c78"
-      }
-    },
-    {
-      "id": "git-3224403",
-      "date": "2026-02-27T16:28:39.000Z",
-      "title": "Add multiplayer room chat and whisper functionality",
-      "content": "<p>Add multiplayer room chat and whisper functionality</p><p><strong>Commit:</strong> <code>3224403</code></p><p>- Introduced support for public room chat and direct whispers (`room_channel`).</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "32244037aae21e05581bbf645209edd66f5758d7",
-        "shortHash": "3224403",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/32244037aae21e05581bbf645209edd66f5758d7"
-      }
-    },
-    {
-      "id": "git-38acc7d",
-      "date": "2026-02-27T15:46:53.000Z",
-      "title": "Add support for turn actions and session state updates with dice selection logic",
-      "content": "<p>Add support for turn actions and session state updates with dice selection logic</p><p><strong>Commit:</strong> <code>38acc7d</code></p><p>- Introduced `select` turn action for granular dice selection.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "38acc7d353410a342ddd28479e64b49d1b38f74e",
-        "shortHash": "38acc7d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/38acc7d353410a342ddd28479e64b49d1b38f74e"
-      }
-    },
-    {
-      "id": "git-178e337",
-      "date": "2026-02-27T15:21:04.000Z",
-      "title": "Add `canManualNewGame` checks to restrict manual game starts during multiplayer sessions",
-      "content": "<p>Add `canManualNewGame` checks to restrict manual game starts during multiplayer sessions</p><p><strong>Commit:</strong> <code>178e337</code></p><p>- Introduced `canManualNewGame()` method to ensure manual game starts are disabled in multiplayer mode or active session states.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "178e337675bcb052027d6c2ad294a13995f51160",
-        "shortHash": "178e337",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/178e337675bcb052027d6c2ad294a13995f51160"
-      }
-    },
-    {
-      "id": "git-8c75625",
-      "date": "2026-02-27T15:11:01.000Z",
-      "title": "Add server-synced game start time and clock offset logic",
-      "content": "<p>Add server-synced game start time and clock offset logic</p><p><strong>Commit:</strong> <code>8c75625</code></p><p>- Introduced `gameStartedAt` and `serverNow` fields to synchronize game start and server timestamps.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "8c75625cde5bd65b25ccaf92acdd3566461ca253",
-        "shortHash": "8c75625",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8c75625cde5bd65b25ccaf92acdd3566461ca253"
-      }
-    },
-    {
-      "id": "git-a45c19d",
-      "date": "2026-02-27T14:59:54.000Z",
-      "title": "Add multiplayer invite autostart and stale participant pruning",
-      "content": "<p>Add multiplayer invite autostart and stale participant pruning</p><p><strong>Commit:</strong> <code>a45c19d</code></p><p>- Added `maybeAutoStartFromMultiplayerInvite` for initiating sessions directly from invite links.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "a45c19decf2b699971bac143fbcf8d2283c49584",
-        "shortHash": "a45c19d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a45c19decf2b699971bac143fbcf8d2283c49584"
-      }
-    },
-    {
-      "id": "git-9acfb0c",
-      "date": "2026-02-27T14:37:40.000Z",
-      "title": "Add support for queuing participants for the next game",
-      "content": "<p>Add support for queuing participants for the next game</p><p><strong>Commit:</strong> <code>9acfb0c</code></p><p>- Introduced `queuedForNextGame` attribute to manage participants waiting for the next game.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "9acfb0c004e9d97313e1f12731990a5066bd50f2",
-        "shortHash": "9acfb0c",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9acfb0c004e9d97313e1f12731990a5066bd50f2"
       }
     }
   ]

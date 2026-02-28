@@ -1289,28 +1289,47 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
         lastHeartbeatPingAt = now;
       }
 
-      let refreshedAttempt = await apiRequestWithStatus(
-        `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/auth/refresh`,
-        {
+      const requestAuthRefresh = () =>
+        apiRequestWithStatus(`/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/auth/refresh`, {
           method: "POST",
           accessToken: hostAccessToken,
           body: { playerId: queueHostPlayerId },
-        }
-      );
+        });
+
+      let refreshedAttempt = await requestAuthRefresh();
       if (refreshedAttempt.ok !== true && isTransientSessionExpiryFailure(refreshedAttempt)) {
-        const rejoinAttempt = await apiRequestWithStatus(
-          `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/join`,
-          {
-            method: "POST",
-            body: {
-              playerId: queueHostPlayerId,
-              displayName: "E2E Queue Host",
-            },
+        for (let recoveryAttempt = 1; recoveryAttempt <= 3; recoveryAttempt += 1) {
+          const rejoinAttempt = await apiRequestWithStatus(
+            `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/join`,
+            {
+              method: "POST",
+              body: {
+                playerId: queueHostPlayerId,
+                displayName: "E2E Queue Host",
+              },
+            }
+          );
+          if (rejoinAttempt.ok === true) {
+            refreshedAttempt = rejoinAttempt;
+            log(
+              `Queue lifecycle auth refresh recovered via session rejoin fallback (attempt ${recoveryAttempt}).`
+            );
+            break;
           }
-        );
-        if (rejoinAttempt.ok === true) {
-          refreshedAttempt = rejoinAttempt;
-          log("Queue lifecycle auth refresh recovered via session rejoin fallback.");
+          if (!isTransientSessionExpiryFailure(rejoinAttempt)) {
+            refreshedAttempt = rejoinAttempt;
+            break;
+          }
+          if (recoveryAttempt >= 3) {
+            refreshedAttempt = rejoinAttempt;
+            break;
+          }
+
+          await waitMs(150 * recoveryAttempt);
+          refreshedAttempt = await requestAuthRefresh();
+          if (!isTransientSessionExpiryFailure(refreshedAttempt)) {
+            break;
+          }
         }
       }
       if (!refreshedAttempt.ok) {
