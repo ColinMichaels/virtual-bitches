@@ -29,6 +29,7 @@
 - Eliminated active-round synthetic next-game timestamps from session snapshots, so clients only receive `nextGameStartsAt` when a real post-game schedule exists.
 - Fixed post-game schedule drift: `scheduleSessionPostGameLifecycle` now preserves an existing `nextGameStartsAt` instead of recalculating it on every lifecycle reconcile call.
 - Impact: heartbeat/auth-refresh activity during winner queue no longer keeps pushing auto-start forward, so fresh rounds start on schedule.
+- Hardened session rehydration retries for multiplayer lifecycle endpoints (`join`, `heartbeat`, `queue-next`, and auth-refresh participant recovery) to reduce transient `session_expired` responses under distributed Firestore read/write lag.
 
 ### Difficulty-Based Turn Timeout Policy
 - Added per-difficulty multiplayer turn timeout configuration on API:
