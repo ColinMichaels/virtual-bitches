@@ -1319,9 +1319,9 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
           }
           if (!isTransientQueueRefreshFailure(rejoinAttempt)) {
             refreshedAttempt = rejoinAttempt;
-          throw new Error(
-            `request failed (POST /multiplayer/sessions/${queueSessionId}/join) status=${rejoinAttempt.status} body=${JSON.stringify(rejoinAttempt.body)}`
-          );
+            throw new Error(
+              `request failed (POST /multiplayer/sessions/${queueSessionId}/join) status=${rejoinAttempt.status} body=${JSON.stringify(rejoinAttempt.body)}`
+            );
           }
           if (recoveryAttempt >= 3) {
             refreshedAttempt = rejoinAttempt;

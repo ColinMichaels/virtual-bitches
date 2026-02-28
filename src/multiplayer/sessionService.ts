@@ -302,7 +302,7 @@ export class MultiplayerSessionService {
     sessionComplete?: boolean;
     completedAt?: number | null;
     gameStartedAt?: number;
-    nextGameStartsAt?: number;
+    nextGameStartsAt?: number | null;
     nextGameAutoStartDelayMs?: number;
     expiresAt?: number;
     serverNow?: number;
@@ -348,8 +348,12 @@ export class MultiplayerSessionService {
     if (typeof update.gameStartedAt === "number" && Number.isFinite(update.gameStartedAt)) {
       nextSession.gameStartedAt = Math.floor(update.gameStartedAt);
     }
-    if (typeof update.nextGameStartsAt === "number" && Number.isFinite(update.nextGameStartsAt)) {
-      nextSession.nextGameStartsAt = Math.floor(update.nextGameStartsAt);
+    if (Object.prototype.hasOwnProperty.call(update, "nextGameStartsAt")) {
+      if (typeof update.nextGameStartsAt === "number" && Number.isFinite(update.nextGameStartsAt)) {
+        nextSession.nextGameStartsAt = Math.floor(update.nextGameStartsAt);
+      } else if (Object.prototype.hasOwnProperty.call(nextSession, "nextGameStartsAt")) {
+        delete nextSession.nextGameStartsAt;
+      }
     }
     if (
       typeof update.nextGameAutoStartDelayMs === "number" &&

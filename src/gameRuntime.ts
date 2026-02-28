@@ -965,7 +965,7 @@ class Game implements GameCallbacks {
   private applyMultiplayerClockFromServer(
     source: {
       gameStartedAt?: number;
-      nextGameStartsAt?: number;
+      nextGameStartsAt?: number | null;
       nextGameAutoStartDelayMs?: number;
       createdAt?: number;
       serverNow?: number;
@@ -981,6 +981,16 @@ class Game implements GameCallbacks {
     if (normalizedRoundCycleMs) {
       this.multiplayerRoundCycleMs = normalizedRoundCycleMs;
     }
+    const explicitNextGameStartsAt =
+      typeof source.nextGameStartsAt === "number" &&
+      Number.isFinite(source.nextGameStartsAt) &&
+      source.nextGameStartsAt > 0
+        ? Math.floor(source.nextGameStartsAt)
+        : null;
+    const localCountdownDeadlineAt =
+      explicitNextGameStartsAt !== null
+        ? this.mapServerTimestampToLocalClock(explicitNextGameStartsAt) ?? explicitNextGameStartsAt
+        : null;
 
     const explicitGameStartedAt =
       typeof source.gameStartedAt === "number" &&
@@ -999,16 +1009,6 @@ class Game implements GameCallbacks {
     const knownServerGameStartAt = serverGameStartAt ?? this.gameStartServerAt;
     if (!serverGameStartAt) {
       if (this.playMode === "multiplayer" && knownServerGameStartAt) {
-        const explicitNextGameStartsAt =
-          typeof source.nextGameStartsAt === "number" &&
-          Number.isFinite(source.nextGameStartsAt) &&
-          source.nextGameStartsAt > 0
-            ? Math.floor(source.nextGameStartsAt)
-            : null;
-        const serverCountdownDeadlineAt =
-          explicitNextGameStartsAt ?? (knownServerGameStartAt + this.multiplayerRoundCycleMs);
-        const localCountdownDeadlineAt =
-          this.mapServerTimestampToLocalClock(serverCountdownDeadlineAt) ?? serverCountdownDeadlineAt;
         this.hud.setRoundCountdownDeadline(localCountdownDeadlineAt);
       }
       return;
@@ -1025,16 +1025,6 @@ class Game implements GameCallbacks {
       if (!fallbackServerGameStartAt || this.playMode !== "multiplayer") {
         return;
       }
-      const explicitNextGameStartsAt =
-        typeof source.nextGameStartsAt === "number" &&
-        Number.isFinite(source.nextGameStartsAt) &&
-        source.nextGameStartsAt > 0
-          ? Math.floor(source.nextGameStartsAt)
-          : null;
-      const serverCountdownDeadlineAt =
-        explicitNextGameStartsAt ?? (fallbackServerGameStartAt + this.multiplayerRoundCycleMs);
-      const localCountdownDeadlineAt =
-        this.mapServerTimestampToLocalClock(serverCountdownDeadlineAt) ?? serverCountdownDeadlineAt;
       this.hud.setRoundCountdownDeadline(localCountdownDeadlineAt);
       return;
     }
@@ -1043,16 +1033,6 @@ class Game implements GameCallbacks {
     this.gameStartTime = localGameStartAt;
     this.hud.setGameClockStart(this.gameStartTime);
     if (this.playMode === "multiplayer") {
-      const explicitNextGameStartsAt =
-        typeof source.nextGameStartsAt === "number" &&
-        Number.isFinite(source.nextGameStartsAt) &&
-        source.nextGameStartsAt > 0
-          ? Math.floor(source.nextGameStartsAt)
-          : null;
-      const serverCountdownDeadlineAt =
-        explicitNextGameStartsAt ?? (serverGameStartAt + this.multiplayerRoundCycleMs);
-      const localCountdownDeadlineAt =
-        this.mapServerTimestampToLocalClock(serverCountdownDeadlineAt) ?? serverCountdownDeadlineAt;
       this.hud.setRoundCountdownDeadline(localCountdownDeadlineAt);
     }
   }
@@ -3623,6 +3603,7 @@ class Game implements GameCallbacks {
     const hasTurnState = Object.prototype.hasOwnProperty.call(message, "turnState");
     const hasStandings = Object.prototype.hasOwnProperty.call(message, "standings");
     const hasCompletedAt = Object.prototype.hasOwnProperty.call(message, "completedAt");
+    const hasNextGameStartsAt = Object.prototype.hasOwnProperty.call(message, "nextGameStartsAt");
     const syncedSession = this.multiplayerSessionService.syncSessionState({
       sessionId: message.sessionId,
       roomCode: message.roomCode,
@@ -3639,8 +3620,8 @@ class Game implements GameCallbacks {
       ...(typeof message.gameStartedAt === "number" && Number.isFinite(message.gameStartedAt)
         ? { gameStartedAt: message.gameStartedAt }
         : {}),
-      ...(typeof message.nextGameStartsAt === "number" && Number.isFinite(message.nextGameStartsAt)
-        ? { nextGameStartsAt: message.nextGameStartsAt }
+      ...(hasNextGameStartsAt
+        ? { nextGameStartsAt: message.nextGameStartsAt ?? null }
         : {}),
       ...(typeof message.nextGameAutoStartDelayMs === "number" &&
       Number.isFinite(message.nextGameAutoStartDelayMs)

@@ -1,0 +1,52 @@
+# BISCUITS - Session Summary
+**Date:** February 28, 2026  
+**Focus:** Deploy stabilization cleanup, multiplayer post-round timing fixes, and round-clock accuracy
+
+---
+
+## Delivered
+
+### Branch and Merge Cleanup
+- Merged `origin/dev` into `bugfix/fix-api-deploy` and resolved the `api/e2e/smoke.mjs` conflict.
+- Cleaned the winner-queue auth-refresh fallback block formatting in `api/e2e/smoke.mjs` to remove merge artifact indentation drift.
+- Kept smoke resiliency behavior (transient refresh recovery via rejoin) while improving readability/maintainability.
+
+### Multiplayer Post-Round Lifecycle Fixes
+- Fixed next-game scheduling baseline so `nextGameStartsAt` is now computed from **round completion time** instead of prior `gameStartedAt`.
+- Updated fallback next-game timestamp resolution to use the supplied event timestamp (`fallback + delay`) when no explicit post-game schedule exists.
+- Eliminated active-round synthetic next-game timestamps from session snapshots, so clients only receive `nextGameStartsAt` when a real post-game schedule exists.
+
+### Difficulty-Based Turn Timeout Policy
+- Added per-difficulty multiplayer turn timeout configuration on API:
+  - `easy`: 40s
+  - `normal`: 30s
+  - `hard`: 15s
+- Added env overrides:
+  - `MULTIPLAYER_TURN_TIMEOUT_EASY_MS`
+  - `MULTIPLAYER_TURN_TIMEOUT_NORMAL_MS`
+  - `MULTIPLAYER_TURN_TIMEOUT_HARD_MS`
+- Preserved `TURN_TIMEOUT_MS` as the normal/default baseline input for backward compatibility.
+- Applied difficulty timeout resolution across turn-state creation and timeout reconciliation paths so runtime behavior is consistent.
+
+### Multiplayer Round Clock Behavior
+- Updated client multiplayer clock sync logic to set countdown mode only when an explicit `nextGameStartsAt` is present.
+- Removed active-round fallback countdown behavior (`gameStart + roundCycle`) that previously forced countdown mode during live rounds.
+- Result: active rounds now show elapsed game time correctly; post-round states continue to show countdown when scheduled.
+
+---
+
+## Validation Snapshot
+
+### Confirmed
+- `node --check api/server.mjs` passes.
+- `npm run build` passes (`tsc` + `vite build`).
+
+### Environment-Limited
+- `npm run test:session-service` cannot run in this sandbox due local IPC/listen restriction (`EPERM` from `tsx` pipe listener).
+
+---
+
+## Next Gameplay Follow-Up
+1. Tune winner modal minimum display window against next-game auto-start so UX remains readable under rapid state transitions.
+2. Add targeted API + runtime tests for per-difficulty timeout transitions and post-game scheduling drift.
+3. Add regression coverage for HUD elapsed-vs-countdown mode switching in multiplayer round lifecycle states.

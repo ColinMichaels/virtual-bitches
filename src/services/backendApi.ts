@@ -151,7 +151,7 @@ export interface MultiplayerSessionRecord {
   completedAt?: number | null;
   createdAt: number;
   gameStartedAt?: number;
-  nextGameStartsAt?: number;
+  nextGameStartsAt?: number | null;
   nextGameAutoStartDelayMs?: number;
   lastActivityAt?: number;
   expiresAt?: number;
