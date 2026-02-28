@@ -177,7 +177,7 @@ async function run() {
   assert(typeof created?.sessionId === "string", "create session returned no sessionId");
   assert(created?.auth?.accessToken, "create session returned no access token");
   activeSessionId = created.sessionId;
-  const hostAccessToken = created.auth.accessToken;
+  let hostAccessToken = created.auth.accessToken;
 
   const joinedAttempt = await joinSessionByIdWithTransientRetry(
     activeSessionId,
@@ -217,6 +217,85 @@ async function run() {
   );
   guestMessageBuffer = createSocketMessageBuffer(guestSocket);
 
+  const setParticipantStateWithTransientRecovery = async ({
+    sessionId,
+    playerId,
+    displayName,
+    action,
+    accessToken,
+    label,
+    maxAttempts = 6,
+    initialDelayMs = 180,
+  }) => {
+    let token = accessToken;
+    let lastFailure = null;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const response = await apiRequestWithStatus(
+        `/multiplayer/sessions/${encodeURIComponent(sessionId)}/participant-state`,
+        {
+          method: "POST",
+          accessToken: token,
+          body: {
+            playerId,
+            action,
+          },
+        }
+      );
+      if (response.ok && response.body?.ok === true) {
+        return {
+          body: response.body,
+          accessToken: token,
+        };
+      }
+
+      lastFailure = response;
+      const failureReason = String(response?.body?.reason ?? "unknown");
+      const transientSessionExpired =
+        failureReason === "session_expired" ||
+        (response.status === 410 && response.body?.reason === "session_expired");
+      if (!transientSessionExpired && !isTransientQueueRefreshFailure(response)) {
+        return {
+          body: response.body,
+          accessToken: token,
+        };
+      }
+
+      if (attempt >= maxAttempts - 1) {
+        break;
+      }
+
+      try {
+        const recovered = await refreshSessionAuthWithRecovery({
+          sessionId,
+          playerId,
+          displayName,
+          accessToken: token,
+          maxAttempts: 4,
+          initialDelayMs: Math.max(120, initialDelayMs),
+        });
+        token = recovered.accessToken;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error ?? "");
+        if (!message.toLowerCase().includes("session_expired")) {
+          throw error;
+        }
+      }
+
+      await waitMs(Math.max(50, initialDelayMs * (attempt + 1)));
+    }
+
+    if (lastFailure?.body) {
+      return {
+        body: lastFailure.body,
+        accessToken: token,
+      };
+    }
+    throw new Error(
+      `${label} failed after ${maxAttempts} attempt(s) (status=${lastFailure?.status ?? "unknown"} body=${JSON.stringify(lastFailure?.body ?? null)})`
+    );
+  };
+
   const unauthorizedParticipantState = await apiRequestWithStatus(
     `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
     {
@@ -233,65 +312,61 @@ async function run() {
     "participant-state should reject missing session auth token"
   );
 
-  const hostSit = await apiRequest(
-    `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
-    {
-      method: "POST",
-      accessToken: hostAccessToken,
-      body: {
-        playerId: hostPlayerId,
-        action: "sit",
-      },
-    }
-  );
+  const hostSitOutcome = await setParticipantStateWithTransientRecovery({
+    sessionId: activeSessionId,
+    playerId: hostPlayerId,
+    displayName: "E2E Host",
+    action: "sit",
+    accessToken: hostAccessToken,
+    label: "host sit participant-state",
+  });
+  hostAccessToken = hostSitOutcome.accessToken;
+  const hostSit = hostSitOutcome.body;
   assert(
     hostSit?.ok === true,
     `host sit participant-state did not return ok=true (reason=${String(hostSit?.reason ?? "unknown")})`
   );
 
-  const guestSit = await apiRequest(
-    `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
-    {
-      method: "POST",
-      accessToken: guestAccessToken,
-      body: {
-        playerId: guestPlayerId,
-        action: "sit",
-      },
-    }
-  );
+  const guestSitOutcome = await setParticipantStateWithTransientRecovery({
+    sessionId: activeSessionId,
+    playerId: guestPlayerId,
+    displayName: "E2E Guest",
+    action: "sit",
+    accessToken: guestAccessToken,
+    label: "guest sit participant-state",
+  });
+  guestAccessToken = guestSitOutcome.accessToken;
+  const guestSit = guestSitOutcome.body;
   assert(
     guestSit?.ok === true,
     `guest sit participant-state did not return ok=true (reason=${String(guestSit?.reason ?? "unknown")})`
   );
 
-  const hostReady = await apiRequest(
-    `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
-    {
-      method: "POST",
-      accessToken: hostAccessToken,
-      body: {
-        playerId: hostPlayerId,
-        action: "ready",
-      },
-    }
-  );
+  const hostReadyOutcome = await setParticipantStateWithTransientRecovery({
+    sessionId: activeSessionId,
+    playerId: hostPlayerId,
+    displayName: "E2E Host",
+    action: "ready",
+    accessToken: hostAccessToken,
+    label: "host ready participant-state",
+  });
+  hostAccessToken = hostReadyOutcome.accessToken;
+  const hostReady = hostReadyOutcome.body;
   assert(
     hostReady?.ok === true,
     `host ready participant-state did not return ok=true (reason=${String(hostReady?.reason ?? "unknown")})`
   );
 
-  const guestReady = await apiRequest(
-    `/multiplayer/sessions/${encodeURIComponent(activeSessionId)}/participant-state`,
-    {
-      method: "POST",
-      accessToken: guestAccessToken,
-      body: {
-        playerId: guestPlayerId,
-        action: "ready",
-      },
-    }
-  );
+  const guestReadyOutcome = await setParticipantStateWithTransientRecovery({
+    sessionId: activeSessionId,
+    playerId: guestPlayerId,
+    displayName: "E2E Guest",
+    action: "ready",
+    accessToken: guestAccessToken,
+    label: "guest ready participant-state",
+  });
+  guestAccessToken = guestReadyOutcome.accessToken;
+  const guestReady = guestReadyOutcome.body;
   assert(
     guestReady?.ok === true,
     `guest ready participant-state did not return ok=true (reason=${String(guestReady?.reason ?? "unknown")})`
