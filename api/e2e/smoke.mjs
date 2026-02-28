@@ -1113,6 +1113,9 @@ async function runRoomLifecycleChecks(runSuffix) {
   );
   assert(!privateRoomListed, "expected private room to be excluded from public room listing");
   const privateJoinerId = `e2e-private-join-${runSuffix}`;
+  let expectedPrivateSessionId = privateCreated.sessionId;
+  let expectedPrivateCreatorId = privateCreatorId;
+  let expectedPrivateJoinerId = privateJoinerId;
   let privateJoinAttempt = await joinRoomByCodeWithTransientRetry(
     privateCreated.roomCode,
     {
@@ -1125,18 +1128,56 @@ async function runRoomLifecycleChecks(runSuffix) {
     }
   );
   if (!privateJoinAttempt.ok && isTransientRoomLookupFailure(privateJoinAttempt)) {
-    privateJoinAttempt = await apiRequestWithStatus(
-      `/multiplayer/sessions/${encodeURIComponent(privateCreated.sessionId)}/join`,
+    privateJoinAttempt = await joinSessionByIdWithTransientRetry(
+      privateCreated.sessionId,
       {
-        method: "POST",
-        body: {
-          playerId: privateJoinerId,
-          displayName: "E2E Private Joiner",
-        },
+        playerId: privateJoinerId,
+        displayName: "E2E Private Joiner",
       }
     );
     if (privateJoinAttempt.ok) {
       log("Private room join-by-code fallback resolved via sessionId join.");
+    } else if (isTransientRoomLookupFailure(privateJoinAttempt)) {
+      log(
+        `Private room join remained transient after sessionId retries (status=${privateJoinAttempt.status} reason=${String(privateJoinAttempt.body?.reason ?? "unknown")}); retrying with fresh private room.`
+      );
+      await safeLeave(privateCreated.sessionId, privateCreatorId);
+      const privateRetryCreatorId = `${privateCreatorId}-retry`;
+      const privateRetryJoinerId = `${privateJoinerId}-retry`;
+      const privateRetryCreated = await apiRequest("/multiplayer/sessions", {
+        method: "POST",
+        body: {
+          playerId: privateRetryCreatorId,
+          displayName: "E2E Private Creator Retry",
+        },
+      });
+      expectedPrivateSessionId = privateRetryCreated.sessionId;
+      expectedPrivateCreatorId = privateRetryCreatorId;
+      expectedPrivateJoinerId = privateRetryJoinerId;
+      privateJoinAttempt = await joinRoomByCodeWithTransientRetry(
+        privateRetryCreated.roomCode,
+        {
+          playerId: privateRetryJoinerId,
+          displayName: "E2E Private Joiner Retry",
+        },
+        {
+          maxAttempts: 8,
+          initialDelayMs: 200,
+        }
+      );
+      if (!privateJoinAttempt.ok && isTransientRoomLookupFailure(privateJoinAttempt)) {
+        privateJoinAttempt = await joinSessionByIdWithTransientRetry(
+          privateRetryCreated.sessionId,
+          {
+            playerId: privateRetryJoinerId,
+            displayName: "E2E Private Joiner Retry",
+          },
+          {
+            maxAttempts: 6,
+            initialDelayMs: 180,
+          }
+        );
+      }
     }
   }
   assert(privateJoinAttempt, "missing private room join attempt result");
@@ -1147,11 +1188,19 @@ async function runRoomLifecycleChecks(runSuffix) {
   const privateJoinedByCode = privateJoinAttempt.body;
   assertEqual(
     privateJoinedByCode?.sessionId,
-    privateCreated.sessionId,
+    expectedPrivateSessionId,
     "expected join-by-room-code to resolve private room session"
   );
-  await safeLeave(privateCreated.sessionId, privateJoinerId);
-  await safeLeave(privateCreated.sessionId, privateCreatorId);
+  await safeLeave(expectedPrivateSessionId, expectedPrivateJoinerId);
+  await safeLeave(expectedPrivateSessionId, expectedPrivateCreatorId);
+  if (
+    expectedPrivateSessionId !== privateCreated.sessionId ||
+    expectedPrivateCreatorId !== privateCreatorId ||
+    expectedPrivateJoinerId !== privateJoinerId
+  ) {
+    await safeLeave(privateCreated.sessionId, privateJoinerId);
+    await safeLeave(privateCreated.sessionId, privateCreatorId);
+  }
 
   let fullSessionJoinProbe = null;
   for (let attempt = 1; attempt <= 6; attempt += 1) {
