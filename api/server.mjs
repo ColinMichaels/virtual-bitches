@@ -6517,6 +6517,14 @@ function registerParticipantTimeoutStrike(participant, round) {
   return nextCount;
 }
 
+function clearParticipantTimeoutStrike(participant) {
+  if (!participant || typeof participant !== "object" || isBotParticipant(participant)) {
+    return;
+  }
+  participant.turnTimeoutRound = null;
+  participant.turnTimeoutCount = 0;
+}
+
 function standParticipantIntoObserverMode(participant, timestamp = Date.now()) {
   if (!participant || typeof participant !== "object" || isBotParticipant(participant)) {
     return false;
@@ -8024,8 +8032,7 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
 
   let timeoutReason = "turn_timeout";
   const timeoutNow = Date.now();
-  const timeoutRound =
-    Number.isFinite(turnState.round) && turnState.round > 0 ? Math.floor(turnState.round) : 1;
+  const timeoutRoundScope = resolveSessionGameStartedAt(session, timeoutNow);
   const timeoutPhase = normalizeTurnPhase(turnState.phase);
   if (timeoutPhase === TURN_PHASES.awaitScore) {
     const pendingScoreSummary = normalizeTurnScoreSummary(turnState.lastScoreSummary);
@@ -8083,7 +8090,7 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
     }
   }
 
-  const timeoutStrikeCount = registerParticipantTimeoutStrike(timedOutParticipant, timeoutRound);
+  const timeoutStrikeCount = registerParticipantTimeoutStrike(timedOutParticipant, timeoutRoundScope);
   let forcedObserverStand = false;
   if (timeoutStrikeCount >= TURN_TIMEOUT_STAND_STRIKE_LIMIT) {
     forcedObserverStand = standParticipantIntoObserverMode(timedOutParticipant, timeoutNow);
@@ -8095,7 +8102,7 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
       broadcastSystemRoomChannelMessage(sessionId, {
         topic: "seat_state",
         title: timedOutName,
-        message: `${timedOutName} timed out twice this round and moved to observer lounge.`,
+        message: `${timedOutName} timed out twice and moved to observer lounge.`,
         severity: "warning",
         timestamp: timeoutNow,
       });
@@ -9656,6 +9663,9 @@ function handleTurnActionMessage(client, session, payload) {
   }
 
   turnState.updatedAt = Date.now();
+  if (action === "roll" || action === "score") {
+    clearParticipantTimeoutStrike(session.participants[client.playerId]);
+  }
   const message = buildTurnActionMessage(
     session,
     client.playerId,
@@ -9713,6 +9723,7 @@ function handleTurnEndMessage(client, session) {
     return;
   }
 
+  clearParticipantTimeoutStrike(session.participants[client.playerId]);
   const advanced = advanceSessionTurn(session, client.playerId, { source: "player" });
   if (!advanced) {
     sendSocketError(client, "turn_advance_failed", "turn_advance_failed");

@@ -30,6 +30,7 @@ const ACTIVE_SEAT_PULSE_SPEED = 0.0072;
 const ACTIVE_SEAT_SURGE_SPEED = 0.0106;
 const AVATAR_TEXTURE_RETRY_BASE_MS = 20000;
 const AVATAR_TEXTURE_RETRY_MAX_MS = 5 * 60 * 1000;
+const LOUNGE_OFFSET_DISTANCE = 3.2;
 
 type SeatChatBubbleTone = "info" | "success" | "warning" | "error";
 
@@ -61,6 +62,7 @@ export interface SeatState {
   index: number;
   occupied: boolean;
   isCurrentPlayer: boolean;
+  isInLounge?: boolean;
   isBot?: boolean;
   playerName?: string;
   avatarUrl?: string;
@@ -75,6 +77,7 @@ export interface SeatState {
 export class PlayerSeatRenderer {
   private scene: Scene;
   private seatMeshes: Map<number, Mesh> = new Map();
+  private seatBasePositions: Map<number, Vector3> = new Map();
   private seatAvatarMeshes: Map<number, Mesh> = new Map();
   private seatHeadMeshes: Map<number, Mesh> = new Map();
   private namePlateMeshes: Map<number, Mesh> = new Map();
@@ -164,6 +167,7 @@ export class PlayerSeatRenderer {
 
     pedestal.rotation.y = seat.angle + Math.PI;
     this.seatMeshes.set(seat.index, pedestal);
+    this.seatBasePositions.set(seat.index, pedestal.position.clone());
     this.seatAvatarMeshes.set(seat.index, avatar);
     this.seatHeadMeshes.set(seat.index, avatar);
     this.seatAvatarTextures.set(seat.index, { url: undefined, texture: null });
@@ -488,6 +492,9 @@ export class PlayerSeatRenderer {
     if (merged.isCurrentPlayer) {
       merged.occupied = true;
     }
+    if (merged.occupied !== true) {
+      merged.isInLounge = false;
+    }
     if (!Number.isFinite(merged.score) || (merged.score as number) < 0) {
       merged.score = 0;
     }
@@ -525,9 +532,11 @@ export class PlayerSeatRenderer {
     const headMat = headMesh.material as StandardMaterial;
     const pedestalMat = pedestal.material as StandardMaterial;
     const scoreZoneMat = scoreZone.material as StandardMaterial;
+    const basePosition = this.seatBasePositions.get(seatIndex);
 
     const isCurrentPlayer = state.isCurrentPlayer === true;
     const isOccupied = state.occupied === true || isCurrentPlayer;
+    const isInLounge = state.isInLounge === true && isOccupied;
     const isBot = state.isBot === true;
     const isComplete = state.isComplete === true;
     const hasAvatarTexture = this.applySeatAvatarTexture(
@@ -539,7 +548,19 @@ export class PlayerSeatRenderer {
     pedestal.scaling = new Vector3(1, 1, 1);
     avatarMesh.scaling = new Vector3(1, 1, 1);
     avatarMesh.position.y = AVATAR_PANEL_HEIGHT;
+    if (basePosition) {
+      pedestal.position.copyFrom(basePosition);
+      if (isInLounge) {
+        const outward = new Vector3(basePosition.x, 0, basePosition.z);
+        if (outward.lengthSquared() > 0.0001) {
+          outward.normalize().scaleInPlace(LOUNGE_OFFSET_DISTANCE);
+          pedestal.position.x = basePosition.x + outward.x;
+          pedestal.position.z = basePosition.z + outward.z;
+        }
+      }
+    }
     scoreZone.scaling = new Vector3(1, 1, 1);
+    scoreZone.isVisible = !isInLounge;
     namePlate.scaling = new Vector3(1, 1, 1);
     namePlate.position.y = 4.5;
     scoreBadge.position.y = 5.4;
@@ -554,7 +575,7 @@ export class PlayerSeatRenderer {
       }
     }
 
-    if (isCurrentPlayer) {
+    if (isCurrentPlayer && !isInLounge) {
       const color = state.avatarColor || new Color3(0.24, 0.84, 0.36);
       pedestalMat.diffuseColor = new Color3(0.2, 0.8, 0.3);
       pedestalMat.emissiveColor = new Color3(0.1, 0.38, 0.15);
@@ -565,7 +586,7 @@ export class PlayerSeatRenderer {
       headMat.emissiveColor = hasAvatarTexture ? new Color3(0.06, 0.06, 0.06) : new Color3(0, 0, 0);
       avatarMat.alpha = 1;
       headMat.alpha = 1;
-    } else if (isOccupied) {
+    } else if (isOccupied && !isInLounge) {
       const color =
         state.avatarColor || (isBot ? new Color3(0.84, 0.52, 0.24) : new Color3(0.4, 0.62, 0.9));
       pedestalMat.diffuseColor = isBot ? new Color3(0.44, 0.3, 0.2) : new Color3(0.24, 0.3, 0.42);
@@ -581,6 +602,17 @@ export class PlayerSeatRenderer {
       headMat.emissiveColor = hasAvatarTexture ? new Color3(0.06, 0.06, 0.06) : new Color3(0, 0, 0);
       avatarMat.alpha = 1;
       headMat.alpha = 1;
+    } else if (isInLounge) {
+      const color = state.avatarColor || new Color3(0.44, 0.48, 0.56);
+      pedestalMat.diffuseColor = new Color3(0.2, 0.21, 0.24);
+      pedestalMat.emissiveColor = new Color3(0.02, 0.02, 0.03);
+      pedestalMat.alpha = 0.8;
+      avatarMat.diffuseColor = color;
+      avatarMat.emissiveColor = new Color3(0.03, 0.03, 0.05);
+      headMat.diffuseColor = hasAvatarTexture ? new Color3(1, 1, 1) : new Color3(0.68, 0.69, 0.74);
+      headMat.emissiveColor = hasAvatarTexture ? new Color3(0.04, 0.04, 0.05) : new Color3(0, 0, 0);
+      avatarMat.alpha = 0.82;
+      headMat.alpha = 0.84;
     } else {
       pedestalMat.diffuseColor = new Color3(0.15, 0.15, 0.17);
       pedestalMat.emissiveColor = new Color3(0, 0, 0);
@@ -602,6 +634,10 @@ export class PlayerSeatRenderer {
       scoreZoneMat.diffuseColor = new Color3(0.43, 0.33, 0.13);
       scoreZoneMat.emissiveColor = new Color3(0.06, 0.04, 0.01);
       scoreZoneMat.alpha = 0.88;
+    } else if (isInLounge) {
+      scoreZoneMat.diffuseColor = new Color3(0.09, 0.09, 0.11);
+      scoreZoneMat.emissiveColor = new Color3(0, 0, 0);
+      scoreZoneMat.alpha = 0.2;
     } else if (isCurrentPlayer) {
       scoreZoneMat.diffuseColor = new Color3(0.16, 0.48, 0.26);
       scoreZoneMat.emissiveColor = new Color3(0.03, 0.08, 0.04);
@@ -624,7 +660,7 @@ export class PlayerSeatRenderer {
     this.drawScoreBadge(scoreBadge, state, isOccupied, isCurrentPlayer, isBot, isComplete);
 
     const isHighlightedSeat = this.highlightedSeatIndex === seatIndex;
-    const isActiveTurnSeat = this.activeTurnSeatIndex === seatIndex && isOccupied;
+    const isActiveTurnSeat = this.activeTurnSeatIndex === seatIndex && isOccupied && !isInLounge;
 
     if (isHighlightedSeat) {
       pedestal.scaling = new Vector3(1.1, 1.1, 1.1);
@@ -1135,6 +1171,7 @@ export class PlayerSeatRenderer {
     this.scoreZoneMeshes.clear();
     this.turnMarkerMeshes.clear();
     this.seatAvatarTextures.clear();
+    this.seatBasePositions.clear();
     this.avatarTextureFailuresByUrl.clear();
     this.scorePulseTimers.clear();
     this.chatBubbleHideTimers.clear();

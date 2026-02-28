@@ -1729,9 +1729,6 @@ class Game implements GameCallbacks {
       )
         .length > 1;
     seatedParticipants.forEach((participant) => {
-      if (!participant.isSeated) {
-        return;
-      }
       participantBySeat.set(participant.seatIndex, participant);
       const isCurrentPlayer = participant.playerId === this.localPlayerId;
       this.participantSeatById.set(participant.playerId, participant.seatIndex);
@@ -1764,6 +1761,7 @@ class Game implements GameCallbacks {
           occupied: true,
           isCurrentPlayer,
           isBot: participant.isBot,
+          isInLounge: participant.isSeated !== true,
           playerName: this.formatSeatDisplayName(participant, isCurrentPlayer, showReadyState),
           avatarUrl: participant.avatarUrl,
           avatarColor: this.resolveSeatColor(participant, isCurrentPlayer),
@@ -1779,6 +1777,7 @@ class Game implements GameCallbacks {
         occupied: showCurrentSeatOccupant,
         isCurrentPlayer: showCurrentSeatOccupant,
         isBot: false,
+        isInLounge: false,
         playerName: showCurrentSeatOccupant ? "YOU" : "Empty",
         avatarUrl: showCurrentSeatOccupant ? this.localAvatarUrl : undefined,
         avatarColor: showCurrentSeatOccupant ? new Color3(0.24, 0.84, 0.36) : undefined,
@@ -2032,6 +2031,7 @@ class Game implements GameCallbacks {
         occupied: isCurrentSeat,
         isCurrentPlayer: isCurrentSeat,
         isBot: false,
+        isInLounge: false,
         playerName: isCurrentSeat ? "YOU" : "Empty",
         avatarUrl: isCurrentSeat ? this.localAvatarUrl : undefined,
         avatarColor: isCurrentSeat ? new Color3(0.24, 0.84, 0.36) : undefined,
@@ -3823,7 +3823,7 @@ class Game implements GameCallbacks {
         message.reason.includes("turn_timeout_auto_score_stand"));
     if (autoStandReason && playerId === this.localPlayerId) {
       notificationService.show(
-        "Timed out twice this round. You were moved to observer lounge.",
+        "Timed out twice. You were moved to observer lounge.",
         "warning",
         2600
       );
