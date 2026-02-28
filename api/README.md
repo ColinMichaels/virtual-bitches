@@ -15,6 +15,8 @@ Environment variables:
 - `API_STORE_BACKEND` (`file` or `firestore`, default: `firestore` in production, `file` otherwise)
 - `API_ALLOW_FILE_STORE_IN_PRODUCTION` (`1` to override safety check; default: disabled)
 - `API_FIRESTORE_PREFIX` (Firestore collection prefix, default: `api_v1`)
+- `API_BOOTSTRAP_WAIT_TIMEOUT_MS` (request wait window while startup bootstrap is still running, default: `20000`)
+- `API_BOOTSTRAP_RETRY_DELAY_MS` (retry delay after bootstrap failure, default: `5000`)
 - `API_DEPLOY_PRESERVE_DB` (deploy helper flag, default: `1`; keeps Firestore backend pinned during deploy)
 - `TURN_TIMEOUT_MS` (active turn timeout window, default: `45000`)
 - `TURN_TIMEOUT_WARNING_MS` (pre-timeout warning lead, default: `10000`)
@@ -82,6 +84,7 @@ API_DEPLOY_PRESERVE_DB=0 API_STORE_BACKEND=file API_ALLOW_FILE_STORE_IN_PRODUCTI
 ## Endpoints
 
 - `GET /api/health`
+- `GET /api/ready` (returns `200` only when bootstrap is ready and shutdown is not in progress; `503` otherwise)
 - `POST /api/auth/token/refresh`
 - `GET /api/auth/me`
 - `GET /api/players/:playerId/profile`

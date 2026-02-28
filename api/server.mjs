@@ -191,6 +191,14 @@ const NEXT_GAME_AUTO_START_DELAY_MS = normalizeTurnTimeoutValue(
   process.env.MULTIPLAYER_NEXT_GAME_DELAY_MS,
   60 * 1000
 );
+const BOOTSTRAP_WAIT_TIMEOUT_MS = normalizeTurnTimeoutValue(
+  process.env.API_BOOTSTRAP_WAIT_TIMEOUT_MS,
+  20000
+);
+const BOOTSTRAP_RETRY_DELAY_MS = normalizeTurnTimeoutValue(
+  process.env.API_BOOTSTRAP_RETRY_DELAY_MS,
+  5000
+);
 const STORE_REHYDRATE_COOLDOWN_MS = normalizeTurnTimeoutValue(
   process.env.STORE_REHYDRATE_COOLDOWN_MS,
   750
@@ -239,6 +247,15 @@ let firebaseAdminAuthClientPromise = null;
 let storeRehydratePromise = null;
 let lastStoreRehydrateAt = 0;
 let chatConductTermRefreshHandle = null;
+let bootstrapPromise = null;
+let bootstrapRetryHandle = null;
+let bootstrapReady = false;
+let bootstrapStartedAt = 0;
+let bootstrapCompletedAt = 0;
+let bootstrapLastError = "";
+let bootstrapAttemptCount = 0;
+let shutdownInProgress = false;
+let shutdownForceTimer = null;
 
 const server = createServer((req, res) => {
   void handleRequest(req, res);
@@ -263,11 +280,21 @@ const botEngine = createBotEngine({
   turnDelayByProfile: BOT_TURN_ADVANCE_DELAY_BY_PROFILE,
 });
 
-await bootstrap();
-startChatConductTermRefreshLoop();
+void beginBootstrap();
 
 server.on("upgrade", async (req, socket) => {
   try {
+    if (shutdownInProgress) {
+      rejectUpgrade(socket, 503, "Service Unavailable");
+      return;
+    }
+
+    const ready = await ensureBootstrapReadyForRequest();
+    if (!ready) {
+      rejectUpgrade(socket, 503, "Service Unavailable");
+      return;
+    }
+
     const requestUrl = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
     if (requestUrl.pathname !== "/") {
       rejectUpgrade(socket, 404, "Not Found");
@@ -317,6 +344,13 @@ const cleanupSweepHandle = setInterval(() => {
 if (typeof cleanupSweepHandle.unref === "function") {
   cleanupSweepHandle.unref();
 }
+
+process.on("SIGTERM", () => {
+  void initiateShutdown("SIGTERM");
+});
+process.on("SIGINT", () => {
+  void initiateShutdown("SIGINT");
+});
 
 function startChatConductTermRefreshLoop() {
   if (chatConductTermRefreshHandle) {
@@ -394,6 +428,79 @@ async function bootstrap() {
   }
 }
 
+function beginBootstrap() {
+  if (!bootstrapStartedAt) {
+    bootstrapStartedAt = Date.now();
+  }
+  bootstrapPromise = runBootstrapAttempt("startup");
+}
+
+async function runBootstrapAttempt(source = "retry") {
+  bootstrapAttemptCount += 1;
+  const attemptStartedAt = Date.now();
+  try {
+    await bootstrap();
+    bootstrapReady = true;
+    bootstrapCompletedAt = Date.now();
+    bootstrapLastError = "";
+    log.info(
+      `Bootstrap ready (attempt=${bootstrapAttemptCount}, source=${source}, durationMs=${bootstrapCompletedAt - attemptStartedAt})`
+    );
+    startChatConductTermRefreshLoop();
+  } catch (error) {
+    bootstrapReady = false;
+    bootstrapLastError =
+      error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    log.error(
+      `Bootstrap failed (attempt=${bootstrapAttemptCount}, source=${source}); retrying in ${BOOTSTRAP_RETRY_DELAY_MS}ms`,
+      error
+    );
+    scheduleBootstrapRetry();
+  }
+}
+
+function scheduleBootstrapRetry() {
+  if (bootstrapRetryHandle || bootstrapReady) {
+    return;
+  }
+  bootstrapRetryHandle = setTimeout(() => {
+    bootstrapRetryHandle = null;
+    bootstrapPromise = runBootstrapAttempt("retry");
+  }, BOOTSTRAP_RETRY_DELAY_MS);
+  if (typeof bootstrapRetryHandle.unref === "function") {
+    bootstrapRetryHandle.unref();
+  }
+}
+
+async function ensureBootstrapReadyForRequest() {
+  if (bootstrapReady) {
+    return true;
+  }
+  if (!bootstrapPromise) {
+    beginBootstrap();
+  }
+  if (!bootstrapPromise) {
+    return false;
+  }
+  let timeoutHandle = null;
+  const timeoutPromise = new Promise((resolve) => {
+    timeoutHandle = setTimeout(() => resolve(false), BOOTSTRAP_WAIT_TIMEOUT_MS);
+  });
+  if (typeof timeoutHandle?.unref === "function") {
+    timeoutHandle.unref();
+  }
+  try {
+    await Promise.race([bootstrapPromise.then(() => true), timeoutPromise]);
+  } catch {
+    // Bootstrap errors are tracked via bootstrapLastError and retry scheduling.
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+  return bootstrapReady;
+}
+
 async function handleRequest(req, res) {
   setCorsHeaders(res);
   if (req.method === "OPTIONS") {
@@ -410,13 +517,23 @@ async function handleRequest(req, res) {
     return;
   }
 
-  cleanupExpiredRecords();
-
   try {
     if (req.method === "GET" && pathname === "/api/health") {
       sendJson(res, 200, {
         ok: true,
         now: Date.now(),
+        shutdown: {
+          inProgress: shutdownInProgress,
+        },
+        bootstrap: {
+          ready: bootstrapReady,
+          attempts: bootstrapAttemptCount,
+          startedAt: bootstrapStartedAt || null,
+          completedAt: bootstrapCompletedAt || null,
+          lastError: bootstrapLastError || null,
+          waitTimeoutMs: BOOTSTRAP_WAIT_TIMEOUT_MS,
+          retryDelayMs: BOOTSTRAP_RETRY_DELAY_MS,
+        },
         runtime: {
           service: process.env.K_SERVICE ?? null,
           revision: process.env.K_REVISION ?? null,
@@ -441,6 +558,58 @@ async function handleRequest(req, res) {
       });
       return;
     }
+
+    if (req.method === "GET" && pathname === "/api/ready") {
+      const ready = bootstrapReady && !shutdownInProgress;
+      sendJson(res, ready ? 200 : 503, {
+        ok: ready,
+        now: Date.now(),
+        reason: shutdownInProgress
+          ? "shutdown_in_progress"
+          : bootstrapLastError
+            ? "bootstrap_failed"
+            : "bootstrap_in_progress",
+        shutdown: {
+          inProgress: shutdownInProgress,
+        },
+        bootstrap: {
+          ready: bootstrapReady,
+          attempts: bootstrapAttemptCount,
+          startedAt: bootstrapStartedAt || null,
+          completedAt: bootstrapCompletedAt || null,
+          lastError: bootstrapLastError || null,
+          waitTimeoutMs: BOOTSTRAP_WAIT_TIMEOUT_MS,
+          retryDelayMs: BOOTSTRAP_RETRY_DELAY_MS,
+        },
+      });
+      return;
+    }
+
+    if (shutdownInProgress) {
+      sendJson(res, 503, {
+        error: "Service shutting down",
+        reason: "shutdown_in_progress",
+      });
+      return;
+    }
+
+    const ready = await ensureBootstrapReadyForRequest();
+    if (!ready) {
+      sendJson(res, 503, {
+        error: "Service warming up",
+        reason: bootstrapLastError ? "bootstrap_failed" : "bootstrap_in_progress",
+        bootstrap: {
+          ready: false,
+          attempts: bootstrapAttemptCount,
+          lastError: bootstrapLastError || null,
+          waitTimeoutMs: BOOTSTRAP_WAIT_TIMEOUT_MS,
+          retryDelayMs: BOOTSTRAP_RETRY_DELAY_MS,
+        },
+      });
+      return;
+    }
+
+    cleanupExpiredRecords();
 
     if (req.method === "GET" && pathname === "/api/media/image-proxy") {
       await handleImageProxy(req, res, url);
@@ -649,6 +818,58 @@ async function handleRequest(req, res) {
     log.error("Request failed", error);
     sendJson(res, 500, { error: "Internal server error" });
   }
+}
+
+async function initiateShutdown(signal = "SIGTERM") {
+  if (shutdownInProgress) {
+    return;
+  }
+  shutdownInProgress = true;
+  log.info(`Shutdown initiated (${signal})`);
+
+  if (bootstrapRetryHandle) {
+    clearTimeout(bootstrapRetryHandle);
+    bootstrapRetryHandle = null;
+  }
+  if (chatConductTermRefreshHandle) {
+    clearInterval(chatConductTermRefreshHandle);
+    chatConductTermRefreshHandle = null;
+  }
+  clearInterval(cleanupSweepHandle);
+
+  if (shutdownForceTimer) {
+    clearTimeout(shutdownForceTimer);
+    shutdownForceTimer = null;
+  }
+  shutdownForceTimer = setTimeout(() => {
+    log.error("Forced shutdown timeout reached; exiting");
+    process.exit(1);
+  }, 10000);
+  if (typeof shutdownForceTimer.unref === "function") {
+    shutdownForceTimer.unref();
+  }
+
+  for (const sessionId of Object.keys(store.multiplayerSessions)) {
+    stopSessionLoops(sessionId);
+  }
+
+  for (const clients of wsSessionClients.values()) {
+    for (const client of [...clients]) {
+      safeCloseSocket(client, WS_CLOSE_CODES.normal, "server_shutdown");
+    }
+  }
+
+  await new Promise((resolve) => {
+    server.close(() => {
+      resolve();
+    });
+  });
+
+  if (shutdownForceTimer) {
+    clearTimeout(shutdownForceTimer);
+    shutdownForceTimer = null;
+  }
+  process.exit(0);
 }
 
 async function handleRefreshToken(req, res) {
