@@ -12,10 +12,13 @@ const assertModerationFlow = process.env.E2E_ASSERT_MULTIPLAYER_MODERATION !== "
 const assertAdminMonitor = process.env.E2E_ASSERT_ADMIN_MONITOR === "1";
 const assertAdminModerationTerms = process.env.E2E_ASSERT_ADMIN_MODERATION_TERMS === "1";
 const assertStorageCutover = process.env.E2E_ASSERT_STORAGE_CUTOVER === "1";
+const assertTimeoutStrikeObserver = process.env.E2E_ASSERT_TIMEOUT_STRIKE_OBSERVER !== "0";
 const adminToken = process.env.E2E_ADMIN_TOKEN?.trim() ?? "";
 const roomExpiryWaitMs = Number(process.env.E2E_ROOM_EXPIRY_WAIT_MS ?? 9000);
 const roomOverflowWaitMs = Number(process.env.E2E_ROOM_OVERFLOW_WAIT_MS ?? 8000);
 const roomOverflowPollIntervalMs = Number(process.env.E2E_ROOM_OVERFLOW_POLL_INTERVAL_MS ?? 250);
+const timeoutStrikeWaitBufferMs = Number(process.env.E2E_TIMEOUT_STRIKE_WAIT_BUFFER_MS ?? 7000);
+const timeoutStrikePollIntervalMs = Number(process.env.E2E_TIMEOUT_STRIKE_POLL_INTERVAL_MS ?? 250);
 // Production defaults to a 60s post-round auto-start window; keep smoke timeout above that.
 const queueLifecycleWaitMs = Number(process.env.E2E_QUEUE_LIFECYCLE_WAIT_MS ?? 75000);
 const expectedStorageBackend = normalizeOptionalString(process.env.E2E_EXPECT_STORAGE_BACKEND).toLowerCase();
@@ -93,6 +96,11 @@ async function run() {
       `Winner queue lifecycle encountered transient failure; retrying once with a fresh session (${firstAttemptMessage}).`
     );
     await runWinnerQueueLifecycleChecks(`${runSuffix}-retry`);
+  }
+  if (assertTimeoutStrikeObserver) {
+    await runTimeoutStrikeObserverChecks(runSuffix);
+  } else {
+    log("Skipping timeout strike observer checks (set E2E_ASSERT_TIMEOUT_STRIKE_OBSERVER=1 to enable).");
   }
   hostPlayerId = `e2e-host-${runSuffix}`;
   guestPlayerId = `e2e-guest-${runSuffix}`;
@@ -1691,6 +1699,251 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
   }
 }
 
+async function runTimeoutStrikeObserverChecks(runSuffix) {
+  log("Running timeout strike observer checks...");
+
+  const timeoutHostPlayerId = `e2e-timeout-host-${runSuffix}`;
+  const timeoutGuestAPlayerId = `e2e-timeout-guest-a-${runSuffix}`;
+  const timeoutGuestBPlayerId = `e2e-timeout-guest-b-${runSuffix}`;
+  const timeoutHostDisplayName = "E2E Timeout Host";
+  const timeoutGuestADisplayName = "E2E Timeout Guest A";
+  const timeoutGuestBDisplayName = "E2E Timeout Guest B";
+
+  const created = await apiRequest("/multiplayer/sessions", {
+    method: "POST",
+    body: {
+      playerId: timeoutHostPlayerId,
+      displayName: timeoutHostDisplayName,
+      botCount: 0,
+      gameDifficulty: "hard",
+    },
+  });
+  assert(typeof created?.sessionId === "string", "timeout strike create session returned no sessionId");
+  assert(created?.auth?.accessToken, "timeout strike create session returned no host access token");
+
+  const timeoutSessionId = created.sessionId;
+  let hostAccessToken = created.auth.accessToken;
+  let guestAAccessToken = "";
+  let guestBAccessToken = "";
+  let timeoutHostSocket = null;
+  let timeoutHostMessageBuffer = null;
+
+  try {
+    try {
+      timeoutHostSocket = await openSocket(
+        "timeout-strike-host",
+        buildSocketUrl(timeoutSessionId, timeoutHostPlayerId, hostAccessToken)
+      );
+      timeoutHostMessageBuffer = createSocketMessageBuffer(timeoutHostSocket);
+    } catch (error) {
+      log(`Timeout strike host socket unavailable; falling back to HTTP-only polling (${String(error)}).`);
+    }
+
+    const joinGuestA = await apiRequest(
+      `/multiplayer/sessions/${encodeURIComponent(timeoutSessionId)}/join`,
+      {
+        method: "POST",
+        body: {
+          playerId: timeoutGuestAPlayerId,
+          displayName: timeoutGuestADisplayName,
+        },
+      }
+    );
+    guestAAccessToken = typeof joinGuestA?.auth?.accessToken === "string" ? joinGuestA.auth.accessToken : "";
+    assert(guestAAccessToken, "timeout strike guest A join returned no access token");
+
+    const joinGuestB = await apiRequest(
+      `/multiplayer/sessions/${encodeURIComponent(timeoutSessionId)}/join`,
+      {
+        method: "POST",
+        body: {
+          playerId: timeoutGuestBPlayerId,
+          displayName: timeoutGuestBDisplayName,
+        },
+      }
+    );
+    guestBAccessToken = typeof joinGuestB?.auth?.accessToken === "string" ? joinGuestB.auth.accessToken : "";
+    assert(guestBAccessToken, "timeout strike guest B join returned no access token");
+
+    const setParticipantState = async (playerId, accessToken, action, label) => {
+      const response = await apiRequest(
+        `/multiplayer/sessions/${encodeURIComponent(timeoutSessionId)}/participant-state`,
+        {
+          method: "POST",
+          accessToken,
+          body: {
+            playerId,
+            action,
+          },
+        }
+      );
+      assert(
+        response?.ok === true,
+        `${label} did not return ok=true (reason=${String(response?.reason ?? "unknown")})`
+      );
+      return response;
+    };
+
+    await setParticipantState(timeoutHostPlayerId, hostAccessToken, "sit", "timeout strike host sit");
+    await setParticipantState(timeoutGuestAPlayerId, guestAAccessToken, "sit", "timeout strike guest A sit");
+    await setParticipantState(timeoutGuestBPlayerId, guestBAccessToken, "sit", "timeout strike guest B sit");
+    await setParticipantState(timeoutHostPlayerId, hostAccessToken, "ready", "timeout strike host ready");
+    await setParticipantState(timeoutGuestAPlayerId, guestAAccessToken, "ready", "timeout strike guest A ready");
+    await setParticipantState(timeoutGuestBPlayerId, guestBAccessToken, "ready", "timeout strike guest B ready");
+
+    const initialRefresh = await refreshSessionAuthWithRecovery({
+      sessionId: timeoutSessionId,
+      playerId: timeoutHostPlayerId,
+      displayName: timeoutHostDisplayName,
+      accessToken: hostAccessToken,
+    });
+    hostAccessToken = initialRefresh.accessToken;
+    const initialSnapshot = initialRefresh.snapshot;
+    const initialTurnState = initialSnapshot?.turnState ?? null;
+    const initialActivePlayerId =
+      typeof initialTurnState?.activeTurnPlayerId === "string" ? initialTurnState.activeTurnPlayerId : "";
+    assert(
+      initialActivePlayerId === timeoutHostPlayerId,
+      `timeout strike expected host to receive first active turn (active=${initialActivePlayerId || "none"})`
+    );
+
+    const initialRound = normalizeE2ERoundNumber(initialTurnState?.round);
+    const timeoutMs = normalizeE2ETurnTimeoutMs(initialTurnState?.turnTimeoutMs);
+    const firstTimeoutWaitMs = computeTurnAutoAdvanceWaitMs(initialTurnState, timeoutMs);
+
+    if (timeoutHostMessageBuffer) {
+      timeoutHostMessageBuffer.length = 0;
+    }
+    const firstTimeout = await waitForTurnAutoAdvanceForPlayer({
+      sessionId: timeoutSessionId,
+      playerId: timeoutHostPlayerId,
+      expectedRound: initialRound,
+      hostPlayerId: timeoutHostPlayerId,
+      hostDisplayName: timeoutHostDisplayName,
+      accessToken: hostAccessToken,
+      messageBuffer: timeoutHostMessageBuffer,
+      waitTimeoutMs: firstTimeoutWaitMs,
+    });
+    hostAccessToken = firstTimeout.accessToken;
+    const firstSnapshot = firstTimeout.snapshot;
+    const firstTurnState = firstSnapshot?.turnState ?? null;
+    const firstRound = normalizeE2ERoundNumber(firstTurnState?.round);
+    assert(
+      firstRound === initialRound,
+      `timeout strike expected first host timeout to remain in same round (expected=${initialRound}, actual=${firstRound})`
+    );
+
+    const activeAfterFirstTimeout =
+      typeof firstTurnState?.activeTurnPlayerId === "string" ? firstTurnState.activeTurnPlayerId : "";
+    assert(
+      activeAfterFirstTimeout &&
+        activeAfterFirstTimeout !== timeoutHostPlayerId &&
+        (activeAfterFirstTimeout === timeoutGuestAPlayerId ||
+          activeAfterFirstTimeout === timeoutGuestBPlayerId),
+      `timeout strike expected a guest active turn after first host timeout (active=${activeAfterFirstTimeout || "none"})`
+    );
+
+    const activeGuestToken =
+      activeAfterFirstTimeout === timeoutGuestAPlayerId ? guestAAccessToken : guestBAccessToken;
+    assert(activeGuestToken, `timeout strike missing access token for active guest ${activeAfterFirstTimeout}`);
+    await setParticipantState(
+      activeAfterFirstTimeout,
+      activeGuestToken,
+      "stand",
+      "timeout strike active guest stand"
+    );
+
+    if (timeoutHostMessageBuffer) {
+      timeoutHostMessageBuffer.length = 0;
+    }
+    const recoveredHost = await waitForActiveTurnPlayer({
+      sessionId: timeoutSessionId,
+      targetPlayerId: timeoutHostPlayerId,
+      expectedRound: firstRound,
+      hostPlayerId: timeoutHostPlayerId,
+      hostDisplayName: timeoutHostDisplayName,
+      accessToken: hostAccessToken,
+      waitTimeoutMs: Math.max(5000, timeoutMs),
+    });
+    hostAccessToken = recoveredHost.accessToken;
+    const recoveredSnapshot = recoveredHost.snapshot;
+    const recoveredTurnState = recoveredSnapshot?.turnState ?? null;
+    const recoveredRound = normalizeE2ERoundNumber(recoveredTurnState?.round);
+    assert(
+      recoveredRound === firstRound,
+      `timeout strike expected host recovery to keep same round (expected=${firstRound}, actual=${recoveredRound})`
+    );
+    const seatedOpponents = Array.isArray(recoveredSnapshot?.participants)
+      ? recoveredSnapshot.participants.filter(
+          (participant) =>
+            participant &&
+            participant.playerId !== timeoutHostPlayerId &&
+            participant.isSeated === true &&
+            participant.queuedForNextGame !== true
+        )
+      : [];
+    assert(
+      seatedOpponents.length >= 1,
+      "timeout strike expected at least one seated opponent before second host timeout"
+    );
+
+    const secondTimeoutWaitMs = computeTurnAutoAdvanceWaitMs(
+      recoveredTurnState,
+      normalizeE2ETurnTimeoutMs(recoveredTurnState?.turnTimeoutMs, timeoutMs)
+    );
+    const secondTimeout = await waitForTurnAutoAdvanceForPlayer({
+      sessionId: timeoutSessionId,
+      playerId: timeoutHostPlayerId,
+      expectedRound: firstRound,
+      hostPlayerId: timeoutHostPlayerId,
+      hostDisplayName: timeoutHostDisplayName,
+      accessToken: hostAccessToken,
+      messageBuffer: timeoutHostMessageBuffer,
+      waitTimeoutMs: secondTimeoutWaitMs,
+    });
+    hostAccessToken = secondTimeout.accessToken;
+    const secondSnapshot = secondTimeout.snapshot;
+    const secondTurnState = secondSnapshot?.turnState ?? null;
+    const secondRound = normalizeE2ERoundNumber(secondTurnState?.round);
+    assert(
+      secondRound === firstRound,
+      `timeout strike expected second host timeout to remain in same round (expected=${firstRound}, actual=${secondRound})`
+    );
+    const hostAfterSecondTimeout = findSnapshotParticipant(secondSnapshot, timeoutHostPlayerId);
+    assert(hostAfterSecondTimeout, "timeout strike snapshot missing host participant after second timeout");
+    assert(
+      hostAfterSecondTimeout?.isSeated === false,
+      "timeout strike expected host to be moved to observer lounge (isSeated=false) after second timeout"
+    );
+    assert(
+      hostAfterSecondTimeout?.isReady !== true,
+      "timeout strike expected host to be unready after observer/lounge move"
+    );
+    assert(
+      hostAfterSecondTimeout?.queuedForNextGame !== true,
+      "timeout strike expected host queuedForNextGame=false after observer/lounge move"
+    );
+    assert(
+      hostAfterSecondTimeout?.isComplete === true,
+      "timeout strike expected host marked complete after observer/lounge move"
+    );
+    if (typeof secondTimeout.reason === "string" && secondTimeout.reason.length > 0) {
+      assert(
+        secondTimeout.reason.includes("turn_timeout_stand") ||
+          secondTimeout.reason.includes("turn_timeout_auto_score_stand"),
+        `timeout strike expected stand timeout reason on second timeout (actual=${secondTimeout.reason})`
+      );
+    }
+
+    log("Timeout strike observer checks passed.");
+  } finally {
+    await safeCloseSocket(timeoutHostSocket);
+    await safeLeave(timeoutSessionId, timeoutGuestAPlayerId);
+    await safeLeave(timeoutSessionId, timeoutGuestBPlayerId);
+    await safeLeave(timeoutSessionId, timeoutHostPlayerId);
+  }
+}
+
 async function runAdminMonitorChecks(cachedStorage = null) {
   log("Running admin monitor checks...");
   const adminAuthOptions = buildAdminAuthRequestOptions();
@@ -2326,6 +2579,316 @@ function consumeQueueLifecycleRestartFromBuffer(buffer, sessionId, hostPlayerId)
   }
   const [match] = buffer.splice(index, 1);
   return match;
+}
+
+function consumeTurnAutoAdvanceFromBuffer(buffer, sessionId, playerId, expectedRound = null) {
+  if (!Array.isArray(buffer) || !sessionId || !playerId) {
+    return null;
+  }
+  const normalizedExpectedRound =
+    Number.isFinite(expectedRound) && expectedRound > 0 ? Math.floor(expectedRound) : null;
+  const index = buffer.findIndex((payload) => {
+    if (!payload || typeof payload !== "object" || payload.type !== "turn_auto_advanced") {
+      return false;
+    }
+    if (payload.sessionId !== sessionId || payload.playerId !== playerId) {
+      return false;
+    }
+    if (normalizedExpectedRound === null) {
+      return true;
+    }
+    const payloadRound =
+      Number.isFinite(payload.round) && payload.round > 0 ? Math.floor(payload.round) : null;
+    return payloadRound === null || payloadRound === normalizedExpectedRound;
+  });
+  if (index < 0) {
+    return null;
+  }
+  const [match] = buffer.splice(index, 1);
+  return match;
+}
+
+function normalizeE2ERoundNumber(value, fallback = 1) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return Math.max(1, Math.floor(fallback));
+  }
+  return Math.max(1, Math.floor(parsed));
+}
+
+function normalizeE2ETurnTimeoutMs(value, fallback = 15000) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return Math.max(5000, Math.floor(fallback));
+  }
+  return Math.max(5000, Math.floor(parsed));
+}
+
+function computeTurnAutoAdvanceWaitMs(turnState, fallbackTimeoutMs) {
+  const timeoutMs = normalizeE2ETurnTimeoutMs(turnState?.turnTimeoutMs, fallbackTimeoutMs);
+  const now = Date.now();
+  const turnExpiresAt =
+    Number.isFinite(turnState?.turnExpiresAt) && turnState.turnExpiresAt > 0
+      ? Math.floor(turnState.turnExpiresAt)
+      : 0;
+  const remainingMs = turnExpiresAt > now ? turnExpiresAt - now : timeoutMs;
+  return Math.max(2000, remainingMs + Math.max(2000, timeoutStrikeWaitBufferMs));
+}
+
+function findSnapshotParticipant(snapshot, playerId) {
+  if (!snapshot || !playerId || !Array.isArray(snapshot.participants)) {
+    return null;
+  }
+  return snapshot.participants.find((participant) => participant?.playerId === playerId) ?? null;
+}
+
+async function refreshSessionAuthWithRecovery({
+  sessionId,
+  playerId,
+  displayName,
+  accessToken,
+  maxAttempts = 4,
+  initialDelayMs = 180,
+}) {
+  let token = typeof accessToken === "string" ? accessToken : "";
+  const normalizedDisplayName =
+    typeof displayName === "string" && displayName.trim().length > 0
+      ? displayName.trim()
+      : playerId;
+  let lastFailure = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const refreshAttempt = await apiRequestWithStatus(
+      `/multiplayer/sessions/${encodeURIComponent(sessionId)}/auth/refresh`,
+      {
+        method: "POST",
+        accessToken: token,
+        body: { playerId },
+      }
+    );
+    if (refreshAttempt.ok) {
+      const nextToken =
+        typeof refreshAttempt.body?.auth?.accessToken === "string" &&
+        refreshAttempt.body.auth.accessToken.length > 0
+          ? refreshAttempt.body.auth.accessToken
+          : token;
+      return {
+        snapshot: refreshAttempt.body,
+        accessToken: nextToken,
+      };
+    }
+
+    if (!isTransientQueueRefreshFailure(refreshAttempt)) {
+      throw new Error(
+        `request failed (POST /multiplayer/sessions/${sessionId}/auth/refresh) status=${refreshAttempt.status} body=${JSON.stringify(refreshAttempt.body)}`
+      );
+    }
+    lastFailure = refreshAttempt;
+
+    const rejoinAttempt = await apiRequestWithStatus(
+      `/multiplayer/sessions/${encodeURIComponent(sessionId)}/join`,
+      {
+        method: "POST",
+        body: {
+          playerId,
+          displayName: normalizedDisplayName,
+        },
+      }
+    );
+    if (rejoinAttempt.ok) {
+      const nextToken =
+        typeof rejoinAttempt.body?.auth?.accessToken === "string" &&
+        rejoinAttempt.body.auth.accessToken.length > 0
+          ? rejoinAttempt.body.auth.accessToken
+          : token;
+      return {
+        snapshot: rejoinAttempt.body,
+        accessToken: nextToken,
+      };
+    }
+    if (!isTransientQueueRefreshFailure(rejoinAttempt)) {
+      throw new Error(
+        `request failed (POST /multiplayer/sessions/${sessionId}/join) status=${rejoinAttempt.status} body=${JSON.stringify(rejoinAttempt.body)}`
+      );
+    }
+    lastFailure = rejoinAttempt;
+
+    if (attempt >= maxAttempts - 1) {
+      break;
+    }
+    await waitMs(Math.max(50, initialDelayMs * (attempt + 1)));
+  }
+
+  throw new Error(
+    `timeout strike refresh did not recover session auth after ${maxAttempts} attempt(s) (status=${lastFailure?.status ?? "unknown"} body=${JSON.stringify(lastFailure?.body ?? null)})`
+  );
+}
+
+async function waitForActiveTurnPlayer({
+  sessionId,
+  targetPlayerId,
+  expectedRound,
+  hostPlayerId,
+  hostDisplayName,
+  accessToken,
+  waitTimeoutMs,
+}) {
+  const deadline = Date.now() + Math.max(2000, Math.floor(waitTimeoutMs));
+  const expectedRoundNumber =
+    Number.isFinite(expectedRound) && expectedRound > 0 ? Math.floor(expectedRound) : null;
+  let token = accessToken;
+  let lastRound = expectedRoundNumber ?? 1;
+  let lastActivePlayerId = "";
+
+  while (Date.now() < deadline) {
+    const refreshed = await refreshSessionAuthWithRecovery({
+      sessionId,
+      playerId: hostPlayerId,
+      displayName: hostDisplayName,
+      accessToken: token,
+    });
+    token = refreshed.accessToken;
+    const snapshot = refreshed.snapshot;
+    const turnState = snapshot?.turnState ?? null;
+    const round = normalizeE2ERoundNumber(turnState?.round, expectedRoundNumber ?? 1);
+    const activePlayerId =
+      typeof turnState?.activeTurnPlayerId === "string" ? turnState.activeTurnPlayerId : "";
+    lastRound = round;
+    lastActivePlayerId = activePlayerId;
+
+    if (
+      activePlayerId === targetPlayerId &&
+      (expectedRoundNumber === null || round === expectedRoundNumber)
+    ) {
+      return {
+        snapshot,
+        accessToken: token,
+      };
+    }
+
+    await waitMs(Math.max(50, timeoutStrikePollIntervalMs));
+  }
+
+  throw new Error(
+    `timeout strike did not recover active turn for ${targetPlayerId} before deadline (lastActive=${lastActivePlayerId || "none"}, lastRound=${lastRound})`
+  );
+}
+
+async function waitForTurnAutoAdvanceForPlayer({
+  sessionId,
+  playerId,
+  expectedRound,
+  hostPlayerId,
+  hostDisplayName,
+  accessToken,
+  messageBuffer,
+  waitTimeoutMs,
+}) {
+  const deadline = Date.now() + Math.max(2000, Math.floor(waitTimeoutMs));
+  const expectedRoundNumber =
+    Number.isFinite(expectedRound) && expectedRound > 0 ? Math.floor(expectedRound) : null;
+  let token = accessToken;
+  let lastHeartbeatPingAt = 0;
+  let lastRound = expectedRoundNumber ?? 1;
+  let lastActivePlayerId = playerId;
+  const heartbeatIntervalMs = 4000;
+
+  const maintainHeartbeat = async () => {
+    const now = Date.now();
+    if (now - lastHeartbeatPingAt < heartbeatIntervalMs) {
+      return;
+    }
+    const heartbeat = await apiRequestWithStatus(
+      `/multiplayer/sessions/${encodeURIComponent(sessionId)}/heartbeat`,
+      {
+        method: "POST",
+        accessToken: token,
+        body: { playerId: hostPlayerId },
+      }
+    );
+    if (heartbeat.ok && heartbeat.body?.ok === true) {
+      lastHeartbeatPingAt = now;
+      return;
+    }
+    throw new Error(
+      `timeout strike heartbeat failed status=${heartbeat.status} body=${JSON.stringify(heartbeat.body)}`
+    );
+  };
+
+  if (messageBuffer) {
+    while (Date.now() < deadline) {
+      await maintainHeartbeat();
+      const wsAdvance = consumeTurnAutoAdvanceFromBuffer(
+        messageBuffer,
+        sessionId,
+        playerId,
+        expectedRoundNumber
+      );
+      if (wsAdvance) {
+        const refreshed = await refreshSessionAuthWithRecovery({
+          sessionId,
+          playerId: hostPlayerId,
+          displayName: hostDisplayName,
+          accessToken: token,
+        });
+        token = refreshed.accessToken;
+        const turnState = refreshed.snapshot?.turnState ?? null;
+        lastRound = normalizeE2ERoundNumber(turnState?.round, expectedRoundNumber ?? 1);
+        lastActivePlayerId =
+          typeof turnState?.activeTurnPlayerId === "string" ? turnState.activeTurnPlayerId : "";
+        return {
+          snapshot: refreshed.snapshot,
+          accessToken: token,
+          reason: typeof wsAdvance.reason === "string" ? wsAdvance.reason : "",
+        };
+      }
+      await waitMs(Math.max(50, timeoutStrikePollIntervalMs));
+    }
+  } else {
+    // Avoid aggressive auth-refresh polling here, since that path mutates liveness state
+    // and can delay turn-timeout expiry under load.
+    while (Date.now() < deadline) {
+      await maintainHeartbeat();
+      const remainingMs = Math.max(0, deadline - Date.now());
+      if (remainingMs <= 0) {
+        break;
+      }
+      await waitMs(Math.min(Math.max(50, timeoutStrikePollIntervalMs), remainingMs));
+    }
+  }
+
+  for (let probeAttempt = 1; probeAttempt <= 2; probeAttempt += 1) {
+    const refreshed = await refreshSessionAuthWithRecovery({
+      sessionId,
+      playerId: hostPlayerId,
+      displayName: hostDisplayName,
+      accessToken: token,
+    });
+    token = refreshed.accessToken;
+    const snapshot = refreshed.snapshot;
+    const turnState = snapshot?.turnState ?? null;
+    const round = normalizeE2ERoundNumber(turnState?.round, expectedRoundNumber ?? 1);
+    const activePlayerId =
+      typeof turnState?.activeTurnPlayerId === "string" ? turnState.activeTurnPlayerId : "";
+    lastRound = round;
+    lastActivePlayerId = activePlayerId;
+
+    if (activePlayerId !== playerId && (expectedRoundNumber === null || round === expectedRoundNumber)) {
+      return {
+        snapshot,
+        accessToken: token,
+        reason: "",
+      };
+    }
+
+    if (probeAttempt < 2) {
+      await waitMs(Math.max(400, timeoutStrikePollIntervalMs * 3));
+    }
+  }
+
+  throw new Error(
+    `timeout strike did not observe auto-advance for ${playerId} within ${waitTimeoutMs}ms (lastActive=${lastActivePlayerId || "none"}, lastRound=${lastRound})`
+  );
 }
 
 async function assertNoBufferedMessage(buffer, matcher, waitDurationMs, label) {
