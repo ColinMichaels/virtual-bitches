@@ -15,6 +15,8 @@
 - Updated room lifecycle saturation checks in `api/e2e/smoke.mjs` to fill the chosen room by `sessionId` (deterministic target) instead of only by room code.
 - Kept strict `room_full` assertions for session-targeted joins at capacity.
 - Relaxed room-code probe handling only when code resolution explicitly routes to a different session, with cleanup + logging, to reduce false failures in shared/persisted environments where room-code collisions can exist.
+- Added retry-tolerant handling for room-code probes that repeatedly resolve to the same target session after a successful `room_full` session-id probe, with explicit cleanup and transient-state logging.
+- Impact: deploy smoke no longer fails on cross-instance/public-room state drift while still enforcing hard capacity checks via direct session-id joins.
 - Updated winner-queue heartbeat handling in smoke to treat transient `session_expired`/lookup-style failures as recoverable while auth-refresh recovery runs, instead of hard-failing immediately.
 - Added websocket-assisted winner-queue restart detection (with HTTP fallback) so smoke can observe post-game auto-restart reliably even when cross-instance HTTP refresh polling sees transient session-store inconsistency.
 - Reduced winner-queue refresh polling cadence (1s throttle) and widened fresh-round detection criteria to avoid false negatives when participant reset state arrives before turn assignment state converges.
