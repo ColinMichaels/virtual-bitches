@@ -1323,7 +1323,7 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
     while (Date.now() < deadline) {
       const now = Date.now();
       if (now - lastHeartbeatPingAt >= 5000) {
-        const heartbeat = await apiRequest(
+        const heartbeat = await apiRequestWithStatus(
           `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/heartbeat`,
           {
             method: "POST",
@@ -1331,11 +1331,21 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
             body: { playerId: queueHostPlayerId },
           }
         );
-        assert(
-          heartbeat?.ok === true,
-          `queue lifecycle heartbeat did not return ok=true (reason=${String(heartbeat?.reason ?? "unknown")})`
-        );
-        lastHeartbeatPingAt = now;
+        if (heartbeat?.ok) {
+          lastHeartbeatPingAt = now;
+        } else if (isTransientQueueRefreshFailure(heartbeat)) {
+          // In production Cloud Run + external store flows, heartbeat can transiently
+          // observe stale session/auth state while refresh/rejoin recovery converges.
+          lastRefreshFailure = heartbeat;
+          lastHeartbeatPingAt = now;
+          log(
+            `Queue lifecycle heartbeat transient failure status=${heartbeat.status} reason=${String(heartbeat.body?.reason ?? "unknown")}; attempting auth refresh recovery.`
+          );
+        } else {
+          throw new Error(
+            `queue lifecycle heartbeat failed status=${heartbeat?.status ?? "unknown"} body=${JSON.stringify(heartbeat?.body ?? null)}`
+          );
+        }
       }
 
       const requestAuthRefresh = () =>
