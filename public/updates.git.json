@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-03-01T03:32:04.301Z",
+  "generatedAt": "2026-03-01T03:39:13.373Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-bc8320d",
+      "date": "2026-03-01T03:33:41.000Z",
+      "title": "extract api route handler registry module",
+      "content": "<p>extract api route handler registry module</p><p><strong>Commit:</strong> <code>bc8320d</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "bc8320dc4ad1c421c9d4b95956f32e0c5c86116e",
+        "shortHash": "bc8320d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/bc8320dc4ad1c421c9d4b95956f32e0c5c86116e"
+      }
+    },
     {
       "id": "git-3aae506",
       "date": "2026-03-01T03:26:14.000Z",
@@ -353,20 +367,6 @@
         "hash": "657cc4e564dfbaea35b0467a8c3578a5f457ae9e",
         "shortHash": "657cc4e",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/657cc4e564dfbaea35b0467a8c3578a5f457ae9e"
-      }
-    },
-    {
-      "id": "git-a738cb5",
-      "date": "2026-02-28T18:48:40.000Z",
-      "title": "Harden private-room join smoke checks for transient session expiry",
-      "content": "<p>Harden private-room join smoke checks for transient session expiry</p><p><strong>Commit:</strong> <code>a738cb5</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "a738cb5a6a2a7d753fe19b737b6e7cbea5530857",
-        "shortHash": "a738cb5",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a738cb5a6a2a7d753fe19b737b6e7cbea5530857"
       }
     }
   ]
