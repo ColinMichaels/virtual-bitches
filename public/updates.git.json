@@ -1,8 +1,288 @@
 {
-  "generatedAt": "2026-03-01T05:14:25.982Z",
+  "generatedAt": "2026-03-01T16:24:30.950Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-b19fa4f",
+      "date": "2026-03-01T15:33:22.000Z",
+      "title": "extract websocket turn handlers",
+      "content": "<p>extract websocket turn handlers</p><p><strong>Commit:</strong> <code>b19fa4f</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "b19fa4fb7e6b5500c241a7aef0459c6749b5db4a",
+        "shortHash": "b19fa4f",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/b19fa4fb7e6b5500c241a7aef0459c6749b5db4a"
+      }
+    },
+    {
+      "id": "git-3ee2f2f",
+      "date": "2026-03-01T15:28:53.000Z",
+      "title": "extract websocket message router",
+      "content": "<p>extract websocket message router</p><p><strong>Commit:</strong> <code>3ee2f2f</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "3ee2f2fceb19c79a8ae00b844bc02d64128ada19",
+        "shortHash": "3ee2f2f",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/3ee2f2fceb19c79a8ae00b844bc02d64128ada19"
+      }
+    },
+    {
+      "id": "git-e632671",
+      "date": "2026-03-01T15:22:29.000Z",
+      "title": "extract websocket upgrade auth",
+      "content": "<p>extract websocket upgrade auth</p><p><strong>Commit:</strong> <code>e632671</code></p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "e6326713833a1126783a2591cec948088f8f29f9",
+        "shortHash": "e632671",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/e6326713833a1126783a2591cec948088f8f29f9"
+      }
+    },
+    {
+      "id": "git-3e2de60",
+      "date": "2026-03-01T15:20:05.000Z",
+      "title": "extract websocket payload validation",
+      "content": "<p>extract websocket payload validation</p><p><strong>Commit:</strong> <code>3e2de60</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "3e2de6076bf535966a6c1e297e9dc24fa26ef1a3",
+        "shortHash": "3e2de60",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/3e2de6076bf535966a6c1e297e9dc24fa26ef1a3"
+      }
+    },
+    {
+      "id": "git-ea92d5e",
+      "date": "2026-03-01T15:17:55.000Z",
+      "title": "extract websocket relay module",
+      "content": "<p>extract websocket relay module</p><p><strong>Commit:</strong> <code>ea92d5e</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "ea92d5e1260c2a8e9692484372017331020bd395",
+        "shortHash": "ea92d5e",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/ea92d5e1260c2a8e9692484372017331020bd395"
+      }
+    },
+    {
+      "id": "git-a6f2763",
+      "date": "2026-03-01T15:11:22.000Z",
+      "title": "add websocket transport module coverage",
+      "content": "<p>add websocket transport module coverage</p><p><strong>Commit:</strong> <code>a6f2763</code></p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "a6f276361bf0bf15a70996e2c1b4cc9d99e145c9",
+        "shortHash": "a6f2763",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a6f276361bf0bf15a70996e2c1b4cc9d99e145c9"
+      }
+    },
+    {
+      "id": "git-da2ce80",
+      "date": "2026-03-01T14:31:42.000Z",
+      "title": "recover queue guest sit from transient session expiry",
+      "content": "<p>recover queue guest sit from transient session expiry</p><p><strong>Commit:</strong> <code>da2ce80</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "da2ce8076f815d3e6f7f8cada7a38102dd09636c",
+        "shortHash": "da2ce80",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/da2ce8076f815d3e6f7f8cada7a38102dd09636c"
+      }
+    },
+    {
+      "id": "git-5bff540",
+      "date": "2026-03-01T14:15:16.000Z",
+      "title": "silence DiceRenderer info logs",
+      "content": "<p>silence DiceRenderer info logs</p><p><strong>Commit:</strong> <code>5bff540</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "5bff540de49bab8c1f6690699942e64ba4077b49",
+        "shortHash": "5bff540",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/5bff540de49bab8c1f6690699942e64ba4077b49"
+      }
+    },
+    {
+      "id": "git-bd8feac",
+      "date": "2026-03-01T14:10:16.000Z",
+      "title": "persist scored spectator dice and improve seat bubbles",
+      "content": "<p>persist scored spectator dice and improve seat bubbles</p><p><strong>Commit:</strong> <code>bd8feac</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "bd8feaca9cceaeb3f19346c7c34c602e7cc2dd92",
+        "shortHash": "bd8feac",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/bd8feaca9cceaeb3f19346c7c34c602e7cc2dd92"
+      }
+    },
+    {
+      "id": "git-2f2cf2b",
+      "date": "2026-03-01T14:06:05.000Z",
+      "title": "render and linger bot spectator roll previews",
+      "content": "<p>render and linger bot spectator roll previews</p><p><strong>Commit:</strong> <code>2f2cf2b</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "2f2cf2b53c91984e517fefbe27ef64d1498c726b",
+        "shortHash": "2f2cf2b",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/2f2cf2b53c91984e517fefbe27ef64d1498c726b"
+      }
+    },
+    {
+      "id": "git-da8c13e",
+      "date": "2026-03-01T13:51:58.000Z",
+      "title": "avoid hard-fail on inconclusive full-session room probe",
+      "content": "<p>avoid hard-fail on inconclusive full-session room probe</p><p><strong>Commit:</strong> <code>da8c13e</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "da8c13e44caa6debe6fd88992ae805a5b69d26f3",
+        "shortHash": "da8c13e",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/da8c13e44caa6debe6fd88992ae805a5b69d26f3"
+      }
+    },
+    {
+      "id": "git-d5d1b3d",
+      "date": "2026-03-01T13:39:21.000Z",
+      "title": "recover heartbeat session_expired before forcing expiry",
+      "content": "<p>recover heartbeat session_expired before forcing expiry</p><p><strong>Commit:</strong> <code>d5d1b3d</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "d5d1b3d0045f41da53531f4275d0ce029d5003c0",
+        "shortHash": "d5d1b3d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d5d1b3d0045f41da53531f4275d0ce029d5003c0"
+      }
+    },
+    {
+      "id": "git-a3e7b30",
+      "date": "2026-03-01T12:48:59.000Z",
+      "title": "treat repeated demo autorun session_expired as inconclusive",
+      "content": "<p>treat repeated demo autorun session_expired as inconclusive</p><p><strong>Commit:</strong> <code>a3e7b30</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "a3e7b30f8e5f9cf135264ad744d02ed4a973d263",
+        "shortHash": "a3e7b30",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a3e7b30f8e5f9cf135264ad744d02ed4a973d263"
+      }
+    },
+    {
+      "id": "git-82746cd",
+      "date": "2026-03-01T06:09:20.000Z",
+      "title": "default non-main branch deploys to dev environment",
+      "content": "<p>default non-main branch deploys to dev environment</p><p><strong>Commit:</strong> <code>82746cd</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "82746cd9548bfe9dd9fd5edf82ed4ac2c1beecc9",
+        "shortHash": "82746cd",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/82746cd9548bfe9dd9fd5edf82ed4ac2c1beecc9"
+      }
+    },
+    {
+      "id": "git-c3d0fe0",
+      "date": "2026-03-01T05:50:30.000Z",
+      "title": "include ws transport modules in API image",
+      "content": "<p>include ws transport modules in API image</p><p><strong>Commit:</strong> <code>c3d0fe0</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "c3d0fe01aed118a4b8930df64ab6615406ba0e46",
+        "shortHash": "c3d0fe0",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c3d0fe01aed118a4b8930df64ab6615406ba0e46"
+      }
+    },
+    {
+      "id": "git-3b2ca08",
+      "date": "2026-03-01T05:49:06.000Z",
+      "title": "extract websocket lifecycle handler module",
+      "content": "<p>extract websocket lifecycle handler module</p><p><strong>Commit:</strong> <code>3b2ca08</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "3b2ca08ebe968285c67a85abc372ac94a8b65463",
+        "shortHash": "3b2ca08",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/3b2ca08ebe968285c67a85abc372ac94a8b65463"
+      }
+    },
+    {
+      "id": "git-3195156",
+      "date": "2026-03-01T05:38:42.000Z",
+      "title": "prevent settings modal crash when legacy variant controls are absent",
+      "content": "<p>prevent settings modal crash when legacy variant controls are absent</p><p><strong>Commit:</strong> <code>3195156</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "3195156250abd7af43e020cccf161aaa92da624b",
+        "shortHash": "3195156",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/3195156250abd7af43e020cccf161aaa92da624b"
+      }
+    },
+    {
+      "id": "git-d657c68",
+      "date": "2026-03-01T05:32:08.000Z",
+      "title": "extract websocket protocol/frame transport module",
+      "content": "<p>extract websocket protocol/frame transport module</p><p><strong>Commit:</strong> <code>d657c68</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "d657c68c332c20b1809057c347724224bb0d4700",
+        "shortHash": "d657c68",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d657c68c332c20b1809057c347724224bb0d4700"
+      }
+    },
+    {
+      "id": "git-46e871d",
+      "date": "2026-03-01T05:20:48.000Z",
+      "title": "migrate sender/direct policy checks into filter registry",
+      "content": "<p>migrate sender/direct policy checks into filter registry</p><p><strong>Commit:</strong> <code>46e871d</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "46e871d394aa000215f9b6b7d70054a7058c61cd",
+        "shortHash": "46e871d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/46e871d394aa000215f9b6b7d70054a7058c61cd"
+      }
+    },
+    {
+      "id": "git-534b1fc",
+      "date": "2026-03-01T05:16:11.000Z",
+      "title": "restore settings modal button behavior and profile avatar placement",
+      "content": "<p>restore settings modal button behavior and profile avatar placement</p><p><strong>Commit:</strong> <code>534b1fc</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "534b1fc944cc70b9058a0331f7f871842f1f914d",
+        "shortHash": "534b1fc",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/534b1fc944cc70b9058a0331f7f871842f1f914d"
+      }
+    },
     {
       "id": "git-27bf696",
       "date": "2026-03-01T05:08:50.000Z",
@@ -241,188 +521,6 @@
         "hash": "848e58d4c630200b34595cd960a1f6f69afb54b5",
         "shortHash": "848e58d",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/848e58d4c630200b34595cd960a1f6f69afb54b5"
-      }
-    },
-    {
-      "id": "git-eb1cb59",
-      "date": "2026-02-28T22:56:21.000Z",
-      "title": "track multiplayer test-speed and demo mode proposal",
-      "content": "<p>track multiplayer test-speed and demo mode proposal</p><p><strong>Commit:</strong> <code>eb1cb59</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "eb1cb59f82e8338df7f8d1d034f63982f48a20aa",
-        "shortHash": "eb1cb59",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/eb1cb59f82e8338df7f8d1d034f63982f48a20aa"
-      }
-    },
-    {
-      "id": "git-12f26f1",
-      "date": "2026-02-28T22:56:15.000Z",
-      "title": "e2e: recover realtime relay checks after transient socket churn",
-      "content": "<p>e2e: recover realtime relay checks after transient socket churn</p><p><strong>Commit:</strong> <code>12f26f1</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "12f26f1b65b637cf84b806365e14201e13e0778c",
-        "shortHash": "12f26f1",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/12f26f1b65b637cf84b806365e14201e13e0778c"
-      }
-    },
-    {
-      "id": "git-7909a2f",
-      "date": "2026-02-28T22:38:43.000Z",
-      "title": "e2e: harden participant-state recovery against transient session_expired",
-      "content": "<p>e2e: harden participant-state recovery against transient session_expired</p><p><strong>Commit:</strong> <code>7909a2f</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "7909a2ff789462661aac347ea90f03d9bced759a",
-        "shortHash": "7909a2f",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/7909a2ff789462661aac347ea90f03d9bced759a"
-      }
-    },
-    {
-      "id": "git-e363af1",
-      "date": "2026-02-28T22:26:50.000Z",
-      "title": "Update `updates.git.json` with the latest deploy notes and bugfixes for timeout-strike handling in #bugfix/fix-api-deploy.",
-      "content": "<p>Update `updates.git.json` with the latest deploy notes and bugfixes for timeout-strike handling in #bugfix/fix-api-deploy.</p><p><strong>Commit:</strong> <code>e363af1</code></p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "e363af161524c09d28c1d419bb8bc960b60e75ab",
-        "shortHash": "e363af1",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/e363af161524c09d28c1d419bb8bc960b60e75ab"
-      }
-    },
-    {
-      "id": "git-2ea43fb",
-      "date": "2026-02-28T22:23:21.000Z",
-      "title": "e2e: add 8-player mixed bot timeout smoke scenario",
-      "content": "<p>e2e: add 8-player mixed bot timeout smoke scenario</p><p><strong>Commit:</strong> <code>2ea43fb</code></p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "2ea43fb94d7088e1fe1bd9916363ff1c7b60c7b5",
-        "shortHash": "2ea43fb",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/2ea43fb94d7088e1fe1bd9916363ff1c7b60c7b5"
-      }
-    },
-    {
-      "id": "git-afc3d08",
-      "date": "2026-02-28T22:11:32.000Z",
-      "title": "e2e: add 2-player timeout strike observer smoke coverage",
-      "content": "<p>e2e: add 2-player timeout strike observer smoke coverage</p><p><strong>Commit:</strong> <code>afc3d08</code></p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "afc3d08776158d5804702086d7656c5b4de527ce",
-        "shortHash": "afc3d08",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/afc3d08776158d5804702086d7656c5b4de527ce"
-      }
-    },
-    {
-      "id": "git-629a3d0",
-      "date": "2026-02-28T22:01:38.000Z",
-      "title": "auto-stand repeat timeouts and move observers to lounge",
-      "content": "<p>auto-stand repeat timeouts and move observers to lounge</p><p><strong>Commit:</strong> <code>629a3d0</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "629a3d04c9d4868c2d38e770476dae01254a2fe4",
-        "shortHash": "629a3d0",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/629a3d04c9d4868c2d38e770476dae01254a2fe4"
-      }
-    },
-    {
-      "id": "git-6a0f30a",
-      "date": "2026-02-28T21:47:54.000Z",
-      "title": "finalize deploy stabilization notes and multiplayer updates",
-      "content": "<p>finalize deploy stabilization notes and multiplayer updates</p><p><strong>Commit:</strong> <code>6a0f30a</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "6a0f30a984d91bf23b1a86ee6762af8afbb8b237",
-        "shortHash": "6a0f30a",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/6a0f30a984d91bf23b1a86ee6762af8afbb8b237"
-      }
-    },
-    {
-      "id": "git-93c2ea7",
-      "date": "2026-02-28T21:10:02.000Z",
-      "title": "Fix transient timeout-strike session expiration handling in smoke tests",
-      "content": "<p>Fix transient timeout-strike session expiration handling in smoke tests</p><p><strong>Commit:</strong> <code>93c2ea7</code></p><p>#bugfix/fix-api-deploy</p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "93c2ea7f686752a715b40b496ce9885b3f8d9486",
-        "shortHash": "93c2ea7",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/93c2ea7f686752a715b40b496ce9885b3f8d9486"
-      }
-    },
-    {
-      "id": "git-a6e7413",
-      "date": "2026-02-28T20:50:20.000Z",
-      "title": "Harden session join logic with transient retry mechanism and enhanced error handling - #bugfix/fix-api-deploy",
-      "content": "<p>Harden session join logic with transient retry mechanism and enhanced error handling - #bugfix/fix-api-deploy</p><p><strong>Commit:</strong> <code>a6e7413</code></p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "a6e741354329fa2d4863de3170ac7e6480aa8dc5",
-        "shortHash": "a6e7413",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a6e741354329fa2d4863de3170ac7e6480aa8dc5"
-      }
-    },
-    {
-      "id": "git-eea0a84",
-      "date": "2026-02-28T20:40:25.000Z",
-      "title": "Fix transient timeout-strike observer checks and refine heartbeat logic in smoke tests - #bugfix/fix-api-deploy",
-      "content": "<p>Fix transient timeout-strike observer checks and refine heartbeat logic in smoke tests - #bugfix/fix-api-deploy</p><p><strong>Commit:</strong> <code>eea0a84</code></p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "eea0a849c1a0d6de3b21f1e4a430d9221f117a13",
-        "shortHash": "eea0a84",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/eea0a849c1a0d6de3b21f1e4a430d9221f117a13"
-      }
-    },
-    {
-      "id": "git-a10fd6a",
-      "date": "2026-02-28T20:21:26.000Z",
-      "title": "Fix transient queue refresh in `timeout-strike` handler for session recovery - #bugfix/fix-api-deploy",
-      "content": "<p>Fix transient queue refresh in `timeout-strike` handler for session recovery - #bugfix/fix-api-deploy</p><p><strong>Commit:</strong> <code>a10fd6a</code></p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "a10fd6aa1be570b951fdf29eec83be7afa1d1989",
-        "shortHash": "a10fd6a",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a10fd6aa1be570b951fdf29eec83be7afa1d1989"
-      }
-    },
-    {
-      "id": "git-deb4d04",
-      "date": "2026-02-28T20:03:21.000Z",
-      "title": "Fix timeout-strike handling for turn expiration scenarios in `bugfix/fix-api-deploy`",
-      "content": "<p>Fix timeout-strike handling for turn expiration scenarios in `bugfix/fix-api-deploy`</p><p><strong>Commit:</strong> <code>deb4d04</code></p><p>Refines turn expiration logic to avoid false positives with `turnExpiresAt` checks and stabilizes smoke tests with added timeout-strike observer validation workflows.</p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "deb4d0442d42673ae76b598f3dc3dbbb509b455a",
-        "shortHash": "deb4d04",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/deb4d0442d42673ae76b598f3dc3dbbb509b455a"
       }
     }
   ]

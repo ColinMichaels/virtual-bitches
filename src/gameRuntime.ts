@@ -852,6 +852,16 @@ class Game implements GameCallbacks {
       );
     });
 
+    document.addEventListener('camera:openControls', () => {
+      this.cameraControlsPanel.show();
+      const current = this.scene.getCameraPosition();
+      this.cameraControlsPanel.updateCurrentPosition(
+        current.alpha,
+        current.beta,
+        current.radius
+      );
+    });
+
     this.chaosUpgradeMenu = new ChaosUpgradeMenu();
 
     // Initialize controllers
@@ -889,6 +899,11 @@ class Game implements GameCallbacks {
     // Handle How to Play button in settings
     this.settingsModal.setOnHowToPlay(() => {
       rulesModal.show();
+    });
+    this.settingsModal.setOnOpenCameraControls(() => {
+      this.cameraControlsPanel.show();
+      const current = this.scene.getCameraPosition();
+      this.cameraControlsPanel.updateCurrentPosition(current.alpha, current.beta, current.radius);
     });
     rulesModal.setOnReplayTutorial(() => {
       this.replayTutorialFromRules();

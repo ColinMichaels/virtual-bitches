@@ -19,11 +19,15 @@ export interface AdminPrincipal {
 export interface AdminMonitorRoomParticipant {
   playerId: string;
   displayName?: string;
+  avatarUrl?: string;
+  providerId?: string;
   isBot: boolean;
+  isSeated?: boolean;
   isReady: boolean;
   isComplete: boolean;
   score: number;
   remainingDice: number;
+  queuedForNextGame?: boolean;
   lastHeartbeatAt: number;
   connected: boolean;
 }
@@ -70,6 +74,8 @@ export interface AdminMonitorMetrics {
   botCount: number;
   readyHumanCount: number;
   connectedSocketCount: number;
+  conductTrackedPlayerCount?: number;
+  conductMutedPlayerCount?: number;
   activeTurnTimeoutLoops: number;
   activeBotLoops: number;
   turnTimeoutAutoAdvanceCount: number;
@@ -127,6 +133,58 @@ export interface AdminAuditEntry {
     playerId?: string;
   };
 }
+
+export interface AdminSessionConductPolicy {
+  enabled?: boolean;
+  filterEnabled?: boolean;
+  strikeLimit?: number;
+  strikeWindowMs?: number;
+  muteDurationMs?: number;
+  autoBanStrikeLimit?: number;
+}
+
+export interface AdminSessionConductPlayerRecord {
+  playerId: string;
+  displayName?: string | null;
+  participantPresent: boolean;
+  isBot: boolean;
+  strikeCount: number;
+  totalStrikes: number;
+  strikeEvents: number[];
+  lastViolationAt: number | null;
+  mutedUntil: number | null;
+  isMuted: boolean;
+  muteRemainingMs: number;
+}
+
+export interface AdminSessionConductState {
+  timestamp: number;
+  sessionId: string;
+  roomCode?: string;
+  policy?: AdminSessionConductPolicy;
+  totalPlayerRecords: number;
+  players: AdminSessionConductPlayerRecord[];
+}
+
+export interface AdminSessionConductResult {
+  conduct: AdminSessionConductState | null;
+  status?: number;
+  reason?: string;
+  principal?: AdminPrincipal | null;
+}
+
+export interface AdminSessionChannelMessageOptions {
+  channel?: "public" | "direct";
+  title?: string;
+  message: string;
+  topic?: string;
+  severity?: "info" | "success" | "warning" | "error";
+  sourceRole?: "admin" | "service" | "system";
+  sourcePlayerId?: string;
+  targetPlayerId?: string;
+}
+
+export type AdminModerationAction = "kick" | "ban";
 
 export interface AdminMonitorResult {
   overview: AdminMonitorOverview | null;
@@ -452,6 +510,171 @@ export class AdminApiService {
     };
   }
 
+  async getSessionConductState(
+    sessionId: string,
+    limit: number = 200,
+    authOptions: AdminRequestAuthOptions = {}
+  ): Promise<AdminSessionConductResult> {
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      return {
+        conduct: null,
+        reason: "invalid_session_id",
+      };
+    }
+    const bounded = Math.max(1, Math.min(500, Math.floor(limit)));
+    const path = `/admin/sessions/${encodeURIComponent(normalizedSessionId)}/conduct?limit=${bounded}`;
+    const result = await this.requestJson(path, {
+      method: "GET",
+      authOptions,
+    });
+    if (!result.ok) {
+      return {
+        conduct: null,
+        status: result.status,
+        reason: result.reason,
+      };
+    }
+    if (!isAdminSessionConductState(result.payload)) {
+      return {
+        conduct: null,
+        status: result.status,
+        reason: "invalid_admin_payload",
+      };
+    }
+    return {
+      conduct: result.payload,
+      status: result.status,
+      principal: isRecord(result.payload?.principal) ? (result.payload.principal as AdminPrincipal) : null,
+    };
+  }
+
+  async sendSessionChannelMessage(
+    sessionId: string,
+    payload: AdminSessionChannelMessageOptions,
+    authOptions: AdminRequestAuthOptions = {}
+  ): Promise<AdminMutationResult> {
+    const normalizedSessionId = sessionId.trim();
+    const message = typeof payload.message === "string" ? payload.message.trim() : "";
+    if (!normalizedSessionId) {
+      return {
+        ok: false,
+        reason: "invalid_session_id",
+      };
+    }
+    if (!message) {
+      return {
+        ok: false,
+        reason: "missing_message",
+      };
+    }
+    if (payload.channel === "direct" && !payload.targetPlayerId?.trim()) {
+      return {
+        ok: false,
+        reason: "missing_target_player",
+      };
+    }
+    const path = `/admin/sessions/${encodeURIComponent(normalizedSessionId)}/channel/messages`;
+    const result = await this.requestJson(path, {
+      method: "POST",
+      body: {
+        channel: payload.channel === "direct" ? "direct" : "public",
+        title: payload.title,
+        message,
+        topic: payload.topic,
+        severity: payload.severity,
+        sourceRole: payload.sourceRole,
+        sourcePlayerId: payload.sourcePlayerId,
+        targetPlayerId: payload.targetPlayerId,
+      },
+      authOptions,
+    });
+    if (!result.ok) {
+      return {
+        ok: false,
+        status: result.status,
+        reason: result.reason,
+      };
+    }
+    return {
+      ok: result.payload?.ok === true,
+      status: result.status,
+      sessionId:
+        typeof result.payload?.sessionId === "string" ? result.payload.sessionId : normalizedSessionId,
+      playerId:
+        typeof result.payload?.targetPlayerId === "string"
+          ? result.payload.targetPlayerId
+          : payload.targetPlayerId?.trim() || undefined,
+      principal: isRecord(result.payload?.principal) ? (result.payload.principal as AdminPrincipal) : null,
+    };
+  }
+
+  async moderateSessionParticipant(
+    sessionId: string,
+    requesterPlayerId: string,
+    targetPlayerId: string,
+    action: AdminModerationAction,
+    authOptions: AdminRequestAuthOptions = {}
+  ): Promise<AdminMutationResult> {
+    const normalizedSessionId = sessionId.trim();
+    const normalizedRequesterPlayerId = requesterPlayerId.trim();
+    const normalizedTargetPlayerId = targetPlayerId.trim();
+    if (!normalizedSessionId) {
+      return {
+        ok: false,
+        reason: "invalid_session_id",
+      };
+    }
+    if (!normalizedRequesterPlayerId) {
+      return {
+        ok: false,
+        reason: "invalid_requester_player_id",
+      };
+    }
+    if (!normalizedTargetPlayerId) {
+      return {
+        ok: false,
+        reason: "invalid_target_player_id",
+      };
+    }
+    if (action !== "kick" && action !== "ban") {
+      return {
+        ok: false,
+        reason: "invalid_moderation_action",
+      };
+    }
+
+    const path = `/multiplayer/sessions/${encodeURIComponent(normalizedSessionId)}/moderate`;
+    const result = await this.requestJson(path, {
+      method: "POST",
+      body: {
+        requesterPlayerId: normalizedRequesterPlayerId,
+        targetPlayerId: normalizedTargetPlayerId,
+        action,
+      },
+      authOptions,
+    });
+    if (!result.ok) {
+      return {
+        ok: false,
+        status: result.status,
+        reason: result.reason,
+      };
+    }
+    return {
+      ok: result.payload?.ok === true,
+      status: result.status,
+      sessionId:
+        typeof result.payload?.sessionId === "string" ? result.payload.sessionId : normalizedSessionId,
+      playerId:
+        typeof result.payload?.targetPlayerId === "string"
+          ? result.payload.targetPlayerId
+          : normalizedTargetPlayerId,
+      sessionExpired: result.payload?.sessionExpired === true,
+      roomInventoryChanged: result.payload?.roomInventoryChanged === true,
+    };
+  }
+
   private async requestJson(
     path: string,
     options: {
@@ -681,6 +904,50 @@ function isAdminStoragePayload(
     return false;
   }
   return payload.sections.every((entry) => isAdminStorageSectionSummary(entry));
+}
+
+function isAdminSessionConductPlayerRecord(payload: unknown): payload is AdminSessionConductPlayerRecord {
+  if (!isRecord(payload)) {
+    return false;
+  }
+  if (typeof payload.playerId !== "string" || !payload.playerId.trim()) {
+    return false;
+  }
+  if (typeof payload.participantPresent !== "boolean") {
+    return false;
+  }
+  if (typeof payload.isBot !== "boolean") {
+    return false;
+  }
+  if (typeof payload.strikeCount !== "number" || !Number.isFinite(payload.strikeCount)) {
+    return false;
+  }
+  if (typeof payload.totalStrikes !== "number" || !Number.isFinite(payload.totalStrikes)) {
+    return false;
+  }
+  if (!Array.isArray(payload.strikeEvents)) {
+    return false;
+  }
+  return true;
+}
+
+function isAdminSessionConductState(payload: unknown): payload is AdminSessionConductState {
+  if (!isRecord(payload)) {
+    return false;
+  }
+  if (typeof payload.timestamp !== "number" || !Number.isFinite(payload.timestamp)) {
+    return false;
+  }
+  if (typeof payload.sessionId !== "string" || !payload.sessionId.trim()) {
+    return false;
+  }
+  if (typeof payload.totalPlayerRecords !== "number" || !Number.isFinite(payload.totalPlayerRecords)) {
+    return false;
+  }
+  if (!Array.isArray(payload.players)) {
+    return false;
+  }
+  return payload.players.every((entry) => isAdminSessionConductPlayerRecord(entry));
 }
 
 export const adminApiService = new AdminApiService();
