@@ -83,6 +83,15 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
   - `timeoutMs`
   - `onError: noop | block`
 - Migrate chat conduct as first decoupled filter chain.
+- Status: ✅ In progress checkpoint landed (`feature/server-phase-03-filter-addon-registry`)
+- Delivered in branch:
+  - `api/filters/addonRegistry.mjs`
+  - `api/filters/roomChannelChatConductFilter.mjs`
+  - `api/server.mjs` delegates room-channel chat-conduct gating through a registry-managed filter chain
+  - fail-open default policy for addon/filter execution errors (`onError: noop`)
+  - policy wiring for filter execution controls:
+    - `MULTIPLAYER_CHAT_CONDUCT_FILTER_TIMEOUT_MS`
+    - `MULTIPLAYER_CHAT_CONDUCT_FILTER_ON_ERROR`
 
 ## Phase 04 - Transport + WS Decoupling
 - Separate websocket frame/protocol handling from domain operations.
