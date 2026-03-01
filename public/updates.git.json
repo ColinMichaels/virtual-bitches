@@ -1,8 +1,36 @@
 {
-  "generatedAt": "2026-03-01T04:42:02.169Z",
+  "generatedAt": "2026-03-01T04:53:52.067Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-3c7aa2f",
+      "date": "2026-03-01T04:50:41.000Z",
+      "title": "improve deploy-api debug output readability",
+      "content": "<p>improve deploy-api debug output readability</p><p><strong>Commit:</strong> <code>3c7aa2f</code></p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "3c7aa2fff4d503f71b7676035ae5537bed8494ab",
+        "shortHash": "3c7aa2f",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/3c7aa2fff4d503f71b7676035ae5537bed8494ab"
+      }
+    },
+    {
+      "id": "git-5d9b42d",
+      "date": "2026-03-01T04:42:52.000Z",
+      "title": "extract turn-timeout engine boundary module",
+      "content": "<p>extract turn-timeout engine boundary module</p><p><strong>Commit:</strong> <code>5d9b42d</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "5d9b42d16314595bbfbf0fecc9558c0d9588fe9b",
+        "shortHash": "5d9b42d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/5d9b42d16314595bbfbf0fecc9558c0d9588fe9b"
+      }
+    },
     {
       "id": "git-05e00c3",
       "date": "2026-03-01T04:36:03.000Z",
@@ -381,20 +409,6 @@
         "hash": "4a7662f04affba6c5d3f17ac9c0b2ce62681a55c",
         "shortHash": "4a7662f",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/4a7662f04affba6c5d3f17ac9c0b2ce62681a55c"
-      }
-    },
-    {
-      "id": "git-b191a4a",
-      "date": "2026-02-28T19:30:50.000Z",
-      "title": "Fix smoke test room overflow handling and stabilize room join checks",
-      "content": "<p>Fix smoke test room overflow handling and stabilize room join checks</p><p><strong>Commit:</strong> <code>b191a4a</code></p><p>Resolves bugfix for improved room overflow polling with new constants `roomOverflowWaitMs` and `roomOverflowPollIntervalMs`. Refactors slot availability logic into reusable helper functions.</p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "b191a4aa06c9864e0d011ec51afccbcb36aedfa6",
-        "shortHash": "b191a4a",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/b191a4aa06c9864e0d011ec51afccbcb36aedfa6"
       }
     }
   ]

@@ -277,17 +277,60 @@ jobs:
           GCP_SA_KEY_B64: ${{ secrets.GCP_SA_KEY_B64 }}
         run: |
           set -euo pipefail
+          missing=()
           for key in PROJECT_ID API_BASE_URL WS_URL FB_API_KEY FB_AUTH_DOMAIN FB_PROJECT_ID FB_STORAGE_BUCKET FB_SENDER_ID FB_APP_ID; do
             value="${!key:-}"
             if [ -z "$value" ]; then
-              echo "Missing required secret/output: $key"
-              exit 1
+              missing+=("$key")
             fi
           done
-          if [ -z "${GCP_SA_KEY:-}" ] && [ -z "${GCP_SA_KEY_B64:-}" ]; then
-            echo "Missing required secret: GCP_SA_KEY (raw JSON) or GCP_SA_KEY_B64 (base64 JSON)"
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing required deploy-api values: ${missing[*]}"
+            printf 'Missing values:\n'
+            printf ' - %s\n' "${missing[@]}"
             exit 1
           fi
+          if [ -z "${GCP_SA_KEY:-}" ] && [ -z "${GCP_SA_KEY_B64:-}" ]; then
+            echo "::error::Missing required secret: GCP_SA_KEY (raw JSON) or GCP_SA_KEY_B64 (base64 JSON)"
+            exit 1
+          fi
+
+      - name: Deploy API Run Summary
+        env:
+          PROJECT_ID: ${{ steps.target.outputs.project_id }}
+          API_BASE_URL: ${{ steps.target.outputs.api_base_url }}
+          WS_URL: ${{ steps.target.outputs.ws_url }}
+          FIRESTORE_PREFIX: ${{ vars.API_FIRESTORE_PREFIX || 'api_v1' }}
+          API_MIN_INSTANCES: ${{ vars.API_MIN_INSTANCES || '1' }}
+          API_MAX_INSTANCES: ${{ vars.API_MAX_INSTANCES || '1' }}
+        run: |
+          set -euo pipefail
+          echo "::group::Deploy API Context"
+          echo "service         : biscuits-api"
+          echo "region          : us-central1"
+          echo "project         : ${PROJECT_ID}"
+          echo "api_base_url    : ${API_BASE_URL}"
+          echo "ws_url          : ${WS_URL}"
+          echo "store_backend   : firestore"
+          echo "firestore_prefix: ${FIRESTORE_PREFIX}"
+          echo "instances       : min=${API_MIN_INSTANCES}, max=${API_MAX_INSTANCES}"
+          echo "::endgroup::"
+
+          {
+            echo "## Deploy API Context"
+            echo
+            echo "| Key | Value |"
+            echo "| --- | ----- |"
+            echo "| Service | \`biscuits-api\` |"
+            echo "| Region | \`us-central1\` |"
+            echo "| Project | \`${PROJECT_ID}\` |"
+            echo "| API Base URL | \`${API_BASE_URL}\` |"
+            echo "| WS URL | \`${WS_URL}\` |"
+            echo "| Store Backend | \`firestore\` |"
+            echo "| Firestore Prefix | \`${FIRESTORE_PREFIX}\` |"
+            echo "| Instances | \`min=${API_MIN_INSTANCES}, max=${API_MAX_INSTANCES}\` |"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Normalize Google credentials
         id: gcp-creds
@@ -385,12 +428,49 @@ jobs:
           REGION: us-central1
         run: |
           set +e
-          echo "Cloud Run service status:"
+          echo "::group::Cloud Run Service Status"
           gcloud run services describe "$SERVICE_NAME" \
             --region "$REGION" \
             --format='yaml(status.conditions,status.latestCreatedRevisionName,status.latestReadyRevisionName)' || true
+          echo "::endgroup::"
 
-          echo "Latest Cloud Build (if available):"
+          REVISION_NAME="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.latestCreatedRevisionName)')"
+          LATEST_READY_REVISION="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.latestReadyRevisionName)')"
+          READY_REASON="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.conditions[?type=Ready].reason)')"
+          READY_MESSAGE="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.conditions[?type=Ready].message)')"
+          READY_MESSAGE="${READY_MESSAGE//$'\n'/ }"
+          READY_MESSAGE_MD="${READY_MESSAGE//|/\\|}"
+          if [ -z "$READY_REASON" ]; then
+            READY_REASON="unknown"
+          fi
+          if [ -z "$READY_MESSAGE" ]; then
+            READY_MESSAGE="no ready-condition message returned"
+          fi
+
+          echo "::group::Cloud Run Parsed Failure Summary"
+          echo "Service               : ${SERVICE_NAME}"
+          echo "Region                : ${REGION}"
+          echo "Latest created rev    : ${REVISION_NAME:-unknown}"
+          echo "Latest ready rev      : ${LATEST_READY_REVISION:-unknown}"
+          echo "Ready failure reason  : ${READY_REASON}"
+          echo "Ready failure message : ${READY_MESSAGE}"
+          echo "::endgroup::"
+
+          {
+            echo "## Deploy API Failure Summary"
+            echo
+            echo "| Key | Value |"
+            echo "| --- | ----- |"
+            echo "| Service | \`${SERVICE_NAME}\` |"
+            echo "| Region | \`${REGION}\` |"
+            echo "| Latest Created Revision | \`${REVISION_NAME:-unknown}\` |"
+            echo "| Latest Ready Revision | \`${LATEST_READY_REVISION:-unknown}\` |"
+            echo "| Ready Reason | \`${READY_REASON}\` |"
+            echo "| Ready Message | ${READY_MESSAGE_MD} |"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::group::Latest Cloud Build"
           LATEST_BUILD_ID="$(gcloud builds list --sort-by=~createTime --limit=1 --format='value(id)' 2>/dev/null)"
           if [ -n "$LATEST_BUILD_ID" ]; then
             gcloud builds describe "$LATEST_BUILD_ID" \
@@ -398,25 +478,27 @@ jobs:
           else
             echo "No Cloud Build ID available from current credentials."
           fi
+          echo "::endgroup::"
 
-          REVISION_NAME="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.latestCreatedRevisionName)')"
+          echo "::group::Revision Diagnostics"
           if [ -n "$REVISION_NAME" ]; then
-            echo "Cloud Run revision status for $REVISION_NAME:"
+            echo "Cloud Run revision status for ${REVISION_NAME}:"
             gcloud run revisions describe "$REVISION_NAME" \
               --region "$REGION" \
               --format='yaml(status.conditions)' || true
 
-            echo "Recent logs for $REVISION_NAME:"
+            echo "Recent logs for ${REVISION_NAME}:"
             gcloud logging read \
               "resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE_NAME AND resource.labels.revision_name=$REVISION_NAME" \
               --limit=200 \
               --format='table(timestamp,severity,textPayload,jsonPayload.message)' || true
-            echo "Fallback logs via Cloud Run service reader:"
+            echo "Fallback logs via Cloud Run service reader (latest service logs):"
             gcloud run services logs read "$SERVICE_NAME" --region "$REGION" --limit=200 || true
           else
             echo "No created revision found; dumping recent service logs."
             gcloud run services logs read "$SERVICE_NAME" --region "$REGION" --limit=200 || true
           fi
+          echo "::endgroup::"
 
           # Never fail this diagnostics helper step; preserve original deploy outcome.
           exit 0
@@ -439,51 +521,76 @@ jobs:
           E2E_CHAT_CONDUCT_TEST_TERM: ${{ vars.E2E_CHAT_CONDUCT_TEST_TERM || 'e2e-term-blocked' }}
         run: |
           set -euo pipefail
+          print_probe_status() {
+            local label="$1"
+            local url="$2"
+            local status="$3"
+            echo "[probe] ${label}: attempt=${status%:*} code=${status#*:} url=${url}"
+          }
           if [ -z "${E2E_API_BASE_URL:-}" ]; then
-            echo "Missing deploy-cloudrun output URL."
+            echo "::error::Missing deploy-cloudrun output URL."
             exit 1
           fi
           if [ "${E2E_ASSERT_STORAGE_CUTOVER}" = "0" ]; then
-            echo "Skipping admin storage cutover assertion (no API_ADMIN_TOKEN or E2E_FIREBASE_ID_TOKEN configured)."
+            echo "::notice::Skipping admin storage cutover assertion (no API_ADMIN_TOKEN or E2E_FIREBASE_ID_TOKEN configured)."
           fi
-          echo "Cloud Run health snapshot:"
+
+          echo "::group::Cloud Run Health Snapshot"
           curl -fsS "${E2E_API_BASE_URL%/}/api/health" || true
-          echo "Waiting for Cloud Run readiness..."
+          echo "::endgroup::"
+
+          echo "::group::Cloud Run Readiness Probe"
           READY=0
+          LAST_READY_STATUS="0:000"
           for attempt in $(seq 1 30); do
-            if curl -fsS "${E2E_API_BASE_URL%/}/api/ready"; then
+            READY_CODE="$(curl -s -o /tmp/api-ready.out -w "%{http_code}" "${E2E_API_BASE_URL%/}/api/ready" || true)"
+            LAST_READY_STATUS="${attempt}:${READY_CODE:-000}"
+            print_probe_status "cloud-run" "${E2E_API_BASE_URL%/}/api/ready" "${LAST_READY_STATUS}"
+            if [ "${READY_CODE}" = "200" ]; then
               READY=1
               break
             fi
             sleep 2
           done
           if [ "$READY" != "1" ]; then
-            echo "Cloud Run readiness probe failed before smoke; continuing to capture smoke failure diagnostics."
+            echo "::warning::Cloud Run readiness probe did not reach HTTP 200 before smoke; continuing for diagnostics."
           fi
-          echo "Running smoke against Cloud Run URL..."
+          echo "::endgroup::"
+
+          echo "::group::Smoke Against Cloud Run URL"
           node api/e2e/smoke.mjs
+          echo "::endgroup::"
+
           if [ -n "${E2E_HOSTING_API_BASE_URL:-}" ] && [ "${E2E_HOSTING_API_BASE_URL}" != "${E2E_API_BASE_URL}" ]; then
             case "${E2E_HOSTING_API_BASE_URL}" in
               http://*|https://*)
-                echo "Hosting rewrite health snapshot:"
+                echo "::group::Hosting Rewrite Health Snapshot"
                 curl -fsS "${E2E_HOSTING_API_BASE_URL%/}/api/health" || true
-                echo "Waiting for Hosting rewrite readiness..."
+                echo "::endgroup::"
+
+                echo "::group::Hosting Rewrite Readiness Probe"
                 HOSTING_READY=0
+                LAST_HOSTING_READY_STATUS="0:000"
                 for attempt in $(seq 1 30); do
-                  if curl -fsS "${E2E_HOSTING_API_BASE_URL%/}/api/ready"; then
+                  HOSTING_READY_CODE="$(curl -s -o /tmp/hosting-ready.out -w "%{http_code}" "${E2E_HOSTING_API_BASE_URL%/}/api/ready" || true)"
+                  LAST_HOSTING_READY_STATUS="${attempt}:${HOSTING_READY_CODE:-000}"
+                  print_probe_status "hosting-rewrite" "${E2E_HOSTING_API_BASE_URL%/}/api/ready" "${LAST_HOSTING_READY_STATUS}"
+                  if [ "${HOSTING_READY_CODE}" = "200" ]; then
                     HOSTING_READY=1
                     break
                   fi
                   sleep 2
                 done
                 if [ "$HOSTING_READY" != "1" ]; then
-                  echo "Hosting rewrite readiness probe failed before smoke; continuing to capture smoke failure diagnostics."
+                  echo "::warning::Hosting rewrite readiness probe did not reach HTTP 200 before smoke; continuing for diagnostics."
                 fi
-                echo "Running smoke against Hosting rewrite URL..."
+                echo "::endgroup::"
+                echo "::group::Smoke Against Hosting Rewrite URL"
                 E2E_API_BASE_URL="${E2E_HOSTING_API_BASE_URL}" node api/e2e/smoke.mjs
+                echo "::endgroup::"
                 ;;
               *)
-                echo "Skipping Hosting rewrite smoke (E2E_HOSTING_API_BASE_URL is not an absolute URL)."
+                echo "::notice::Skipping Hosting rewrite smoke (E2E_HOSTING_API_BASE_URL is not an absolute URL)."
                 ;;
             esac
           fi
