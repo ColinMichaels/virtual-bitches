@@ -1,6 +1,6 @@
 # BISCUITS - Session Summary
 **Date:** March 1, 2026  
-**Focus:** Unified game config follow-through plus Phase 01 routing extraction and Phase 02 engine-boundary checkpoint
+**Focus:** Unified game config follow-through plus Phase 01 routing extraction and iterative Phase 02 engine-boundary checkpoints
 
 ---
 
@@ -41,6 +41,8 @@
   - `api/engine/sessionTurnEngine.mjs`
 - Extracted post-game/session lifecycle state transition logic from `api/server.mjs` into:
   - `api/engine/sessionLifecycleEngine.mjs`
+- Extracted bot turn execution transition logic from `api/server.mjs` into:
+  - `api/engine/botTurnEngine.mjs`
 - Added dependency-injected engine composition in `server.mjs` so core turn transitions run behind explicit interfaces.
 - Kept transport and orchestration call sites stable via wrapper delegation:
   - `ensureSessionTurnState`
@@ -58,6 +60,8 @@
   - `markSessionPostGamePlayerAction`
   - `resetSessionForNextGame`
   - `completeSessionRoundWithWinner`
+- Added stable wrapper delegation for bot progression operations:
+  - `executeBotTurn`
 - Preserved API/WebSocket behavior while isolating core game transition logic from the server composition root.
 
 ---
@@ -67,6 +71,7 @@
 ### Confirmed
 - `npm run test:game-config` passes.
 - `npm run test:backend-api` passes.
+- `node --check api/engine/botTurnEngine.mjs` passes.
 - `node --check api/engine/sessionLifecycleEngine.mjs` passes.
 - `node --check api/engine/sessionTurnEngine.mjs` passes.
 - `node --check api/server.mjs` passes.

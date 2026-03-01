@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-03-01T03:49:50.327Z",
+  "generatedAt": "2026-03-01T04:34:40.970Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-99b7fd1",
+      "date": "2026-03-01T04:07:04.000Z",
+      "title": "extract session lifecycle engine boundary module for post-game transitions in feature/server-phase-02-engine-boundaries",
+      "content": "<p>extract session lifecycle engine boundary module for post-game transitions in feature/server-phase-02-engine-boundaries</p><p><strong>Commit:</strong> <code>99b7fd1</code></p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "99b7fd10330e94b64768eba66c71afef2d997b5f",
+        "shortHash": "99b7fd1",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/99b7fd10330e94b64768eba66c71afef2d997b5f"
+      }
+    },
     {
       "id": "git-9c165d8",
       "date": "2026-03-01T03:45:50.000Z",
@@ -367,20 +381,6 @@
         "hash": "b191a4aa06c9864e0d011ec51afccbcb36aedfa6",
         "shortHash": "b191a4a",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/b191a4aa06c9864e0d011ec51afccbcb36aedfa6"
-      }
-    },
-    {
-      "id": "git-657cc4e",
-      "date": "2026-02-28T19:22:22.000Z",
-      "title": "Auto-score timed-out turns and expire rooms with no seated players",
-      "content": "<p>Auto-score timed-out turns and expire rooms with no seated players</p><p><strong>Commit:</strong> <code>657cc4e</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "657cc4e564dfbaea35b0467a8c3578a5f457ae9e",
-        "shortHash": "657cc4e",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/657cc4e564dfbaea35b0467a8c3578a5f457ae9e"
       }
     }
   ]
