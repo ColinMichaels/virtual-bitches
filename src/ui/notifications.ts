@@ -3,7 +3,7 @@
  * Displays channel-specific notifications:
  * - gameplay: centered gameboard toasts
  * - private: side toasts for direct/private player messages
- * - debug: toggleable right-corner monitor
+ * - debug: monitor feed rendered inside debug view
  */
 
 export type NotificationType = "info" | "success" | "warning" | "error";
@@ -45,6 +45,23 @@ interface NotificationVisibilityPrefs {
   private: boolean;
 }
 
+interface DebugMonitorElements {
+  entryList: HTMLElement;
+  toggleGameplay: HTMLInputElement;
+  togglePrivate: HTMLInputElement;
+  toggleDebug: HTMLInputElement;
+  unreadBadge?: HTMLElement | null;
+  clearButton?: HTMLButtonElement | null;
+}
+
+interface DebugMonitorEntry {
+  message: string;
+  detail?: string;
+  type: NotificationType;
+  timestamp: number;
+  icon?: string;
+}
+
 export class NotificationService {
   private toastContainers!: Record<ToastChannel, HTMLElement>;
   private queueByChannel: Record<ToastChannel, QueuedNotification[]> = {
@@ -71,14 +88,8 @@ export class NotificationService {
   private readonly visibilityStorageKey = "vb.notification.channelVisibility.v1";
   private channelVisibility: NotificationVisibilityPrefs;
 
-  private debugRoot: HTMLElement;
-  private debugToggle: HTMLButtonElement;
-  private debugPanel: HTMLElement;
-  private debugUnreadBadge: HTMLElement;
-  private debugEntryList: HTMLElement;
-  private debugToggleGameplay: HTMLInputElement;
-  private debugTogglePrivate: HTMLInputElement;
-  private debugToggleDebug: HTMLInputElement;
+  private debugMonitor: DebugMonitorElements | null = null;
+  private debugEntryStore: DebugMonitorEntry[] = [];
   private debugUnreadCount = 0;
   private debugPanelOpen = false;
 
@@ -103,84 +114,30 @@ export class NotificationService {
       gameplay: gameplayContainer,
       private: privateContainer,
     };
-
-    this.debugRoot = document.createElement("section");
-    this.debugRoot.id = "notification-debug-root";
-
-    this.debugToggle = document.createElement("button");
-    this.debugToggle.type = "button";
-    this.debugToggle.id = "notification-debug-toggle";
-    this.debugToggle.className = "notification-debug-toggle";
-    this.debugToggle.setAttribute("aria-expanded", "false");
-    this.debugToggle.innerHTML = `
-      <span class="notification-debug-toggle-label">Debug</span>
-      <span id="notification-debug-unread" class="notification-debug-unread is-hidden" aria-live="polite"></span>
-    `;
-    this.debugUnreadBadge = this.debugToggle.querySelector("#notification-debug-unread") as HTMLElement;
-
-    this.debugPanel = document.createElement("div");
-    this.debugPanel.id = "notification-debug-panel";
-    this.debugPanel.className = "notification-debug-panel";
-    this.debugPanel.innerHTML = `
-      <div class="notification-debug-header">
-        <strong class="notification-debug-title">Debug Monitor</strong>
-        <button type="button" class="notification-debug-clear">Clear</button>
-      </div>
-      <div class="notification-debug-filters">
-        <label class="notification-debug-filter">
-          <input id="notification-debug-filter-gameplay" type="checkbox" />
-          <span>Gameplay</span>
-        </label>
-        <label class="notification-debug-filter">
-          <input id="notification-debug-filter-private" type="checkbox" />
-          <span>Private</span>
-        </label>
-        <label class="notification-debug-filter">
-          <input id="notification-debug-filter-debug" type="checkbox" />
-          <span>Debug</span>
-        </label>
-      </div>
-      <div class="notification-debug-list-wrap">
-        <ul id="notification-debug-list" class="notification-debug-list" aria-live="polite"></ul>
-      </div>
-    `;
-    this.debugEntryList = this.debugPanel.querySelector("#notification-debug-list") as HTMLElement;
-    this.debugToggleGameplay = this.debugPanel.querySelector(
-      "#notification-debug-filter-gameplay"
-    ) as HTMLInputElement;
-    this.debugTogglePrivate = this.debugPanel.querySelector(
-      "#notification-debug-filter-private"
-    ) as HTMLInputElement;
-    this.debugToggleDebug = this.debugPanel.querySelector(
-      "#notification-debug-filter-debug"
-    ) as HTMLInputElement;
-
-    this.debugRoot.appendChild(this.debugToggle);
-    this.debugRoot.appendChild(this.debugPanel);
-    document.body.appendChild(this.debugRoot);
-
-    this.debugToggle.addEventListener("click", () => {
-      this.setDebugPanelOpen(!this.debugPanelOpen);
-    });
-    (this.debugPanel.querySelector(".notification-debug-clear") as HTMLButtonElement).addEventListener(
-      "click",
-      () => {
-        this.debugEntryList.innerHTML = "";
-      }
-    );
-    this.debugToggleGameplay.addEventListener("change", () => {
-      this.setChannelVisibility("gameplay", this.debugToggleGameplay.checked);
-    });
-    this.debugTogglePrivate.addEventListener("change", () => {
-      this.setChannelVisibility("private", this.debugTogglePrivate.checked);
-    });
-    this.debugToggleDebug.addEventListener("change", () => {
-      this.setChannelVisibility("debug", this.debugToggleDebug.checked);
-    });
-
-    this.syncDebugFilterInputs();
     this.applyChannelVisibility();
-    this.setDebugPanelOpen(false);
+  }
+
+  attachDebugMonitor(elements: DebugMonitorElements): void {
+    this.debugMonitor = elements;
+    elements.toggleGameplay.addEventListener("change", () => {
+      this.setChannelVisibility("gameplay", elements.toggleGameplay.checked);
+    });
+    elements.togglePrivate.addEventListener("change", () => {
+      this.setChannelVisibility("private", elements.togglePrivate.checked);
+    });
+    elements.toggleDebug.addEventListener("change", () => {
+      this.setChannelVisibility("debug", elements.toggleDebug.checked);
+    });
+    elements.clearButton?.addEventListener("click", () => {
+      this.clearDebugEntries();
+    });
+    this.syncDebugFilterInputs();
+    this.renderDebugEntries();
+    this.updateDebugUnreadBadge();
+  }
+
+  detachDebugMonitor(): void {
+    this.debugMonitor = null;
   }
 
   /**
@@ -504,10 +461,38 @@ export class NotificationService {
   private displayDebugNotification(notification: QueuedNotification): void {
     const { message, detail, type, timestamp, dedupeKey, icon } = notification;
     this.debugRecentByDedupeKey.set(dedupeKey, timestamp);
+    this.debugEntryStore.unshift({
+      message,
+      detail,
+      type,
+      timestamp,
+      icon,
+    });
+    if (this.debugEntryStore.length > 100) {
+      this.debugEntryStore.length = 100;
+    }
+    this.renderDebugEntries();
 
+    if (!this.debugPanelOpen) {
+      this.debugUnreadCount += 1;
+      this.updateDebugUnreadBadge();
+    }
+  }
+
+  private renderDebugEntries(): void {
+    if (!this.debugMonitor) {
+      return;
+    }
+    this.debugMonitor.entryList.innerHTML = "";
+    for (const entry of this.debugEntryStore) {
+      this.debugMonitor.entryList.appendChild(this.createDebugEntryElement(entry));
+    }
+  }
+
+  private createDebugEntryElement(entry: DebugMonitorEntry): HTMLElement {
     const item = document.createElement("li");
-    item.className = `notification-debug-entry notification-debug-entry-${type}`;
-    const timeLabel = new Date(timestamp).toLocaleTimeString([], { hour12: false });
+    item.className = `notification-debug-entry notification-debug-entry-${entry.type}`;
+    const timeLabel = new Date(entry.timestamp).toLocaleTimeString([], { hour12: false });
 
     const head = document.createElement("div");
     head.className = "notification-debug-entry-head";
@@ -519,37 +504,24 @@ export class NotificationService {
 
     const levelEl = document.createElement("span");
     levelEl.className = "notification-debug-entry-level";
-    levelEl.textContent = type.toUpperCase();
+    levelEl.textContent = entry.type.toUpperCase();
     head.appendChild(levelEl);
 
     const messageEl = document.createElement("p");
     messageEl.className = "notification-debug-entry-message";
-    messageEl.textContent = icon ? `${icon} ${message}` : message;
+    messageEl.textContent = entry.icon ? `${entry.icon} ${entry.message}` : entry.message;
 
     item.appendChild(head);
     item.appendChild(messageEl);
 
-    if (detail) {
+    if (entry.detail) {
       const detailEl = document.createElement("p");
       detailEl.className = "notification-debug-entry-detail";
-      detailEl.textContent = detail;
+      detailEl.textContent = entry.detail;
       item.appendChild(detailEl);
     }
 
-    this.debugEntryList.prepend(item);
-
-    while (this.debugEntryList.childElementCount > 100) {
-      const last = this.debugEntryList.lastElementChild;
-      if (!last) {
-        break;
-      }
-      last.remove();
-    }
-
-    if (!this.debugPanelOpen) {
-      this.debugUnreadCount += 1;
-      this.updateDebugUnreadBadge();
-    }
+    return item;
   }
 
   /**
@@ -579,11 +551,8 @@ export class NotificationService {
     }
   }
 
-  private setDebugPanelOpen(open: boolean): void {
+  setDebugPanelOpen(open: boolean): void {
     this.debugPanelOpen = open;
-    this.debugRoot.classList.toggle("is-open", open);
-    this.debugPanel.classList.toggle("is-open", open);
-    this.debugToggle.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
       this.debugUnreadCount = 0;
       this.updateDebugUnreadBadge();
@@ -646,19 +615,34 @@ export class NotificationService {
   }
 
   private syncDebugFilterInputs(): void {
-    this.debugToggleGameplay.checked = this.channelVisibility.gameplay;
-    this.debugTogglePrivate.checked = this.channelVisibility.private;
-    this.debugToggleDebug.checked = this.channelVisibility.debug;
+    if (!this.debugMonitor) {
+      return;
+    }
+    this.debugMonitor.toggleGameplay.checked = this.channelVisibility.gameplay;
+    this.debugMonitor.togglePrivate.checked = this.channelVisibility.private;
+    this.debugMonitor.toggleDebug.checked = this.channelVisibility.debug;
   }
 
   private updateDebugUnreadBadge(): void {
-    if (this.debugUnreadCount <= 0) {
-      this.debugUnreadBadge.classList.add("is-hidden");
-      this.debugUnreadBadge.textContent = "";
+    const unreadBadge = this.debugMonitor?.unreadBadge;
+    if (!unreadBadge) {
       return;
     }
-    this.debugUnreadBadge.classList.remove("is-hidden");
-    this.debugUnreadBadge.textContent = this.debugUnreadCount > 99 ? "99+" : `${this.debugUnreadCount}`;
+    if (this.debugUnreadCount <= 0) {
+      unreadBadge.classList.add("is-hidden");
+      unreadBadge.textContent = "";
+      return;
+    }
+    unreadBadge.classList.remove("is-hidden");
+    unreadBadge.textContent = this.debugUnreadCount > 99 ? "99+" : `${this.debugUnreadCount}`;
+  }
+
+  clearDebugEntries(): void {
+    this.debugEntryStore = [];
+    this.debugRecentByDedupeKey.clear();
+    this.debugUnreadCount = 0;
+    this.renderDebugEntries();
+    this.updateDebugUnreadBadge();
   }
 
   /**
@@ -667,10 +651,7 @@ export class NotificationService {
   clear(): void {
     this.clearToastChannel("gameplay");
     this.clearToastChannel("private");
-    this.debugEntryList.innerHTML = "";
-    this.debugRecentByDedupeKey.clear();
-    this.debugUnreadCount = 0;
-    this.updateDebugUnreadBadge();
+    this.clearDebugEntries();
   }
 }
 

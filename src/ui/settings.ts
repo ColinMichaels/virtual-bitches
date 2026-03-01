@@ -4,6 +4,7 @@
  */
 
 import { settingsService, Settings } from "../services/settings.js";
+import { cameraService } from "../services/cameraService.js";
 import { audioService } from "../services/audio.js";
 import { hapticsService } from "../services/haptics.js";
 import { notificationService } from "./notifications.js";
@@ -53,6 +54,7 @@ export class SettingsModal {
   private onClose: (() => void) | null = null;
   private onNewGame: (() => void) | null = null;
   private onHowToPlay: (() => void) | null = null;
+  private onOpenCameraControls: (() => void) | null = null;
   private checkGameInProgress: (() => boolean) | null = null;
   private activeTab: SettingsTab = "game";
   private savingLeaderboardName = false;
@@ -220,6 +222,63 @@ export class SettingsModal {
                   <option value="high" ${this.settings.display.visual.tableContrast === "high" ? "selected" : ""}>${t("settings.controls.tableContrast.high")}</option>
                   <option value="maximum" ${this.settings.display.visual.tableContrast === "maximum" ? "selected" : ""}>${t("settings.controls.tableContrast.maximum")}</option>
                 </select>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3>Camera Presets</h3>
+              <p class="setting-description">
+                Save custom camera positions and tune transition behavior.
+              </p>
+
+              <div class="setting-row">
+                <label>
+                  <input
+                    type="checkbox"
+                    id="camera-smooth-transitions"
+                    ${this.settings.camera?.smoothTransitions ? "checked" : ""}
+                  >
+                  Smooth camera transitions
+                </label>
+              </div>
+
+              <div class="setting-row">
+                <label for="camera-transition-duration">Transition Duration</label>
+                <input
+                  type="range"
+                  id="camera-transition-duration"
+                  min="0.2"
+                  max="2.5"
+                  step="0.05"
+                  value="${Number(this.settings.camera?.transitionDuration ?? 0.75).toFixed(2)}"
+                >
+                <span id="camera-transition-duration-value">${Number(
+                  this.settings.camera?.transitionDuration ?? 0.75
+                ).toFixed(2)}s</span>
+              </div>
+
+              <div class="setting-row">
+                <label for="camera-sensitivity">Camera Sensitivity</label>
+                <input
+                  type="range"
+                  id="camera-sensitivity"
+                  min="0.5"
+                  max="2.0"
+                  step="0.05"
+                  value="${Number(this.settings.camera?.sensitivity ?? this.settings.controls.cameraSensitivity ?? 1.0).toFixed(2)}"
+                >
+                <span id="camera-sensitivity-value">${Number(
+                  this.settings.camera?.sensitivity ?? this.settings.controls.cameraSensitivity ?? 1.0
+                ).toFixed(2)}x</span>
+              </div>
+
+              <div class="setting-row settings-camera-preset-row">
+                <button type="button" id="settings-open-camera-controls" class="btn btn-secondary">
+                  Open Camera Preset Manager
+                </button>
+                <span id="settings-camera-preset-summary" class="setting-description">
+                  ${this.getCameraPresetSummary()}
+                </span>
               </div>
             </div>
 
@@ -422,6 +481,56 @@ export class SettingsModal {
       }, 800);
 
       audioService.playSfx("click");
+    });
+
+    const cameraSmoothTransitions = document.getElementById(
+      "camera-smooth-transitions"
+    ) as HTMLInputElement | null;
+    cameraSmoothTransitions?.addEventListener("change", () => {
+      settingsService.updateCamera({
+        smoothTransitions: cameraSmoothTransitions.checked,
+      });
+      audioService.playSfx("click");
+    });
+
+    const cameraTransitionDuration = document.getElementById(
+      "camera-transition-duration"
+    ) as HTMLInputElement | null;
+    const cameraTransitionDurationValue = document.getElementById(
+      "camera-transition-duration-value"
+    ) as HTMLElement | null;
+    cameraTransitionDuration?.addEventListener("input", () => {
+      const value = Number.parseFloat(cameraTransitionDuration.value);
+      const safeValue = Number.isFinite(value) ? Math.max(0.2, Math.min(2.5, value)) : 0.75;
+      if (cameraTransitionDurationValue) {
+        cameraTransitionDurationValue.textContent = `${safeValue.toFixed(2)}s`;
+      }
+      settingsService.updateCamera({
+        transitionDuration: safeValue,
+      });
+    });
+
+    const cameraSensitivity = document.getElementById("camera-sensitivity") as HTMLInputElement | null;
+    const cameraSensitivityValue = document.getElementById("camera-sensitivity-value") as HTMLElement | null;
+    cameraSensitivity?.addEventListener("input", () => {
+      const value = Number.parseFloat(cameraSensitivity.value);
+      const safeValue = Number.isFinite(value) ? Math.max(0.5, Math.min(2.0, value)) : 1.0;
+      if (cameraSensitivityValue) {
+        cameraSensitivityValue.textContent = `${safeValue.toFixed(2)}x`;
+      }
+      settingsService.updateCamera({
+        sensitivity: safeValue,
+      });
+    });
+
+    const openCameraControlsButton = document.getElementById("settings-open-camera-controls");
+    openCameraControlsButton?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      this.onOpenCameraControls?.();
+      const summary = document.getElementById("settings-camera-preset-summary");
+      if (summary) {
+        summary.textContent = this.getCameraPresetSummary();
+      }
     });
 
     // Chaos accessibility safeguards
@@ -1978,6 +2087,40 @@ export class SettingsModal {
       this.settings.display.shadowsEnabled;
     (document.getElementById("table-contrast") as HTMLSelectElement).value =
       this.settings.display.visual.tableContrast;
+    const cameraSmoothTransitions = document.getElementById(
+      "camera-smooth-transitions"
+    ) as HTMLInputElement | null;
+    if (cameraSmoothTransitions) {
+      cameraSmoothTransitions.checked = this.settings.camera?.smoothTransitions === true;
+    }
+    const transitionDuration = Number(this.settings.camera?.transitionDuration ?? 0.75);
+    const cameraTransitionDuration = document.getElementById(
+      "camera-transition-duration"
+    ) as HTMLInputElement | null;
+    if (cameraTransitionDuration) {
+      cameraTransitionDuration.value = transitionDuration.toFixed(2);
+    }
+    const cameraTransitionDurationValue = document.getElementById(
+      "camera-transition-duration-value"
+    ) as HTMLElement | null;
+    if (cameraTransitionDurationValue) {
+      cameraTransitionDurationValue.textContent = `${transitionDuration.toFixed(2)}s`;
+    }
+    const sensitivity = Number(
+      this.settings.camera?.sensitivity ?? this.settings.controls.cameraSensitivity ?? 1
+    );
+    const cameraSensitivity = document.getElementById("camera-sensitivity") as HTMLInputElement | null;
+    if (cameraSensitivity) {
+      cameraSensitivity.value = sensitivity.toFixed(2);
+    }
+    const cameraSensitivityValue = document.getElementById("camera-sensitivity-value") as HTMLElement | null;
+    if (cameraSensitivityValue) {
+      cameraSensitivityValue.textContent = `${sensitivity.toFixed(2)}x`;
+    }
+    const cameraPresetSummary = document.getElementById("settings-camera-preset-summary");
+    if (cameraPresetSummary) {
+      cameraPresetSummary.textContent = this.getCameraPresetSummary();
+    }
     (document.getElementById("reduce-chaos-camera-effects") as HTMLInputElement).checked =
       this.settings.controls.reduceChaosCameraEffects;
     (document.getElementById("allow-control-inversion") as HTMLInputElement).checked =
@@ -2070,6 +2213,12 @@ export class SettingsModal {
     return normalized.charAt(0).toUpperCase();
   }
 
+  private getCameraPresetSummary(): string {
+    const stats = cameraService.getStats();
+    const maxSlots = stats.maxSlots === Infinity ? "∞" : String(stats.maxSlots);
+    return `${stats.positionCount}/${maxSlots} presets saved`;
+  }
+
   private formatDuration(ms: number): string {
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
@@ -2148,6 +2297,13 @@ export class SettingsModal {
    */
   setOnHowToPlay(callback: () => void): void {
     this.onHowToPlay = callback;
+  }
+
+  /**
+   * Set callback for opening the camera controls manager
+   */
+  setOnOpenCameraControls(callback: () => void): void {
+    this.onOpenCameraControls = callback;
   }
 
   /**

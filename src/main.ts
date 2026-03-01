@@ -574,6 +574,9 @@ async function completeBootLoading(): Promise<void> {
 
   await sleep(BOOT_FINAL_HOLD_MS);
   hideBootLoadingScreen();
+  window.setTimeout(() => {
+    splash?.playEntranceAnimation();
+  }, 340);
 }
 
 function hideBootLoadingScreen(): void {

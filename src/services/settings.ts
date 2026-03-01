@@ -64,6 +64,15 @@ export interface Settings {
   haptics?: boolean; // Optional for backwards compatibility
 }
 
+const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
+  sensitivity: 1.0,
+  smoothTransitions: false,
+  transitionDuration: 0.75,
+  // savedPositionSlots left undefined to be driven by CameraService tier limits
+  flyingModeEnabled: false,
+  machinimaModeEnabled: false,
+};
+
 const DEFAULT_SETTINGS: Settings = {
   audio: {
     masterVolume: 0.7,
@@ -87,14 +96,7 @@ const DEFAULT_SETTINGS: Settings = {
     allowChaosControlInversion: true,
     mobileDiceLayout: "wrapped",
   },
-  camera: {
-    sensitivity: 1.0,
-    smoothTransitions: false,
-    transitionDuration: 0.75,
-    // savedPositionSlots left undefined to be driven by CameraService tier limits
-    flyingModeEnabled: false,
-    machinimaModeEnabled: false,
-  },
+  camera: { ...DEFAULT_CAMERA_SETTINGS },
   game: {
     showTutorial: true,
     confirmBeforeNewGame: false,
@@ -172,7 +174,7 @@ export class SettingsService {
         }
       },
       controls: { ...DEFAULT_SETTINGS.controls, ...loaded.controls },
-      camera: { ...DEFAULT_SETTINGS.camera, ...(loaded.camera || {}) },
+      camera: { ...DEFAULT_CAMERA_SETTINGS, ...(loaded.camera || {}) },
       game: { ...DEFAULT_SETTINGS.game, ...loaded.game },
       haptics: typeof loaded.haptics === "boolean" ? loaded.haptics : DEFAULT_SETTINGS.haptics,
     };
@@ -244,6 +246,33 @@ export class SettingsService {
    */
   updateControls(controls: Partial<ControlSettings>): void {
     this.settings.controls = { ...this.settings.controls, ...controls };
+    if (typeof controls.cameraSensitivity === "number") {
+      this.settings.camera = {
+        ...DEFAULT_CAMERA_SETTINGS,
+        ...(this.settings.camera || {}),
+        sensitivity: controls.cameraSensitivity,
+      };
+    }
+    this.touchUpdatedAt();
+    this.saveSettings();
+    this.notifyListeners();
+  }
+
+  /**
+   * Update camera settings
+   */
+  updateCamera(camera: Partial<CameraSettings>): void {
+    this.settings.camera = {
+      ...DEFAULT_CAMERA_SETTINGS,
+      ...(this.settings.camera || {}),
+      ...camera,
+    };
+    if (typeof camera.sensitivity === "number") {
+      this.settings.controls = {
+        ...this.settings.controls,
+        cameraSensitivity: camera.sensitivity,
+      };
+    }
     this.touchUpdatedAt();
     this.saveSettings();
     this.notifyListeners();
