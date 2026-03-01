@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-03-01 (server decoupling phase-07 follow-through + deploy stabilization hotfixes)
+**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-03-01 (server decoupling phase-08 follow-through + deploy stabilization hotfixes)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -28,7 +28,7 @@ Reference docs:
   - [x] Phase 07 follow-through: extract shared multiplayer session membership orchestration (`removeParticipantFromSession`) into a dedicated service used by route/admin/socket flows.
   - [x] Phase 08 checkpoint: extract multiplayer session rehydrate/retry resilience helpers into a dedicated service boundary.
   - [x] Add a lightweight deploy gate checklist section to session summary notes for each phase checkpoint (`node --check api/server.mjs`, `npm run test:storage-auth-adapters`, `npm run test:ws-transport`).
-  - [ ] Phase 08 follow-through: evaluate remaining distributed session-recovery call sites for shared backoff policy alignment and add focused integration coverage for recovery edge cases.
+  - [x] Phase 08 follow-through: evaluate remaining distributed session-recovery call sites for shared backoff policy alignment and add focused integration coverage for recovery edge cases.
 
 ### Branding + I18N Overhaul (2026-02-27)
 - **Status**: 🟡 In Progress

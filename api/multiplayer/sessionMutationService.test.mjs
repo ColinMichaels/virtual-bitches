@@ -371,6 +371,37 @@ test("updateParticipantState sit updates seat state and broadcasts", async () =>
   assert.equal(fixture.calls.persistStore, 1);
 });
 
+test("updateParticipantState retries auth with participant rehydrate flow", async () => {
+  const session = createSession();
+  let authChecks = 0;
+  const fixture = createFixture({
+    store: { multiplayerSessions: { "session-1": session } },
+    authorizeSessionActionRequest: () => {
+      authChecks += 1;
+      if (authChecks === 1) {
+        return { ok: false, reason: "token_not_found" };
+      }
+      return { ok: true, playerId: "host", sessionId: "session-1" };
+    },
+  });
+
+  const result = await fixture.service.updateParticipantState({
+    req: {},
+    sessionId: "session-1",
+    body: { playerId: "host", action: "ready" },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(fixture.calls.rehydrateSessionParticipant.length, 1);
+  assert.equal(fixture.calls.rehydrateSessionParticipant[0].reasonPrefix, "participant_state_auth");
+  assert.deepEqual(fixture.calls.rehydrateSessionParticipant[0].retryOptions, {
+    attempts: 4,
+    baseDelayMs: 120,
+  });
+  assert.equal(fixture.calls.persistStore, 1);
+});
+
 test("updateSessionDemoControls validates session id", async () => {
   const fixture = createFixture();
   const result = await fixture.service.updateSessionDemoControls({
@@ -414,6 +445,44 @@ test("updateSessionDemoControls enforces owner-only access", async () => {
 
   assert.equal(result.status, 403);
   assert.equal(result.payload.reason, "not_room_owner");
+});
+
+test("updateSessionDemoControls retries auth via session rehydrate flow on transient auth mismatch", async () => {
+  const session = createSession({
+    demoMode: true,
+    participants: {
+      host: {
+        playerId: "host",
+        isBot: false,
+        isSeated: true,
+        isReady: false,
+        queuedForNextGame: false,
+      },
+    },
+  });
+  let authChecks = 0;
+  const fixture = createFixture({
+    store: { multiplayerSessions: { "session-1": session } },
+    authorizeSessionActionRequest: () => {
+      authChecks += 1;
+      if (authChecks === 1) {
+        return { ok: false, reason: "session_token_mismatch" };
+      }
+      return { ok: true, playerId: "host", sessionId: "session-1" };
+    },
+  });
+  const result = await fixture.service.updateSessionDemoControls({
+    req: {},
+    sessionId: "session-1",
+    body: { playerId: "host", action: "pause" },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.controls.demoAutoRun, false);
+  assert.equal(fixture.calls.rehydrateSession.length, 1);
+  assert.equal(fixture.calls.rehydrateSession[0].reasonPrefix, "demo_controls_auth:host");
+  assert.deepEqual(fixture.calls.rehydrateSession[0].retryOptions, { attempts: 4, baseDelayMs: 120 });
 });
 
 test("updateSessionDemoControls resume path restarts and persists", async () => {
@@ -475,6 +544,87 @@ test("leaveSession returns ok when participant is already absent", async () => {
 
   assert.equal(result.status, 200);
   assert.equal(result.payload.ok, true);
+});
+
+test("leaveSession retries unknown_session with session rehydrate flow", async () => {
+  let removeCalls = 0;
+  const fixture = createFixture({
+    store: { multiplayerSessions: {} },
+    removeParticipantFromSession: (sessionId, playerId, metadata, store) => {
+      removeCalls += 1;
+      if (removeCalls === 1) {
+        return { ok: false, reason: "unknown_session" };
+      }
+      const session = store.multiplayerSessions[sessionId];
+      if (!session || !session.participants[playerId]) {
+        return { ok: false, reason: "unknown_player" };
+      }
+      delete session.participants[playerId];
+      return { ok: true, roomInventoryChanged: false, sessionExpired: false };
+    },
+    rehydrateSessionWithRetry: ({ sessionId, reasonPrefix, retryOptions, store }) => {
+      assert.equal(reasonPrefix, "leave_session");
+      assert.deepEqual(retryOptions, { attempts: 3, baseDelayMs: 100 });
+      store.multiplayerSessions[sessionId] = createSession();
+      return store.multiplayerSessions[sessionId];
+    },
+  });
+
+  const result = await fixture.service.leaveSession({
+    sessionId: "session-1",
+    body: { playerId: "host" },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(fixture.calls.rehydrateSession.length, 1);
+  assert.equal(fixture.calls.persistStore, 1);
+});
+
+test("leaveSession retries unknown_player with participant rehydrate flow", async () => {
+  let removeCalls = 0;
+  const fixture = createFixture({
+    store: {
+      multiplayerSessions: {
+        "session-1": createSession({ participants: {} }),
+      },
+    },
+    removeParticipantFromSession: (sessionId, playerId, metadata, store) => {
+      removeCalls += 1;
+      if (removeCalls === 1) {
+        return { ok: false, reason: "unknown_player" };
+      }
+      const session = store.multiplayerSessions[sessionId];
+      if (!session || !session.participants[playerId]) {
+        return { ok: false, reason: "unknown_player" };
+      }
+      delete session.participants[playerId];
+      return { ok: true, roomInventoryChanged: false, sessionExpired: false };
+    },
+    rehydrateSessionParticipantWithRetry: ({ sessionId, playerId, reasonPrefix, retryOptions, store }) => {
+      assert.equal(reasonPrefix, "leave_session_participant");
+      assert.deepEqual(retryOptions, { attempts: 3, baseDelayMs: 100 });
+      const session = store.multiplayerSessions[sessionId];
+      session.participants[playerId] = {
+        playerId,
+        isBot: false,
+      };
+      return {
+        session,
+        participant: session.participants[playerId],
+      };
+    },
+  });
+
+  const result = await fixture.service.leaveSession({
+    sessionId: "session-1",
+    body: { playerId: "host" },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(fixture.calls.rehydrateSessionParticipant.length, 1);
+  assert.equal(fixture.calls.persistStore, 1);
 });
 
 test("moderateSessionParticipant rejects self-moderation", async () => {
