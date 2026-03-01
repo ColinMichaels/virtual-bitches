@@ -8,6 +8,9 @@
   },
   "scripts": {
     "start": "node server.mjs",
-    "test:bot-engine": "node bot/engine.test.mjs"
+    "test:bot-engine": "node bot/engine.test.mjs",
+    "test:ws-protocol": "node ws/socketProtocol.test.mjs",
+    "test:ws-lifecycle": "node ws/socketLifecycle.test.mjs",
+    "test:ws-transport": "npm run test:ws-protocol && npm run test:ws-lifecycle"
   }
 }
