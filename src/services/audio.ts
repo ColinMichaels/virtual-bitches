@@ -9,7 +9,7 @@ import { getGameMusicUrlCandidates } from "./assetUrl.js";
 
 const log = logger.create('AudioService');
 
-export type SoundEffect = "roll" | "select" | "score" | "click" | "gameOver";
+export type SoundEffect = "roll" | "select" | "score" | "click" | "gameOver" | "turnAlert";
 
 export class AudioService {
   private context: AudioContext | null = null;
@@ -82,6 +82,9 @@ export class AudioService {
 
     // Game over sound - completion fanfare
     this.soundBuffers.set("gameOver", this.createGameOverSound());
+
+    // Turn alert tone - short double pulse to get attention
+    this.soundBuffers.set("turnAlert", this.createTurnAlertSound());
   }
 
   /**
@@ -177,6 +180,34 @@ export class AudioService {
         const t = i / sampleRate;
         const envelope = Math.exp(-t * 5);
         data[startSample + i] += Math.sin(2 * Math.PI * note.freq * t) * envelope * 0.2;
+      }
+    }
+
+    return buffer;
+  }
+
+  /**
+   * Create local-turn alert sound (double tone pulse)
+   */
+  private createTurnAlertSound(): AudioBuffer {
+    const sampleRate = this.context!.sampleRate;
+    const duration = 0.45;
+    const buffer = this.context!.createBuffer(1, sampleRate * duration, sampleRate);
+    const data = buffer.getChannelData(0);
+    const pulses = [
+      { start: 0, length: 0.11, frequency: 880 },
+      { start: 0.18, length: 0.14, frequency: 1047 },
+    ];
+
+    for (const pulse of pulses) {
+      const startSample = Math.floor(pulse.start * sampleRate);
+      const pulseSamples = Math.floor(pulse.length * sampleRate);
+      for (let i = 0; i < pulseSamples && startSample + i < data.length; i++) {
+        const t = i / sampleRate;
+        const attack = Math.min(1, t * 40);
+        const release = Math.exp(-t * 14);
+        const envelope = attack * release;
+        data[startSample + i] += Math.sin(2 * Math.PI * pulse.frequency * t) * envelope * 0.22;
       }
     }
 

@@ -1,8 +1,120 @@
 {
-  "generatedAt": "2026-03-01T16:24:30.950Z",
+  "generatedAt": "2026-03-01T18:21:09.645Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-a3d615a",
+      "date": "2026-03-01T17:45:05.000Z",
+      "title": "extract firebase identity verifier adapter",
+      "content": "<p>extract firebase identity verifier adapter</p><p><strong>Commit:</strong> <code>a3d615a</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "a3d615aa08ae126d6ae108cecdde98d1ab7ce793",
+        "shortHash": "a3d615a",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a3d615aa08ae126d6ae108cecdde98d1ab7ce793"
+      }
+    },
+    {
+      "id": "git-d18274f",
+      "date": "2026-03-01T17:23:30.000Z",
+      "title": "speed deploy smoke bot suites and harden chat-conduct transient recovery",
+      "content": "<p>speed deploy smoke bot suites and harden chat-conduct transient recovery</p><p><strong>Commit:</strong> <code>d18274f</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "d18274f397c31810b1a671511dede1bc2050da67",
+        "shortHash": "d18274f",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d18274f397c31810b1a671511dede1bc2050da67"
+      }
+    },
+    {
+      "id": "git-5200e68",
+      "date": "2026-03-01T17:01:28.000Z",
+      "title": "include auth modules in container image",
+      "content": "<p>include auth modules in container image</p><p><strong>Commit:</strong> <code>5200e68</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "5200e685f25596ccc80295f3b8f17de8b7960f26",
+        "shortHash": "5200e68",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/5200e685f25596ccc80295f3b8f17de8b7960f26"
+      }
+    },
+    {
+      "id": "git-9814475",
+      "date": "2026-03-01T16:54:06.000Z",
+      "title": "extract store sync controller",
+      "content": "<p>extract store sync controller</p><p><strong>Commit:</strong> <code>9814475</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "981447562778f9f48c90742f73815fd64068a772",
+        "shortHash": "9814475",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/981447562778f9f48c90742f73815fd64068a772"
+      }
+    },
+    {
+      "id": "git-920b8b5",
+      "date": "2026-03-01T16:37:50.000Z",
+      "title": "extract token adapter and add storage resilience tests",
+      "content": "<p>extract token adapter and add storage resilience tests</p><p><strong>Commit:</strong> <code>920b8b5</code></p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "920b8b5f2c4c68641c01a2bda81112336fe5bdc0",
+        "shortHash": "920b8b5",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/920b8b5f2c4c68641c01a2bda81112336fe5bdc0"
+      }
+    },
+    {
+      "id": "git-a04d180",
+      "date": "2026-03-01T16:33:52.000Z",
+      "title": "extract socket orchestration bridge",
+      "content": "<p>extract socket orchestration bridge</p><p><strong>Commit:</strong> <code>a04d180</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "a04d1802de819784c75e25802854454848423b4e",
+        "shortHash": "a04d180",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a04d1802de819784c75e25802854454848423b4e"
+      }
+    },
+    {
+      "id": "git-a985e27",
+      "date": "2026-03-01T16:27:24.000Z",
+      "title": "decouple debug monitor and enhance notification handling in notification service (#server-phase-04)",
+      "content": "<p>decouple debug monitor and enhance notification handling in notification service (#server-phase-04)</p><p><strong>Commit:</strong> <code>a985e27</code></p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "a985e27a59052cc563e73671dc9ee60efee5161c",
+        "shortHash": "a985e27",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a985e27a59052cc563e73671dc9ee60efee5161c"
+      }
+    },
+    {
+      "id": "git-6783393",
+      "date": "2026-03-01T16:26:41.000Z",
+      "title": "trigger entrance animation after loader and disable drag",
+      "content": "<p>trigger entrance animation after loader and disable drag</p><p><strong>Commit:</strong> <code>6783393</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "678339382fee43576ee03cb983c185ef07824b52",
+        "shortHash": "6783393",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/678339382fee43576ee03cb983c185ef07824b52"
+      }
+    },
     {
       "id": "git-b19fa4f",
       "date": "2026-03-01T15:33:22.000Z",
@@ -451,76 +563,6 @@
         "hash": "64e06e3e3bc36b58caeeac71d09c4fb61bb5ea7a",
         "shortHash": "64e06e3",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/64e06e3e3bc36b58caeeac71d09c4fb61bb5ea7a"
-      }
-    },
-    {
-      "id": "git-ce8c874",
-      "date": "2026-03-01T02:32:21.000Z",
-      "title": "add demo control actions, private-room enhancements, and session state updates",
-      "content": "<p>add demo control actions, private-room enhancements, and session state updates</p><p><strong>Commit:</strong> <code>ce8c874</code></p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "ce8c874115760a2add5da2151d56ccf40c94a754",
-        "shortHash": "ce8c874",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/ce8c874115760a2add5da2151d56ccf40c94a754"
-      }
-    },
-    {
-      "id": "git-8f1f6a0",
-      "date": "2026-03-01T02:31:18.000Z",
-      "title": "add unified config contract with tests and docs",
-      "content": "<p>add unified config contract with tests and docs</p><p><strong>Commit:</strong> <code>8f1f6a0</code></p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "8f1f6a0ad3289265728fd6404d8fc86f908f5ec6",
-        "shortHash": "8f1f6a0",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8f1f6a0ad3289265728fd6404d8fc86f908f5ec6"
-      }
-    },
-    {
-      "id": "git-be700be",
-      "date": "2026-02-28T23:51:14.000Z",
-      "title": "add private-room demo speed toggle and reset flow",
-      "content": "<p>add private-room demo speed toggle and reset flow</p><p><strong>Commit:</strong> <code>be700be</code></p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "be700be4e8e066126ad324feec4a42c7048bce56",
-        "shortHash": "be700be",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/be700be4e8e066126ad324feec4a42c7048bce56"
-      }
-    },
-    {
-      "id": "git-a96b203",
-      "date": "2026-02-28T23:43:20.000Z",
-      "title": "add speed profile foundation and deployment stabilization docs",
-      "content": "<p>add speed profile foundation and deployment stabilization docs</p><p><strong>Commit:</strong> <code>a96b203</code></p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "a96b203a2f1814658ed9dbb081421841bbc08804",
-        "shortHash": "a96b203",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a96b203a2f1814658ed9dbb081421841bbc08804"
-      }
-    },
-    {
-      "id": "git-848e58d",
-      "date": "2026-02-28T23:14:40.000Z",
-      "title": "e2e: mark realtime relay auth churn inconclusive by default",
-      "content": "<p>e2e: mark realtime relay auth churn inconclusive by default</p><p><strong>Commit:</strong> <code>848e58d</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "848e58d4c630200b34595cd960a1f6f69afb54b5",
-        "shortHash": "848e58d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/848e58d4c630200b34595cd960a1f6f69afb54b5"
       }
     }
   ]

@@ -287,6 +287,7 @@ class Game implements GameCallbacks {
   private participantLabelById = new Map<string, string>();
   private nudgeCooldownByPlayerId = new Map<string, number>();
   private lastTurnPlanPreview = "";
+  private lastLocalTurnAlertKey = "";
   private lastSessionComplete = false;
   private localAvatarUrl: string | undefined;
   private localAdminRole: "viewer" | "operator" | "owner" | null = null;
@@ -2871,6 +2872,7 @@ class Game implements GameCallbacks {
 
   private resetLocalStateForNextMultiplayerGame(options?: { notificationMessage?: string | null }): void {
     this.gameOverController.hide();
+    this.lastLocalTurnAlertKey = "";
     this.state = GameFlowController.createNewGame();
     if (this.playMode === "multiplayer") {
       const sessionDifficulty = this.multiplayerSessionService.getActiveSession()?.gameDifficulty;
@@ -2900,23 +2902,52 @@ class Game implements GameCallbacks {
     }
   }
 
-  private shouldShowWaitForNextGameAction(): boolean {
+  private resolveWaitForNextGameViewState(): {
+    showWaitForNextGame: boolean;
+    queuedForNextGame: boolean;
+    nextGameStartsAtMs: number | null;
+  } {
     if (this.playMode !== "multiplayer" || this.state.status !== "COMPLETE") {
-      return false;
+      return {
+        showWaitForNextGame: false,
+        queuedForNextGame: false,
+        nextGameStartsAtMs: null,
+      };
     }
     const activeSession = this.multiplayerSessionService.getActiveSession();
     if (!activeSession || activeSession.sessionComplete !== true) {
-      return false;
+      return {
+        showWaitForNextGame: false,
+        queuedForNextGame: false,
+        nextGameStartsAtMs: null,
+      };
     }
     const localParticipant = this.getSessionParticipantById(activeSession, this.localPlayerId);
-    if (!localParticipant || normalizeQueuedForNextGame(localParticipant.queuedForNextGame)) {
-      return false;
+    if (!localParticipant || localParticipant.isBot || localParticipant.isSeated === false) {
+      return {
+        showWaitForNextGame: false,
+        queuedForNextGame: false,
+        nextGameStartsAtMs: null,
+      };
     }
-    if (!Array.isArray(activeSession.standings) || activeSession.standings.length === 0) {
-      return false;
+    return {
+      showWaitForNextGame: true,
+      queuedForNextGame: normalizeQueuedForNextGame(localParticipant.queuedForNextGame),
+      nextGameStartsAtMs: this.resolveNextGameStartsAtLocalMs(activeSession),
+    };
+  }
+
+  private resolveNextGameStartsAtLocalMs(
+    session: MultiplayerSessionRecord | null | undefined
+  ): number | null {
+    if (
+      typeof session?.nextGameStartsAt !== "number" ||
+      !Number.isFinite(session.nextGameStartsAt) ||
+      session.nextGameStartsAt <= 0
+    ) {
+      return null;
     }
-    const winnerPlayerId = activeSession.standings[0]?.playerId;
-    return winnerPlayerId === this.localPlayerId;
+    return this.mapServerTimestampToLocalClock(session.nextGameStartsAt) ?? Math.floor(session.nextGameStartsAt);
   }
 
   private async queueForNextMultiplayerGame(): Promise<void> {
@@ -2933,10 +2964,9 @@ class Game implements GameCallbacks {
         return;
       }
 
-      this.resetLocalStateForNextMultiplayerGame({ notificationMessage: null });
       this.applyMultiplayerSeatState(queuedSession);
       this.touchMultiplayerTurnSyncActivity();
-      notificationService.show("Waiting for next game...", "info", 2000);
+      notificationService.show("Queued for next game. Waiting for countdown...", "info", 2200);
     } finally {
       this.waitForNextGameRequestInFlight = false;
       this.updateUI();
@@ -4270,6 +4300,7 @@ class Game implements GameCallbacks {
         typeof message.round === "number" && Number.isFinite(message.round)
           ? ` (Round ${Math.floor(message.round)})`
           : "";
+      this.playLocalTurnAlert(message);
       notificationService.show(`Your turn${suffix}`, "success", 1800);
       return;
     }
@@ -4278,6 +4309,23 @@ class Game implements GameCallbacks {
       tone: "info",
       durationMs: 1800,
     });
+  }
+
+  private playLocalTurnAlert(message: MultiplayerTurnStartMessage): void {
+    const round =
+      typeof message.round === "number" && Number.isFinite(message.round)
+        ? Math.max(1, Math.floor(message.round))
+        : 0;
+    const turnNumber =
+      typeof message.turnNumber === "number" && Number.isFinite(message.turnNumber)
+        ? Math.max(1, Math.floor(message.turnNumber))
+        : 0;
+    const turnKey = `${message.playerId}:${round}:${turnNumber}:${message.phase ?? "unknown"}`;
+    if (turnKey === this.lastLocalTurnAlertKey) {
+      return;
+    }
+    this.lastLocalTurnAlertKey = turnKey;
+    audioService.playSfx("turnAlert");
   }
 
   private handleMultiplayerTurnEnd(message: MultiplayerTurnEndMessage): void {
@@ -6049,8 +6097,12 @@ class Game implements GameCallbacks {
 
     // Check for game complete
     if (prevState.status !== "COMPLETE" && this.state.status === "COMPLETE") {
+      const waitState = this.resolveWaitForNextGameViewState();
       this.gameOverController.showGameOver(this.state, this.gameStartTime, {
-        showWaitForNextGame: this.shouldShowWaitForNextGameAction(),
+        showWaitForNextGame: waitState.showWaitForNextGame,
+        queuedForNextGame: waitState.queuedForNextGame,
+        waitForNextGamePending: this.waitForNextGameRequestInFlight,
+        nextGameStartsAtMs: waitState.nextGameStartsAtMs,
       });
     }
   }
@@ -6363,6 +6415,11 @@ class Game implements GameCallbacks {
     if (this.waitForNextGameRequestInFlight) {
       return;
     }
+    const waitState = this.resolveWaitForNextGameViewState();
+    if (waitState.queuedForNextGame) {
+      notificationService.show("You are already queued for the next game.", "info", 2000);
+      return;
+    }
     void this.queueForNextMultiplayerGame();
   }
 
@@ -6640,14 +6697,13 @@ class Game implements GameCallbacks {
         ? "Start a new game"
         : "Multiplayer game starts are server-controlled";
     }
-    if (this.waitNextGameBtn) {
-      const showWaitAction = this.shouldShowWaitForNextGameAction();
-      this.waitNextGameBtn.style.display = showWaitAction ? "inline-flex" : "none";
-      this.waitNextGameBtn.disabled = this.waitForNextGameRequestInFlight;
-      this.waitNextGameBtn.textContent = this.waitForNextGameRequestInFlight
-        ? "Joining Queue..."
-        : "Wait for Next Game";
-    }
+    const waitState = this.resolveWaitForNextGameViewState();
+    this.gameOverController.updateWaitForNextGame({
+      showWaitForNextGame: waitState.showWaitForNextGame,
+      queuedForNextGame: waitState.queuedForNextGame,
+      waitForNextGamePending: this.waitForNextGameRequestInFlight,
+      nextGameStartsAtMs: waitState.nextGameStartsAtMs,
+    });
     this.updateDemoControlButtons();
 
     const localSeatState = this.getLocalMultiplayerSeatState();
