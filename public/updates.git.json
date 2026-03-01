@@ -1,8 +1,36 @@
 {
-  "generatedAt": "2026-03-01T04:53:52.067Z",
+  "generatedAt": "2026-03-01T05:14:25.982Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-27bf696",
+      "date": "2026-03-01T05:08:50.000Z",
+      "title": "add filter registry and decouple chat conduct chain",
+      "content": "<p>add filter registry and decouple chat conduct chain</p><p><strong>Commit:</strong> <code>27bf696</code></p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "27bf696047dd931faae4ce6f5a9d9eafe9135a36",
+        "shortHash": "27bf696",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/27bf696047dd931faae4ce6f5a9d9eafe9135a36"
+      }
+    },
+    {
+      "id": "git-29005e7",
+      "date": "2026-03-01T04:56:06.000Z",
+      "title": "extract turn-action engine boundary module",
+      "content": "<p>extract turn-action engine boundary module</p><p><strong>Commit:</strong> <code>29005e7</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "29005e7bad810decf9c40ddb1984ecdc31c7ddaa",
+        "shortHash": "29005e7",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/29005e7bad810decf9c40ddb1984ecdc31c7ddaa"
+      }
+    },
     {
       "id": "git-3c7aa2f",
       "date": "2026-03-01T04:50:41.000Z",
@@ -395,20 +423,6 @@
         "hash": "deb4d0442d42673ae76b598f3dc3dbbb509b455a",
         "shortHash": "deb4d04",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/deb4d0442d42673ae76b598f3dc3dbbb509b455a"
-      }
-    },
-    {
-      "id": "git-4a7662f",
-      "date": "2026-02-28T19:46:14.000Z",
-      "title": "Resolve timeout-strike handling for round progression",
-      "content": "<p>Resolve timeout-strike handling for round progression</p><p><strong>Commit:</strong> <code>4a7662f</code></p><p>Refine timeout policy with `MULTIPLAYER_TURN_TIMEOUT_STAND_STRIKE_LIMIT`, introducing auto-stand to observer mode after repeated timeouts in the same round. Amend related game state synchronization and UI notifications to support forced observer transitions on timeout strikes.</p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "4a7662f04affba6c5d3f17ac9c0b2ce62681a55c",
-        "shortHash": "4a7662f",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/4a7662f04affba6c5d3f17ac9c0b2ce62681a55c"
       }
     }
   ]

@@ -316,8 +316,8 @@ class Game implements GameCallbacks {
   private roomChatBtn: HTMLButtonElement | null = null;
   private mobileInviteLinkBtn: HTMLButtonElement | null = null;
   private mobileRoomChatBtn: HTMLButtonElement | null = null;
-  private settingsGearBtn: HTMLButtonElement | null = null;
-  private settingsGearAvatarEl: HTMLImageElement | null = null;
+  private profileBtnEl: HTMLButtonElement | null = null;
+  private profileBtnAvatarEl: HTMLImageElement | null = null;
   private pauseMenuModal: HTMLElement | null = null;
   private roomChatBadgeEl: HTMLElement | null = null;
   private mobileRoomChatBadgeEl: HTMLElement | null = null;
@@ -657,10 +657,8 @@ class Game implements GameCallbacks {
     ) as HTMLButtonElement | null;
     this.inviteLinkBtn = document.getElementById("invite-link-btn") as HTMLButtonElement | null;
     this.roomChatBtn = document.getElementById("room-chat-btn") as HTMLButtonElement | null;
-    this.settingsGearBtn = document.getElementById("settings-gear-btn") as HTMLButtonElement | null;
-    this.settingsGearAvatarEl = document.getElementById(
-      "settings-gear-avatar"
-    ) as HTMLImageElement | null;
+    this.profileBtnEl = document.getElementById("profile-btn") as HTMLButtonElement | null;
+    this.profileBtnAvatarEl = document.getElementById("profile-btn-avatar") as HTMLImageElement | null;
     this.mobileInviteLinkBtn = document.getElementById("mobile-invite-link-btn") as HTMLButtonElement | null;
     this.mobileRoomChatBtn = document.getElementById("mobile-room-chat-btn") as HTMLButtonElement | null;
     this.demoRunToggleBtn?.addEventListener("click", () => {
@@ -1687,7 +1685,7 @@ class Game implements GameCallbacks {
       now - this.cachedMultiplayerIdentity.fetchedAt < MULTIPLAYER_IDENTITY_CACHE_MS
     ) {
       this.localAvatarUrl = this.cachedMultiplayerIdentity.value.avatarUrl;
-      this.updateSettingsGearAvatar();
+      this.updateProfileButtonAvatar();
       return this.cachedMultiplayerIdentity.value;
     }
 
@@ -1727,7 +1725,7 @@ class Game implements GameCallbacks {
       providerId,
     };
     this.localAvatarUrl = avatarUrl;
-    this.updateSettingsGearAvatar();
+    this.updateProfileButtonAvatar();
     this.cachedMultiplayerIdentity = {
       value: identity,
       fetchedAt: now,
@@ -1735,24 +1733,24 @@ class Game implements GameCallbacks {
     return identity;
   }
 
-  private updateSettingsGearAvatar(): void {
-    if (!this.settingsGearBtn || !this.settingsGearAvatarEl) {
+  private updateProfileButtonAvatar(): void {
+    if (!this.profileBtnEl || !this.profileBtnAvatarEl) {
       return;
     }
 
     const avatarUrl = this.localAvatarUrl;
     if (typeof avatarUrl === "string" && avatarUrl.trim().length > 0) {
-      if (this.settingsGearAvatarEl.src !== avatarUrl) {
-        this.settingsGearAvatarEl.src = avatarUrl;
+      if (this.profileBtnAvatarEl.src !== avatarUrl) {
+        this.profileBtnAvatarEl.src = avatarUrl;
       }
-      this.settingsGearAvatarEl.style.display = "";
-      this.settingsGearBtn.classList.add("has-profile-avatar");
+      this.profileBtnAvatarEl.style.display = "";
+      this.profileBtnEl.classList.add("has-profile-avatar");
       return;
     }
 
-    this.settingsGearAvatarEl.removeAttribute("src");
-    this.settingsGearAvatarEl.style.display = "none";
-    this.settingsGearBtn.classList.remove("has-profile-avatar");
+    this.profileBtnAvatarEl.removeAttribute("src");
+    this.profileBtnAvatarEl.style.display = "none";
+    this.profileBtnEl.classList.remove("has-profile-avatar");
   }
 
   private normalizeMultiplayerDisplayName(value: unknown): string | undefined {
@@ -5375,10 +5373,10 @@ class Game implements GameCallbacks {
     this.updateUI();
   }
 
-  private openSettingsFromPauseMenu(): void {
-    this.ensurePauseMenuModal();
-    this.hidePauseMenu();
+  openSettingsModal(): void {
+    const wasPaused = this.paused;
     this.paused = true;
+    this.hidePauseMenu();
     const tutorialActive = tutorialModal.isActive();
     this.settingsModal.show({
       preserveOpenModalIds: tutorialActive ? ["tutorial-modal"] : undefined,
@@ -5390,7 +5388,15 @@ class Game implements GameCallbacks {
         this.settingsModal.showTab(preferredSettingsTab);
       }
     }
+    if (!wasPaused) {
+      notificationService.show("Paused", "info");
+    }
     this.updateUI();
+  }
+
+  private openSettingsFromPauseMenu(): void {
+    this.ensurePauseMenuModal();
+    this.openSettingsModal();
   }
 
   handleEscapePauseMenu(): void {
@@ -6187,7 +6193,7 @@ class Game implements GameCallbacks {
   }
 
   private updateUI(): void {
-    this.updateSettingsGearAvatar();
+    this.updateProfileButtonAvatar();
     this.updateInviteLinkControlVisibility();
     this.hud.update(this.state);
     this.scene.playerSeatRenderer.updateSeat(this.scene.currentPlayerSeat, {
