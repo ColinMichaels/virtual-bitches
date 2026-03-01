@@ -10,6 +10,10 @@ import { createStoreSyncController } from "./storage/storeSyncController.mjs";
 import { createAdminSecurityAuditService } from "./admin/adminSecurityAuditService.mjs";
 import { createAdminMutationService } from "./admin/adminMutationService.mjs";
 import { createSessionControlService } from "./multiplayer/sessionControlService.mjs";
+import { createSessionMutationService } from "./multiplayer/sessionMutationService.mjs";
+import { createSessionProvisioningService } from "./multiplayer/sessionProvisioningService.mjs";
+import { createSessionMembershipService } from "./multiplayer/sessionMembershipService.mjs";
+import { createSessionRehydrateService } from "./multiplayer/sessionRehydrateService.mjs";
 import { createBotEngine } from "./bot/engine.mjs";
 import { createSessionTurnEngine } from "./engine/sessionTurnEngine.mjs";
 import { createSessionLifecycleEngine } from "./engine/sessionLifecycleEngine.mjs";
@@ -561,6 +565,7 @@ let bootstrapLastError = "";
 let bootstrapAttemptCount = 0;
 let shutdownInProgress = false;
 let shutdownForceTimer = null;
+let removeParticipantFromSessionHandler = null;
 
 const server = createServer((req, res) => {
   void handleRequest(req, res);
@@ -589,6 +594,12 @@ const {
   sendSocketError,
   safeCloseSocket,
 } = socketOrchestration;
+const sessionRehydrateService = createSessionRehydrateService({
+  getStore: () => store,
+  rehydrateStoreFromAdapter,
+});
+const { rehydrateSessionWithRetry, rehydrateSessionParticipantWithRetry } =
+  sessionRehydrateService;
 const sessionControlService = createSessionControlService({
   getStore: () => store,
   gameDifficulties: GAME_DIFFICULTIES,
@@ -638,6 +649,108 @@ const {
   queueParticipantForNextGame: queueSessionParticipantForNextGame,
   refreshSessionAuth: refreshSessionParticipantAuth,
 } = sessionControlService;
+const sessionMutationService = createSessionMutationService({
+  getStore: () => store,
+  roomKinds: ROOM_KINDS,
+  adminRoles: ADMIN_ROLES,
+  sessionModerationActions: SESSION_MODERATION_ACTIONS,
+  maxMultiplayerHumanPlayers: MAX_MULTIPLAYER_HUMAN_PLAYERS,
+  maxMultiplayerBots: MAX_MULTIPLAYER_BOTS,
+  rehydrateStoreFromAdapter,
+  normalizeParticipantStateAction,
+  normalizeDemoControlAction,
+  authorizeSessionActionRequest,
+  shouldRetrySessionAuthFromStore,
+  isBotParticipant,
+  isParticipantSeated,
+  isParticipantQueuedForNextGame,
+  shouldQueueParticipantForNextGame,
+  markSessionActivity,
+  ensureSessionTurnState,
+  reconcileSessionLoops,
+  broadcastSessionState,
+  broadcastSystemRoomChannelMessage,
+  buildSessionSnapshot,
+  getSessionRoomKind,
+  ensureSessionOwner,
+  getSessionOwnerPlayerId,
+  getBotParticipants,
+  getSeatedHumanParticipantCount,
+  pruneSessionBots,
+  addBotsToSession,
+  resetSessionForNextGame,
+  normalizeSessionBotsForAutoRun,
+  resetSessionBotLoopSchedule,
+  isSessionDemoAutoRunEnabled,
+  isSessionDemoFastMode,
+  isDemoModeSession,
+  buildTurnStartMessage,
+  broadcastToSession,
+  removeParticipantFromSession,
+  authorizeAdminRequest,
+  resolveModerationActorDisplayName,
+  upsertSessionRoomBan,
+  recordAdminAuditEvent,
+  persistStore,
+});
+const {
+  updateParticipantState: updateSessionParticipantState,
+  updateSessionDemoControls: updateSessionDemoModeControls,
+  leaveSession: leaveSessionParticipant,
+  moderateSessionParticipant: moderateSessionPlayer,
+} = sessionMutationService;
+const sessionProvisioningService = createSessionProvisioningService({
+  getStore: () => store,
+  roomKinds: ROOM_KINDS,
+  defaultParticipantDiceCount: DEFAULT_PARTICIPANT_DICE_COUNT,
+  multiplayerSessionIdleTtlMs: MULTIPLAYER_SESSION_IDLE_TTL_MS,
+  wsBaseUrl: WS_BASE_URL,
+  multiplayerRoomListLimitMax: MULTIPLAYER_ROOM_LIST_LIMIT_MAX,
+  multiplayerRoomListLimitDefault: MULTIPLAYER_ROOM_LIST_LIMIT_DEFAULT,
+  reconcilePublicRoomInventory,
+  persistStore,
+  buildRoomListing,
+  resolveRoomListPriority,
+  createSessionId: randomUUID,
+  resolveCreateSessionGameSettings,
+  normalizeOptionalRoomCode,
+  isRoomCodeInUse,
+  generateUniquePrivateRoomCode,
+  resolveParticipantBlockedPlayerIds,
+  normalizeParticipantDisplayName,
+  normalizeAvatarUrl,
+  normalizeProviderId,
+  createEmptyChatConductState,
+  addBotsToSession,
+  resolveSessionGameConfig,
+  ensureSessionTurnState,
+  reconcileSessionLoops,
+  issueAuthTokenBundle,
+  markSessionActivity,
+  buildSessionResponse,
+});
+const { listRooms: listMultiplayerRooms, createSession: createMultiplayerSession } =
+  sessionProvisioningService;
+const sessionMembershipService = createSessionMembershipService({
+  getStore: () => store,
+  roomKinds: ROOM_KINDS,
+  wsCloseCodes: WS_CLOSE_CODES,
+  disconnectPlayerSockets,
+  getHumanParticipantCount,
+  getSessionRoomKind,
+  ensureSessionOwner,
+  ensureSessionTurnState,
+  expireSession,
+  resetPublicRoomForIdle,
+  reconcileSessionLoops,
+  broadcastSessionState,
+  maybeForfeitSessionForSingleHumanRemaining,
+  markSessionActivity,
+  buildTurnStartMessage,
+  broadcastToSession,
+  reconcilePublicRoomInventory,
+});
+removeParticipantFromSessionHandler = sessionMembershipService.removeParticipantFromSession;
 const socketRelay = createSocketRelay({
   wsSessionClients,
   writeSocketFrame,
@@ -1761,131 +1874,18 @@ async function handleAppendLogs(req, res) {
 }
 
 async function handleListRooms(res, url) {
-  const parsedLimit = Number(url.searchParams.get("limit"));
-  const limit = Number.isFinite(parsedLimit)
-    ? Math.max(1, Math.min(MULTIPLAYER_ROOM_LIST_LIMIT_MAX, Math.floor(parsedLimit)))
-    : MULTIPLAYER_ROOM_LIST_LIMIT_DEFAULT;
-  const now = Date.now();
-  const roomInventoryChanged = reconcilePublicRoomInventory(now);
-  if (roomInventoryChanged) {
-    await persistStore();
-  }
-
-  const rooms = Object.values(store.multiplayerSessions)
-    .map((session) => buildRoomListing(session, now))
-    .filter((room) => room !== null && room.isPublic === true && room.sessionComplete !== true)
-    .sort((left, right) => {
-      const roomTypeDelta = resolveRoomListPriority(left) - resolveRoomListPriority(right);
-      if (roomTypeDelta !== 0) {
-        return roomTypeDelta;
-      }
-      const activeDelta = right.activeHumanCount - left.activeHumanCount;
-      if (activeDelta !== 0) {
-        return activeDelta;
-      }
-      const humanDelta = right.humanCount - left.humanCount;
-      if (humanDelta !== 0) {
-        return humanDelta;
-      }
-      return right.lastActivityAt - left.lastActivityAt;
-    })
-    .slice(0, limit);
-
-  sendJson(res, 200, {
-    rooms,
-    timestamp: now,
+  const listResult = await listMultiplayerRooms({
+    rawLimit: url.searchParams.get("limit"),
   });
+  sendJson(res, listResult.status, listResult.payload);
 }
 
 async function handleCreateSession(req, res) {
   const body = await parseJsonBody(req);
-  const playerId = typeof body?.playerId === "string" ? body.playerId : "";
-  if (!playerId) {
-    sendJson(res, 400, { error: "playerId is required" });
-    return;
-  }
-
-  const sessionId = randomUUID();
-  const resolvedGameSettings = resolveCreateSessionGameSettings(body);
-  const botCount = resolvedGameSettings.botCount;
-  const gameDifficulty = resolvedGameSettings.gameDifficulty;
-  const demoSpeedMode = resolvedGameSettings.demoSpeedMode;
-  const demoMode = resolvedGameSettings.demoMode;
-  const demoAutoRun = resolvedGameSettings.demoAutoRun;
-  const gameConfig = resolvedGameSettings.gameConfig;
-  const now = Date.now();
-  const requestedRoomCode = normalizeOptionalRoomCode(body?.roomCode);
-  if (requestedRoomCode && isRoomCodeInUse(requestedRoomCode, now)) {
-    sendJson(res, 409, {
-      error: "Room code unavailable",
-      reason: "room_code_taken",
-    });
-    return;
-  }
-  const roomCode = requestedRoomCode || generateUniquePrivateRoomCode(now);
-  if (!roomCode) {
-    sendJson(res, 500, { error: "Failed to allocate room code" });
-    return;
-  }
-  const expiresAt = now + MULTIPLAYER_SESSION_IDLE_TTL_MS;
-  const participantBlockedPlayerIds = resolveParticipantBlockedPlayerIds(playerId, {
-    candidateBlockedPlayerIds: body?.blockedPlayerIds,
+  const createResult = await createMultiplayerSession({
+    body,
   });
-  const normalizedDisplayName = normalizeParticipantDisplayName(body?.displayName);
-  const participants = {
-    [playerId]: {
-      playerId,
-      ...(normalizedDisplayName ? { displayName: normalizedDisplayName } : {}),
-      avatarUrl: normalizeAvatarUrl(body?.avatarUrl),
-      providerId: normalizeProviderId(body?.providerId),
-      ...(participantBlockedPlayerIds.length > 0
-        ? { blockedPlayerIds: participantBlockedPlayerIds }
-        : {}),
-      joinedAt: now,
-      lastHeartbeatAt: now,
-      isSeated: false,
-      isReady: false,
-      score: 0,
-      remainingDice: DEFAULT_PARTICIPANT_DICE_COUNT,
-      turnTimeoutRound: null,
-      turnTimeoutCount: 0,
-      queuedForNextGame: false,
-      isComplete: false,
-      completedAt: null,
-    },
-  };
-
-  const session = {
-    sessionId,
-    roomCode,
-    gameDifficulty,
-    gameConfig,
-    demoMode,
-    demoAutoRun,
-    demoSpeedMode,
-    wsUrl: WS_BASE_URL,
-    roomKind: ROOM_KINDS.private,
-    ownerPlayerId: playerId,
-    roomBans: {},
-    chatConductState: createEmptyChatConductState(),
-    createdAt: now,
-    gameStartedAt: now,
-    lastActivityAt: now,
-    expiresAt,
-    participants,
-    turnState: null,
-  };
-  addBotsToSession(session, botCount, now);
-  session.gameConfig = resolveSessionGameConfig(session);
-
-  store.multiplayerSessions[sessionId] = session;
-  ensureSessionTurnState(session);
-  reconcileSessionLoops(sessionId);
-  const auth = issueAuthTokenBundle(playerId, sessionId);
-  markSessionActivity(session, playerId, Date.now());
-  const response = buildSessionResponse(session, playerId, auth);
-  await persistStore();
-  sendJson(res, 200, response);
+  sendJson(res, createResult.status, createResult.payload);
 }
 
 async function handleJoinSession(req, res, pathname) {
@@ -1924,348 +1924,24 @@ async function handleSessionHeartbeat(req, res, pathname) {
 
 async function handleUpdateParticipantState(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
-  let session = store.multiplayerSessions[sessionId];
-  if (!session || session.expiresAt <= Date.now()) {
-    await rehydrateStoreFromAdapter(`participant_state_session:${sessionId}`, { force: true });
-    session = store.multiplayerSessions[sessionId];
-  }
-  if (!session || session.expiresAt <= Date.now()) {
-    sendJson(res, 200, {
-      ok: false,
-      reason: "session_expired",
-    });
-    return;
-  }
-
   const body = await parseJsonBody(req);
-  const playerId = typeof body?.playerId === "string" ? body.playerId : "";
-  const action = normalizeParticipantStateAction(body?.action);
-  let participant = playerId ? session.participants[playerId] : null;
-  if (!playerId || !participant || isBotParticipant(participant)) {
-    await rehydrateStoreFromAdapter(`participant_state_participant:${sessionId}:${playerId || "unknown"}`, {
-      force: true,
-    });
-    session = store.multiplayerSessions[sessionId];
-    participant = playerId && session ? session.participants[playerId] : null;
-  }
-  if (!session || !playerId || !participant || isBotParticipant(participant)) {
-    sendJson(res, 200, {
-      ok: false,
-      reason: "unknown_player",
-    });
-    return;
-  }
-  if (!action) {
-    sendJson(res, 400, {
-      error: "action is required",
-      reason: "invalid_action",
-    });
-    return;
-  }
-
-  let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-  if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
-    await rehydrateStoreFromAdapter(`participant_state_auth:${sessionId}:${playerId}`, { force: true });
-    authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-  }
-  if (!authCheck.ok) {
-    sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "unauthorized" });
-    return;
-  }
-
-  const now = Date.now();
-  let changed = false;
-  let reason = "ok";
-
-  if (action === "sit") {
-    const shouldQueueForNextGame = shouldQueueParticipantForNextGame(session);
-    if (!isParticipantSeated(participant)) {
-      participant.isSeated = true;
-      changed = true;
-    }
-    if (participant.isReady === true) {
-      participant.isReady = false;
-      changed = true;
-    }
-    const nextQueuedForNextGame = shouldQueueForNextGame ? true : false;
-    if (participant.queuedForNextGame !== nextQueuedForNextGame) {
-      participant.queuedForNextGame = nextQueuedForNextGame;
-      changed = true;
-    }
-  } else if (action === "stand") {
-    if (isParticipantSeated(participant)) {
-      participant.isSeated = false;
-      changed = true;
-    }
-    if (participant.isReady === true) {
-      participant.isReady = false;
-      changed = true;
-    }
-    if (participant.queuedForNextGame === true) {
-      participant.queuedForNextGame = false;
-      changed = true;
-    }
-  } else if (action === "ready") {
-    if (!isParticipantSeated(participant)) {
-      reason = "not_seated";
-    } else {
-      const shouldQueueForNextGame = shouldQueueParticipantForNextGame(session);
-      const nextQueuedForNextGame = shouldQueueForNextGame ? true : false;
-      if (participant.queuedForNextGame !== nextQueuedForNextGame) {
-        participant.queuedForNextGame = nextQueuedForNextGame;
-        changed = true;
-      }
-      if (participant.isReady !== true) {
-        participant.isReady = true;
-        changed = true;
-      }
-    }
-  } else if (action === "unready") {
-    if (participant.isReady === true) {
-      participant.isReady = false;
-      changed = true;
-    }
-    if (!shouldQueueParticipantForNextGame(session) && participant.queuedForNextGame === true) {
-      participant.queuedForNextGame = false;
-      changed = true;
-    }
-  }
-
-  if (!isParticipantSeated(participant) && participant.isReady === true) {
-    participant.isReady = false;
-    changed = true;
-  }
-  participant.lastHeartbeatAt = now;
-  markSessionActivity(session, playerId, now);
-
-  if (changed) {
-    ensureSessionTurnState(session);
-    reconcileSessionLoops(sessionId);
-    broadcastSessionState(session, `participant_${action}`);
-    const actorName = participant.displayName || participant.playerId;
-    const actionMessageMap = {
-      sit:
-        participant.queuedForNextGame === true
-          ? `${actorName} sat down and is waiting for the next game.`
-          : `${actorName} sat down.`,
-      stand: `${actorName} stood up.`,
-      ready:
-        participant.queuedForNextGame === true
-          ? `${actorName} is ready for the next game.`
-          : `${actorName} is ready to play.`,
-      unready: `${actorName} is no longer ready.`,
-    };
-    const actionMessage = actionMessageMap[action];
-    if (actionMessage) {
-      broadcastSystemRoomChannelMessage(sessionId, {
-        topic: "seat_state",
-        title: actorName,
-        message: actionMessage,
-        severity: action === "ready" ? "success" : "info",
-        timestamp: now,
-      });
-    }
-  }
-  await persistStore();
-
-  sendJson(res, 200, {
-    ok: reason === "ok",
-    reason,
-    state: {
-      isSeated: isParticipantSeated(participant),
-      isReady: participant.isReady === true,
-      queuedForNextGame: isParticipantQueuedForNextGame(participant),
-    },
-    session: {
-      ...buildSessionSnapshot(session),
-      serverNow: now,
-    },
+  const updateResult = await updateSessionParticipantState({
+    req,
+    sessionId,
+    body,
   });
+  sendJson(res, updateResult.status, updateResult.payload);
 }
 
 async function handleUpdateSessionDemoControls(req, res, pathname) {
-  const sessionId = decodeURIComponent(pathname.split("/")[4] ?? "").trim();
-  if (!sessionId) {
-    sendJson(res, 400, { error: "Invalid session ID", reason: "invalid_session_id" });
-    return;
-  }
-
-  let session = store.multiplayerSessions[sessionId];
-  if (!session || session.expiresAt <= Date.now()) {
-    await rehydrateStoreFromAdapter(`demo_controls_session:${sessionId}`, { force: true });
-    session = store.multiplayerSessions[sessionId];
-  }
-  if (!session || session.expiresAt <= Date.now()) {
-    sendJson(res, 410, { error: "Session expired", reason: "session_expired" });
-    return;
-  }
-
+  const sessionId = decodeURIComponent(pathname.split("/")[4] ?? "");
   const body = await parseJsonBody(req);
-  const requestedPlayerId = typeof body?.playerId === "string" ? body.playerId.trim() : "";
-  const action = normalizeDemoControlAction(body?.action);
-  if (!action) {
-    sendJson(res, 400, { error: "Invalid demo control action", reason: "invalid_action" });
-    return;
-  }
-
-  let authCheck = authorizeSessionActionRequest(req, undefined, sessionId);
-  if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
-    await rehydrateStoreFromAdapter(
-      `demo_controls_auth:${sessionId}:${requestedPlayerId || "unknown"}`,
-      { force: true }
-    );
-    authCheck = authorizeSessionActionRequest(req, undefined, sessionId);
-  }
-  if (!authCheck.ok) {
-    sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "unauthorized" });
-    return;
-  }
-  const authenticatedPlayerId =
-    typeof authCheck.playerId === "string" ? authCheck.playerId.trim() : "";
-  const playerId =
-    authenticatedPlayerId ||
-    requestedPlayerId;
-  if (!playerId) {
-    sendJson(res, 400, { error: "playerId is required", reason: "invalid_player_id" });
-    return;
-  }
-  const participant = session.participants?.[playerId];
-  if (!participant || isBotParticipant(participant)) {
-    sendJson(res, 404, { error: "Unknown player", reason: "unknown_player" });
-    return;
-  }
-
-  if (getSessionRoomKind(session) !== ROOM_KINDS.private) {
-    sendJson(res, 409, { error: "Demo controls are private-room only", reason: "room_not_private" });
-    return;
-  }
-  const ownerPlayerId = ensureSessionOwner(session);
-  if (!ownerPlayerId || ownerPlayerId !== playerId) {
-    sendJson(res, 403, { error: "Only room owner can control demo", reason: "not_room_owner" });
-    return;
-  }
-  const now = Date.now();
-  let changed = false;
-  let didRestartAutoRun = false;
-  let seededBotCount = getBotParticipants(session).length;
-
-  if (session.demoMode !== true) {
-    session.demoMode = true;
-    changed = true;
-  }
-  if (action === "pause") {
-    if (session.demoAutoRun !== false) {
-      session.demoAutoRun = false;
-      changed = true;
-    }
-  } else if (action === "resume") {
-    if (session.demoAutoRun !== true) {
-      session.demoAutoRun = true;
-      changed = true;
-    }
-    if (participant.isSeated === true) {
-      participant.isSeated = false;
-      changed = true;
-    }
-    if (participant.isReady === true) {
-      participant.isReady = false;
-      changed = true;
-    }
-    if (participant.queuedForNextGame === true) {
-      participant.queuedForNextGame = false;
-      changed = true;
-    }
-
-    const seatedHumanCount = getSeatedHumanParticipantCount(session);
-    const availableSeatCount = Math.max(0, MAX_MULTIPLAYER_HUMAN_PLAYERS - seatedHumanCount);
-    const targetBotCount =
-      availableSeatCount > 0
-        ? Math.max(1, Math.min(MAX_MULTIPLAYER_BOTS, availableSeatCount))
-        : 0;
-    const botPrune = pruneSessionBots(sessionId, session, {
-      removeAll: true,
-      now,
-    });
-    if (botPrune.changed) {
-      changed = true;
-    }
-    const addedBotCount = addBotsToSession(session, targetBotCount, now);
-    if (addedBotCount > 0) {
-      changed = true;
-    }
-
-    const restarted = resetSessionForNextGame(session, now);
-    if (restarted) {
-      changed = true;
-    } else {
-      session.gameStartedAt = now;
-      session.turnState = null;
-      ensureSessionTurnState(session);
-      changed = true;
-    }
-    const normalizedBots = normalizeSessionBotsForAutoRun(session, now);
-    if (normalizedBots.changed) {
-      changed = true;
-    }
-    seededBotCount = normalizedBots.count;
-    didRestartAutoRun = true;
-  } else if (action === "speed_fast") {
-    if (session.demoSpeedMode !== true) {
-      session.demoSpeedMode = true;
-      changed = true;
-    }
-  } else if (action === "speed_normal") {
-    if (session.demoSpeedMode !== false) {
-      session.demoSpeedMode = false;
-      changed = true;
-    }
-  }
-
-  participant.lastHeartbeatAt = now;
-  markSessionActivity(session, playerId, now);
-  ensureSessionTurnState(session);
-
-  if (changed) {
-    resetSessionBotLoopSchedule(sessionId);
-    reconcileSessionLoops(sessionId);
-    const isRunning = isSessionDemoAutoRunEnabled(session);
-    const speedLabel = isSessionDemoFastMode(session) ? "fast" : "normal";
-    broadcastSystemRoomChannelMessage(sessionId, {
-      topic: "demo_control",
-      title: participant.displayName || participant.playerId,
-      message:
-        action === "pause"
-          ? "Demo paused by host."
-          : action === "resume"
-            ? `Demo restarted with ${seededBotCount} bot${seededBotCount === 1 ? "" : "s"}.`
-            : `Demo speed set to ${speedLabel}.`,
-      severity: "info",
-      timestamp: now,
-    });
-    if (didRestartAutoRun && isRunning) {
-      const nextTurnStart = buildTurnStartMessage(session, {
-        source: "demo_restart",
-      });
-      if (nextTurnStart) {
-        broadcastToSession(sessionId, JSON.stringify(nextTurnStart), null);
-      }
-    }
-    broadcastSessionState(session, "demo_controls");
-  }
-
-  await persistStore();
-  sendJson(res, 200, {
-    ok: true,
-    controls: {
-      demoMode: isDemoModeSession(session),
-      demoAutoRun: isSessionDemoAutoRunEnabled(session),
-      demoSpeedMode: isSessionDemoFastMode(session),
-    },
-    session: {
-      ...buildSessionSnapshot(session),
-      serverNow: now,
-    },
+  const updateResult = await updateSessionDemoModeControls({
+    req,
+    sessionId,
+    body,
   });
+  sendJson(res, updateResult.status, updateResult.payload);
 }
 
 async function handleQueueParticipantForNextGame(req, res, pathname) {
@@ -2283,229 +1959,22 @@ async function handleLeaveSession(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
 
   const body = await parseJsonBody(req);
-  const playerId = typeof body?.playerId === "string" ? body.playerId : "";
-  if (!playerId) {
-    sendJson(res, 400, { error: "playerId is required" });
-    return;
-  }
-  let removal = removeParticipantFromSession(sessionId, playerId, {
-    source: "leave",
-    socketReason: "left_session",
+  const leaveResult = await leaveSessionParticipant({
+    sessionId,
+    body,
   });
-  if (!removal.ok && (removal.reason === "unknown_session" || removal.reason === "unknown_player")) {
-    await rehydrateStoreFromAdapter(`leave_session:${sessionId}:${playerId}`, { force: true });
-    removal = removeParticipantFromSession(sessionId, playerId, {
-      source: "leave",
-      socketReason: "left_session",
-    });
-  }
-  if (!removal.ok && removal.reason === "unknown_session") {
-    sendJson(res, 200, { ok: true });
-    return;
-  }
-  if (!removal.ok && removal.reason === "unknown_player") {
-    sendJson(res, 200, { ok: true });
-    return;
-  }
-  if (!removal.ok) {
-    sendJson(res, 404, { error: "Player not found in session", reason: removal.reason });
-    return;
-  }
-  await persistStore();
-  sendJson(res, 200, { ok: true });
+  sendJson(res, leaveResult.status, leaveResult.payload);
 }
 
 async function handleModerateSessionParticipant(req, res, pathname) {
-  const sessionId = decodeURIComponent(pathname.split("/")[4] ?? "").trim();
-  if (!sessionId) {
-    sendJson(res, 400, {
-      error: "Invalid session ID",
-      reason: "invalid_session_id",
-    });
-    return;
-  }
-
-  let session = store.multiplayerSessions[sessionId];
-  if (!session || session.expiresAt <= Date.now()) {
-    await rehydrateStoreFromAdapter(`moderate_session:${sessionId}`, { force: true });
-    session = store.multiplayerSessions[sessionId];
-  }
-  if (!session || session.expiresAt <= Date.now()) {
-    sendJson(res, 410, {
-      error: "Session expired",
-      reason: "session_expired",
-    });
-    return;
-  }
-
+  const sessionId = decodeURIComponent(pathname.split("/")[4] ?? "");
   const body = await parseJsonBody(req);
-  const requesterPlayerId =
-    typeof body?.requesterPlayerId === "string" ? body.requesterPlayerId.trim() : "";
-  const targetPlayerId =
-    typeof body?.targetPlayerId === "string" ? body.targetPlayerId.trim() : "";
-  const actionRaw = typeof body?.action === "string" ? body.action.trim().toLowerCase() : "";
-  const action = SESSION_MODERATION_ACTIONS.has(actionRaw) ? actionRaw : "";
-  if (!requesterPlayerId) {
-    sendJson(res, 400, {
-      error: "requesterPlayerId is required",
-      reason: "invalid_requester_player_id",
-    });
-    return;
-  }
-  if (!targetPlayerId) {
-    sendJson(res, 400, {
-      error: "targetPlayerId is required",
-      reason: "invalid_target_player_id",
-    });
-    return;
-  }
-  if (!action) {
-    sendJson(res, 400, {
-      error: "Invalid moderation action",
-      reason: "invalid_moderation_action",
-    });
-    return;
-  }
-  if (requesterPlayerId === targetPlayerId) {
-    sendJson(res, 409, {
-      error: "Cannot moderate self",
-      reason: "cannot_moderate_self",
-    });
-    return;
-  }
-
-  if (getSessionRoomKind(session) === ROOM_KINDS.private) {
-    ensureSessionOwner(session);
-  }
-  const requesterParticipant = session.participants?.[requesterPlayerId] ?? null;
-  const requesterAuth = authorizeSessionActionRequest(req, requesterPlayerId, sessionId);
-  const requesterIsOwner =
-    requesterAuth.ok &&
-    requesterParticipant &&
-    !isBotParticipant(requesterParticipant) &&
-    getSessionOwnerPlayerId(session) === requesterPlayerId;
-  let moderatorRole = requesterIsOwner ? "owner" : null;
-  let adminAuth = null;
-
-  if (!moderatorRole) {
-    adminAuth = await authorizeAdminRequest(req, { minimumRole: ADMIN_ROLES.operator });
-    if (adminAuth.ok) {
-      moderatorRole = "admin";
-    }
-  }
-
-  if (!moderatorRole) {
-    if (requesterAuth.ok && requesterParticipant && !isBotParticipant(requesterParticipant)) {
-      sendJson(res, 403, {
-        error: "Only room owner can moderate participants",
-        reason: "not_room_owner",
-      });
-      return;
-    }
-    sendJson(res, adminAuth?.status ?? 401, {
-      error: "Unauthorized",
-      reason: adminAuth?.reason ?? "unauthorized",
-    });
-    return;
-  }
-
-  const now = Date.now();
-  const targetParticipant = session.participants?.[targetPlayerId] ?? null;
-  if (!targetParticipant && action === "kick") {
-    sendJson(res, 404, {
-      error: "Target player not found in session",
-      reason: "unknown_player",
-    });
-    return;
-  }
-
-  const actorName = resolveModerationActorDisplayName({
-    requesterPlayerId,
-    requesterParticipant,
-    moderatorRole,
-    adminAuth,
+  const moderateResult = await moderateSessionPlayer({
+    req,
+    sessionId,
+    body,
   });
-  const targetLabel =
-    typeof targetParticipant?.displayName === "string" && targetParticipant.displayName.trim().length > 0
-      ? targetParticipant.displayName.trim()
-      : targetPlayerId;
-  if (action === "ban") {
-    upsertSessionRoomBan(session, targetPlayerId, {
-      bannedAt: now,
-      bannedByPlayerId: requesterPlayerId,
-      bannedByRole: moderatorRole,
-    });
-  }
-
-  let removal = {
-    ok: true,
-    roomInventoryChanged: false,
-    sessionExpired: false,
-  };
-  if (targetParticipant) {
-    removal = removeParticipantFromSession(sessionId, targetPlayerId, {
-      source: action === "ban" ? "moderation_ban" : "moderation_kick",
-      socketReason: action === "ban" ? "banned_from_room" : "removed_by_moderator",
-    });
-    if (!removal.ok) {
-      const status =
-        removal.reason === "unknown_session" || removal.reason === "unknown_player" ? 404 : 409;
-      sendJson(res, status, {
-        error: "Failed to moderate participant",
-        reason: removal.reason,
-      });
-      return;
-    }
-  }
-
-  const updatedSession = store.multiplayerSessions[sessionId];
-  if (updatedSession) {
-    markSessionActivity(updatedSession, requesterPlayerId, now, {
-      countAsPlayerAction: false,
-    });
-    reconcileSessionLoops(sessionId);
-    broadcastSystemRoomChannelMessage(sessionId, {
-      topic: action === "ban" ? "moderation_ban" : "moderation_kick",
-      title: "Room Moderation",
-      message:
-        action === "ban"
-          ? `${targetLabel} was banned from the room by ${actorName}.`
-          : `${targetLabel} was removed from the room by ${actorName}.`,
-      severity: action === "ban" ? "warning" : "info",
-      timestamp: now,
-    });
-  }
-
-  if (moderatorRole === "admin" && adminAuth?.ok) {
-    recordAdminAuditEvent(adminAuth, "participant_remove", {
-      summary: `${action} ${targetPlayerId} in ${sessionId}`,
-      sessionId,
-      playerId: targetPlayerId,
-      action,
-      roomInventoryChanged: removal.roomInventoryChanged === true,
-      sessionExpired: removal.sessionExpired === true,
-    });
-  }
-
-  await persistStore();
-
-  sendJson(res, 200, {
-    ok: true,
-    action,
-    targetPlayerId,
-    moderatedBy: {
-      playerId: requesterPlayerId,
-      role: moderatorRole,
-    },
-    roomInventoryChanged: removal.roomInventoryChanged === true,
-    sessionExpired: removal.sessionExpired === true,
-    session: updatedSession
-      ? {
-          ...buildSessionSnapshot(updatedSession),
-          serverNow: now,
-        }
-      : null,
-  });
+  sendJson(res, moderateResult.status, moderateResult.payload);
 }
 
 function removeParticipantFromSession(
@@ -2513,66 +1982,10 @@ function removeParticipantFromSession(
   playerId,
   options = { source: "leave", socketReason: "left_session" }
 ) {
-  const session = store.multiplayerSessions[sessionId];
-  if (!session) {
-    return {
-      ok: false,
-      reason: "unknown_session",
-    };
+  if (typeof removeParticipantFromSessionHandler !== "function") {
+    throw new Error("Session membership service is not initialized");
   }
-  if (!session.participants?.[playerId]) {
-    return {
-      ok: false,
-      reason: "unknown_player",
-    };
-  }
-
-  delete session.participants[playerId];
-  if (session.chatConductState?.players && typeof session.chatConductState.players === "object") {
-    delete session.chatConductState.players[playerId];
-  }
-  const removedOwner =
-    typeof session.ownerPlayerId === "string" && session.ownerPlayerId.trim() === playerId;
-  if (removedOwner) {
-    ensureSessionOwner(session);
-  }
-  disconnectPlayerSockets(
-    sessionId,
-    playerId,
-    WS_CLOSE_CODES.normal,
-    options.socketReason ?? "left_session"
-  );
-  ensureSessionTurnState(session);
-  const now = Date.now();
-
-  if (getHumanParticipantCount(session) === 0) {
-    const roomKind = getSessionRoomKind(session);
-    if (roomKind === ROOM_KINDS.private) {
-      expireSession(sessionId, "session_empty");
-    } else {
-      resetPublicRoomForIdle(session, now);
-      reconcileSessionLoops(sessionId);
-      broadcastSessionState(session, options.source ?? "leave");
-    }
-  } else {
-    const forfeited = maybeForfeitSessionForSingleHumanRemaining(session, now);
-    markSessionActivity(session, undefined, now);
-    reconcileSessionLoops(sessionId);
-    if (!forfeited) {
-      const turnStart = buildTurnStartMessage(session, { source: "reassign" });
-      if (turnStart) {
-        broadcastToSession(sessionId, JSON.stringify(turnStart), null);
-      }
-    }
-    broadcastSessionState(session, options.source ?? "leave");
-  }
-
-  const roomInventoryChanged = reconcilePublicRoomInventory(now);
-  return {
-    ok: true,
-    roomInventoryChanged,
-    sessionExpired: !store.multiplayerSessions[sessionId],
-  };
+  return removeParticipantFromSessionHandler(sessionId, playerId, options);
 }
 
 async function handleRefreshSessionAuth(req, res, pathname) {
@@ -2584,90 +1997,6 @@ async function handleRefreshSessionAuth(req, res, pathname) {
     body,
   });
   sendJson(res, refreshResult.status, refreshResult.payload);
-}
-
-async function rehydrateSessionWithRetry(sessionId, reasonPrefix, options = {}) {
-  const normalizedSessionId =
-    typeof sessionId === "string" ? sessionId.trim() : "";
-  if (!normalizedSessionId) {
-    return null;
-  }
-  const attempts = Number.isFinite(options.attempts)
-    ? Math.max(1, Math.floor(options.attempts))
-    : 3;
-  const baseDelayMs = Number.isFinite(options.baseDelayMs)
-    ? Math.max(0, Math.floor(options.baseDelayMs))
-    : 100;
-
-  let session = store.multiplayerSessions[normalizedSessionId] ?? null;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (session) {
-      return session;
-    }
-    if (attempt > 0 && baseDelayMs > 0) {
-      await delayMs(baseDelayMs * attempt);
-    }
-    await rehydrateStoreFromAdapter(`${reasonPrefix}:${normalizedSessionId}:attempt_${attempt + 1}`, {
-      force: true,
-    });
-    session = store.multiplayerSessions[normalizedSessionId] ?? null;
-  }
-  return session;
-}
-
-async function rehydrateSessionParticipantWithRetry(sessionId, playerId, reasonPrefix, options = {}) {
-  const normalizedSessionId =
-    typeof sessionId === "string" ? sessionId.trim() : "";
-  const normalizedPlayerId =
-    typeof playerId === "string" ? playerId.trim() : "";
-  if (!normalizedSessionId || !normalizedPlayerId) {
-    return {
-      session: null,
-      participant: null,
-    };
-  }
-  const attempts = Number.isFinite(options.attempts)
-    ? Math.max(1, Math.floor(options.attempts))
-    : 3;
-  const baseDelayMs = Number.isFinite(options.baseDelayMs)
-    ? Math.max(0, Math.floor(options.baseDelayMs))
-    : 100;
-
-  let session = store.multiplayerSessions[normalizedSessionId] ?? null;
-  let participant = session?.participants?.[normalizedPlayerId] ?? null;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (session && participant) {
-      return {
-        session,
-        participant,
-      };
-    }
-    if (attempt > 0 && baseDelayMs > 0) {
-      await delayMs(baseDelayMs * attempt);
-    }
-    await rehydrateStoreFromAdapter(
-      `${reasonPrefix}:${normalizedSessionId}:${normalizedPlayerId}:attempt_${attempt + 1}`,
-      { force: true }
-    );
-    session = store.multiplayerSessions[normalizedSessionId] ?? null;
-    participant = session?.participants?.[normalizedPlayerId] ?? null;
-  }
-  return {
-    session,
-    participant,
-  };
-}
-
-async function delayMs(durationMs) {
-  const delay = Number.isFinite(durationMs)
-    ? Math.max(0, Math.floor(durationMs))
-    : 0;
-  if (delay <= 0) {
-    return;
-  }
-  await new Promise((resolve) => {
-    setTimeout(resolve, delay);
-  });
 }
 
 async function handleAdminOverview(req, res, url) {
