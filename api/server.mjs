@@ -28,6 +28,7 @@ import {
 } from "./filters/directMessageBlockRelationshipFilter.mjs";
 import { dispatchApiRoute } from "./http/routeDispatcher.mjs";
 import { createApiRouteHandlers } from "./http/routeHandlers.mjs";
+import { createFirebaseIdentityVerifier } from "./auth/firebaseIdentityVerifier.mjs";
 import { createTokenAuthAdapter } from "./auth/tokenAuthAdapter.mjs";
 import {
   completeSocketHandshake,
@@ -420,7 +421,6 @@ const WS_CLOSE_CODES = {
 };
 
 let store = structuredClone(DEFAULT_STORE);
-const firebaseTokenCache = new Map();
 const tokenAuthAdapter = createTokenAuthAdapter({
   getStore: () => store,
   accessTokenTtlMs: ACCESS_TOKEN_TTL_MS,
@@ -434,6 +434,17 @@ const {
   revokeRefreshToken,
   extractBearerToken,
 } = tokenAuthAdapter;
+const firebaseIdentityVerifier = createFirebaseIdentityVerifier({
+  firebaseAuthMode: FIREBASE_AUTH_MODE,
+  firebaseProjectId: FIREBASE_PROJECT_ID,
+  firebaseWebApiKey: FIREBASE_WEB_API_KEY,
+  serviceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+  fetchImpl: globalThis.fetch,
+  now: () => Date.now(),
+  normalizeReason,
+  log,
+});
+const { verifyFirebaseIdToken } = firebaseIdentityVerifier;
 const storeSyncController = createStoreSyncController({
   getStore: () => store,
   setStore: (nextStore) => {
@@ -453,7 +464,6 @@ const storeSyncController = createStoreSyncController({
   log,
 });
 let storeAdapter = null;
-let firebaseAdminAuthClientPromise = null;
 let chatConductTermRefreshHandle = null;
 let bootstrapPromise = null;
 let bootstrapRetryHandle = null;
@@ -4560,302 +4570,6 @@ function shouldRetrySessionAuthFromStore(reason) {
     reason === "player_mismatch" ||
     reason === "session_mismatch"
   );
-}
-
-async function verifyFirebaseIdToken(idToken) {
-  const now = Date.now();
-  const cached = firebaseTokenCache.get(idToken);
-  if (cached && cached.expiresAt > now + 5000) {
-    return {
-      ok: true,
-      claims: cached,
-    };
-  }
-
-  const adminResult = await verifyFirebaseIdTokenWithAdmin(idToken);
-  if (adminResult) {
-    if (adminResult.ok) {
-      firebaseTokenCache.set(idToken, adminResult.claims);
-    }
-    return adminResult;
-  }
-
-  return verifyFirebaseIdTokenWithLegacyLookup(idToken, now);
-}
-
-async function verifyFirebaseIdTokenWithAdmin(idToken) {
-  if (FIREBASE_AUTH_MODE === "legacy") {
-    return null;
-  }
-
-  const authClient = await getFirebaseAdminAuthClient();
-  if (!authClient) {
-    if (FIREBASE_AUTH_MODE === "admin") {
-      return {
-        ok: false,
-        reason: "firebase_admin_unavailable",
-      };
-    }
-    return null;
-  }
-
-  try {
-    const decoded = await authClient.verifyIdToken(idToken, true);
-    const audience = typeof decoded?.aud === "string" ? decoded.aud : "";
-    const issuer = typeof decoded?.iss === "string" ? decoded.iss : "";
-    if (FIREBASE_PROJECT_ID && audience && audience !== FIREBASE_PROJECT_ID) {
-      return {
-        ok: false,
-        reason: "firebase_audience_mismatch",
-      };
-    }
-    if (FIREBASE_PROJECT_ID && issuer) {
-      const expectedIssuer = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
-      if (issuer !== expectedIssuer) {
-        return {
-          ok: false,
-          reason: "firebase_issuer_mismatch",
-        };
-      }
-    }
-
-    const signInProvider =
-      typeof decoded?.firebase?.sign_in_provider === "string"
-        ? decoded.firebase.sign_in_provider
-        : "";
-    const claims = {
-      uid: typeof decoded?.uid === "string" ? decoded.uid : "",
-      email: typeof decoded?.email === "string" ? decoded.email : undefined,
-      name: typeof decoded?.name === "string" ? decoded.name : undefined,
-      picture: typeof decoded?.picture === "string" ? decoded.picture : undefined,
-      signInProvider,
-      isAnonymous: signInProvider === "anonymous",
-      expiresAt:
-        typeof decoded?.exp === "number"
-          ? decoded.exp * 1000
-          : Date.now() + 5 * 60 * 1000,
-    };
-
-    if (!claims.uid) {
-      return {
-        ok: false,
-        reason: "firebase_token_missing_uid",
-      };
-    }
-
-    return {
-      ok: true,
-      claims,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: normalizeFirebaseAdminReason(error),
-    };
-  }
-}
-
-async function getFirebaseAdminAuthClient() {
-  if (firebaseAdminAuthClientPromise) {
-    return firebaseAdminAuthClientPromise;
-  }
-
-  firebaseAdminAuthClientPromise = (async () => {
-    try {
-      const [{ getApps, initializeApp, applicationDefault, cert }, { getAuth }] =
-        await Promise.all([
-          import("firebase-admin/app"),
-          import("firebase-admin/auth"),
-        ]);
-
-      const existing = getApps()[0];
-      const app =
-        existing ??
-        initializeApp(
-          buildFirebaseAdminOptions({
-            applicationDefault,
-            cert,
-          })
-        );
-
-      return getAuth(app);
-    } catch (error) {
-      const logMethod = FIREBASE_AUTH_MODE === "admin" ? "error" : "warn";
-      log[logMethod]("Failed to initialize Firebase Admin auth verifier", error);
-      return null;
-    }
-  })();
-
-  return firebaseAdminAuthClientPromise;
-}
-
-function buildFirebaseAdminOptions({ applicationDefault, cert }) {
-  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
-  if (!serviceAccountJson) {
-    return {
-      credential: applicationDefault(),
-      projectId: FIREBASE_PROJECT_ID || undefined,
-    };
-  }
-
-  const parsed = JSON.parse(serviceAccountJson);
-  return {
-    credential: cert(parsed),
-    projectId: FIREBASE_PROJECT_ID || parsed.project_id || undefined,
-  };
-}
-
-function normalizeFirebaseAdminReason(error) {
-  const maybeCode =
-    typeof error?.code === "string"
-      ? error.code
-      : typeof error?.errorInfo?.code === "string"
-        ? error.errorInfo.code
-        : "verification_failed";
-  const normalizedCode = String(maybeCode).replace(/^auth\//, "");
-  return `firebase_admin_${normalizeReason(normalizedCode)}`;
-}
-
-async function verifyFirebaseIdTokenWithLegacyLookup(idToken, now) {
-  if (!FIREBASE_WEB_API_KEY) {
-    return {
-      ok: false,
-      reason: "firebase_api_key_not_configured",
-    };
-  }
-
-  const decoded = decodeJwtPayload(idToken);
-  const audience = typeof decoded?.aud === "string" ? decoded.aud : "";
-  const issuer = typeof decoded?.iss === "string" ? decoded.iss : "";
-  if (FIREBASE_PROJECT_ID && audience && audience !== FIREBASE_PROJECT_ID) {
-    log.warn(
-      `Rejected Firebase token with mismatched project audience (expected=${FIREBASE_PROJECT_ID}, actual=${audience})`
-    );
-    return {
-      ok: false,
-      reason: "firebase_audience_mismatch",
-    };
-  }
-  if (FIREBASE_PROJECT_ID && issuer) {
-    const expectedIssuer = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
-    if (issuer !== expectedIssuer) {
-      log.warn(
-        `Rejected Firebase token with mismatched issuer (expected=${expectedIssuer}, actual=${issuer})`
-      );
-      return {
-        ok: false,
-        reason: "firebase_issuer_mismatch",
-      };
-    }
-  }
-
-  const endpoint = new URL("https://identitytoolkit.googleapis.com/v1/accounts:lookup");
-  endpoint.searchParams.set("key", FIREBASE_WEB_API_KEY);
-
-  let response;
-  try {
-    response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        idToken,
-      }),
-    });
-  } catch (error) {
-    log.warn("Failed to call Firebase accounts:lookup", error);
-    return {
-      ok: false,
-      reason: "firebase_lookup_request_failed",
-    };
-  }
-
-  let payload;
-  try {
-    payload = await response.json();
-  } catch (error) {
-    log.warn("Invalid Firebase accounts:lookup JSON response", error);
-    return {
-      ok: false,
-      reason: "firebase_lookup_invalid_json",
-    };
-  }
-
-  if (!response.ok) {
-    const remoteMessage =
-      typeof payload?.error?.message === "string"
-        ? payload.error.message
-        : `HTTP_${response.status}`;
-
-    return {
-      ok: false,
-      reason: `firebase_lookup_${normalizeReason(remoteMessage)}`,
-    };
-  }
-
-  const users = Array.isArray(payload?.users) ? payload.users : [];
-  const user = users[0] ?? null;
-  const uid =
-    user && typeof user.localId === "string" ? user.localId.trim() : "";
-  const exp = Number(decoded?.exp ?? 0);
-  const expiresAt = Number.isFinite(exp) ? exp * 1000 : now + 5 * 60 * 1000;
-
-  if (!uid) {
-    return {
-      ok: false,
-      reason: "firebase_token_missing_uid",
-    };
-  }
-
-  const claims = {
-    uid,
-    email: user && typeof user.email === "string" ? user.email : undefined,
-    name:
-      user && typeof user.displayName === "string"
-        ? user.displayName
-        : undefined,
-    picture:
-      user && typeof user.photoUrl === "string" ? user.photoUrl : undefined,
-    signInProvider:
-      typeof decoded?.firebase?.sign_in_provider === "string"
-        ? decoded.firebase.sign_in_provider
-        : (Array.isArray(user?.providerUserInfo) &&
-            typeof user.providerUserInfo[0]?.providerId === "string"
-          ? user.providerUserInfo[0].providerId
-          : ""),
-    isAnonymous:
-      (typeof decoded?.firebase?.sign_in_provider === "string" &&
-        decoded.firebase.sign_in_provider === "anonymous") ||
-      (Array.isArray(user?.providerUserInfo) &&
-        user.providerUserInfo.length === 0 &&
-        typeof user?.email !== "string"),
-    expiresAt,
-  };
-
-  firebaseTokenCache.set(idToken, claims);
-  return {
-    ok: true,
-    claims,
-  };
-}
-
-function decodeJwtPayload(token) {
-  const parts = String(token ?? "").split(".");
-  if (parts.length < 2) {
-    return null;
-  }
-
-  const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-  const padding = payload.length % 4 === 0 ? "" : "=".repeat(4 - (payload.length % 4));
-  const normalized = payload + padding;
-
-  try {
-    const raw = Buffer.from(normalized, "base64").toString("utf8");
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
 }
 
 function normalizeReason(message) {
