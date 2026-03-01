@@ -38,6 +38,7 @@ import { createSocketLifecycle } from "./ws/socketLifecycle.mjs";
 import { createSocketMessageRouter } from "./ws/socketMessageRouter.mjs";
 import { isSupportedSocketPayload } from "./ws/socketPayloadValidation.mjs";
 import { createSocketRelay } from "./ws/socketRelay.mjs";
+import { createSocketTurnMessageHandlers } from "./ws/socketTurnHandlers.mjs";
 import { createSocketUpgradeAuthenticator } from "./ws/socketUpgradeAuth.mjs";
 import {
   buildChatConductWarning,
@@ -439,6 +440,7 @@ const server = createServer((req, res) => {
 const wsSessionClients = new Map();
 const wsClientMeta = new WeakMap();
 let socketMessageRouter = null;
+let socketTurnHandlers = null;
 const socketRelay = createSocketRelay({
   wsSessionClients,
   writeSocketFrame,
@@ -629,6 +631,23 @@ roomChannelFilterRegistry.registerFilter({
     timeoutMs: DIRECT_MESSAGE_BLOCK_FILTER_TIMEOUT_MS,
     onError: DIRECT_MESSAGE_BLOCK_FILTER_ON_ERROR,
   },
+});
+socketTurnHandlers = createSocketTurnMessageHandlers({
+  turnPhases: TURN_PHASES,
+  ensureSessionTurnState,
+  normalizeTurnPhase,
+  markSessionActivity,
+  processTurnAction,
+  sendSocketError,
+  sendTurnSyncPayload,
+  broadcastToSession,
+  broadcastRoundWinnerResolved,
+  broadcastSessionState,
+  persistStore,
+  reconcileSessionLoops,
+  clearParticipantTimeoutStrike,
+  advanceSessionTurn,
+  log,
 });
 socketMessageRouter = createSocketMessageRouter({
   wsClientMeta,
@@ -9420,89 +9439,17 @@ function handleSocketMessage(client, rawMessage) {
 }
 
 function handleTurnActionMessage(client, session, payload) {
-  const timestamp = Date.now();
-  session.participants[client.playerId].lastHeartbeatAt = timestamp;
-  markSessionActivity(session, client.playerId, timestamp);
-  const transition = processTurnAction(session, client.playerId, payload);
-  if (!transition.ok) {
-    sendSocketError(client, transition.code, transition.reason);
-    if (transition.sync) {
-      sendTurnSyncPayload(client, session, "sync");
-    }
+  if (!socketTurnHandlers) {
     return;
   }
-
-  if (transition.message) {
-    broadcastToSession(client.sessionId, JSON.stringify(transition.message), null);
-  }
-
-  if (transition.winnerResolved) {
-    broadcastRoundWinnerResolved(
-      session,
-      client.playerId,
-      transition.actionTimestamp,
-      "winner_complete"
-    );
-  }
-
-  if (!transition.shouldBroadcastState) {
-    reconcileSessionLoops(client.sessionId);
-    return;
-  }
-
-  broadcastSessionState(session, `turn_${transition.action}`);
-  if (transition.shouldPersist) {
-    persistStore().catch((error) => {
-      log.warn("Failed to persist session after turn action", error);
-    });
-  }
-  reconcileSessionLoops(client.sessionId);
+  socketTurnHandlers.handleTurnActionMessage(client, session, payload);
 }
 
 function handleTurnEndMessage(client, session) {
-  const timestamp = Date.now();
-  session.participants[client.playerId].lastHeartbeatAt = timestamp;
-  markSessionActivity(session, client.playerId, timestamp);
-  const turnState = ensureSessionTurnState(session);
-  log.info(
-    `Turn end request: session=${client.sessionId} player=${client.playerId} active=${turnState?.activeTurnPlayerId ?? "n/a"} order=${Array.isArray(turnState?.order) ? turnState.order.join(",") : "n/a"}`
-  );
-  if (!turnState?.activeTurnPlayerId) {
-    sendSocketError(client, "turn_unavailable", "turn_unavailable");
+  if (!socketTurnHandlers) {
     return;
   }
-
-  if (turnState.activeTurnPlayerId !== client.playerId) {
-    sendSocketError(client, "turn_not_active", "not_your_turn");
-    sendTurnSyncPayload(client, session, "sync");
-    return;
-  }
-
-  if (normalizeTurnPhase(turnState.phase) !== TURN_PHASES.readyToEnd) {
-    sendSocketError(client, "turn_action_required", "score_required_before_turn_end");
-    sendTurnSyncPayload(client, session, "sync");
-    return;
-  }
-
-  clearParticipantTimeoutStrike(session.participants[client.playerId]);
-  const advanced = advanceSessionTurn(session, client.playerId, { source: "player" });
-  if (!advanced) {
-    sendSocketError(client, "turn_advance_failed", "turn_advance_failed");
-    return;
-  }
-  log.info(
-    `Turn advanced: session=${client.sessionId} endedBy=${advanced.turnEnd.playerId} next=${advanced.turnStart?.playerId ?? "none"} round=${advanced.turnStart?.round ?? turnState.round} turn=${advanced.turnStart?.turnNumber ?? turnState.turnNumber}`
-  );
-
-  broadcastToSession(client.sessionId, JSON.stringify(advanced.turnEnd), null);
-  if (advanced.turnStart) {
-    broadcastToSession(client.sessionId, JSON.stringify(advanced.turnStart), null);
-  }
-  broadcastSessionState(session, "turn_end");
-  persistStore().catch((error) => {
-    log.warn("Failed to persist session after turn advance", error);
-  });
-  reconcileSessionLoops(client.sessionId);
+  socketTurnHandlers.handleTurnEndMessage(client, session);
 }
 
 function broadcastSessionState(session, source = "server", sender = null) {
