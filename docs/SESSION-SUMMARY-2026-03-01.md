@@ -32,6 +32,9 @@
   - a centralized immutable route handler map in `server.mjs`
   - a single dispatch call to the extracted route module
 - Preserved existing handler contracts and request/response behavior.
+- Extracted route handler-map construction into:
+  - `api/http/routeHandlers.mjs`
+  - server now composes handler dependencies instead of owning the full map literal
 
 ---
 
@@ -42,6 +45,7 @@
 - `npm run test:backend-api` passes.
 - `node --check api/server.mjs` passes.
 - `node --check api/http/routeDispatcher.mjs` passes.
+- `node --check api/http/routeHandlers.mjs` passes.
 - `npm run build` passes.
 
 ### Notes

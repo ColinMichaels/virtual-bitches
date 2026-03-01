@@ -58,6 +58,7 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
 - Delivered in branch:
   - `api/http/routeDispatcher.mjs`
   - `api/server.mjs` dispatch-chain replacement using centralized handler map
+  - `api/http/routeHandlers.mjs` handler-registry extraction to keep server focused on composition
 
 ## Phase 02 - Engine Boundaries
 - Extract session/turn progression logic into core engine modules.
