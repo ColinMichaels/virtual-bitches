@@ -12,6 +12,8 @@ import { gameBrand } from "../config/brand.js";
 import { getLocale, setLocale, t, type LocaleCode } from "../i18n/index.js";
 import { confirmAction } from "./confirmModal.js";
 import { renderRefreshIconSvg } from "./icons.js";
+import { settingsService } from "../services/settings.js";
+import { buildUnifiedGameConfig, type UnifiedGameCreateConfig } from "../gameplay/gameConfig.js";
 import { environment } from "@env";
 
 const log = logger.create("SplashScreen");
@@ -21,6 +23,7 @@ export type SplashPlayMode = "solo" | "multiplayer";
 export interface SplashStartOptions {
   playMode: SplashPlayMode;
   forceTutorialReplay?: boolean;
+  gameConfig?: UnifiedGameCreateConfig;
   multiplayer?: {
     botCount: number;
     joinBotCount?: number;
@@ -722,8 +725,10 @@ export class SplashScreen {
       audioService.playSfx("click");
       const multiplayerStartOptions =
         this.playMode === "multiplayer" ? this.buildMultiplayerStartOptions() : undefined;
+      const gameConfig = this.buildStartGameConfig(this.playMode, multiplayerStartOptions);
       void attemptStart({
         playMode: this.playMode,
+        gameConfig,
         multiplayer: multiplayerStartOptions,
       });
     };
@@ -946,6 +951,27 @@ export class SplashScreen {
           ? true
           : undefined,
     };
+  }
+
+  private buildStartGameConfig(
+    playMode: SplashPlayMode,
+    multiplayerOptions?: SplashStartOptions["multiplayer"]
+  ): UnifiedGameCreateConfig {
+    if (playMode === "multiplayer") {
+      const demoSpeedMode = multiplayerOptions?.demoSpeedMode === true;
+      return buildUnifiedGameConfig({
+        mode: demoSpeedMode ? "demo" : "multiplayer",
+        difficulty: this.multiplayerDifficulty,
+        botCount: multiplayerOptions?.botCount ?? this.botCount,
+        demoSpeedMode,
+        autoRun: demoSpeedMode,
+      });
+    }
+
+    return buildUnifiedGameConfig({
+      mode: "solo",
+      difficulty: settingsService.getSettings().game.difficulty,
+    });
   }
 
   private resolveMultiplayerJoinLabel(): string {
@@ -1617,6 +1643,7 @@ export class SplashScreen {
     try {
       const started = await attemptStart({
         playMode: "multiplayer",
+        gameConfig: this.buildStartGameConfig("multiplayer", multiplayerStartOptions),
         multiplayer: {
           ...multiplayerStartOptions,
           roomCode: targetRoomCode,
