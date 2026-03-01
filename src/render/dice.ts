@@ -1650,7 +1650,9 @@ export class DiceRenderer {
     }
 
     radial.normalize();
-    const rollDistance = Math.max(3, length * 0.62);
+    // Keep spectator roll previews closer to table center for better visibility
+    // from both host and observer camera angles.
+    const rollDistance = Math.max(1.8, Math.min(3.2, length * 0.35));
     return new Vector3(radial.x * rollDistance, 0, radial.z * rollDistance);
   }
 
