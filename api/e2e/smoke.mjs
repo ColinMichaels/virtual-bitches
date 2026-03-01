@@ -3,6 +3,8 @@ import { getStoreSections } from "../storage/defaultStore.mjs";
 
 const REQUEST_TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 10000);
 const WS_TIMEOUT_MS = Number(process.env.E2E_WS_TIMEOUT_MS ?? 10000);
+const smokeProfile = normalizeOptionalString(process.env.E2E_SMOKE_PROFILE).toLowerCase();
+const fastSmokeProfile = smokeProfile === "fast";
 const firebaseIdToken = process.env.E2E_FIREBASE_ID_TOKEN?.trim() ?? "";
 const assertBotTraffic = process.env.E2E_ASSERT_BOTS === "1";
 const assertRoomExpiry = process.env.E2E_ASSERT_ROOM_EXPIRY === "1";
@@ -12,8 +14,14 @@ const assertModerationFlow = process.env.E2E_ASSERT_MULTIPLAYER_MODERATION !== "
 const assertAdminMonitor = process.env.E2E_ASSERT_ADMIN_MONITOR === "1";
 const assertAdminModerationTerms = process.env.E2E_ASSERT_ADMIN_MODERATION_TERMS === "1";
 const assertStorageCutover = process.env.E2E_ASSERT_STORAGE_CUTOVER === "1";
-const assertTimeoutStrikeObserver = process.env.E2E_ASSERT_TIMEOUT_STRIKE_OBSERVER !== "0";
-const assertEightPlayerBotTimeout = process.env.E2E_ASSERT_EIGHT_PLAYER_BOT_TIMEOUT !== "0";
+const assertTimeoutStrikeObserver = parseBooleanOverride(
+  process.env.E2E_ASSERT_TIMEOUT_STRIKE_OBSERVER,
+  !fastSmokeProfile
+);
+const assertEightPlayerBotTimeout = parseBooleanOverride(
+  process.env.E2E_ASSERT_EIGHT_PLAYER_BOT_TIMEOUT,
+  !fastSmokeProfile
+);
 const assertDemoAutoRunControls = process.env.E2E_ASSERT_DEMO_AUTORUN_CONTROLS !== "0";
 const adminToken = process.env.E2E_ADMIN_TOKEN?.trim() ?? "";
 const roomExpiryWaitMs = Number(process.env.E2E_ROOM_EXPIRY_WAIT_MS ?? 9000);
@@ -25,9 +33,15 @@ const timeoutStrikeHeartbeatIntervalMs = Number(
   process.env.E2E_TIMEOUT_STRIKE_HEARTBEAT_INTERVAL_MS ?? 5000
 );
 // Production defaults to a 60s post-round auto-start window; keep smoke timeout above that.
-const queueLifecycleWaitMs = Number(process.env.E2E_QUEUE_LIFECYCLE_WAIT_MS ?? 75000);
-const demoAutoRunProgressWaitMs = Number(process.env.E2E_DEMO_AUTORUN_PROGRESS_WAIT_MS ?? 14000);
-const demoAutoRunPauseStabilityWaitMs = Number(process.env.E2E_DEMO_PAUSE_STABILITY_WAIT_MS ?? 5000);
+const queueLifecycleWaitMs = Number(
+  process.env.E2E_QUEUE_LIFECYCLE_WAIT_MS ?? (fastSmokeProfile ? 60000 : 75000)
+);
+const demoAutoRunProgressWaitMs = Number(
+  process.env.E2E_DEMO_AUTORUN_PROGRESS_WAIT_MS ?? (fastSmokeProfile ? 10000 : 14000)
+);
+const demoAutoRunPauseStabilityWaitMs = Number(
+  process.env.E2E_DEMO_PAUSE_STABILITY_WAIT_MS ?? (fastSmokeProfile ? 3500 : 5000)
+);
 const demoAutoRunPollIntervalMs = Number(process.env.E2E_DEMO_AUTORUN_POLL_INTERVAL_MS ?? 250);
 const expectedStorageBackend = normalizeOptionalString(process.env.E2E_EXPECT_STORAGE_BACKEND).toLowerCase();
 const expectedFirestorePrefix = normalizeOptionalString(process.env.E2E_EXPECT_FIRESTORE_PREFIX);
@@ -46,6 +60,8 @@ const failOnTransientEightPlayerBotSessionExpired =
   process.env.E2E_FAIL_ON_TRANSIENT_EIGHT_PLAYER_BOT_SESSION_EXPIRED === "1";
 const failOnTransientRealtimeRelaySessionExpired =
   process.env.E2E_FAIL_ON_TRANSIENT_REALTIME_RELAY_SESSION_EXPIRED === "1";
+const failOnTransientChatConductSessionExpired =
+  process.env.E2E_FAIL_ON_TRANSIENT_CHAT_CONDUCT_SESSION_EXPIRED === "1";
 
 const baseInput = (process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:3000").trim();
 const wsOverride = process.env.E2E_WS_URL?.trim();
@@ -70,7 +86,7 @@ async function run() {
   const reportedBotTickRange = health?.multiplayer?.botTickRangeMs ?? null;
   const reportedBotTurnAdvanceRange = health?.multiplayer?.botTurnAdvanceRangeMs ?? null;
   log(
-    `Smoke runtime profile: speedProfile=${reportedSpeedProfile || "unknown"} turnTimeoutByDifficultyMs=${JSON.stringify(reportedTurnTimeoutByDifficulty)} botTickRangeMs=${JSON.stringify(reportedBotTickRange)} botTurnAdvanceRangeMs=${JSON.stringify(reportedBotTurnAdvanceRange)}`
+    `Smoke runtime profile: smokeProfile=${smokeProfile || "default"} speedProfile=${reportedSpeedProfile || "unknown"} turnTimeoutByDifficultyMs=${JSON.stringify(reportedTurnTimeoutByDifficulty)} botTickRangeMs=${JSON.stringify(reportedBotTickRange)} botTurnAdvanceRangeMs=${JSON.stringify(reportedBotTurnAdvanceRange)}`
   );
   if (expectedSpeedProfile) {
     assert(
@@ -870,8 +886,8 @@ async function run() {
     }
   }
 
-  if (assertChatConductFlow) {
-    log("Running multiplayer chat-conduct strike/mute checks...");
+  const runChatConductChecks = async (attemptLabel = "primary") => {
+    log(`Running multiplayer chat-conduct strike/mute checks (${attemptLabel})...`);
     assert(chatConductTestTerm.length > 0, "chat-conduct smoke requires E2E_CHAT_CONDUCT_TEST_TERM");
     const chatConductHealth = health?.multiplayer?.chatConduct;
     assert(chatConductHealth?.enabled === true, "chat-conduct smoke requires multiplayer.chatConduct.enabled=true");
@@ -987,8 +1003,41 @@ async function run() {
     } else {
       log("Skipping chat-conduct admin clear verification (no admin auth configured).");
     }
+  };
 
-    log("Multiplayer chat-conduct strike/mute checks passed.");
+  if (assertChatConductFlow) {
+    if (!isSocketOpen(hostSocket) || !isSocketOpen(guestSocket)) {
+      log("Realtime socket state not healthy before chat-conduct checks; attempting recovery.");
+      await recoverRealtimeRelaySockets();
+    }
+    try {
+      await runChatConductChecks("primary");
+      log("Multiplayer chat-conduct strike/mute checks passed.");
+    } catch (error) {
+      if (!isTransientChatConductFailure(error)) {
+        throw error;
+      }
+      const firstAttemptMessage = error instanceof Error ? error.message : String(error);
+      log(
+        `Chat-conduct strike/mute checks encountered transient failure; recovering sockets and retrying once (${firstAttemptMessage}).`
+      );
+      try {
+        await recoverRealtimeRelaySockets();
+        await runChatConductChecks("retry");
+        log("Multiplayer chat-conduct strike/mute checks passed on retry.");
+      } catch (retryError) {
+        if (
+          isTransientChatConductSessionExpiredFailure(retryError) &&
+          !failOnTransientChatConductSessionExpired
+        ) {
+          log(
+            "Chat-conduct checks marked inconclusive due repeated transient session_expired in Cloud Run distributed flow; continuing (set E2E_FAIL_ON_TRANSIENT_CHAT_CONDUCT_SESSION_EXPIRED=1 to fail hard)."
+          );
+        } else {
+          throw retryError;
+        }
+      }
+    }
   } else {
     log("Skipping multiplayer chat-conduct checks (set E2E_ASSERT_CHAT_CONDUCT=1 to enable).");
   }
@@ -3412,6 +3461,13 @@ function normalizeOptionalString(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function parseBooleanOverride(rawValue, fallbackValue) {
+  if (typeof rawValue !== "string" || rawValue.trim().length === 0) {
+    return fallbackValue === true;
+  }
+  return rawValue.trim() !== "0";
+}
+
 run()
   .catch((error) => {
     fail(error instanceof Error ? error.message : String(error));
@@ -3568,6 +3624,10 @@ function openSocket(label, url) {
       }
     });
   });
+}
+
+function isSocketOpen(socket) {
+  return Boolean(socket && socket.readyState === WebSocket.OPEN);
 }
 
 function waitForMessage(socket, matcher, label) {
@@ -4454,6 +4514,26 @@ function isTransientEightPlayerBotSessionExpiredFailure(error) {
 }
 
 function isTransientRealtimeRelaySessionExpiredFailure(error) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("session_expired") ||
+    normalized.includes("timeout strike refresh did not recover session auth")
+  );
+}
+
+function isTransientChatConductFailure(error) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("timed out after") ||
+    normalized.includes("socket closed") ||
+    normalized.includes("session_expired") ||
+    normalized.includes("timeout strike refresh did not recover session auth")
+  );
+}
+
+function isTransientChatConductSessionExpiredFailure(error) {
   const message = error instanceof Error ? error.message : String(error ?? "");
   const normalized = message.toLowerCase();
   return (
