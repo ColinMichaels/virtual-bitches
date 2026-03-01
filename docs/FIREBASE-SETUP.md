@@ -143,6 +143,67 @@ Trigger:
 - push to `dev` (staging/dev deploy)
 - includes a dedicated `deploy-assets` job that optimizes and uploads runtime images to Firebase Storage
 
+### Team Deploy Flow (Feature -> Dev)
+
+Use this process for normal feature and phase work so deployments remain predictable:
+
+1. Sync local `dev` first:
+   ```bash
+   git checkout dev
+   git pull --ff-only origin dev
+   ```
+2. Create a new branch from updated `dev`:
+   ```bash
+   git checkout -b feature/<phase-or-feature-name>
+   ```
+3. Implement changes and commit using the template below.
+4. Push branch and open a PR targeting `dev`.
+5. Wait for code inspections/checks to pass and an approver review.
+6. Merge PR into `dev` after approval.
+7. Merge to `dev` triggers the GitHub deploy workflow automatically.
+
+Commit message template:
+
+```text
+<type>(<scope>): <short summary>
+
+Context:
+- Why this change is needed
+
+Changes:
+- Key code/doc updates made
+- Any behavior changes
+
+Validation:
+- Tests/checks run
+- Smoke or manual verification
+
+Deploy Notes:
+- Env/config impacts (if any)
+- Rollback considerations (if any)
+```
+
+Example:
+
+```text
+refactor(server): extract ws lifecycle handlers
+
+Context:
+- reduce server.mjs coupling and isolate websocket lifecycle logic
+
+Changes:
+- moved upgrade/connect/disconnect handlers into ws lifecycle module
+- kept server transport ownership in server.mjs
+
+Validation:
+- npm run test:ws-lifecycle
+- npm run test:ws-transport
+
+Deploy Notes:
+- no new env vars
+- low-risk refactor with behavior parity
+```
+
 Known-good project values:
 - Project ID: `biscuits-488600`
 - Hosting site: `biscuits-488600` (or explicit `biscuit-dice` if intentionally targeting that site)

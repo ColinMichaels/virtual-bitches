@@ -1,6 +1,6 @@
 # BISCUITS - Session Summary
 **Date:** March 1, 2026  
-**Focus:** Unified game config follow-through plus iterative Phase 01-04 server refactor checkpoints (routing, engine boundaries, filter registry, websocket transport extraction)
+**Focus:** Unified game config follow-through plus iterative Phase 01-06 server refactor checkpoints (routing, engine boundaries, filter registry, websocket transport extraction, storage/auth adapters, admin service boundaries)
 
 ---
 
@@ -108,6 +108,32 @@
   - session client register/unregister/disconnect paths
 - Preserved existing websocket/domain message handling flow while reducing transport implementation surface in the composition root.
 
+### Phase 05 - Storage/Auth Adapter Hardening (Follow-through)
+- Extracted request/session auth checks from `api/server.mjs` into:
+  - `api/auth/requestAuthorizer.mjs`
+- Extracted admin access mode + token/identity/role authorization from `api/server.mjs` into:
+  - `api/auth/adminAccessAuthorizer.mjs`
+- Preserved auth contracts while moving bearer/session/admin authorization paths out of the composition root.
+- Added focused auth adapter tests:
+  - `api/auth/requestAuthorizer.test.mjs`
+  - `api/auth/adminAccessAuthorizer.test.mjs`
+
+### Phase 06 - Admin Service Boundaries (Follow-through)
+- Extracted admin security/audit/role support logic from `api/server.mjs` into:
+  - `api/admin/adminSecurityAuditService.mjs`
+- Delegated role normalization + hierarchy checks, bootstrap owner allowlist role resolution, admin limit parsing, admin principal shaping, admin audit write/read normalization, and admin role record shaping to the extracted admin service.
+- Added isolated service coverage:
+  - `api/admin/adminSecurityAuditService.test.mjs`
+- Extracted admin mutation route use-case orchestration from `api/server.mjs` into:
+  - `api/admin/adminMutationService.mjs`
+- Delegated admin mutation flows to the extracted service while preserving HTTP contracts:
+  - role upsert
+  - session expire
+  - participant remove
+  - session conduct clear (per-player + full-session)
+- Added focused regression coverage for extracted mutation flows:
+  - `api/admin/adminMutationService.test.mjs`
+
 ---
 
 ## Validation Snapshot
@@ -128,6 +154,13 @@
 - `node --check api/http/routeHandlers.mjs` passes.
 - `node --check api/ws/socketProtocol.mjs` passes.
 - `node --check api/ws/socketLifecycle.mjs` passes.
+- `cd api && npm run test:auth-admin-access` passes.
+- `cd api && npm run test:auth-request-authorizer` passes.
+- `cd api && npm run test:admin-security-audit` passes.
+- `cd api && npm run test:admin-mutations` passes.
+- `cd api && npm run test:admin-services` passes.
+- `cd api && npm run test:storage-auth-adapters` passes.
+- `cd api && npm run test:ws-transport` passes.
 - `npm run build` passes.
 - `npm run test:e2e:api:local` passes.
 
@@ -148,6 +181,7 @@
   - `feature/server-phase-03-filter-addon-registry`
 - Created Phase 04 branch for websocket transport decoupling:
   - `feature/server-phase-04-transport-ws-decoupling`
+- Phase 05/06 follow-through checkpoints (auth/storage adapters + admin service boundaries) were landed incrementally in the active refactor stream.
 - Added dedicated phase plan in:
   - `docs/SERVER-REFACTOR-PHASE-PLAN.md`
 
@@ -155,6 +189,6 @@
 
 ## Next Phase Candidate
 
-1. Phase 04 follow-through: extract websocket relay orchestration helpers from `api/server.mjs`.
-2. Phase 04 follow-through: introduce transport-focused tests around protocol/frame and socket lifecycle behavior.
-3. Phase 05: Continue storage/auth adapter hardening with resilience-oriented failure-path tests.
+1. Evaluate Phase 07 candidate: isolate multiplayer session control endpoints (join/heartbeat/refresh/queue) into application service modules while preserving existing HTTP/WS contracts.
+2. Add a lightweight deploy-gate checklist section to incremental phase session summaries (`node --check api/server.mjs`, `npm run test:storage-auth-adapters`, `npm run test:ws-transport`, phase-specific service tests).
+3. Add targeted integration-level admin route tests once phase-07 extraction stabilizes to keep CI runtime bounded.
