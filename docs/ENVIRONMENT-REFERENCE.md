@@ -179,9 +179,10 @@ Optional but recommended:
 | `E2E_FAIL_ON_TRANSIENT_TIMEOUT_STRIKE_SESSION_EXPIRED` | `0` or `1` | Fail hard when timeout-strike smoke hits repeated transient `session_expired` (`0` default marks inconclusive) |
 | `E2E_ASSERT_ADMIN_MONITOR` | `0` or `1` | Toggle admin monitor smoke segment (overview/rooms/metrics/audit/roles + admin mutations) |
 | `E2E_ASSERT_ADMIN_MODERATION_TERMS` | `0` or `1` | Toggle admin moderation-term smoke segment (`/api/admin/moderation/terms*`) |
-| `E2E_ASSERT_MULTIPLAYER_MODERATION` | `0` or `1` | Toggle moderation smoke segment (`kick/ban`, `room_banned`, `interaction_blocked`) |
 | `E2E_ASSERT_CHAT_CONDUCT` | `0` or `1` | Toggle chat conduct smoke segment (strikes + mute + admin clear) |
+| `E2E_ASSERT_MULTIPLAYER_MODERATION` | `0` or `1` | Toggle moderation + interaction-block smoke segment (`kick/ban`, `room_banned`, `interaction_blocked`) |
 | `E2E_CHAT_CONDUCT_TEST_TERM` | token like `e2e-term-blocked` | Deterministic banned term used by smoke payloads |
+| `E2E_FAIL_ON_TRANSIENT_MODERATION_SESSION_EXPIRED` | `0` or `1` | Fail hard when moderation smoke hits repeated transient `session_expired` (`0` default marks inconclusive) |
 | `E2E_EXPECT_STORAGE_SECTION_MIN_COUNTS` | `players:1,sessions:1` | Optional CI assertions |
 | `CDN_REQUIRE_PUBLIC_READ` | `0` or `1` | CDN/public bucket strategy |
 | `CDN_AUTOCONFIGURE_PUBLIC_READ` | `0` or `1` | CI IAM automation toggle |
