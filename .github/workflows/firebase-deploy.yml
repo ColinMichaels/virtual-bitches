@@ -432,20 +432,22 @@ jobs:
       - name: Cloud Run deploy diagnostics (on failure)
         if: ${{ failure() && steps.deploy-api.outcome == 'failure' }}
         env:
+          PROJECT_ID: ${{ steps.target.outputs.project_id }}
           SERVICE_NAME: biscuits-api
           REGION: us-central1
         run: |
           set +e
           echo "::group::Cloud Run Service Status"
           gcloud run services describe "$SERVICE_NAME" \
+            --project "$PROJECT_ID" \
             --region "$REGION" \
             --format='yaml(status.conditions,status.latestCreatedRevisionName,status.latestReadyRevisionName)' || true
           echo "::endgroup::"
 
-          REVISION_NAME="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.latestCreatedRevisionName)')"
-          LATEST_READY_REVISION="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.latestReadyRevisionName)')"
-          READY_REASON="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.conditions[?type=Ready].reason)')"
-          READY_MESSAGE="$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.conditions[?type=Ready].message)')"
+          REVISION_NAME="$(gcloud run services describe "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --format='value(status.latestCreatedRevisionName)')"
+          LATEST_READY_REVISION="$(gcloud run services describe "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --format='value(status.latestReadyRevisionName)')"
+          READY_REASON="$(gcloud run services describe "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --format='value(status.conditions[?type=Ready].reason)')"
+          READY_MESSAGE="$(gcloud run services describe "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --format='value(status.conditions[?type=Ready].message)')"
           READY_MESSAGE="${READY_MESSAGE//$'\n'/ }"
           READY_MESSAGE_MD="${READY_MESSAGE//|/\\|}"
           if [ -z "$READY_REASON" ]; then
@@ -479,9 +481,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "::group::Latest Cloud Build"
-          LATEST_BUILD_ID="$(gcloud builds list --sort-by=~createTime --limit=1 --format='value(id)' 2>/dev/null)"
+          LATEST_BUILD_ID="$(gcloud builds list --project "$PROJECT_ID" --sort-by=~createTime --limit=1 --format='value(id)' 2>/dev/null)"
           if [ -n "$LATEST_BUILD_ID" ]; then
             gcloud builds describe "$LATEST_BUILD_ID" \
+              --project "$PROJECT_ID" \
               --format='yaml(id,status,createTime,finishTime,logUrl,source)' || true
           else
             echo "No Cloud Build ID available from current credentials."
@@ -492,19 +495,21 @@ jobs:
           if [ -n "$REVISION_NAME" ]; then
             echo "Cloud Run revision status for ${REVISION_NAME}:"
             gcloud run revisions describe "$REVISION_NAME" \
+              --project "$PROJECT_ID" \
               --region "$REGION" \
               --format='yaml(status.conditions)' || true
 
             echo "Recent logs for ${REVISION_NAME}:"
             gcloud logging read \
               "resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE_NAME AND resource.labels.revision_name=$REVISION_NAME" \
+              --project "$PROJECT_ID" \
               --limit=200 \
               --format='table(timestamp,severity,textPayload,jsonPayload.message)' || true
             echo "Fallback logs via Cloud Run service reader (latest service logs):"
-            gcloud run services logs read "$SERVICE_NAME" --region "$REGION" --limit=200 || true
+            gcloud run services logs read "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --limit=200 || true
           else
             echo "No created revision found; dumping recent service logs."
-            gcloud run services logs read "$SERVICE_NAME" --region "$REGION" --limit=200 || true
+            gcloud run services logs read "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --limit=200 || true
           fi
           echo "::endgroup::"
 
@@ -610,6 +615,7 @@ jobs:
       - name: API smoke diagnostics (on failure)
         if: ${{ failure() && (github.event_name != 'workflow_dispatch' || inputs.run_api_smoke) }}
         env:
+          PROJECT_ID: ${{ steps.target.outputs.project_id }}
           SERVICE_NAME: biscuits-api
           REGION: us-central1
         run: |
@@ -617,6 +623,7 @@ jobs:
           echo "Recent websocket/auth diagnostics from Cloud Run:"
           gcloud logging read \
             "resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE_NAME AND (textPayload:\"Rejected WebSocket upgrade\" OR textPayload:\"Using firestore store backend\" OR textPayload:\"Using file store backend\" OR textPayload:\"Multiplayer session idle TTL\")" \
+            --project "$PROJECT_ID" \
             --limit=200 \
             --format='table(timestamp,severity,resource.labels.revision_name,textPayload,jsonPayload.message)' || true
           exit 0
