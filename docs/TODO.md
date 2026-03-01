@@ -22,7 +22,8 @@ Reference docs:
 - **Next Steps**:
   - [x] Phase 06 follow-through: extract admin route use-case orchestration into dedicated admin application service modules.
   - [x] Add focused regression coverage for admin route mutation flows (role upsert, session expire, participant remove, conduct clear operations).
-  - [ ] Phase 07 candidate: isolate multiplayer session control endpoint orchestration (`join`/`heartbeat`/`refresh`/`queue-next`) into service boundaries.
+  - [x] Phase 07 checkpoint: isolate multiplayer session control endpoint orchestration (`join`/`heartbeat`/`refresh`/`queue-next`) into service boundaries.
+  - [ ] Phase 07 follow-through: extract remaining multiplayer session mutation orchestration (`participant-state`, demo controls, moderation/leave) into service boundaries.
   - [ ] Add a lightweight deploy gate checklist section to session summary notes for each phase checkpoint (`node --check api/server.mjs`, `npm run test:storage-auth-adapters`, `npm run test:ws-transport`).
 
 ### Branding + I18N Overhaul (2026-02-27)

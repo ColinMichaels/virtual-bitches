@@ -134,6 +134,17 @@
 - Added focused regression coverage for extracted mutation flows:
   - `api/admin/adminMutationService.test.mjs`
 
+### Phase 07 - Multiplayer Session Control Boundaries (Checkpoint)
+- Extracted multiplayer session-control endpoint orchestration from `api/server.mjs` into:
+  - `api/multiplayer/sessionControlService.mjs`
+- Delegated session-control route use-cases to the extracted service while preserving route contracts:
+  - `join` (`/multiplayer/sessions/:id/join`, `/multiplayer/rooms/:code/join`)
+  - `heartbeat` (`/multiplayer/sessions/:id/heartbeat`)
+  - `auth/refresh` (`/multiplayer/sessions/:id/auth/refresh`)
+  - `queue-next` (`/multiplayer/sessions/:id/queue-next`)
+- Added focused regression coverage for extracted session-control flows:
+  - `api/multiplayer/sessionControlService.test.mjs`
+
 ---
 
 ## Validation Snapshot
@@ -159,6 +170,7 @@
 - `cd api && npm run test:admin-security-audit` passes.
 - `cd api && npm run test:admin-mutations` passes.
 - `cd api && npm run test:admin-services` passes.
+- `cd api && npm run test:multiplayer-session-control` passes.
 - `cd api && npm run test:storage-auth-adapters` passes.
 - `cd api && npm run test:ws-transport` passes.
 - `npm run build` passes.
@@ -189,6 +201,6 @@
 
 ## Next Phase Candidate
 
-1. Evaluate Phase 07 candidate: isolate multiplayer session control endpoints (join/heartbeat/refresh/queue) into application service modules while preserving existing HTTP/WS contracts.
+1. Phase 07 follow-through: extract remaining multiplayer session mutation orchestration (`participant-state`, demo controls, moderation/leave) into service modules while preserving route/WS contracts.
 2. Add a lightweight deploy-gate checklist section to incremental phase session summaries (`node --check api/server.mjs`, `npm run test:storage-auth-adapters`, `npm run test:ws-transport`, phase-specific service tests).
-3. Add targeted integration-level admin route tests once phase-07 extraction stabilizes to keep CI runtime bounded.
+3. Add targeted integration-level admin + multiplayer route tests once phase-07 extraction stabilizes to keep CI runtime bounded.

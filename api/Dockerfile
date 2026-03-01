@@ -14,6 +14,7 @@ COPY engine ./engine
 COPY filters ./filters
 COPY http ./http
 COPY moderation ./moderation
+COPY multiplayer ./multiplayer
 COPY storage ./storage
 COPY ws ./ws
 COPY data ./data
