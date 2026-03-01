@@ -44,11 +44,12 @@ export class AnalyticsService {
       void this.applyCollectionState();
     });
 
-    await this.initializeSdk();
     await this.applyCollectionState();
-    this.logEvent("app_shell_booted", {
-      build_mode: environment.production ? "production" : "development",
-    });
+    if (this.isEnabled()) {
+      this.logEvent("app_shell_booted", {
+        build_mode: environment.production ? "production" : "development",
+      });
+    }
   }
 
   logEvent(eventName: string, params: AnalyticsParams = {}): void {
@@ -99,8 +100,11 @@ export class AnalyticsService {
   }
 
   private async applyCollectionState(): Promise<void> {
-    await this.initializeSdk();
+    if (this.analyticsEnabled) {
+      await this.initializeSdk();
+    }
     if (!this.analytics || !this.sdkSupported) {
+      this.lastAppliedCollectionEnabled = this.analyticsEnabled;
       return;
     }
 

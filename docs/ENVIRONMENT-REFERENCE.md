@@ -28,6 +28,7 @@ Use these in `.env.local` for local dev and GitHub deploy environment values for
 | Key | Example shape | Where to obtain |
 | --- | --- | --- |
 | `VITE_FIREBASE_MEASUREMENT_ID` | `G-XXXXXXXXXX` | Firebase Console -> Analytics (if enabled) |
+| `VITE_ENABLE_ANALYTICS` | `0` or `1` | Team-controlled analytics kill switch (`1` default in dev/prod) |
 | `VITE_ASSET_BASE_URL` | `https://storage.googleapis.com/<bucket>/` | Firebase Storage bucket public URL (or leave empty for Hosting-local paths) |
 | `VITE_FEEDBACK_FORM_URL` | `https://docs.google.com/forms/...` | Team feedback form URL |
 | `VITE_ENABLE_ADMIN_UI` | `0` or `1` | Team-controlled feature flag |
@@ -39,10 +40,12 @@ Use these in `.env.local` for local dev and GitHub deploy environment values for
 
 Analytics runtime note:
 - Client analytics initializes only when all of these are true:
+  - `VITE_ENABLE_ANALYTICS=1` (or feature default is enabled for the environment).
   - Firebase web config is present and valid.
   - `VITE_FIREBASE_MEASUREMENT_ID` is configured.
   - The build/environment enables analytics (`environment.features.analytics`).
   - The player enables `Settings -> Account -> Usage Analytics` (stored locally as consent).
+- If browser console shows `firebaseinstallations.googleapis.com ... 403 PERMISSION_DENIED`, check Firebase Web API key restrictions in Google Cloud Console and confirm the Firebase Installations API is allowed for that key/project pairing.
 
 ### 1.3 Optional Asset Override Values
 
@@ -125,6 +128,7 @@ Optional but recommended:
 | Key | Example shape | Where to obtain |
 | --- | --- | --- |
 | `VITE_ENABLE_ADMIN_UI` | `0` or `1` | Team feature flag |
+| `VITE_ENABLE_ANALYTICS` | `0` or `1` | Frontend analytics kill switch |
 | `VITE_MULTIPLAYER_AUTO_SEAT_READY_ENABLED` | `0` or `1` | Global deploy kill switch for join auto-seat/auto-ready |
 | `VITE_MULTIPLAYER_DEMO_SPEED_MODE_ENABLED` | `0` or `1` | Toggle splash multiplayer demo-speed badge |
 | `VITE_MULTIPLAYER_DEMO_SPEED_LABEL` | text like `Demo Speed Mode` | UI label for demo-speed badge |
