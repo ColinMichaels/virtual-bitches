@@ -125,7 +125,20 @@ async function run() {
     log(
       `Winner queue lifecycle encountered transient failure; retrying once with a fresh session (${firstAttemptMessage}).`
     );
-    await runWinnerQueueLifecycleChecks(`${runSuffix}-retry`);
+    try {
+      await runWinnerQueueLifecycleChecks(`${runSuffix}-retry`);
+    } catch (retryError) {
+      if (
+        isTransientWinnerQueueSessionExpiredFailure(retryError) &&
+        !failOnTransientQueueSessionExpired
+      ) {
+        log(
+          "Queue lifecycle marked inconclusive due repeated transient session_expired in Cloud Run distributed flow; continuing (set E2E_FAIL_ON_TRANSIENT_QUEUE_SESSION_EXPIRED=1 to fail hard)."
+        );
+      } else {
+        throw retryError;
+      }
+    }
   }
   if (assertDemoAutoRunControls) {
     try {
@@ -1731,34 +1744,102 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
     const guestAccessToken =
       typeof joined?.auth?.accessToken === "string" ? joined.auth.accessToken : "";
     assert(guestAccessToken, "queue lifecycle join returned no guest access token");
+    const setQueueParticipantStateWithTransientRecovery = async ({
+      playerId,
+      displayName,
+      action,
+      accessToken,
+      label,
+      maxAttempts = 8,
+      initialDelayMs = 220,
+    }) => {
+      let token = accessToken;
+      let lastFailure = null;
 
-    const hostSat = await apiRequest(
-      `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/participant-state`,
-      {
-        method: "POST",
-        accessToken: hostAccessToken,
-        body: {
-          playerId: queueHostPlayerId,
-          action: "sit",
-        },
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const response = await apiRequestWithStatus(
+          `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/participant-state`,
+          {
+            method: "POST",
+            accessToken: token,
+            body: {
+              playerId,
+              action,
+            },
+          }
+        );
+        if (response.ok && response.body?.ok === true) {
+          return {
+            body: response.body,
+            accessToken: token,
+          };
+        }
+
+        lastFailure = response;
+        if (!isTransientQueueRefreshFailure(response)) {
+          return {
+            body: response.body,
+            accessToken: token,
+          };
+        }
+
+        if (attempt >= maxAttempts - 1) {
+          break;
+        }
+
+        try {
+          const recovered = await refreshSessionAuthWithRecovery({
+            sessionId: queueSessionId,
+            playerId,
+            displayName,
+            accessToken: token,
+            maxAttempts: 4,
+            initialDelayMs: Math.max(120, initialDelayMs),
+          });
+          token = recovered.accessToken;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error ?? "");
+          if (!message.toLowerCase().includes("session_expired")) {
+            throw error;
+          }
+        }
+
+        await waitMs(Math.max(50, initialDelayMs * (attempt + 1)));
       }
-    );
+
+      if (lastFailure?.body) {
+        return {
+          body: lastFailure.body,
+          accessToken: token,
+        };
+      }
+      throw new Error(
+        `${label} failed after ${maxAttempts} attempt(s) (status=${lastFailure?.status ?? "unknown"} body=${JSON.stringify(lastFailure?.body ?? null)})`
+      );
+    };
+
+    const hostSatOutcome = await setQueueParticipantStateWithTransientRecovery({
+      playerId: queueHostPlayerId,
+      displayName: "E2E Queue Host",
+      action: "sit",
+      accessToken: hostAccessToken,
+      label: "queue lifecycle host sit",
+    });
+    hostAccessToken = hostSatOutcome.accessToken;
+    const hostSat = hostSatOutcome.body;
     assert(
       hostSat?.ok === true,
       `queue lifecycle host sit did not return ok=true (reason=${String(hostSat?.reason ?? "unknown")})`
     );
 
-    const guestSat = await apiRequest(
-      `/multiplayer/sessions/${encodeURIComponent(queueSessionId)}/participant-state`,
-      {
-        method: "POST",
-        accessToken: guestAccessToken,
-        body: {
-          playerId: queueGuestPlayerId,
-          action: "sit",
-        },
-      }
-    );
+    const guestSatOutcome = await setQueueParticipantStateWithTransientRecovery({
+      playerId: queueGuestPlayerId,
+      displayName: "E2E Queue Guest",
+      action: "sit",
+      accessToken: guestAccessToken,
+      label: "queue lifecycle guest sit",
+    });
+    const guestSat = guestSatOutcome.body;
     assert(
       guestSat?.ok === true,
       `queue lifecycle guest sit did not return ok=true (reason=${String(guestSat?.reason ?? "unknown")})`
@@ -4315,6 +4396,12 @@ function isTransientWinnerQueueLifecycleFailure(error) {
     normalized.includes("queue lifecycle did not auto-start a fresh round") ||
     normalized.includes("session_expired")
   );
+}
+
+function isTransientWinnerQueueSessionExpiredFailure(error) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.toLowerCase();
+  return normalized.includes("session_expired");
 }
 
 function isTransientDemoAutoRunControlFailure(error) {

@@ -231,7 +231,7 @@ export class DiceRenderer {
       await this.buildRotationCache();
 
       this.geometryLoaded = true;
-      log.info("Dice-box rendering system initialized");
+      log.debug("Dice-box rendering system initialized");
     } catch (error) {
       log.error("Failed to initialize dice-box renderer:", error);
       this.geometryLoaded = false;
@@ -418,7 +418,7 @@ export class DiceRenderer {
       return;
     }
 
-    log.info(`Loading materials for theme: ${themeConfig.name}`);
+    log.debug(`Loading materials for theme: ${themeConfig.name}`);
 
     // Clear material cache
     this.materialCache.clear();
@@ -438,7 +438,7 @@ export class DiceRenderer {
     if (themeConfig.fallbackTheme) {
       const fallbackConfig = themeManager.getThemeConfig(themeConfig.fallbackTheme);
       if (fallbackConfig) {
-        log.info(`Loading fallback theme materials: ${fallbackConfig.name}`);
+        log.debug(`Loading fallback theme materials: ${fallbackConfig.name}`);
         await this.loadMaterialsForTheme(fallbackConfig, true);
       }
     }
@@ -462,7 +462,7 @@ export class DiceRenderer {
    * Uses texture atlas with all colors baked in
    */
   private async createStandardMaterialForTheme(themeConfig: any, basePath: string, isFallback: boolean): Promise<void> {
-    log.info("Loading standard material from:", basePath);
+    log.debug("Loading standard material from:", basePath);
 
     const diffuseTexture = new Texture(`${basePath}/${themeConfig.material.diffuseTexture}`, this.scene);
     const normalMap = new Texture(`${basePath}/${themeConfig.material.bumpTexture}`, this.scene);
@@ -487,7 +487,7 @@ export class DiceRenderer {
       }
     });
 
-    log.info("Standard material textures loaded");
+    log.debug("Standard material textures loaded");
 
     const materialName = isFallback ? `dice-material-${themeConfig.systemName}` : "dice-material";
     const material = new StandardMaterial(materialName, this.scene);
@@ -524,7 +524,7 @@ export class DiceRenderer {
    * Following dice-box approach: mix diffuse color with texture alpha
    */
   private async createColorMaterialForTheme(themeConfig: any, basePath: string, isFallback: boolean): Promise<void> {
-    log.info("Loading color material from:", basePath);
+    log.debug("Loading color material from:", basePath);
 
     const diffuseConfig = themeConfig.material.diffuseTexture as { light: string; dark: string };
     // Load textures - we'll use them for both diffuse and opacity
@@ -552,7 +552,7 @@ export class DiceRenderer {
       }
     });
 
-    log.info("Color material textures loaded");
+    log.debug("Color material textures loaded");
 
     // Apply texture scaling if specified (for themes with different texture sizes)
     const textureScale = (themeConfig.material as any).textureScale;
@@ -1770,7 +1770,7 @@ export class DiceRenderer {
    * Handle theme change - reload materials and update all dice
    */
   private async onThemeChanged(): Promise<void> {
-    log.info("Theme changed, reloading...");
+    log.debug("Theme changed, reloading...");
     this.cancelAllSpectatorPreviews();
 
     const currentTheme = themeManager.getCurrentThemeConfig();
@@ -1782,7 +1782,7 @@ export class DiceRenderer {
                                  this.loadedMeshFile !== newMeshFile;
 
     if (needsGeometryReload) {
-      log.info(`Mesh file changed from ${this.loadedMeshFile} to ${newMeshFile}, reloading geometry...`);
+      log.debug(`Mesh file changed from ${this.loadedMeshFile} to ${newMeshFile}, reloading geometry...`);
 
       // Dispose ALL existing dice meshes
       this.meshes.forEach((mesh) => {
@@ -1917,7 +1917,7 @@ export class DiceRenderer {
       }
     });
 
-    log.info("Theme updated for all dice");
+    log.debug("Theme updated for all dice");
   }
 
   /**
