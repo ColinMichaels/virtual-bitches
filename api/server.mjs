@@ -656,6 +656,8 @@ const sessionMutationService = createSessionMutationService({
   sessionModerationActions: SESSION_MODERATION_ACTIONS,
   maxMultiplayerHumanPlayers: MAX_MULTIPLAYER_HUMAN_PLAYERS,
   maxMultiplayerBots: MAX_MULTIPLAYER_BOTS,
+  rehydrateSessionWithRetry,
+  rehydrateSessionParticipantWithRetry,
   rehydrateStoreFromAdapter,
   normalizeParticipantStateAction,
   normalizeDemoControlAction,
