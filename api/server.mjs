@@ -9,6 +9,7 @@ import { cloneStore } from "./storage/defaultStore.mjs";
 import { createBotEngine } from "./bot/engine.mjs";
 import { createSessionTurnEngine } from "./engine/sessionTurnEngine.mjs";
 import { createSessionLifecycleEngine } from "./engine/sessionLifecycleEngine.mjs";
+import { createBotTurnEngine } from "./engine/botTurnEngine.mjs";
 import { dispatchApiRoute } from "./http/routeDispatcher.mjs";
 import { createApiRouteHandlers } from "./http/routeHandlers.mjs";
 import {
@@ -433,6 +434,21 @@ const sessionTurnController = createSessionTurnEngine({
   normalizeParticipantScore,
   normalizeParticipantRemainingDice,
   normalizeParticipantCompletedAt,
+});
+const botTurnController = createBotTurnEngine({
+  turnPhases: TURN_PHASES,
+  botEngine,
+  normalizeTurnPhase,
+  ensureSessionTurnState,
+  isBotParticipant,
+  resolveSessionGameDifficulty,
+  isParticipantComplete,
+  normalizeParticipantCompletedAt,
+  advanceSessionTurn,
+  normalizeParticipantRemainingDice,
+  parseTurnRollPayload,
+  buildTurnActionMessage,
+  applyParticipantScoreUpdate,
 });
 
 void beginBootstrap();
@@ -7716,119 +7732,7 @@ function dispatchBotMessage(sessionId) {
 }
 
 function executeBotTurn(session, activePlayerId) {
-  const turnState = ensureSessionTurnState(session);
-  if (!turnState || turnState.activeTurnPlayerId !== activePlayerId) {
-    return null;
-  }
-
-  const participant = session.participants?.[activePlayerId];
-  if (!isBotParticipant(participant)) {
-    return null;
-  }
-  const gameDifficulty = resolveSessionGameDifficulty(session);
-  participant.lastHeartbeatAt = Date.now();
-
-  if (isParticipantComplete(participant)) {
-    participant.isComplete = true;
-    participant.completedAt =
-      normalizeParticipantCompletedAt(participant.completedAt) ?? Date.now();
-    const advanced = advanceSessionTurn(session, activePlayerId, {
-      source: "bot_auto",
-    });
-    return advanced
-      ? {
-          rollAction: null,
-          scoreAction: null,
-          turnEnd: advanced.turnEnd,
-          turnStart: advanced.turnStart,
-        }
-      : null;
-  }
-
-  if (normalizeTurnPhase(turnState.phase) !== TURN_PHASES.awaitRoll) {
-    turnState.phase = TURN_PHASES.awaitRoll;
-    turnState.lastRollSnapshot = null;
-    turnState.lastScoreSummary = null;
-    turnState.updatedAt = Date.now();
-  }
-
-  const remainingDice = normalizeParticipantRemainingDice(participant.remainingDice);
-  const rollPayload = botEngine.buildTurnRollPayload({
-    playerId: activePlayerId,
-    turnNumber: turnState.turnNumber,
-    remainingDice,
-  });
-  if (!rollPayload) {
-    return null;
-  }
-  const parsedRoll = parseTurnRollPayload({ roll: rollPayload });
-  if (!parsedRoll.ok) {
-    return null;
-  }
-
-  turnState.lastRollSnapshot = parsedRoll.value;
-  turnState.lastScoreSummary = null;
-  turnState.phase = TURN_PHASES.awaitScore;
-  turnState.updatedAt = Date.now();
-
-  const rollAction = buildTurnActionMessage(
-    session,
-    activePlayerId,
-    "roll",
-    { roll: parsedRoll.value },
-    { source: "bot_auto" }
-  );
-
-  const botScoreSummary = botEngine.buildTurnScoreSummary({
-    rollSnapshot: parsedRoll.value,
-    remainingDice,
-    botProfile: participant.botProfile,
-    gameDifficulty,
-    turnNumber: turnState.turnNumber,
-    sessionParticipants: session.participants,
-    playerId: activePlayerId,
-  });
-  if (!botScoreSummary) {
-    return null;
-  }
-
-  const scoreUpdate = applyParticipantScoreUpdate(
-    participant,
-    botScoreSummary,
-    parsedRoll.value.dice.length
-  );
-  const finalizedScoreSummary = {
-    ...botScoreSummary,
-    projectedTotalScore: scoreUpdate.nextScore,
-    remainingDice: scoreUpdate.nextRemainingDice,
-    isComplete: scoreUpdate.didComplete,
-    updatedAt: Date.now(),
-  };
-  turnState.lastScoreSummary = finalizedScoreSummary;
-  turnState.phase = TURN_PHASES.readyToEnd;
-  turnState.updatedAt = Date.now();
-
-  const scoreAction = buildTurnActionMessage(
-    session,
-    activePlayerId,
-    "score",
-    { score: finalizedScoreSummary },
-    { source: "bot_auto" }
-  );
-
-  const advanced = advanceSessionTurn(session, activePlayerId, {
-    source: "bot_auto",
-  });
-  if (!advanced) {
-    return null;
-  }
-
-  return {
-    rollAction,
-    scoreAction,
-    turnEnd: advanced.turnEnd,
-    turnStart: advanced.turnStart,
-  };
+  return botTurnController.executeBotTurn(session, activePlayerId);
 }
 
 function scheduleBotTurnIfNeeded(sessionId) {
