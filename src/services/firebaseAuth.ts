@@ -13,6 +13,7 @@ import {
   type User,
 } from "firebase/auth";
 import { logger } from "../utils/logger.js";
+import { getFirebaseAppOptions } from "./firebaseAppConfig.js";
 
 const log = logger.create("FirebaseAuth");
 const FIREBASE_SESSION_EXPIRED_EVENT_COOLDOWN_MS = 10000;
@@ -137,7 +138,7 @@ export class FirebaseAuthService {
     }
 
     try {
-      this.app = getApps()[0] ?? initializeApp(environment.firebaseConfig);
+      this.app = getApps()[0] ?? initializeApp(getFirebaseAppOptions());
       this.auth = getAuth(this.app);
       await this.configurePersistence(this.auth);
       await this.bindAuthStateListener(this.auth);
