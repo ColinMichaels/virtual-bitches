@@ -31,7 +31,7 @@ export const environment: Environment = {
   features: {
     leaderboard: true,
     multiplayer: true,
-    analytics: true,
+    analytics: parseBooleanFlag(env.VITE_ENABLE_ANALYTICS, true),
     multiplayerAutoSeatReady: parseBooleanFlag(
       env.VITE_MULTIPLAYER_AUTO_SEAT_READY_ENABLED,
       true
