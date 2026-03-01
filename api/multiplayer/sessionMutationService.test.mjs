@@ -41,6 +41,8 @@ function createFixture(options = {}) {
       multiplayerSessions: {},
     };
   const calls = {
+    rehydrateSession: [],
+    rehydrateSessionParticipant: [],
     rehydrateStore: [],
     authorizeSessionActionRequest: [],
     markSessionActivity: [],
@@ -75,6 +77,30 @@ function createFixture(options = {}) {
     sessionModerationActions: new Set(["kick", "ban"]),
     maxMultiplayerHumanPlayers: options.maxMultiplayerHumanPlayers ?? 4,
     maxMultiplayerBots: options.maxMultiplayerBots ?? 8,
+    rehydrateSessionWithRetry: async (sessionId, reasonPrefix, retryOptions) => {
+      calls.rehydrateSession.push({ sessionId, reasonPrefix, retryOptions });
+      if (typeof options.rehydrateSessionWithRetry === "function") {
+        return options.rehydrateSessionWithRetry({ sessionId, reasonPrefix, retryOptions, store });
+      }
+      return store.multiplayerSessions[sessionId] ?? null;
+    },
+    rehydrateSessionParticipantWithRetry: async (sessionId, playerId, reasonPrefix, retryOptions) => {
+      calls.rehydrateSessionParticipant.push({ sessionId, playerId, reasonPrefix, retryOptions });
+      if (typeof options.rehydrateSessionParticipantWithRetry === "function") {
+        return options.rehydrateSessionParticipantWithRetry({
+          sessionId,
+          playerId,
+          reasonPrefix,
+          retryOptions,
+          store,
+        });
+      }
+      const session = store.multiplayerSessions[sessionId] ?? null;
+      return {
+        session,
+        participant: session?.participants?.[playerId] ?? null,
+      };
+    },
     rehydrateStoreFromAdapter: async (reason, metadata) => {
       calls.rehydrateStore.push({ reason, metadata });
       if (typeof options.rehydrateStoreFromAdapter === "function") {

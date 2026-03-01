@@ -19,6 +19,8 @@ export function createSessionMutationService({
   sessionModerationActions,
   maxMultiplayerHumanPlayers,
   maxMultiplayerBots,
+  rehydrateSessionWithRetry,
+  rehydrateSessionParticipantWithRetry,
   rehydrateStoreFromAdapter,
   normalizeParticipantStateAction,
   normalizeDemoControlAction,
@@ -63,6 +65,14 @@ export function createSessionMutationService({
   const sessionModerationActionsImpl = requireObject(
     "sessionModerationActions",
     sessionModerationActions
+  );
+  const rehydrateSessionWithRetryImpl = requireFunction(
+    "rehydrateSessionWithRetry",
+    rehydrateSessionWithRetry
+  );
+  const rehydrateSessionParticipantWithRetryImpl = requireFunction(
+    "rehydrateSessionParticipantWithRetry",
+    rehydrateSessionParticipantWithRetry
   );
   const rehydrateStoreFromAdapterImpl = requireFunction(
     "rehydrateStoreFromAdapter",
@@ -151,8 +161,10 @@ export function createSessionMutationService({
   async function updateParticipantState({ req, sessionId, body }) {
     let session = getSession(sessionId);
     if (!session || session.expiresAt <= nowImpl()) {
-      await rehydrateStoreFromAdapterImpl(`participant_state_session:${sessionId}`, { force: true });
-      session = getSession(sessionId);
+      session = await rehydrateSessionWithRetryImpl(sessionId, "participant_state_session", {
+        attempts: 4,
+        baseDelayMs: 120,
+      });
     }
     if (!session || session.expiresAt <= nowImpl()) {
       return {
@@ -168,11 +180,17 @@ export function createSessionMutationService({
     const action = normalizeParticipantStateActionImpl(body?.action);
     let participant = playerId ? session.participants[playerId] : null;
     if (!playerId || !participant || isBotParticipantImpl(participant)) {
-      await rehydrateStoreFromAdapterImpl(`participant_state_participant:${sessionId}:${playerId || "unknown"}`, {
-        force: true,
-      });
-      session = getSession(sessionId);
-      participant = playerId && session ? session.participants[playerId] : null;
+      const recovered = await rehydrateSessionParticipantWithRetryImpl(
+        sessionId,
+        playerId,
+        "participant_state_participant",
+        {
+          attempts: 4,
+          baseDelayMs: 120,
+        }
+      );
+      session = recovered.session;
+      participant = recovered.participant;
     }
     if (!session || !playerId || !participant || isBotParticipantImpl(participant)) {
       return {
@@ -334,8 +352,14 @@ export function createSessionMutationService({
 
     let session = getSession(normalizedSessionId);
     if (!session || session.expiresAt <= nowImpl()) {
-      await rehydrateStoreFromAdapterImpl(`demo_controls_session:${normalizedSessionId}`, { force: true });
-      session = getSession(normalizedSessionId);
+      session = await rehydrateSessionWithRetryImpl(
+        normalizedSessionId,
+        "demo_controls_session",
+        {
+          attempts: 4,
+          baseDelayMs: 120,
+        }
+      );
     }
     if (!session || session.expiresAt <= nowImpl()) {
       return {
@@ -538,8 +562,26 @@ export function createSessionMutationService({
       source: "leave",
       socketReason: "left_session",
     });
-    if (!removal.ok && (removal.reason === "unknown_session" || removal.reason === "unknown_player")) {
-      await rehydrateStoreFromAdapterImpl(`leave_session:${sessionId}:${playerId}`, { force: true });
+    if (!removal.ok && removal.reason === "unknown_session") {
+      await rehydrateSessionWithRetryImpl(sessionId, "leave_session", {
+        attempts: 3,
+        baseDelayMs: 100,
+      });
+      removal = removeParticipantFromSessionImpl(sessionId, playerId, {
+        source: "leave",
+        socketReason: "left_session",
+      });
+    }
+    if (!removal.ok && removal.reason === "unknown_player") {
+      await rehydrateSessionParticipantWithRetryImpl(
+        sessionId,
+        playerId,
+        "leave_session_participant",
+        {
+          attempts: 3,
+          baseDelayMs: 100,
+        }
+      );
       removal = removeParticipantFromSessionImpl(sessionId, playerId, {
         source: "leave",
         socketReason: "left_session",
@@ -585,8 +627,10 @@ export function createSessionMutationService({
 
     let session = getSession(normalizedSessionId);
     if (!session || session.expiresAt <= nowImpl()) {
-      await rehydrateStoreFromAdapterImpl(`moderate_session:${normalizedSessionId}`, { force: true });
-      session = getSession(normalizedSessionId);
+      session = await rehydrateSessionWithRetryImpl(normalizedSessionId, "moderate_session", {
+        attempts: 4,
+        baseDelayMs: 120,
+      });
     }
     if (!session || session.expiresAt <= nowImpl()) {
       return {
