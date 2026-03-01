@@ -35,8 +35,10 @@ import {
   writeSocketFrame,
 } from "./ws/socketProtocol.mjs";
 import { createSocketLifecycle } from "./ws/socketLifecycle.mjs";
+import { createSocketMessageRouter } from "./ws/socketMessageRouter.mjs";
 import { isSupportedSocketPayload } from "./ws/socketPayloadValidation.mjs";
 import { createSocketRelay } from "./ws/socketRelay.mjs";
+import { createSocketTurnMessageHandlers } from "./ws/socketTurnHandlers.mjs";
 import { createSocketUpgradeAuthenticator } from "./ws/socketUpgradeAuth.mjs";
 import {
   buildChatConductWarning,
@@ -437,6 +439,8 @@ const server = createServer((req, res) => {
 });
 const wsSessionClients = new Map();
 const wsClientMeta = new WeakMap();
+let socketMessageRouter = null;
+let socketTurnHandlers = null;
 const socketRelay = createSocketRelay({
   wsSessionClients,
   writeSocketFrame,
@@ -627,6 +631,54 @@ roomChannelFilterRegistry.registerFilter({
     timeoutMs: DIRECT_MESSAGE_BLOCK_FILTER_TIMEOUT_MS,
     onError: DIRECT_MESSAGE_BLOCK_FILTER_ON_ERROR,
   },
+});
+socketTurnHandlers = createSocketTurnMessageHandlers({
+  turnPhases: TURN_PHASES,
+  ensureSessionTurnState,
+  normalizeTurnPhase,
+  markSessionActivity,
+  processTurnAction,
+  sendSocketError,
+  sendTurnSyncPayload,
+  broadcastToSession,
+  broadcastRoundWinnerResolved,
+  broadcastSessionState,
+  persistStore,
+  reconcileSessionLoops,
+  clearParticipantTimeoutStrike,
+  advanceSessionTurn,
+  log,
+});
+socketMessageRouter = createSocketMessageRouter({
+  wsClientMeta,
+  isSupportedSocketPayload,
+  getSession: (sessionId) => store.multiplayerSessions[sessionId],
+  wsCloseCodes: WS_CLOSE_CODES,
+  markSessionActivity,
+  reconcileSessionLoops,
+  sendSocketError,
+  safeCloseSocket,
+  sendSocketPayload,
+  broadcastToSession,
+  sendToSessionPlayer,
+  broadcastRoomChannelToSession,
+  broadcastRealtimeSocketMessageToSession,
+  handleTurnEndMessage,
+  handleTurnActionMessage,
+  roomChannelFilterRegistry,
+  roomChannelFilterScopePreflight: ROOM_CHANNEL_FILTER_SCOPE_PREFLIGHT,
+  roomChannelFilterScopeInbound: ROOM_CHANNEL_FILTER_SCOPE_INBOUND,
+  realtimeFilterScopeDirectDelivery: REALTIME_FILTER_SCOPE_DIRECT_DELIVERY,
+  normalizeRoomChannelMessage,
+  normalizeRoomChannelTopic,
+  normalizeRoomChannelTitle,
+  upsertSessionRoomBan,
+  removeParticipantFromSession,
+  broadcastSystemRoomChannelMessage,
+  persistStore,
+  createId: randomUUID,
+  now: () => Date.now(),
+  log,
 });
 
 void beginBootstrap();
@@ -9380,358 +9432,24 @@ function rejectUpgrade(socket, status, reason) {
 }
 
 function handleSocketMessage(client, rawMessage) {
-  if (!wsClientMeta.get(client.socket)) return;
-
-  let payload;
-  try {
-    payload = JSON.parse(rawMessage);
-  } catch (error) {
-    log.warn("Ignoring malformed WebSocket JSON payload", error);
-    sendSocketError(client, "invalid_payload", "invalid_json");
+  if (!socketMessageRouter) {
     return;
   }
-
-  if (!isSupportedSocketPayload(payload)) {
-    sendSocketError(client, "unsupported_message_type", "unsupported_message_type");
-    return;
-  }
-
-  const session = store.multiplayerSessions[client.sessionId];
-  if (!session || session.expiresAt <= Date.now()) {
-    sendSocketError(client, "session_expired", "session_expired");
-    safeCloseSocket(client, WS_CLOSE_CODES.sessionExpired, "session_expired");
-    return;
-  }
-
-  if (!session.participants[client.playerId]) {
-    sendSocketError(client, "unauthorized", "player_not_in_session");
-    safeCloseSocket(client, WS_CLOSE_CODES.forbidden, "player_not_in_session");
-    return;
-  }
-
-  if (payload.type === "turn_end") {
-    handleTurnEndMessage(client, session);
-    return;
-  }
-
-  if (payload.type === "turn_action") {
-    handleTurnActionMessage(client, session, payload);
-    return;
-  }
-
-  const now = Date.now();
-  session.participants[client.playerId].lastHeartbeatAt = now;
-  markSessionActivity(session, client.playerId, now);
-
-  if (
-    payload.type === "game_update" ||
-    payload.type === "player_notification" ||
-    payload.type === "room_channel"
-  ) {
-    relayRealtimeSocketMessage(client, session, payload, now);
-    reconcileSessionLoops(client.sessionId);
-    return;
-  }
-
-  broadcastToSession(client.sessionId, rawMessage, client);
-}
-
-function relayRealtimeSocketMessage(client, session, payload, now = Date.now()) {
-  const targetPlayerId =
-    typeof payload.targetPlayerId === "string" ? payload.targetPlayerId.trim() : "";
-  const hasTargetPlayer = targetPlayerId.length > 0;
-  let shouldPersistChatConduct = false;
-  if (hasTargetPlayer && !session?.participants?.[targetPlayerId]) {
-    sendSocketError(client, "invalid_target_player", "target_player_not_in_session");
-    return;
-  }
-
-  const normalizedChannel =
-    payload.type === "room_channel"
-      ? payload.channel === "direct"
-        ? "direct"
-        : "public"
-      : hasTargetPlayer
-        ? "direct"
-        : "public";
-
-  if (payload.type === "room_channel") {
-    const preflightDecision = roomChannelFilterRegistry.execute(ROOM_CHANNEL_FILTER_SCOPE_PREFLIGHT, {
-      session,
-      playerId: client.playerId,
-      channel: normalizedChannel,
-      payloadType: payload.type,
-      now,
-    });
-    if (!preflightDecision.allowed) {
-      const failureCode =
-        typeof preflightDecision.code === "string" && preflightDecision.code.length > 0
-          ? preflightDecision.code
-          : "room_channel_sender_restricted";
-      const failureReason =
-        typeof preflightDecision.reason === "string" && preflightDecision.reason.length > 0
-          ? preflightDecision.reason
-          : failureCode;
-      sendSocketError(client, failureCode, failureReason);
-      return;
-    }
-    const normalizedMessage = normalizeRoomChannelMessage(payload.message);
-    if (!normalizedMessage) {
-      sendSocketError(client, "room_channel_invalid_message", "room_channel_invalid_message");
-      return;
-    }
-    const roomChannelFilterDecision = roomChannelFilterRegistry.execute(
-      ROOM_CHANNEL_FILTER_SCOPE_INBOUND,
-      {
-        session,
-        playerId: client.playerId,
-        channel: normalizedChannel,
-        message: normalizedMessage,
-        now,
-      }
-    );
-    if (roomChannelFilterDecision.stateChanged) {
-      shouldPersistChatConduct = true;
-    }
-    if (!roomChannelFilterDecision.allowed) {
-      const warning = roomChannelFilterDecision.outcome?.warning ?? null;
-      if (warning) {
-        sendSocketPayload(client, {
-          type: "player_notification",
-          id: randomUUID(),
-          playerId: client.playerId,
-          sourcePlayerId: client.playerId,
-          sourceRole: "system",
-          targetPlayerId: client.playerId,
-          title: warning.title,
-          message: warning.message,
-          detail: warning.detail,
-          severity: warning.severity,
-          timestamp: now,
-        });
-      }
-      const failureCode =
-        typeof roomChannelFilterDecision.code === "string" &&
-        roomChannelFilterDecision.code.length > 0
-          ? roomChannelFilterDecision.code
-          : typeof roomChannelFilterDecision.outcome?.code === "string" &&
-              roomChannelFilterDecision.outcome.code.length > 0
-            ? roomChannelFilterDecision.outcome.code
-          : "room_channel_message_blocked";
-      const failureReason =
-        typeof roomChannelFilterDecision.reason === "string" &&
-        roomChannelFilterDecision.reason.length > 0
-          ? roomChannelFilterDecision.reason
-          : typeof roomChannelFilterDecision.outcome?.reason === "string" &&
-              roomChannelFilterDecision.outcome.reason.length > 0
-            ? roomChannelFilterDecision.outcome.reason
-          : failureCode;
-      sendSocketError(client, failureCode, failureReason);
-      if (roomChannelFilterDecision.outcome?.shouldAutoBan === true) {
-        const participant = session.participants?.[client.playerId];
-        const offenderLabel =
-          typeof participant?.displayName === "string" && participant.displayName.trim().length > 0
-            ? participant.displayName.trim()
-            : client.playerId;
-        upsertSessionRoomBan(session, client.playerId, {
-          bannedAt: now,
-          bannedByPlayerId: "system",
-          bannedByRole: "admin",
-        });
-        removeParticipantFromSession(client.sessionId, client.playerId, {
-          source: "conduct_auto_ban",
-          socketReason: "banned_for_conduct",
-        });
-        broadcastSystemRoomChannelMessage(client.sessionId, {
-          topic: "moderation_ban",
-          title: "Room Moderation",
-          message: `${offenderLabel} was banned for repeated chat conduct violations.`,
-          severity: "warning",
-          timestamp: now,
-        });
-      }
-      if (shouldPersistChatConduct) {
-        persistStore().catch((error) => {
-          log.warn("Failed to persist session after room-channel conduct update", error);
-        });
-      }
-      return;
-    }
-    payload.message = normalizedMessage;
-  }
-
-  const base = {
-    ...payload,
-    playerId: client.playerId,
-    sourcePlayerId: client.playerId,
-    timestamp:
-      typeof payload.timestamp === "number" && Number.isFinite(payload.timestamp)
-        ? payload.timestamp
-        : now,
-  };
-
-  if (payload.type === "room_channel") {
-    base.channel = normalizedChannel;
-    const normalizedTopic = normalizeRoomChannelTopic(payload.topic);
-    if (normalizedTopic) {
-      base.topic = normalizedTopic;
-    } else {
-      delete base.topic;
-    }
-    base.title = normalizeRoomChannelTitle(payload.title, normalizedChannel);
-    base.message = normalizeRoomChannelMessage(payload.message);
-    base.sourceRole = "player";
-  }
-
-  if (normalizedChannel === "direct") {
-    const directTargetPlayerId = hasTargetPlayer ? targetPlayerId : "";
-    if (!directTargetPlayerId) {
-      sendSocketError(client, "invalid_target_player", "target_player_required_for_direct");
-      return;
-    }
-    const directDeliveryDecision = roomChannelFilterRegistry.execute(
-      REALTIME_FILTER_SCOPE_DIRECT_DELIVERY,
-      {
-        session,
-        sourcePlayerId: client.playerId,
-        targetPlayerId: directTargetPlayerId,
-        payloadType: payload.type,
-        now,
-      }
-    );
-    if (!directDeliveryDecision.allowed) {
-      const blockErrorCode =
-        payload.type === "room_channel" ? "room_channel_blocked" : "interaction_blocked";
-      const failureCode =
-        typeof directDeliveryDecision.code === "string" &&
-        directDeliveryDecision.code.length > 0
-          ? directDeliveryDecision.code
-          : blockErrorCode;
-      const failureReason =
-        typeof directDeliveryDecision.reason === "string" &&
-        directDeliveryDecision.reason.length > 0
-          ? directDeliveryDecision.reason
-          : failureCode;
-      sendSocketError(client, failureCode, failureReason);
-      return;
-    }
-    base.targetPlayerId = directTargetPlayerId;
-    sendToSessionPlayer(
-      client.sessionId,
-      directTargetPlayerId,
-      JSON.stringify(base),
-      client
-    );
-    if (shouldPersistChatConduct) {
-      persistStore().catch((error) => {
-        log.warn("Failed to persist session after room-channel direct relay", error);
-      });
-    }
-    return;
-  }
-
-  delete base.targetPlayerId;
-  if (payload.type === "room_channel") {
-    broadcastRoomChannelToSession(session, base, client);
-    if (shouldPersistChatConduct) {
-      persistStore().catch((error) => {
-        log.warn("Failed to persist session after room-channel relay", error);
-      });
-    }
-    return;
-  }
-  broadcastRealtimeSocketMessageToSession(session, base, client);
-  if (shouldPersistChatConduct) {
-    persistStore().catch((error) => {
-      log.warn("Failed to persist session after realtime relay", error);
-    });
-  }
+  socketMessageRouter.handleSocketMessage(client, rawMessage);
 }
 
 function handleTurnActionMessage(client, session, payload) {
-  const timestamp = Date.now();
-  session.participants[client.playerId].lastHeartbeatAt = timestamp;
-  markSessionActivity(session, client.playerId, timestamp);
-  const transition = processTurnAction(session, client.playerId, payload);
-  if (!transition.ok) {
-    sendSocketError(client, transition.code, transition.reason);
-    if (transition.sync) {
-      sendTurnSyncPayload(client, session, "sync");
-    }
+  if (!socketTurnHandlers) {
     return;
   }
-
-  if (transition.message) {
-    broadcastToSession(client.sessionId, JSON.stringify(transition.message), null);
-  }
-
-  if (transition.winnerResolved) {
-    broadcastRoundWinnerResolved(
-      session,
-      client.playerId,
-      transition.actionTimestamp,
-      "winner_complete"
-    );
-  }
-
-  if (!transition.shouldBroadcastState) {
-    reconcileSessionLoops(client.sessionId);
-    return;
-  }
-
-  broadcastSessionState(session, `turn_${transition.action}`);
-  if (transition.shouldPersist) {
-    persistStore().catch((error) => {
-      log.warn("Failed to persist session after turn action", error);
-    });
-  }
-  reconcileSessionLoops(client.sessionId);
+  socketTurnHandlers.handleTurnActionMessage(client, session, payload);
 }
 
 function handleTurnEndMessage(client, session) {
-  const timestamp = Date.now();
-  session.participants[client.playerId].lastHeartbeatAt = timestamp;
-  markSessionActivity(session, client.playerId, timestamp);
-  const turnState = ensureSessionTurnState(session);
-  log.info(
-    `Turn end request: session=${client.sessionId} player=${client.playerId} active=${turnState?.activeTurnPlayerId ?? "n/a"} order=${Array.isArray(turnState?.order) ? turnState.order.join(",") : "n/a"}`
-  );
-  if (!turnState?.activeTurnPlayerId) {
-    sendSocketError(client, "turn_unavailable", "turn_unavailable");
+  if (!socketTurnHandlers) {
     return;
   }
-
-  if (turnState.activeTurnPlayerId !== client.playerId) {
-    sendSocketError(client, "turn_not_active", "not_your_turn");
-    sendTurnSyncPayload(client, session, "sync");
-    return;
-  }
-
-  if (normalizeTurnPhase(turnState.phase) !== TURN_PHASES.readyToEnd) {
-    sendSocketError(client, "turn_action_required", "score_required_before_turn_end");
-    sendTurnSyncPayload(client, session, "sync");
-    return;
-  }
-
-  clearParticipantTimeoutStrike(session.participants[client.playerId]);
-  const advanced = advanceSessionTurn(session, client.playerId, { source: "player" });
-  if (!advanced) {
-    sendSocketError(client, "turn_advance_failed", "turn_advance_failed");
-    return;
-  }
-  log.info(
-    `Turn advanced: session=${client.sessionId} endedBy=${advanced.turnEnd.playerId} next=${advanced.turnStart?.playerId ?? "none"} round=${advanced.turnStart?.round ?? turnState.round} turn=${advanced.turnStart?.turnNumber ?? turnState.turnNumber}`
-  );
-
-  broadcastToSession(client.sessionId, JSON.stringify(advanced.turnEnd), null);
-  if (advanced.turnStart) {
-    broadcastToSession(client.sessionId, JSON.stringify(advanced.turnStart), null);
-  }
-  broadcastSessionState(session, "turn_end");
-  persistStore().catch((error) => {
-    log.warn("Failed to persist session after turn advance", error);
-  });
-  reconcileSessionLoops(client.sessionId);
+  socketTurnHandlers.handleTurnEndMessage(client, session);
 }
 
 function broadcastSessionState(session, source = "server", sender = null) {
