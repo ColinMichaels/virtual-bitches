@@ -19,9 +19,12 @@
     "test:ws-orchestration": "node ws/socketOrchestration.test.mjs",
     "test:ws-transport": "npm run test:ws-protocol && npm run test:ws-validation && npm run test:ws-upgrade-auth && npm run test:ws-turn-handlers && npm run test:ws-router && npm run test:ws-lifecycle && npm run test:ws-relay && npm run test:ws-orchestration",
     "test:auth-token-adapter": "node auth/tokenAuthAdapter.test.mjs",
+    "test:auth-admin-access": "node auth/adminAccessAuthorizer.test.mjs",
+    "test:auth-request-authorizer": "node auth/requestAuthorizer.test.mjs",
     "test:auth-firebase-identity": "node auth/firebaseIdentityVerifier.test.mjs",
+    "test:admin-security-audit": "node admin/adminSecurityAuditService.test.mjs",
     "test:storage-file": "node storage/fileStore.test.mjs",
     "test:storage-sync-controller": "node storage/storeSyncController.test.mjs",
-    "test:storage-auth-adapters": "npm run test:auth-token-adapter && npm run test:auth-firebase-identity && npm run test:storage-file && npm run test:storage-sync-controller"
+    "test:storage-auth-adapters": "npm run test:auth-token-adapter && npm run test:auth-admin-access && npm run test:auth-request-authorizer && npm run test:auth-firebase-identity && npm run test:storage-file && npm run test:storage-sync-controller"
   }
 }
