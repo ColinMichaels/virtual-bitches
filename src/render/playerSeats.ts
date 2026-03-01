@@ -20,6 +20,13 @@ const SCORE_ZONE_DISTANCE_FACTOR = 0.46;
 const CHAT_BUBBLE_DEFAULT_DURATION_MS = 2400;
 const CHAT_BUBBLE_MIN_DURATION_MS = 900;
 const CHAT_BUBBLE_MAX_DURATION_MS = 10000;
+const CHAT_BUBBLE_POP_IN_DURATION_MS = 1000;
+const CHAT_BUBBLE_POP_IN_START_SCALE_FACTOR = 0.72;
+const CHAT_BUBBLE_SCALE_MIN = 0.92;
+const CHAT_BUBBLE_SCALE_MAX = 1.7;
+const CHAT_BUBBLE_SCALE_DISTANCE_FACTOR = 0.07;
+const CHAT_BUBBLE_SCALE_BASE = 0.72;
+const CHAT_BUBBLE_SCALE_SMOOTHING = 0.2;
 const AVATAR_PANEL_SIZE = 1.92;
 const AVATAR_PANEL_HEIGHT = 2.36;
 const AVATAR_HEAD_ANCHOR_OFFSET = 0.96;
@@ -43,6 +50,11 @@ export interface SeatChatBubbleOptions {
 interface SeatChatBubbleVisual {
   root: Mesh;
   textTexture: DynamicTexture;
+}
+
+interface SeatChatBubbleAnimationState {
+  openedAt: number;
+  startScale: number;
 }
 
 interface SeatAvatarTextureState {
@@ -90,6 +102,7 @@ export class PlayerSeatRenderer {
   private avatarTextureFailuresByUrl: Map<string, AvatarTextureFailureState> = new Map();
   private scorePulseTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
   private chatBubbleHideTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
+  private chatBubbleAnimationStates: Map<number, SeatChatBubbleAnimationState> = new Map();
   private highlightedSeatIndex: number | null = null;
   private activeTurnSeatIndex: number | null = null;
   private readonly turnMarkerAnimator: () => void;
@@ -99,6 +112,7 @@ export class PlayerSeatRenderer {
     this.scene = scene;
     this.turnMarkerAnimator = () => {
       this.animateActiveTurnMarker();
+      this.animateChatBubbles();
     };
     this.scene.registerBeforeRender(this.turnMarkerAnimator);
   }
@@ -402,6 +416,13 @@ export class PlayerSeatRenderer {
     const isBot = options.isBot ?? state?.isBot === true;
     this.drawChatBubble(bubbleVisual, normalizedMessage, tone, isBot);
     bubbleVisual.root.isVisible = true;
+    const targetScale = this.resolveChatBubbleTargetScale(bubbleVisual.root);
+    const startScale = Math.max(0.5, targetScale * CHAT_BUBBLE_POP_IN_START_SCALE_FACTOR);
+    bubbleVisual.root.scaling.set(startScale, startScale, startScale);
+    this.chatBubbleAnimationStates.set(seatIndex, {
+      openedAt: Date.now(),
+      startScale,
+    });
 
     const existingTimer = this.chatBubbleHideTimers.get(seatIndex);
     if (existingTimer) {
@@ -429,7 +450,9 @@ export class PlayerSeatRenderer {
     const bubbleVisual = this.chatBubbleMeshes.get(seatIndex);
     if (bubbleVisual) {
       bubbleVisual.root.isVisible = false;
+      bubbleVisual.root.scaling.set(1, 1, 1);
     }
+    this.chatBubbleAnimationStates.delete(seatIndex);
   }
 
   /**
@@ -542,7 +565,8 @@ export class PlayerSeatRenderer {
     const hasAvatarTexture = this.applySeatAvatarTexture(
       seatIndex,
       headMat,
-      isOccupied ? state.avatarUrl : undefined
+      isOccupied ? state.avatarUrl : undefined,
+      isBot
     );
 
     pedestal.scaling = new Vector3(1, 1, 1);
@@ -690,12 +714,14 @@ export class PlayerSeatRenderer {
   private applySeatAvatarTexture(
     seatIndex: number,
     headMaterial: StandardMaterial,
-    avatarUrl: string | undefined
+    avatarUrl: string | undefined,
+    flipHorizontally: boolean
   ): boolean {
     const normalizedUrl =
       typeof avatarUrl === "string" && avatarUrl.trim().length > 0 ? avatarUrl.trim() : undefined;
     const existing = this.seatAvatarTextures.get(seatIndex) ?? { url: undefined, texture: null };
     if (existing.url === normalizedUrl && existing.texture) {
+      this.fitTextureToAvatarSurface(existing.texture, { flipHorizontally });
       headMaterial.diffuseTexture = existing.texture ?? null;
       return Boolean(existing.texture);
     }
@@ -738,7 +764,7 @@ export class PlayerSeatRenderer {
           if (!texture) {
             return;
           }
-          this.fitTextureToAvatarSurface(texture);
+          this.fitTextureToAvatarSurface(texture, { flipHorizontally });
           this.avatarTextureFailuresByUrl.delete(normalizedUrl);
           headMaterial.diffuseTexture = texture;
           headMaterial.useAlphaFromDiffuseTexture = false;
@@ -764,7 +790,7 @@ export class PlayerSeatRenderer {
       texture.wrapU = Texture.CLAMP_ADDRESSMODE;
       texture.wrapV = Texture.CLAMP_ADDRESSMODE;
       if (texture) {
-        this.fitTextureToAvatarSurface(texture);
+        this.fitTextureToAvatarSurface(texture, { flipHorizontally });
       }
     } catch {
       this.seatAvatarTextures.set(seatIndex, { url: undefined, texture: null });
@@ -781,14 +807,18 @@ export class PlayerSeatRenderer {
   /**
    * Fit a profile image to a square avatar panel using centered crop.
    */
-  private fitTextureToAvatarSurface(texture: Texture): void {
+  private fitTextureToAvatarSurface(
+    texture: Texture,
+    options?: { flipHorizontally?: boolean }
+  ): void {
+    const flipHorizontally = options?.flipHorizontally === true;
     const textureSize = texture.getSize();
     const width = textureSize.width;
     const height = textureSize.height;
     if (!width || !height) {
-      texture.uScale = 1;
+      texture.uScale = flipHorizontally ? -1 : 1;
       texture.vScale = 1;
-      texture.uOffset = 0;
+      texture.uOffset = flipHorizontally ? 1 : 0;
       texture.vOffset = 0;
       return;
     }
@@ -796,15 +826,20 @@ export class PlayerSeatRenderer {
     const textureAspect = width / height;
     const targetAspect = 1; // square panel
 
+    let horizontalScale = 1;
+    let verticalScale = 1;
     if (textureAspect > targetAspect) {
-      texture.uScale = targetAspect / textureAspect;
-      texture.vScale = 1;
+      horizontalScale = targetAspect / textureAspect;
     } else {
-      texture.uScale = 1;
-      texture.vScale = textureAspect / targetAspect;
+      verticalScale = textureAspect / targetAspect;
     }
-    texture.uOffset = 0.5 - texture.uScale * 0.5;
-    texture.vOffset = 0.5 - texture.vScale * 0.5;
+
+    texture.uScale = flipHorizontally ? -horizontalScale : horizontalScale;
+    texture.vScale = verticalScale;
+    texture.uOffset = flipHorizontally
+      ? 0.5 + horizontalScale * 0.5
+      : 0.5 - horizontalScale * 0.5;
+    texture.vOffset = 0.5 - verticalScale * 0.5;
   }
 
   private drawNamePlate(
@@ -1007,6 +1042,53 @@ export class PlayerSeatRenderer {
     }
   }
 
+  private animateChatBubbles(): void {
+    const now = Date.now();
+    this.chatBubbleMeshes.forEach((bubbleVisual, seatIndex) => {
+      if (!bubbleVisual.root.isVisible) {
+        this.chatBubbleAnimationStates.delete(seatIndex);
+        return;
+      }
+
+      const targetScale = this.resolveChatBubbleTargetScale(bubbleVisual.root);
+      let animationState = this.chatBubbleAnimationStates.get(seatIndex);
+      if (!animationState) {
+        animationState = {
+          openedAt: now,
+          startScale: Math.max(0.5, targetScale * CHAT_BUBBLE_POP_IN_START_SCALE_FACTOR),
+        };
+        this.chatBubbleAnimationStates.set(seatIndex, animationState);
+      }
+
+      const elapsedMs = Math.max(0, now - animationState.openedAt);
+      const progress = Math.min(1, elapsedMs / CHAT_BUBBLE_POP_IN_DURATION_MS);
+      const easedProgress = 1 - (1 - progress) ** 3;
+      const desiredScale =
+        animationState.startScale + (targetScale - animationState.startScale) * easedProgress;
+      const currentScale = Number.isFinite(bubbleVisual.root.scaling.x)
+        ? bubbleVisual.root.scaling.x
+        : desiredScale;
+      const nextScale =
+        currentScale + (desiredScale - currentScale) * CHAT_BUBBLE_SCALE_SMOOTHING;
+      bubbleVisual.root.scaling.set(nextScale, nextScale, nextScale);
+    });
+  }
+
+  private resolveChatBubbleTargetScale(bubble: Mesh): number {
+    const activeCamera = this.scene.activeCamera;
+    if (!activeCamera) {
+      return 1;
+    }
+    const cameraPosition = activeCamera.globalPosition ?? activeCamera.position;
+    if (!cameraPosition) {
+      return 1;
+    }
+    const bubblePosition = bubble.getAbsolutePosition();
+    const distance = Vector3.Distance(cameraPosition, bubblePosition);
+    const scaled = CHAT_BUBBLE_SCALE_BASE + distance * CHAT_BUBBLE_SCALE_DISTANCE_FACTOR;
+    return Math.max(CHAT_BUBBLE_SCALE_MIN, Math.min(CHAT_BUBBLE_SCALE_MAX, scaled));
+  }
+
   private drawChatBubble(
     bubbleVisual: SeatChatBubbleVisual,
     message: string,
@@ -1175,6 +1257,7 @@ export class PlayerSeatRenderer {
     this.avatarTextureFailuresByUrl.clear();
     this.scorePulseTimers.clear();
     this.chatBubbleHideTimers.clear();
+    this.chatBubbleAnimationStates.clear();
     this.seatStates.clear();
   }
 }

@@ -216,6 +216,7 @@ const DEFAULT_MULTIPLAYER_ROUND_CYCLE_MS = 60 * 1000;
 const PLAYER_INTERACTION_COMING_SOON_TOOLTIP = "Coming soon";
 const SPECTATOR_SCORE_COMMIT_DELAY_MS = 340;
 const SPECTATOR_SCORE_COMMIT_DELAY_FAST_MS = 180;
+const DEMO_BOT_SPECTATOR_PREVIEW_LINGER_MS = 1800;
 
 class Game implements GameCallbacks {
   private state: GameState;
@@ -269,6 +270,15 @@ class Game implements GameCallbacks {
   private selectionSyncDebounceHandle: ReturnType<typeof setTimeout> | null = null;
   private selectionSyncRollServerId: string | null = null;
   private spectatorScoreCommitTimersByPlayerId = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  private spectatorRollSnapshotByPlayerId = new Map<
+    string,
+    MultiplayerTurnActionMessage["roll"]
+  >();
+  private spectatorRenderedRollKeyByPlayerId = new Map<string, string>();
+  private spectatorPreviewClearTimersByPlayerId = new Map<
     string,
     ReturnType<typeof setTimeout>
   >();
@@ -1876,7 +1886,7 @@ class Game implements GameCallbacks {
     const activeParticipantIds = new Set(seatedParticipants.map((participant) => participant.playerId));
     previousParticipantIds.forEach((playerId) => {
       if (!activeParticipantIds.has(playerId) && playerId !== this.localPlayerId) {
-        this.diceRenderer.cancelSpectatorPreview(this.buildSpectatorPreviewKey(playerId));
+        this.clearSpectatorRollingPreviewForPlayer(playerId);
       }
     });
     this.nudgeCooldownByPlayerId.forEach((_, playerId) => {
@@ -2856,6 +2866,10 @@ class Game implements GameCallbacks {
       GameFlowController.updateHintMode(this.state, this.diceRow);
     }
     this.diceRenderer.clearDice();
+    this.clearScheduledSpectatorPreviewClear();
+    this.clearPendingSpectatorScoreCommit();
+    this.spectatorRollSnapshotByPlayerId.clear();
+    this.spectatorRenderedRollKeyByPlayerId.clear();
     this.scene.returnCameraToDefaultOverview(true);
     this.animating = false;
     this.awaitingMultiplayerRoll = false;
@@ -3159,14 +3173,25 @@ class Game implements GameCallbacks {
       return null;
     }
     const center = this.scene.playerSeatRenderer.getSeatScoreZonePosition(seatIndex);
-    if (!center) {
+    if (center) {
+      return {
+        seatIndex,
+        x: center.x,
+        y: center.y,
+        z: center.z,
+      };
+    }
+
+    const fallbackSeat = this.scene.playerSeats[seatIndex];
+    if (!fallbackSeat?.position) {
       return null;
     }
+
     return {
       seatIndex,
-      x: center.x,
-      y: center.y,
-      z: center.z,
+      x: fallbackSeat.position.x,
+      y: fallbackSeat.position.y,
+      z: fallbackSeat.position.z,
     };
   }
 
@@ -3207,13 +3232,159 @@ class Game implements GameCallbacks {
     return `${sessionId}:${playerId}`;
   }
 
+  private buildSpectatorRollCacheKey(
+    roll: MultiplayerTurnActionMessage["roll"] | null | undefined
+  ): string | null {
+    if (!roll || !Array.isArray(roll.dice) || roll.dice.length === 0) {
+      return null;
+    }
+
+    const serverRollId =
+      typeof roll.serverRollId === "string" ? roll.serverRollId.trim() : "";
+    if (serverRollId) {
+      return `srv:${serverRollId}`;
+    }
+
+    const rollIndex =
+      Number.isFinite(roll.rollIndex) && roll.rollIndex > 0
+        ? Math.floor(roll.rollIndex)
+        : 0;
+    const diceKey = roll.dice
+      .map((die) => {
+        const dieId = typeof die?.dieId === "string" ? die.dieId.trim() : "";
+        const sides = Number.isFinite(die?.sides) ? Math.floor(die.sides) : 0;
+        const value = Number.isFinite(die?.value) ? Math.floor(die.value as number) : 0;
+        return `${dieId}:${sides}:${value}`;
+      })
+      .filter((entry) => entry.length > 0)
+      .join("|");
+    return `idx:${rollIndex}:${diceKey}`;
+  }
+
+  private syncSpectatorRollPreviewForPlayer(
+    playerId: string | null | undefined,
+    roll: MultiplayerTurnActionMessage["roll"] | null | undefined,
+    options?: { forceReplay?: boolean }
+  ): boolean {
+    const targetPlayerId = typeof playerId === "string" ? playerId.trim() : "";
+    if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
+      return false;
+    }
+    if (!roll || !Array.isArray(roll.dice) || roll.dice.length === 0) {
+      return false;
+    }
+
+    const seatScoreZone = this.getSeatScoreZonePosition(targetPlayerId);
+    if (!seatScoreZone) {
+      return false;
+    }
+
+    const rollKey = this.buildSpectatorRollCacheKey(roll);
+    if (!options?.forceReplay && rollKey) {
+      const currentRollKey = this.spectatorRenderedRollKeyByPlayerId.get(targetPlayerId);
+      if (currentRollKey === rollKey) {
+        return true;
+      }
+    }
+
+    this.clearScheduledSpectatorPreviewClear(targetPlayerId);
+    this.clearPendingSpectatorScoreCommit(targetPlayerId);
+    this.spectatorRollSnapshotByPlayerId.set(targetPlayerId, roll);
+    if (rollKey) {
+      this.spectatorRenderedRollKeyByPlayerId.set(targetPlayerId, rollKey);
+    } else {
+      this.spectatorRenderedRollKeyByPlayerId.delete(targetPlayerId);
+    }
+
+    const started = this.diceRenderer.startSpectatorRollPreview(
+      this.buildSpectatorPreviewKey(targetPlayerId),
+      roll,
+      new Vector3(seatScoreZone.x, seatScoreZone.y, seatScoreZone.z)
+    );
+    if (!started) {
+      this.spectatorRenderedRollKeyByPlayerId.delete(targetPlayerId);
+    }
+    return started;
+  }
+
   private clearSpectatorRollingPreviewForPlayer(playerId: string | null | undefined): void {
     const targetPlayerId = typeof playerId === "string" ? playerId.trim() : "";
     if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
       return;
     }
+    this.clearScheduledSpectatorPreviewClear(targetPlayerId);
     this.clearPendingSpectatorScoreCommit(targetPlayerId);
+    this.spectatorRollSnapshotByPlayerId.delete(targetPlayerId);
+    this.spectatorRenderedRollKeyByPlayerId.delete(targetPlayerId);
     this.diceRenderer.cancelSpectatorPreview(this.buildSpectatorPreviewKey(targetPlayerId));
+  }
+
+  private clearSpectatorRollingDicePreviewForPlayer(
+    playerId: string | null | undefined,
+    options?: { clearSnapshot?: boolean }
+  ): void {
+    const targetPlayerId = typeof playerId === "string" ? playerId.trim() : "";
+    if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
+      return;
+    }
+
+    this.clearScheduledSpectatorPreviewClear(targetPlayerId);
+    this.clearPendingSpectatorScoreCommit(targetPlayerId);
+    if (options?.clearSnapshot === true) {
+      this.spectatorRollSnapshotByPlayerId.delete(targetPlayerId);
+      this.spectatorRenderedRollKeyByPlayerId.delete(targetPlayerId);
+    }
+    this.diceRenderer.clearSpectatorRollingPreview(this.buildSpectatorPreviewKey(targetPlayerId));
+  }
+
+  private clearScheduledSpectatorPreviewClear(playerId?: string | null): void {
+    const targetPlayerId = typeof playerId === "string" ? playerId.trim() : "";
+    if (targetPlayerId) {
+      const timer = this.spectatorPreviewClearTimersByPlayerId.get(targetPlayerId);
+      if (timer) {
+        clearTimeout(timer);
+        this.spectatorPreviewClearTimersByPlayerId.delete(targetPlayerId);
+      }
+      return;
+    }
+
+    this.spectatorPreviewClearTimersByPlayerId.forEach((timer) => {
+      clearTimeout(timer);
+    });
+    this.spectatorPreviewClearTimersByPlayerId.clear();
+  }
+
+  private resolveSpectatorPreviewClearDelayMs(playerId: string): number {
+    if (!this.shouldShowDetailedDemoBotTurnAction(playerId)) {
+      return 0;
+    }
+    return DEMO_BOT_SPECTATOR_PREVIEW_LINGER_MS;
+  }
+
+  private scheduleSpectatorPreviewClearForPlayer(
+    playerId: string | null | undefined,
+    delayMs?: number
+  ): void {
+    const targetPlayerId = typeof playerId === "string" ? playerId.trim() : "";
+    if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
+      return;
+    }
+
+    this.clearScheduledSpectatorPreviewClear(targetPlayerId);
+    const resolvedDelayMs =
+      typeof delayMs === "number" && Number.isFinite(delayMs)
+        ? Math.max(0, Math.floor(delayMs))
+        : this.resolveSpectatorPreviewClearDelayMs(targetPlayerId);
+    if (resolvedDelayMs <= 0) {
+      this.clearSpectatorRollingDicePreviewForPlayer(targetPlayerId, { clearSnapshot: true });
+      return;
+    }
+
+    const clearHandle = window.setTimeout(() => {
+      this.spectatorPreviewClearTimersByPlayerId.delete(targetPlayerId);
+      this.clearSpectatorRollingDicePreviewForPlayer(targetPlayerId, { clearSnapshot: true });
+    }, resolvedDelayMs);
+    this.spectatorPreviewClearTimersByPlayerId.set(targetPlayerId, clearHandle);
   }
 
   private clearPendingSpectatorScoreCommit(playerId?: string | null): void {
@@ -3266,7 +3437,6 @@ class Game implements GameCallbacks {
           },
         });
       }
-      this.clearSpectatorRollingPreviewForPlayer(playerId);
     }, Math.max(80, Math.floor(delayMs)));
     this.spectatorScoreCommitTimersByPlayerId.set(playerId, commitTimer);
   }
@@ -4026,6 +4196,7 @@ class Game implements GameCallbacks {
       this.resetLocalStateForNextMultiplayerGame();
     }
     this.applyMultiplayerSeatState(syncedSession);
+    this.recoverSpectatorPreviewFromSessionTurnState(syncedSession.turnState);
     if (syncedSession.sessionComplete === true && !this.lastSessionComplete) {
       this.lastSessionComplete = true;
       this.scene.triggerVictoryLighting(3200);
@@ -4069,8 +4240,13 @@ class Game implements GameCallbacks {
       message.phase,
       message.activeRoll
     );
+    this.recoverSpectatorTurnPreviewFromSnapshot(
+      message.playerId,
+      message.phase,
+      message.activeRoll
+    );
     if (previousActiveTurnPlayerId && previousActiveTurnPlayerId !== message.playerId) {
-      this.clearSpectatorRollingPreviewForPlayer(previousActiveTurnPlayerId);
+      this.scheduleSpectatorPreviewClearForPlayer(previousActiveTurnPlayerId);
     }
     this.updateUI();
 
@@ -4123,7 +4299,7 @@ class Game implements GameCallbacks {
       return;
     }
 
-    this.clearSpectatorRollingPreviewForPlayer(endedPlayerId);
+    this.scheduleSpectatorPreviewClearForPlayer(endedPlayerId);
 
     this.showSeatBubbleForPlayer(endedPlayerId, "Turn ended", {
       tone: "info",
@@ -4191,7 +4367,7 @@ class Game implements GameCallbacks {
       this.updateTurnSeatHighlight(null);
       this.scheduleTurnTransitionSyncRecovery("turn_auto_advanced_waiting_for_next", playerId);
     }
-    this.clearSpectatorRollingPreviewForPlayer(playerId);
+    this.clearSpectatorRollingDicePreviewForPlayer(playerId, { clearSnapshot: true });
     const autoStandReason =
       typeof message.reason === "string" &&
       (message.reason.includes("turn_timeout_stand") ||
@@ -4243,13 +4419,10 @@ class Game implements GameCallbacks {
 
     const seatScoreZone = this.getSeatScoreZonePosition(message.playerId);
     const spectatorPreviewKey = this.buildSpectatorPreviewKey(message.playerId);
-    if (message.action === "roll" && seatScoreZone && message.roll) {
-      this.clearPendingSpectatorScoreCommit(message.playerId);
-      this.diceRenderer.startSpectatorRollPreview(
-        spectatorPreviewKey,
-        message.roll,
-        new Vector3(seatScoreZone.x, seatScoreZone.y, seatScoreZone.z)
-      );
+    if (message.action === "roll" && message.roll) {
+      this.syncSpectatorRollPreviewForPlayer(message.playerId, message.roll, {
+        forceReplay: true,
+      });
     }
 
     if (message.action === "select") {
@@ -4260,7 +4433,6 @@ class Game implements GameCallbacks {
         (dieId): dieId is string => typeof dieId === "string" && dieId.trim().length > 0
       );
       this.diceRenderer.updateSpectatorSelectionPreview(spectatorPreviewKey, selectedDiceIds);
-      return;
     }
 
     if (message.action === "score") {
@@ -4285,25 +4457,210 @@ class Game implements GameCallbacks {
             },
           });
         }
-        this.clearSpectatorRollingPreviewForPlayer(message.playerId);
+        this.scheduleSpectatorPreviewClearForPlayer(message.playerId);
       }
     }
 
-    const actionLabel = message.action === "score" ? "Scored" : "Rolled";
     const scoredPoints =
       message.action === "score" &&
       typeof message.score?.points === "number" &&
       Number.isFinite(message.score.points)
         ? Math.max(0, Math.floor(message.score.points))
         : null;
-    const scoreSuffix = scoredPoints !== null ? ` (+${scoredPoints})` : "";
-    this.showSeatBubbleForPlayer(message.playerId, `${actionLabel}${scoreSuffix}`, {
+    const actionBubbleMessage = this.buildTurnActionBubbleMessage(message, scoredPoints);
+    this.showSeatBubbleForPlayer(message.playerId, actionBubbleMessage, {
       tone:
         message.action === "score"
           ? resolveScoreFeedbackTone(scoredPoints ?? 0)
           : "info",
       durationMs: 1400,
     });
+  }
+
+  private buildTurnActionBubbleMessage(
+    message: MultiplayerTurnActionMessage,
+    scoredPoints: number | null
+  ): string {
+    const playerId = typeof message.playerId === "string" ? message.playerId.trim() : "";
+    if (playerId && this.shouldShowDetailedDemoBotTurnAction(playerId)) {
+      const detailedMessage = this.buildDetailedDemoBotTurnActionBubbleMessage(
+        playerId,
+        message,
+        scoredPoints
+      );
+      if (detailedMessage) {
+        return detailedMessage;
+      }
+    }
+
+    if (message.action === "score") {
+      return scoredPoints !== null ? `Scored (+${scoredPoints})` : "Scored";
+    }
+    if (message.action === "select") {
+      return "Selected";
+    }
+    return "Rolled";
+  }
+
+  private shouldShowDetailedDemoBotTurnAction(playerId: string): boolean {
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    return (
+      activeSession?.demoMode === true &&
+      activeSession?.demoAutoRun !== false &&
+      this.isBotParticipant(playerId)
+    );
+  }
+
+  private buildDetailedDemoBotTurnActionBubbleMessage(
+    playerId: string,
+    message: MultiplayerTurnActionMessage,
+    scoredPoints: number | null
+  ): string | null {
+    if (message.action === "roll") {
+      const rollSummary = this.formatTurnRollDiceSummary(message.roll);
+      return rollSummary ? `Roll ${rollSummary}` : "Rolled";
+    }
+
+    if (message.action === "score") {
+      const selectedDiceIds = Array.isArray(message.score?.selectedDiceIds)
+        ? message.score.selectedDiceIds.filter(
+            (dieId): dieId is string => typeof dieId === "string" && dieId.trim().length > 0
+          )
+        : [];
+      const selectedSummary = this.formatSelectedDiceSummary(playerId, selectedDiceIds);
+      if (selectedSummary) {
+        return scoredPoints !== null
+          ? `Pick ${selectedSummary} (+${scoredPoints})`
+          : `Pick ${selectedSummary}`;
+      }
+      if (selectedDiceIds.length > 0) {
+        return scoredPoints !== null
+          ? `Picked ${selectedDiceIds.length} (+${scoredPoints})`
+          : `Picked ${selectedDiceIds.length}`;
+      }
+      return scoredPoints !== null ? `Scored (+${scoredPoints})` : "Scored";
+    }
+
+    if (message.action === "select") {
+      const selectedDiceIds = Array.isArray(message.select?.selectedDiceIds)
+        ? message.select.selectedDiceIds.filter(
+            (dieId): dieId is string => typeof dieId === "string" && dieId.trim().length > 0
+          )
+        : [];
+      const selectedSummary = this.formatSelectedDiceSummary(playerId, selectedDiceIds);
+      if (selectedSummary) {
+        return `Select ${selectedSummary}`;
+      }
+      if (selectedDiceIds.length > 0) {
+        return `Selecting ${selectedDiceIds.length}`;
+      }
+      return "Selecting";
+    }
+
+    return null;
+  }
+
+  private formatTurnRollDiceSummary(
+    roll: MultiplayerTurnActionMessage["roll"] | null | undefined
+  ): string | null {
+    if (!roll || !Array.isArray(roll.dice) || roll.dice.length === 0) {
+      return null;
+    }
+
+    const sample = roll.dice
+      .slice(0, 4)
+      .map((die) => this.formatTurnDieLabel(die?.dieId, die?.sides, die?.value))
+      .filter((value) => value.length > 0)
+      .join(", ");
+    const extraCount = Math.max(0, roll.dice.length - 4);
+    const extraSuffix = extraCount > 0 ? ` +${extraCount}` : "";
+    if (!sample) {
+      return `${roll.dice.length} dice`;
+    }
+    return `${sample}${extraSuffix}`;
+  }
+
+  private formatSelectedDiceSummary(playerId: string, selectedDiceIds: string[]): string {
+    if (!selectedDiceIds.length) {
+      return "";
+    }
+
+    const rollSnapshot = this.spectatorRollSnapshotByPlayerId.get(playerId);
+    const dieById = new Map<
+      string,
+      { sides: number | undefined; value: number | undefined }
+    >();
+    if (rollSnapshot && Array.isArray(rollSnapshot.dice)) {
+      rollSnapshot.dice.forEach((die) => {
+        const dieId = typeof die?.dieId === "string" ? die.dieId.trim() : "";
+        if (!dieId) {
+          return;
+        }
+        const numericSides = Number(die?.sides);
+        const numericValue = Number(die?.value);
+        dieById.set(dieId, {
+          sides: Number.isFinite(numericSides) ? Math.floor(numericSides) : undefined,
+          value: Number.isFinite(numericValue) ? Math.floor(numericValue) : undefined,
+        });
+      });
+    }
+
+    const labels = selectedDiceIds.map((dieId) => {
+      const snapshot = dieById.get(dieId);
+      return this.formatTurnDieLabel(dieId, snapshot?.sides, snapshot?.value);
+    });
+    const preview = labels.slice(0, 3).join(", ");
+    const extraCount = Math.max(0, labels.length - 3);
+    const extraSuffix = extraCount > 0 ? ` +${extraCount}` : "";
+    return `${preview}${extraSuffix}`;
+  }
+
+  private formatTurnDieLabel(
+    dieId: unknown,
+    sides: unknown,
+    value: unknown
+  ): string {
+    const normalizedDieId = typeof dieId === "string" ? dieId.trim() : "";
+    const normalizedSides = Number.isFinite(sides)
+      ? Math.max(2, Math.floor(sides as number))
+      : this.resolveDieSidesFromId(normalizedDieId);
+    const normalizedValue = Number.isFinite(value)
+      ? Math.max(1, Math.floor(value as number))
+      : null;
+    if (normalizedSides !== null && normalizedValue !== null) {
+      return `d${normalizedSides}=${normalizedValue}`;
+    }
+    if (normalizedSides !== null) {
+      return `d${normalizedSides}`;
+    }
+    if (normalizedDieId) {
+      return normalizedDieId;
+    }
+    return "die";
+  }
+
+  private resolveDieSidesFromId(dieId: string): number | null {
+    if (!dieId) {
+      return null;
+    }
+
+    const botStyleMatch = dieId.match(/-s(\d+)(?:-|$)/i);
+    if (botStyleMatch) {
+      const parsed = Number(botStyleMatch[1]);
+      if (Number.isFinite(parsed) && parsed >= 2) {
+        return Math.floor(parsed);
+      }
+    }
+
+    const standardDieMatch = dieId.match(/^d(\d+)(?:-|$)/i);
+    if (standardDieMatch) {
+      const parsed = Number(standardDieMatch[1]);
+      if (Number.isFinite(parsed) && parsed >= 2) {
+        return Math.floor(parsed);
+      }
+    }
+
+    return null;
   }
 
   private handleMultiplayerProtocolError(code: string, message?: string): void {
@@ -4584,6 +4941,51 @@ class Game implements GameCallbacks {
     if (!restored) {
       notificationService.show("Turn state sync incomplete. Roll to continue.", "warning", 1800);
     }
+  }
+
+  private recoverSpectatorTurnPreviewFromSnapshot(
+    activePlayerId: string | null | undefined,
+    phase: MultiplayerTurnPhase | undefined,
+    activeRoll: MultiplayerTurnActionMessage["roll"] | null | undefined
+  ): void {
+    if (!this.isMultiplayerTurnEnforced()) {
+      return;
+    }
+
+    const targetPlayerId = typeof activePlayerId === "string" ? activePlayerId.trim() : "";
+    if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
+      return;
+    }
+
+    if (phase === "await_score") {
+      this.syncSpectatorRollPreviewForPlayer(targetPlayerId, activeRoll);
+      return;
+    }
+
+    if (phase === "ready_to_end") {
+      if (!this.syncSpectatorRollPreviewForPlayer(targetPlayerId, activeRoll)) {
+        this.scheduleSpectatorPreviewClearForPlayer(targetPlayerId);
+      }
+      return;
+    }
+
+    if (phase === "await_roll") {
+      this.scheduleSpectatorPreviewClearForPlayer(targetPlayerId);
+    }
+  }
+
+  private recoverSpectatorPreviewFromSessionTurnState(
+    turnState: MultiplayerSessionRecord["turnState"] | null | undefined
+  ): void {
+    if (!turnState) {
+      return;
+    }
+
+    this.recoverSpectatorTurnPreviewFromSnapshot(
+      turnState.activeTurnPlayerId,
+      turnState.phase,
+      turnState.activeRoll
+    );
   }
 
   private flushPendingTurnEndSync(): void {
@@ -4999,7 +5401,10 @@ class Game implements GameCallbacks {
     this.activeTurnPlayerId = this.localPlayerId;
     this.activeRollServerId = null;
     this.applyTurnTiming(null);
+    this.clearScheduledSpectatorPreviewClear();
     this.clearPendingSpectatorScoreCommit();
+    this.spectatorRollSnapshotByPlayerId.clear();
+    this.spectatorRenderedRollKeyByPlayerId.clear();
     this.diceRenderer.cancelAllSpectatorPreviews();
     this.lastTurnPlanPreview = "";
     this.lastSessionComplete = false;
@@ -5050,7 +5455,10 @@ class Game implements GameCallbacks {
     this.awaitingMultiplayerRoll = false;
     this.pendingTurnEndSync = false;
     this.applyTurnTiming(null);
+    this.clearScheduledSpectatorPreviewClear();
     this.clearPendingSpectatorScoreCommit();
+    this.spectatorRollSnapshotByPlayerId.clear();
+    this.spectatorRenderedRollKeyByPlayerId.clear();
     this.diceRenderer.cancelAllSpectatorPreviews();
     this.lastTurnPlanPreview = "";
     this.lastSessionComplete = false;
