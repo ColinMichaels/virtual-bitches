@@ -1,6 +1,6 @@
 # BISCUITS - Session Summary
 **Date:** March 1, 2026  
-**Focus:** Unified game config follow-through plus Phase 01 routing extraction and iterative Phase 02 engine-boundary checkpoints
+**Focus:** Unified game config follow-through plus iterative Phase 01-04 server refactor checkpoints (routing, engine boundaries, filter registry, websocket transport extraction)
 
 ---
 
@@ -92,6 +92,16 @@
   - `MULTIPLAYER_DIRECT_MESSAGE_BLOCK_FILTER_TIMEOUT_MS`
   - `MULTIPLAYER_DIRECT_MESSAGE_BLOCK_FILTER_ON_ERROR`
 
+### Phase 04 - Transport + WS Decoupling (Incremental Refactor)
+- Extracted websocket protocol/frame handling into:
+  - `api/ws/socketProtocol.mjs`
+- Refactored `api/server.mjs` to delegate protocol-only websocket concerns:
+  - upgrade header validation
+  - handshake response composition
+  - frame parsing
+  - frame writing
+- Preserved existing websocket/domain message handling flow while reducing transport implementation surface in the composition root.
+
 ---
 
 ## Validation Snapshot
@@ -110,7 +120,9 @@
 - `node --check api/filters/directMessageBlockRelationshipFilter.mjs` passes.
 - `node --check api/http/routeDispatcher.mjs` passes.
 - `node --check api/http/routeHandlers.mjs` passes.
+- `node --check api/ws/socketProtocol.mjs` passes.
 - `npm run build` passes.
+- `npm run test:e2e:api:local` passes.
 
 ### Notes
 - `public/updates.git.json` regenerated during build (`updates:generate`).
@@ -127,6 +139,8 @@
   - `feature/server-phase-02-engine-boundaries`
 - Created Phase 03 branch for filter/addon registry extraction:
   - `feature/server-phase-03-filter-addon-registry`
+- Created Phase 04 branch for websocket transport decoupling:
+  - `feature/server-phase-04-transport-ws-decoupling`
 - Added dedicated phase plan in:
   - `docs/SERVER-REFACTOR-PHASE-PLAN.md`
 
@@ -134,6 +148,6 @@
 
 ## Next Phase Candidate
 
-1. Phase 03 follow-through: migrate additional optional moderation/room policy checks onto the registry chain.
-2. Phase 04: Move websocket protocol translation concerns behind dedicated transport handlers.
+1. Phase 04 follow-through: extract websocket connection lifecycle and relay orchestration handlers from `api/server.mjs`.
+2. Phase 04 follow-through: introduce transport-focused tests around protocol/frame and socket lifecycle behavior.
 3. Phase 05: Continue storage/auth adapter hardening with resilience-oriented failure-path tests.

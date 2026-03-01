@@ -103,6 +103,10 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
 ## Phase 04 - Transport + WS Decoupling
 - Separate websocket frame/protocol handling from domain operations.
 - Keep turn messages/events stable.
+- Status: ✅ In progress checkpoint landed (`feature/server-phase-04-transport-ws-decoupling`)
+- Delivered in branch:
+  - `api/ws/socketProtocol.mjs`
+  - `api/server.mjs` delegates websocket protocol concerns (upgrade header validation, handshake response, frame parse/write) to extracted transport module
 
 ## Phase 05 - Storage/Auth Adapter Hardening
 - Formalize repositories/adapters for storage and auth providers.
