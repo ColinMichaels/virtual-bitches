@@ -13,6 +13,7 @@ import { createSessionControlService } from "./multiplayer/sessionControlService
 import { createSessionMutationService } from "./multiplayer/sessionMutationService.mjs";
 import { createSessionProvisioningService } from "./multiplayer/sessionProvisioningService.mjs";
 import { createSessionMembershipService } from "./multiplayer/sessionMembershipService.mjs";
+import { createSessionRehydrateService } from "./multiplayer/sessionRehydrateService.mjs";
 import { createBotEngine } from "./bot/engine.mjs";
 import { createSessionTurnEngine } from "./engine/sessionTurnEngine.mjs";
 import { createSessionLifecycleEngine } from "./engine/sessionLifecycleEngine.mjs";
@@ -593,6 +594,12 @@ const {
   sendSocketError,
   safeCloseSocket,
 } = socketOrchestration;
+const sessionRehydrateService = createSessionRehydrateService({
+  getStore: () => store,
+  rehydrateStoreFromAdapter,
+});
+const { rehydrateSessionWithRetry, rehydrateSessionParticipantWithRetry } =
+  sessionRehydrateService;
 const sessionControlService = createSessionControlService({
   getStore: () => store,
   gameDifficulties: GAME_DIFFICULTIES,
@@ -1990,90 +1997,6 @@ async function handleRefreshSessionAuth(req, res, pathname) {
     body,
   });
   sendJson(res, refreshResult.status, refreshResult.payload);
-}
-
-async function rehydrateSessionWithRetry(sessionId, reasonPrefix, options = {}) {
-  const normalizedSessionId =
-    typeof sessionId === "string" ? sessionId.trim() : "";
-  if (!normalizedSessionId) {
-    return null;
-  }
-  const attempts = Number.isFinite(options.attempts)
-    ? Math.max(1, Math.floor(options.attempts))
-    : 3;
-  const baseDelayMs = Number.isFinite(options.baseDelayMs)
-    ? Math.max(0, Math.floor(options.baseDelayMs))
-    : 100;
-
-  let session = store.multiplayerSessions[normalizedSessionId] ?? null;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (session) {
-      return session;
-    }
-    if (attempt > 0 && baseDelayMs > 0) {
-      await delayMs(baseDelayMs * attempt);
-    }
-    await rehydrateStoreFromAdapter(`${reasonPrefix}:${normalizedSessionId}:attempt_${attempt + 1}`, {
-      force: true,
-    });
-    session = store.multiplayerSessions[normalizedSessionId] ?? null;
-  }
-  return session;
-}
-
-async function rehydrateSessionParticipantWithRetry(sessionId, playerId, reasonPrefix, options = {}) {
-  const normalizedSessionId =
-    typeof sessionId === "string" ? sessionId.trim() : "";
-  const normalizedPlayerId =
-    typeof playerId === "string" ? playerId.trim() : "";
-  if (!normalizedSessionId || !normalizedPlayerId) {
-    return {
-      session: null,
-      participant: null,
-    };
-  }
-  const attempts = Number.isFinite(options.attempts)
-    ? Math.max(1, Math.floor(options.attempts))
-    : 3;
-  const baseDelayMs = Number.isFinite(options.baseDelayMs)
-    ? Math.max(0, Math.floor(options.baseDelayMs))
-    : 100;
-
-  let session = store.multiplayerSessions[normalizedSessionId] ?? null;
-  let participant = session?.participants?.[normalizedPlayerId] ?? null;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (session && participant) {
-      return {
-        session,
-        participant,
-      };
-    }
-    if (attempt > 0 && baseDelayMs > 0) {
-      await delayMs(baseDelayMs * attempt);
-    }
-    await rehydrateStoreFromAdapter(
-      `${reasonPrefix}:${normalizedSessionId}:${normalizedPlayerId}:attempt_${attempt + 1}`,
-      { force: true }
-    );
-    session = store.multiplayerSessions[normalizedSessionId] ?? null;
-    participant = session?.participants?.[normalizedPlayerId] ?? null;
-  }
-  return {
-    session,
-    participant,
-  };
-}
-
-async function delayMs(durationMs) {
-  const delay = Number.isFinite(durationMs)
-    ? Math.max(0, Math.floor(durationMs))
-    : 0;
-  if (delay <= 0) {
-    return;
-  }
-  await new Promise((resolve) => {
-    setTimeout(resolve, delay);
-  });
 }
 
 async function handleAdminOverview(req, res, url) {

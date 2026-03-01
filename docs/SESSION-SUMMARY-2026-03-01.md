@@ -167,6 +167,15 @@
 - Added focused regression coverage for extracted membership/removal flow:
   - `api/multiplayer/sessionMembershipService.test.mjs`
 
+### Phase 08 - Multiplayer Rehydrate/Retry Resilience Boundaries (Checkpoint)
+- Extracted multiplayer session rehydrate/retry helper orchestration from `api/server.mjs` into:
+  - `api/multiplayer/sessionRehydrateService.mjs`
+- Delegated recovery helper flows to the extracted service while preserving route contracts:
+  - `rehydrateSessionWithRetry`
+  - `rehydrateSessionParticipantWithRetry`
+- Added focused regression coverage for extracted rehydrate/retry helper behavior:
+  - `api/multiplayer/sessionRehydrateService.test.mjs`
+
 ---
 
 ## Validation Snapshot
@@ -193,6 +202,7 @@
 - `cd api && npm run test:admin-mutations` passes.
 - `cd api && npm run test:admin-services` passes.
 - `cd api && npm run test:multiplayer-session-control` passes.
+- `cd api && npm run test:multiplayer-session-rehydrate` passes.
 - `cd api && npm run test:multiplayer-session-membership` passes.
 - `cd api && npm run test:multiplayer-session-mutations` passes.
 - `cd api && npm run test:multiplayer-session-provisioning` passes.
@@ -233,6 +243,6 @@
 
 ## Next Phase Candidate
 
-1. Phase 08 candidate: extract multiplayer rehydrate/retry resilience helpers (`rehydrateSessionWithRetry`, `rehydrateSessionParticipantWithRetry`, delay/backoff policy) into a dedicated multiplayer service module used by route services.
+1. Phase 08 follow-through candidate: align remaining distributed session-recovery call sites to shared backoff policy and add focused integration coverage for Cloud Run transient recovery edge cases.
 2. Add a lightweight deploy-gate checklist section to incremental phase session summaries (`node --check api/server.mjs`, `npm run test:storage-auth-adapters`, `npm run test:ws-transport`, phase-specific service tests).
 3. Add targeted integration-level admin + multiplayer route tests now that phase-07 extraction has stabilized, while keeping CI runtime bounded.

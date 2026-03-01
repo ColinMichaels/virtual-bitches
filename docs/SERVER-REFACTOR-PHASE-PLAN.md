@@ -175,12 +175,12 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
 ## Phase 08 - Multiplayer Rehydrate/Retry Resilience Boundaries
 - Extract session rehydrate/retry helper orchestration from `server.mjs` into dedicated multiplayer resilience service modules.
 - Keep auth/session recovery behavior stable for distributed Cloud Run flows.
-- Candidate extraction targets:
-  - `rehydrateSessionWithRetry`
-  - `rehydrateSessionParticipantWithRetry`
-  - shared delay/backoff policy helpers
-- Validation target:
-  - focused resilience service unit tests + existing `test:multiplayer-services` regression coverage
+- Status: ✅ In progress checkpoint landed
+- Delivered in branch:
+  - `api/multiplayer/sessionRehydrateService.mjs`
+  - `api/server.mjs` delegates multiplayer session rehydrate/retry helpers (`rehydrateSessionWithRetry`, `rehydrateSessionParticipantWithRetry`) to extracted rehydrate service
+  - `api/multiplayer/sessionRehydrateService.test.mjs`
+  - `api/package.json` includes `test:multiplayer-session-rehydrate` and extends `test:multiplayer-services` coverage
 
 ## Guardrails
 

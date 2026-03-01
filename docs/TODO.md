@@ -26,7 +26,9 @@ Reference docs:
   - [x] Phase 07 follow-through: extract remaining multiplayer session mutation orchestration (`participant-state`, demo controls, moderation/leave) into service boundaries.
   - [x] Phase 07 follow-through: extract multiplayer room provisioning/list orchestration (`create-session`, `list-rooms`) into service boundaries.
   - [x] Phase 07 follow-through: extract shared multiplayer session membership orchestration (`removeParticipantFromSession`) into a dedicated service used by route/admin/socket flows.
+  - [x] Phase 08 checkpoint: extract multiplayer session rehydrate/retry resilience helpers into a dedicated service boundary.
   - [x] Add a lightweight deploy gate checklist section to session summary notes for each phase checkpoint (`node --check api/server.mjs`, `npm run test:storage-auth-adapters`, `npm run test:ws-transport`).
+  - [ ] Phase 08 follow-through: evaluate remaining distributed session-recovery call sites for shared backoff policy alignment and add focused integration coverage for recovery edge cases.
 
 ### Branding + I18N Overhaul (2026-02-27)
 - **Status**: 🟡 In Progress
