@@ -7,6 +7,7 @@ import { logger } from "./logger.mjs";
 import { createStoreAdapter, DEFAULT_STORE } from "./storage/index.mjs";
 import { cloneStore } from "./storage/defaultStore.mjs";
 import { createBotEngine } from "./bot/engine.mjs";
+import { dispatchApiRoute } from "./http/routeDispatcher.mjs";
 import {
   buildChatConductWarning,
   createChatConductPolicy,
@@ -627,6 +628,47 @@ async function ensureBootstrapReadyForRequest() {
   return bootstrapReady;
 }
 
+const API_ROUTE_HANDLERS = Object.freeze({
+  imageProxy: handleImageProxy,
+  adminOverview: handleAdminOverview,
+  adminRooms: handleAdminRooms,
+  adminMetrics: handleAdminMetrics,
+  adminStorage: handleAdminStorage,
+  adminModerationTermsOverview: handleAdminModerationTermsOverview,
+  adminUpsertModerationTerm: handleAdminUpsertModerationTerm,
+  adminRemoveModerationTerm: handleAdminRemoveModerationTerm,
+  adminRefreshModerationTerms: handleAdminRefreshModerationTerms,
+  adminAudit: handleAdminAudit,
+  adminRoles: handleAdminRoles,
+  adminRoleUpsert: handleAdminRoleUpsert,
+  adminExpireSession: handleAdminExpireSession,
+  adminRemoveParticipant: handleAdminRemoveParticipant,
+  adminSessionChannelMessage: handleAdminSessionChannelMessage,
+  adminSessionConductState: handleAdminSessionConductState,
+  adminSessionConductPlayer: handleAdminSessionConductPlayer,
+  adminClearSessionConductPlayer: handleAdminClearSessionConductPlayer,
+  adminClearSessionConductState: handleAdminClearSessionConductState,
+  refreshToken: handleRefreshToken,
+  authMe: handleAuthMe,
+  getProfile: handleGetProfile,
+  putProfile: handlePutProfile,
+  getPlayerScores: handleGetPlayerScores,
+  appendPlayerScores: handleAppendPlayerScores,
+  appendLogs: handleAppendLogs,
+  submitLeaderboardScore: handleSubmitLeaderboardScore,
+  getGlobalLeaderboard: handleGetGlobalLeaderboard,
+  createSession: handleCreateSession,
+  listRooms: handleListRooms,
+  joinRoomByCode: handleJoinRoomByCode,
+  joinSession: handleJoinSession,
+  sessionHeartbeat: handleSessionHeartbeat,
+  updateParticipantState: handleUpdateParticipantState,
+  moderateSessionParticipant: handleModerateSessionParticipant,
+  queueParticipantForNextGame: handleQueueParticipantForNextGame,
+  leaveSession: handleLeaveSession,
+  refreshSessionAuth: handleRefreshSessionAuth,
+});
+
 async function handleRequest(req, res) {
   setCorsHeaders(res);
   if (req.method === "OPTIONS") {
@@ -744,206 +786,16 @@ async function handleRequest(req, res) {
     }
 
     cleanupExpiredRecords();
-
-    if (req.method === "GET" && pathname === "/api/media/image-proxy") {
-      await handleImageProxy(req, res, url);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/overview") {
-      await handleAdminOverview(req, res, url);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/rooms") {
-      await handleAdminRooms(req, res, url);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/metrics") {
-      await handleAdminMetrics(req, res);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/storage") {
-      await handleAdminStorage(req, res);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/moderation/terms") {
-      await handleAdminModerationTermsOverview(req, res, url);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/admin/moderation/terms/upsert") {
-      await handleAdminUpsertModerationTerm(req, res);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/admin/moderation/terms/remove") {
-      await handleAdminRemoveModerationTerm(req, res);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/admin/moderation/terms/refresh") {
-      await handleAdminRefreshModerationTerms(req, res);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/audit") {
-      await handleAdminAudit(req, res, url);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/roles") {
-      await handleAdminRoles(req, res, url);
-      return;
-    }
-
-    if (req.method === "PUT" && /^\/api\/admin\/roles\/[^/]+$/.test(pathname)) {
-      await handleAdminRoleUpsert(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/admin\/sessions\/[^/]+\/expire$/.test(pathname)) {
-      await handleAdminExpireSession(req, res, pathname);
-      return;
-    }
-
-    if (
-      req.method === "POST" &&
-      /^\/api\/admin\/sessions\/[^/]+\/participants\/[^/]+\/remove$/.test(pathname)
-    ) {
-      await handleAdminRemoveParticipant(req, res, pathname);
-      return;
-    }
-
-    if (
-      req.method === "POST" &&
-      /^\/api\/admin\/sessions\/[^/]+\/channel\/messages$/.test(pathname)
-    ) {
-      await handleAdminSessionChannelMessage(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "GET" && /^\/api\/admin\/sessions\/[^/]+\/conduct$/.test(pathname)) {
-      await handleAdminSessionConductState(req, res, pathname, url);
-      return;
-    }
-
-    if (
-      req.method === "GET" &&
-      /^\/api\/admin\/sessions\/[^/]+\/conduct\/players\/[^/]+$/.test(pathname)
-    ) {
-      await handleAdminSessionConductPlayer(req, res, pathname);
-      return;
-    }
-
-    if (
-      req.method === "POST" &&
-      /^\/api\/admin\/sessions\/[^/]+\/conduct\/players\/[^/]+\/clear$/.test(pathname)
-    ) {
-      await handleAdminClearSessionConductPlayer(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/admin\/sessions\/[^/]+\/conduct\/clear$/.test(pathname)) {
-      await handleAdminClearSessionConductState(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/auth/token/refresh") {
-      await handleRefreshToken(req, res);
-      return;
-    }
-
-    if ((req.method === "GET" || req.method === "PUT") && pathname === "/api/auth/me") {
-      await handleAuthMe(req, res);
-      return;
-    }
-
-    if (req.method === "GET" && /^\/api\/players\/[^/]+\/profile$/.test(pathname)) {
-      await handleGetProfile(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "PUT" && /^\/api\/players\/[^/]+\/profile$/.test(pathname)) {
-      await handlePutProfile(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "GET" && /^\/api\/players\/[^/]+\/scores$/.test(pathname)) {
-      await handleGetPlayerScores(req, res, pathname, url);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/players\/[^/]+\/scores\/batch$/.test(pathname)) {
-      await handleAppendPlayerScores(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/logs/batch") {
-      await handleAppendLogs(req, res);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/leaderboard/scores") {
-      await handleSubmitLeaderboardScore(req, res);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/leaderboard/global") {
-      await handleGetGlobalLeaderboard(res, url);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/multiplayer/sessions") {
-      await handleCreateSession(req, res);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/multiplayer/rooms") {
-      await handleListRooms(res, url);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/rooms\/[^/]+\/join$/.test(pathname)) {
-      await handleJoinRoomByCode(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/join$/.test(pathname)) {
-      await handleJoinSession(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/heartbeat$/.test(pathname)) {
-      await handleSessionHeartbeat(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/participant-state$/.test(pathname)) {
-      await handleUpdateParticipantState(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/moderate$/.test(pathname)) {
-      await handleModerateSessionParticipant(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/queue-next$/.test(pathname)) {
-      await handleQueueParticipantForNextGame(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/leave$/.test(pathname)) {
-      await handleLeaveSession(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/auth\/refresh$/.test(pathname)) {
-      await handleRefreshSessionAuth(req, res, pathname);
+    const handled = await dispatchApiRoute(
+      {
+        req,
+        res,
+        url,
+        pathname,
+      },
+      API_ROUTE_HANDLERS
+    );
+    if (handled) {
       return;
     }
 

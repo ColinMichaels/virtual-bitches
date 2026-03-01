@@ -1,6 +1,6 @@
 # BISCUITS - Session Summary
 **Date:** March 1, 2026  
-**Focus:** Unified game config contract follow-through (server + client wiring), baseline checkpoint before server modularization phases
+**Focus:** Unified game config contract follow-through and Phase 01 server routing extraction checkpoint
 
 ---
 
@@ -25,6 +25,14 @@
 - Updated backend API docs to reflect actual legacy-vs-config precedence.
 - Documented that session create/join responses now include derived `gameConfig` snapshots.
 
+### Phase 01 - Routing Extraction (Incremental Refactor)
+- Extracted API route matching/dispatch out of `api/server.mjs` into:
+  - `api/http/routeDispatcher.mjs`
+- Replaced the long in-function endpoint if/else chain with:
+  - a centralized immutable route handler map in `server.mjs`
+  - a single dispatch call to the extracted route module
+- Preserved existing handler contracts and request/response behavior.
+
 ---
 
 ## Validation Snapshot
@@ -33,6 +41,7 @@
 - `npm run test:game-config` passes.
 - `npm run test:backend-api` passes.
 - `node --check api/server.mjs` passes.
+- `node --check api/http/routeDispatcher.mjs` passes.
 - `npm run build` passes.
 
 ### Notes
@@ -44,6 +53,8 @@
 
 - Created incremental phase branch for this checkpoint:
   - `feature/server-phase-00-game-config-baseline`
+- Created Phase 01 branch for routing extraction:
+  - `feature/server-phase-01-routing-extraction`
 - Added dedicated phase plan in:
   - `docs/SERVER-REFACTOR-PHASE-PLAN.md`
 
@@ -51,6 +62,6 @@
 
 ## Next Phase Candidate
 
-1. Phase 01: Extract route handlers and HTTP/WS composition scaffolding out of `api/server.mjs` without changing runtime behavior.
-2. Phase 02: Introduce plugin/filter registry with fail-open degradation policy for non-core addons.
-3. Phase 03: Move moderation/chat conduct and optional systems behind decoupled adapters.
+1. Phase 02: Extract engine/session orchestration boundaries from transport concerns (HTTP/WS) into dedicated modules.
+2. Phase 03: Introduce plugin/filter registry with fail-open degradation policy for non-core addons.
+3. Phase 04: Move moderation/chat conduct and optional systems behind decoupled adapters.
