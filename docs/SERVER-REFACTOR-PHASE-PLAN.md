@@ -118,6 +118,13 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
 - Formalize repositories/adapters for storage and auth providers.
 - Keep core engine adapter-agnostic.
 - Add focused resilience tests for external provider failure paths.
+- Status: ✅ In progress checkpoint landed (`feature/server-phase-05-storage-auth-adapters`)
+- Delivered in branch:
+  - `api/auth/tokenAuthAdapter.mjs`
+  - `api/server.mjs` delegates access/refresh token issue+verify+revoke and bearer parsing to extracted auth adapter
+  - `api/auth/tokenAuthAdapter.test.mjs`
+  - `api/storage/fileStore.test.mjs`
+  - `api/package.json` includes `test:storage-auth-adapters`
 
 ## Guardrails
 

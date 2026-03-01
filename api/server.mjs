@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { randomBytes, randomInt, randomUUID, createHash } from "node:crypto";
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { isIP } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,6 +27,7 @@ import {
 } from "./filters/directMessageBlockRelationshipFilter.mjs";
 import { dispatchApiRoute } from "./http/routeDispatcher.mjs";
 import { createApiRouteHandlers } from "./http/routeHandlers.mjs";
+import { createTokenAuthAdapter } from "./auth/tokenAuthAdapter.mjs";
 import {
   completeSocketHandshake,
   DEFAULT_MAX_WS_MESSAGE_BYTES,
@@ -419,6 +420,19 @@ const WS_CLOSE_CODES = {
 
 let store = structuredClone(DEFAULT_STORE);
 const firebaseTokenCache = new Map();
+const tokenAuthAdapter = createTokenAuthAdapter({
+  getStore: () => store,
+  accessTokenTtlMs: ACCESS_TOKEN_TTL_MS,
+  refreshTokenTtlMs: REFRESH_TOKEN_TTL_MS,
+  now: () => Date.now(),
+});
+const {
+  issueAuthTokenBundle,
+  verifyAccessToken,
+  verifyRefreshToken,
+  revokeRefreshToken,
+  extractBearerToken,
+} = tokenAuthAdapter;
 let storeAdapter = null;
 let firebaseAdminAuthClientPromise = null;
 let storeRehydratePromise = null;
@@ -1199,7 +1213,7 @@ async function handleRefreshToken(req, res) {
     return;
   }
 
-  delete store.refreshTokens[hashToken(refreshToken)];
+  revokeRefreshToken(refreshToken);
   const tokens = issueAuthTokenBundle(refreshRecord.playerId, refreshRecord.sessionId);
   await persistStore();
   sendJson(res, 200, {
@@ -4836,65 +4850,8 @@ function normalizeReason(message) {
     .slice(0, 80);
 }
 
-function issueAuthTokenBundle(playerId, sessionId) {
-  const now = Date.now();
-  const accessToken = randomToken();
-  const refreshToken = randomToken();
-  const accessRecord = {
-    playerId,
-    sessionId,
-    expiresAt: now + ACCESS_TOKEN_TTL_MS,
-    issuedAt: now,
-  };
-  const refreshRecord = {
-    playerId,
-    sessionId,
-    expiresAt: now + REFRESH_TOKEN_TTL_MS,
-    issuedAt: now,
-  };
-
-  store.accessTokens[hashToken(accessToken)] = accessRecord;
-  store.refreshTokens[hashToken(refreshToken)] = refreshRecord;
-
-  return {
-    accessToken,
-    refreshToken,
-    expiresAt: accessRecord.expiresAt,
-    tokenType: "Bearer",
-  };
-}
-
-function verifyAccessToken(token) {
-  const record = store.accessTokens[hashToken(token)];
-  if (!record) return null;
-  if (record.expiresAt <= Date.now()) {
-    delete store.accessTokens[hashToken(token)];
-    return null;
-  }
-  return record;
-}
-
-function verifyRefreshToken(token) {
-  const record = store.refreshTokens[hashToken(token)];
-  if (!record) return null;
-  if (record.expiresAt <= Date.now()) {
-    delete store.refreshTokens[hashToken(token)];
-    return null;
-  }
-  return record;
-}
-
-function extractBearerToken(header) {
-  const match = /^Bearer\s+(.+)$/i.exec(header);
-  return match ? match[1].trim() : "";
-}
-
 function randomToken() {
   return randomBytes(24).toString("base64url");
-}
-
-function hashToken(value) {
-  return createHash("sha256").update(value).digest("hex");
 }
 
 function buildSessionResponse(session, playerId, auth) {
