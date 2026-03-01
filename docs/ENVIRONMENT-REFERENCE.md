@@ -164,6 +164,7 @@ Optional but recommended:
 | `E2E_TIMEOUT_STRIKE_POLL_INTERVAL_MS` | integer ms like `250` | Timeout-strike polling cadence |
 | `E2E_TIMEOUT_STRIKE_HEARTBEAT_INTERVAL_MS` | integer ms like `5000` | Timeout-strike heartbeat cadence while waiting for turn expiry |
 | `E2E_FAIL_ON_TRANSIENT_QUEUE_SESSION_EXPIRED` | `0` or `1` | Fail hard when queue lifecycle hits repeated transient `session_expired` (`0` default marks inconclusive) |
+| `E2E_FAIL_ON_TRANSIENT_DEMO_AUTORUN_SESSION_EXPIRED` | `0` or `1` | Fail hard when demo auto-run smoke hits repeated transient `session_expired` (`0` default marks inconclusive) |
 | `E2E_FAIL_ON_TRANSIENT_TIMEOUT_STRIKE_SESSION_EXPIRED` | `0` or `1` | Fail hard when timeout-strike smoke hits repeated transient `session_expired` (`0` default marks inconclusive) |
 | `E2E_ASSERT_ADMIN_MONITOR` | `0` or `1` | Toggle admin monitor smoke segment (overview/rooms/metrics/audit/roles + admin mutations) |
 | `E2E_ASSERT_ADMIN_MODERATION_TERMS` | `0` or `1` | Toggle admin moderation-term smoke segment (`/api/admin/moderation/terms*`) |

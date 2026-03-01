@@ -296,6 +296,7 @@ Notes:
 - distributed Cloud Run runs can surface repeated transient `session_expired`; smoke marks timeout-strike as inconclusive by default after retry.
 - set `E2E_FAIL_ON_TRANSIENT_TIMEOUT_STRIKE_SESSION_EXPIRED=1` to fail hard on that transient path.
 - set `E2E_FAIL_ON_TRANSIENT_QUEUE_SESSION_EXPIRED=1` to fail hard for the queue lifecycle inconclusive path.
+- set `E2E_FAIL_ON_TRANSIENT_DEMO_AUTORUN_SESSION_EXPIRED=1` to fail hard for demo auto-run repeated transient `session_expired`.
 
 Baseline smoke also validates:
 - player score batch write + read-back sync (`/players/:playerId/scores/batch` + `/players/:playerId/scores`)
