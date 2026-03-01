@@ -1,6 +1,7 @@
 import { logger } from "../utils/logger.js";
 import { environment } from "@env";
 import type { CameraAttackMessage } from "../chaos/types.js";
+import type { UnifiedGameCreateConfig } from "../gameplay/gameConfig.js";
 import type { ParticleNetworkEvent } from "../services/particleService.js";
 
 const log = logger.create("MultiplayerNetwork");
@@ -240,6 +241,10 @@ export interface MultiplayerSessionStateMessage {
   sessionId: string;
   roomCode: string;
   gameDifficulty?: MultiplayerGameDifficulty;
+  gameConfig?: UnifiedGameCreateConfig;
+  demoMode?: boolean;
+  demoAutoRun?: boolean;
+  demoSpeedMode?: boolean;
   ownerPlayerId?: string;
   participants: MultiplayerSessionStateParticipant[];
   standings?: MultiplayerSessionStateStanding[];

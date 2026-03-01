@@ -254,6 +254,77 @@ await test("tracks room_full join failure reason", async () => {
   }
 });
 
+await test("passes unified gameConfig through create-session options", async () => {
+  const service = new MultiplayerSessionService("player-alpha");
+  const originalCreate = backendApiService.createMultiplayerSession.bind(backendApiService);
+  const capturedRequests: Array<{
+    playerId: string;
+    gameConfig?: {
+      mode?: string;
+      automation?: {
+        autoRun?: boolean;
+      };
+    };
+  }> = [];
+
+  (
+    backendApiService as {
+      createMultiplayerSession: typeof backendApiService.createMultiplayerSession;
+    }
+  ).createMultiplayerSession = async (request) => {
+    capturedRequests.push({
+      playerId: request.playerId,
+      gameConfig: request.gameConfig,
+    });
+    return createSession({
+      sessionId: "session-create-config",
+      roomCode: "CFG001",
+    });
+  };
+
+  try {
+    const created = await service.createSession({
+      gameDifficulty: "hard",
+      botCount: 3,
+      gameConfig: {
+        mode: "demo",
+        difficulty: "hard",
+        timingProfile: "demo_fast",
+        capabilities: {
+          chaos: false,
+          gifting: false,
+          moderation: true,
+          banning: true,
+          hostControls: true,
+          privateChat: true,
+        },
+        automation: {
+          enabled: true,
+          autoRun: true,
+          botCount: 3,
+          speedMode: "fast",
+        },
+      },
+    });
+    assert(created !== null, "Expected create-session success");
+    assertEqual(capturedRequests.length, 1, "Expected one create-session request");
+    assertEqual(capturedRequests[0]?.playerId, "player-alpha", "Expected player id passthrough");
+    assertEqual(capturedRequests[0]?.gameConfig?.mode, "demo", "Expected gameConfig mode passthrough");
+    assertEqual(
+      capturedRequests[0]?.gameConfig?.automation?.autoRun,
+      true,
+      "Expected gameConfig automation.autoRun passthrough"
+    );
+  } finally {
+    service.dispose();
+    (
+      backendApiService as {
+        createMultiplayerSession: typeof backendApiService.createMultiplayerSession;
+      }
+    ).createMultiplayerSession = originalCreate;
+  }
+});
+
 await test("passes botCount through join options for bot seeding", async () => {
   const service = new MultiplayerSessionService("player-alpha");
   const originalJoin = backendApiService.joinMultiplayerSession.bind(backendApiService);
@@ -574,6 +645,66 @@ await test("queueForNextGame expires active session when API reports session_exp
     ).queueMultiplayerForNextGame = originalQueue;
     (authSessionService as { clear: typeof authSessionService.clear }).clear = originalAuthClear;
     documentShim.restore();
+  }
+});
+
+await test("updateDemoControls syncs host demo session flags", async () => {
+  const service = new MultiplayerSessionService("player-alpha");
+  const originalJoin = backendApiService.joinMultiplayerSession.bind(backendApiService);
+  const originalDemoControls =
+    backendApiService.updateMultiplayerDemoControls.bind(backendApiService);
+
+  (backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession })
+    .joinMultiplayerSession = async () => ({
+      session: createSession({
+        sessionId: "session-demo-controls",
+        roomCode: "DEMO42",
+        demoMode: true,
+        demoAutoRun: true,
+        demoSpeedMode: true,
+        ownerPlayerId: "player-alpha",
+      }),
+    });
+  (
+    backendApiService as {
+      updateMultiplayerDemoControls: typeof backendApiService.updateMultiplayerDemoControls;
+    }
+  ).updateMultiplayerDemoControls = async () => ({
+    ok: true,
+    controls: {
+      demoMode: true,
+      demoAutoRun: false,
+      demoSpeedMode: false,
+    },
+    session: createSession({
+      sessionId: "session-demo-controls",
+      roomCode: "DEMO42",
+      demoMode: true,
+      demoAutoRun: false,
+      demoSpeedMode: false,
+      ownerPlayerId: "player-alpha",
+    }),
+  });
+
+  try {
+    const joined = await service.joinSession("session-demo-controls");
+    assert(joined !== null, "Expected joined demo session");
+
+    const updated = await service.updateDemoControls("pause");
+    assert(updated !== null, "Expected updated demo session");
+    assertEqual(updated?.demoMode, true, "Expected demoMode=true");
+    assertEqual(updated?.demoAutoRun, false, "Expected demoAutoRun=false after pause");
+    assertEqual(updated?.demoSpeedMode, false, "Expected demoSpeedMode=false after response sync");
+  } finally {
+    service.dispose();
+    (
+      backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession }
+    ).joinMultiplayerSession = originalJoin;
+    (
+      backendApiService as {
+        updateMultiplayerDemoControls: typeof backendApiService.updateMultiplayerDemoControls;
+      }
+    ).updateMultiplayerDemoControls = originalDemoControls;
   }
 });
 

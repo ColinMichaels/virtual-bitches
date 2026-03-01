@@ -145,7 +145,15 @@ Planned (not implemented yet):
   - `participants[]` snapshot (`playerId`, `displayName`, optional `avatarUrl`, optional `providerId`, `isBot`, `joinedAt`, `lastHeartbeatAt`)
   - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `phase`, `activeRollServerId`, optional `activeRoll`, `updatedAt`)
 - `POST /api/multiplayer/sessions` accepts optional `displayName`, `avatarUrl`, `providerId`, and `botCount` (`0..4`) to seed the local participant profile and bot seats.
+- `POST /api/multiplayer/sessions` also accepts optional `gameConfig` for unified mode/timing/capability automation input:
+  - `mode`: `solo` | `multiplayer` | `demo` (this endpoint normalizes `solo` -> `multiplayer`)
+  - `difficulty`: `easy` | `normal` | `hard`
+  - `timingProfile`: `standard` | `demo_fast` | `test_fast`
+  - `capabilities`: `{ chaos, gifting, moderation, banning, hostControls, privateChat }`
+  - `automation`: `{ enabled, autoRun, botCount, speedMode }` where `speedMode` is `normal` | `fast`
+  - Legacy fields (`botCount`, `gameDifficulty`, `demoSpeedMode`) remain supported and are used as fallbacks.
 - `POST /api/multiplayer/sessions/:sessionId/join` and `POST /api/multiplayer/rooms/:roomCode/join` accept optional `displayName`, `avatarUrl`, `providerId`, and `botCount` (`0..4`) to update joining participant profile data and seed bots into an existing room.
+- Join endpoints also accept optional `gameConfig`; currently its `difficulty` and `automation.botCount` are used as normalized fallbacks for legacy join payload fields.
 - Join can return `room_banned` when the player has been room-banned by the room owner/admin.
 - Multiplayer mutation endpoints now require a valid session bearer token:
   - `POST /api/multiplayer/sessions/:sessionId/heartbeat`

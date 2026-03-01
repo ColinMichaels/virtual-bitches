@@ -232,14 +232,48 @@ await test("passes botCount and difficulty in multiplayer session create payload
     playerId: "player-1",
     botCount: 2,
     gameDifficulty: "hard",
+    gameConfig: {
+      mode: "demo",
+      difficulty: "hard",
+      timingProfile: "demo_fast",
+      capabilities: {
+        chaos: false,
+        gifting: false,
+        moderation: true,
+        banning: true,
+        hostControls: true,
+        privateChat: true,
+      },
+      automation: {
+        enabled: true,
+        autoRun: true,
+        botCount: 2,
+        speedMode: "fast",
+      },
+    },
   });
 
   assert(result !== null, "Expected create session response");
   assertEqual(fetchCalls.length, 1, "Expected one fetch call");
   const rawBody = String(fetchCalls[0].init?.body ?? "");
-  const parsedBody = JSON.parse(rawBody) as { botCount?: number; gameDifficulty?: string };
+  const parsedBody = JSON.parse(rawBody) as {
+    botCount?: number;
+    gameDifficulty?: string;
+    gameConfig?: {
+      mode?: string;
+      automation?: {
+        autoRun?: boolean;
+      };
+    };
+  };
   assertEqual(parsedBody.botCount, 2, "Expected botCount in request payload");
   assertEqual(parsedBody.gameDifficulty, "hard", "Expected gameDifficulty in request payload");
+  assertEqual(parsedBody.gameConfig?.mode, "demo", "Expected gameConfig mode in request payload");
+  assertEqual(
+    parsedBody.gameConfig?.automation?.autoRun,
+    true,
+    "Expected gameConfig automation.autoRun in request payload"
+  );
 });
 
 await test("lists multiplayer rooms with bounded limit", async () => {
@@ -353,6 +387,81 @@ await test("updates multiplayer participant seat/ready state", async () => {
   };
   assertEqual(body.playerId, "player-alpha", "Expected participant-state player id");
   assertEqual(body.action, "ready", "Expected participant-state action");
+});
+
+await test("updates multiplayer demo controls for host-owned demo room", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    jsonResponse({
+      ok: true,
+      controls: {
+        demoMode: true,
+        demoAutoRun: false,
+        demoSpeedMode: true,
+      },
+      session: {
+        sessionId: "session-demo",
+        roomCode: "DEMO42",
+        demoMode: true,
+        demoAutoRun: false,
+        demoSpeedMode: true,
+        createdAt: Date.now(),
+      },
+    });
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.updateMultiplayerDemoControls(
+    "session/demo",
+    "player-alpha",
+    "pause"
+  );
+  assert(result !== null, "Expected demo-control response");
+  assertEqual(result?.ok, true, "Expected demo-control success");
+  assertEqual(fetchCalls.length, 1, "Expected one demo-control call");
+  assertEqual(
+    fetchCalls[0].url,
+    "https://api.example.com/api/multiplayer/sessions/session%2Fdemo/demo-controls",
+    "Expected encoded demo-controls endpoint"
+  );
+  const body = JSON.parse(String(fetchCalls[0].init?.body ?? "{}")) as {
+    playerId?: string;
+    action?: string;
+  };
+  assertEqual(body.playerId, "player-alpha", "Expected demo-control player id");
+  assertEqual(body.action, "pause", "Expected demo-control action");
+});
+
+await test("returns typed reason when demo-controls request is rejected", async () => {
+  authSessionService.clear();
+  fetchCalls.length = 0;
+  fetchResponder = () =>
+    jsonResponse(
+      {
+        error: "Unknown player",
+        reason: "unknown_player",
+      },
+      404
+    );
+
+  const api = new BackendApiService({
+    baseUrl: "https://api.example.com/api",
+    fetchImpl: mockFetch,
+  });
+
+  const result = await api.updateMultiplayerDemoControls(
+    "session-demo",
+    "player-alpha",
+    "resume"
+  );
+  assert(result !== null, "Expected demo-control failure payload");
+  assertEqual(result?.ok, false, "Expected demo-control failure");
+  assertEqual(result?.reason, "unknown_player", "Expected unknown_player reason");
+  assertEqual(result?.status, 404, "Expected 404 status");
 });
 
 await test("returns typed room_full reason when multiplayer join is rejected", async () => {

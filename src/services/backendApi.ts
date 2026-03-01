@@ -2,6 +2,7 @@ import { environment } from "@env";
 import { logger } from "../utils/logger.js";
 import type { Settings } from "./settings.js";
 import type { UpgradeProgressionState } from "../chaos/upgrades/types.js";
+import type { UnifiedGameCreateConfig } from "../gameplay/gameConfig.js";
 import { authSessionService, type AuthTokenBundle } from "./authSession.js";
 
 const log = logger.create("BackendApi");
@@ -136,6 +137,9 @@ export interface MultiplayerSessionRecord {
   sessionId: string;
   roomCode: string;
   gameDifficulty?: MultiplayerGameDifficulty;
+  gameConfig?: UnifiedGameCreateConfig;
+  demoMode?: boolean;
+  demoAutoRun?: boolean;
   demoSpeedMode?: boolean;
   ownerPlayerId?: string;
   roomType?: "private" | "public_default" | "public_overflow";
@@ -178,6 +182,28 @@ export interface MultiplayerRoomListing {
   sessionComplete: boolean;
 }
 
+export interface MultiplayerDemoControlResponse {
+  ok: boolean;
+  reason?:
+    | "session_expired"
+    | "unknown_player"
+    | "unauthorized"
+    | "not_room_owner"
+    | "room_not_private"
+    | "demo_mode_disabled"
+    | "invalid_action"
+    | "invalid_session_id"
+    | "invalid_player_id"
+    | "unknown";
+  status?: number;
+  controls?: {
+    demoMode: boolean;
+    demoAutoRun: boolean;
+    demoSpeedMode: boolean;
+  };
+  session?: MultiplayerSessionRecord;
+}
+
 export interface CreateMultiplayerSessionRequest {
   playerId: string;
   roomCode?: string;
@@ -188,6 +214,7 @@ export interface CreateMultiplayerSessionRequest {
   botCount?: number;
   gameDifficulty?: MultiplayerGameDifficulty;
   demoSpeedMode?: boolean;
+  gameConfig?: UnifiedGameCreateConfig;
 }
 
 export interface JoinMultiplayerSessionRequest {
@@ -487,6 +514,52 @@ export class BackendApiService {
         body: { playerId, action },
       }
     );
+  }
+
+  async updateMultiplayerDemoControls(
+    sessionId: string,
+    playerId: string,
+    action: "pause" | "resume" | "speed_normal" | "speed_fast"
+  ): Promise<MultiplayerDemoControlResponse | null> {
+    const path = `/multiplayer/sessions/${encodeURIComponent(sessionId)}/demo-controls`;
+    const requestOptions = {
+      method: "POST",
+      body: { playerId, action },
+    };
+    const firstResponse = await this.executeRequest(path, requestOptions, "session");
+    if (!firstResponse) {
+      return {
+        ok: false,
+        reason: "unknown",
+      };
+    }
+
+    if (firstResponse.status === 401) {
+      const refreshed = await authSessionService.refreshTokens({
+        baseUrl: this.baseUrl,
+        fetchImpl: this.fetchImpl,
+        timeoutMs: this.timeoutMs,
+      });
+      if (!refreshed) {
+        authSessionService.markSessionExpired("http_401_refresh_failed");
+        return {
+          ok: false,
+          reason: "session_expired",
+          status: 401,
+        };
+      }
+
+      const retryResponse = await this.executeRequest(path, requestOptions, "session");
+      if (!retryResponse) {
+        return {
+          ok: false,
+          reason: "unknown",
+        };
+      }
+      return this.parseDemoControlResponse(retryResponse, path);
+    }
+
+    return this.parseDemoControlResponse(firstResponse, path);
   }
 
   async moderateMultiplayerParticipant(
@@ -877,6 +950,51 @@ export class BackendApiService {
     };
   }
 
+  private async parseDemoControlResponse(
+    response: Response,
+    path: string
+  ): Promise<MultiplayerDemoControlResponse> {
+    const payload = await parseJsonPayload(response);
+    if (!response.ok) {
+      const reason = extractFailureReason(payload);
+      if (reason) {
+        log.warn(
+          `API request failed: POST ${path} (${response.status}) - ${reason}`
+        );
+      } else {
+        log.warn(`API request failed: POST ${path} (${response.status})`);
+      }
+      return {
+        ok: false,
+        reason: normalizeDemoControlFailureReason(reason),
+        status: response.status,
+      };
+    }
+
+    const controlsPayload = payload && isRecord(payload.controls) ? payload.controls : null;
+    const session =
+      payload && isRecord(payload.session)
+        ? (payload.session as unknown as MultiplayerSessionRecord)
+        : undefined;
+
+    return {
+      ok: payload?.ok === true,
+      reason:
+        payload?.ok === true
+          ? undefined
+          : normalizeDemoControlFailureReason(extractFailureReason(payload)),
+      status: response.status,
+      controls: controlsPayload
+        ? {
+            demoMode: controlsPayload.demoMode === true,
+            demoAutoRun: controlsPayload.demoAutoRun === true,
+            demoSpeedMode: controlsPayload.demoSpeedMode === true,
+          }
+        : undefined,
+      session,
+    };
+  }
+
   private async joinMultiplayerByPath(
     path: string,
     request: JoinMultiplayerSessionRequest
@@ -1008,6 +1126,50 @@ function normalizeModerationFailureReason(
     return "invalid_target_player_id";
   }
   if (normalized.includes("unauthorized")) {
+    return "unauthorized";
+  }
+  return "unknown";
+}
+
+function normalizeDemoControlFailureReason(
+  value: string
+): MultiplayerDemoControlResponse["reason"] {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!normalized) {
+    return "unknown";
+  }
+  if (normalized.includes("session_expired")) {
+    return "session_expired";
+  }
+  if (normalized.includes("unknown_player")) {
+    return "unknown_player";
+  }
+  if (normalized.includes("not_room_owner")) {
+    return "not_room_owner";
+  }
+  if (normalized.includes("room_not_private")) {
+    return "room_not_private";
+  }
+  if (normalized.includes("demo_mode_disabled")) {
+    return "demo_mode_disabled";
+  }
+  if (normalized.includes("invalid_action")) {
+    return "invalid_action";
+  }
+  if (normalized.includes("invalid_session_id")) {
+    return "invalid_session_id";
+  }
+  if (normalized.includes("invalid_player_id")) {
+    return "invalid_player_id";
+  }
+  if (
+    normalized.includes("unauthorized") ||
+    normalized.includes("invalid_or_expired_access_token") ||
+    normalized.includes("invalid_bearer_header") ||
+    normalized.includes("missing_authorization_header") ||
+    normalized.includes("player_mismatch") ||
+    normalized.includes("session_mismatch")
+  ) {
     return "unauthorized";
   }
   return "unknown";
