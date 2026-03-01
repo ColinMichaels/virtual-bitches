@@ -9,6 +9,7 @@ COPY server.mjs ./
 COPY logger.mjs ./
 COPY bot ./bot
 COPY engine ./engine
+COPY filters ./filters
 COPY http ./http
 COPY moderation ./moderation
 COPY storage ./storage

@@ -72,6 +72,18 @@
   - `processTurnAction` transition path via `turnActionController.processTurnAction(...)`
 - Preserved API/WebSocket behavior while isolating core game transition logic from the server composition root.
 
+### Phase 03 - Filter/Addon Registry (Incremental Refactor)
+- Added generic addon/filter registry module with policy controls:
+  - `api/filters/addonRegistry.mjs`
+  - supports `enabled`, `timeoutMs`, and `onError: noop | block`
+- Added chat-conduct room-channel filter adapter:
+  - `api/filters/roomChannelChatConductFilter.mjs`
+- Refactored room-channel moderation gate in `api/server.mjs` to run through registry-managed filter execution.
+- Preserved current chat-conduct behavior while moving moderation policy enforcement out of the WebSocket relay control flow.
+- Added deploy/runtime env wiring for filter policy controls:
+  - `MULTIPLAYER_CHAT_CONDUCT_FILTER_TIMEOUT_MS`
+  - `MULTIPLAYER_CHAT_CONDUCT_FILTER_ON_ERROR`
+
 ---
 
 ## Validation Snapshot
@@ -84,6 +96,8 @@
 - `node --check api/engine/sessionLifecycleEngine.mjs` passes.
 - `node --check api/engine/sessionTurnEngine.mjs` passes.
 - `node --check api/server.mjs` passes.
+- `node --check api/filters/addonRegistry.mjs` passes.
+- `node --check api/filters/roomChannelChatConductFilter.mjs` passes.
 - `node --check api/http/routeDispatcher.mjs` passes.
 - `node --check api/http/routeHandlers.mjs` passes.
 - `npm run build` passes.
@@ -101,6 +115,8 @@
   - `feature/server-phase-01-routing-extraction`
 - Created Phase 02 branch for engine boundary extraction:
   - `feature/server-phase-02-engine-boundaries`
+- Created Phase 03 branch for filter/addon registry extraction:
+  - `feature/server-phase-03-filter-addon-registry`
 - Added dedicated phase plan in:
   - `docs/SERVER-REFACTOR-PHASE-PLAN.md`
 
@@ -108,6 +124,6 @@
 
 ## Next Phase Candidate
 
-1. Phase 03: Introduce plugin/filter registry with fail-open degradation policy for non-core addons.
-2. Phase 04: Move moderation/chat conduct and optional systems behind decoupled adapters.
+1. Phase 03 follow-through: migrate additional optional moderation/room policy checks onto the registry chain.
+2. Phase 04: Move websocket protocol translation concerns behind dedicated transport handlers.
 3. Phase 05: Continue storage/auth adapter hardening with resilience-oriented failure-path tests.

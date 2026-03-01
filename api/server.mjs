@@ -12,6 +12,11 @@ import { createSessionLifecycleEngine } from "./engine/sessionLifecycleEngine.mj
 import { createBotTurnEngine } from "./engine/botTurnEngine.mjs";
 import { createTurnTimeoutEngine } from "./engine/turnTimeoutEngine.mjs";
 import { createTurnActionEngine } from "./engine/turnActionEngine.mjs";
+import { createAddonFilterRegistry } from "./filters/addonRegistry.mjs";
+import {
+  createRoomChannelChatConductFilter,
+  ROOM_CHANNEL_FILTER_SCOPE_INBOUND,
+} from "./filters/roomChannelChatConductFilter.mjs";
 import { dispatchApiRoute } from "./http/routeDispatcher.mjs";
 import { createApiRouteHandlers } from "./http/routeHandlers.mjs";
 import {
@@ -89,6 +94,18 @@ const CHAT_CONDUCT_BASE_POLICY = createChatConductPolicy({
   muteDurationMs: process.env.MULTIPLAYER_CHAT_MUTE_MS,
   autoBanStrikeLimit: process.env.MULTIPLAYER_CHAT_AUTO_ROOM_BAN_STRIKE_LIMIT,
 });
+const CHAT_CONDUCT_FILTER_ENABLED =
+  process.env.MULTIPLAYER_CHAT_CONDUCT_FILTER_ENABLED === "0"
+    ? false
+    : CHAT_CONDUCT_BASE_POLICY.enabled;
+const CHAT_CONDUCT_FILTER_TIMEOUT_MS = normalizeAddonFilterTimeoutMs(
+  process.env.MULTIPLAYER_CHAT_CONDUCT_FILTER_TIMEOUT_MS,
+  250
+);
+const CHAT_CONDUCT_FILTER_ON_ERROR = normalizeAddonFilterOnErrorMode(
+  process.env.MULTIPLAYER_CHAT_CONDUCT_FILTER_ON_ERROR,
+  "noop"
+);
 const MODERATION_STORE_CHAT_TERMS_KEY = "chatTerms";
 const log = logger.create("Server");
 const SHORT_SESSION_TTL_REQUESTED = process.env.ALLOW_SHORT_SESSION_TTLS === "1";
@@ -484,6 +501,32 @@ const turnActionController = createTurnActionEngine({
   buildTurnActionMessage,
   completeSessionRoundWithWinner,
 });
+const roomChannelFilterRegistry = createAddonFilterRegistry({
+  now: () => Date.now(),
+  warn: (message, error = null) => {
+    if (error) {
+      log.warn(message, error);
+      return;
+    }
+    log.warn(message);
+  },
+});
+const roomChannelChatConductFilter = createRoomChannelChatConductFilter({
+  ensureSessionChatConductState,
+  evaluateRoomChannelConduct,
+  buildChatConductWarning,
+  getChatConductPolicy,
+});
+roomChannelFilterRegistry.registerFilter({
+  id: roomChannelChatConductFilter.id,
+  scope: roomChannelChatConductFilter.scope,
+  run: roomChannelChatConductFilter.run,
+  policy: {
+    enabled: CHAT_CONDUCT_FILTER_ENABLED,
+    timeoutMs: CHAT_CONDUCT_FILTER_TIMEOUT_MS,
+    onError: CHAT_CONDUCT_FILTER_ON_ERROR,
+  },
+});
 
 void beginBootstrap();
 
@@ -631,6 +674,14 @@ async function bootstrap() {
   log.info(
     `Chat conduct filter: enabled=${chatConductPolicy.enabled} publicOnly=${chatConductPolicy.publicOnly} terms=${chatConductPolicy.bannedTerms.size} strikeLimit=${chatConductPolicy.strikeLimit} muteMs=${chatConductPolicy.muteDurationMs} autoBanStrikeLimit=${chatConductPolicy.autoBanStrikeLimit} managedTerms=${chatConductTermsSnapshot.managedTermCount} remoteTerms=${chatConductTermsSnapshot.remoteTermCount} remoteConfigured=${chatConductTermsSnapshot.remoteConfigured}`
   );
+  const roomChannelFilterSummary = roomChannelFilterRegistry
+    .listFilters()
+    .map(
+      (filter) =>
+        `${filter.id}(enabled=${filter.policy.enabled},timeoutMs=${filter.policy.timeoutMs},onError=${filter.policy.onError})`
+    )
+    .join(", ");
+  log.info(`Room-channel addon filters: ${roomChannelFilterSummary || "none"}`);
   if (CHAT_CONDUCT_TERM_SYNC_ON_BOOT && chatConductTermsSnapshot.remoteConfigured) {
     const bootstrapSync = await refreshChatModerationTermsFromRemote({
       source: "bootstrap",
@@ -3483,6 +3534,9 @@ function buildAdminChatConductPolicySummary(now = Date.now()) {
   const terms = CHAT_CONDUCT_TERM_SERVICE.getSnapshot(now);
   return {
     enabled: policy.enabled,
+    filterEnabled: CHAT_CONDUCT_FILTER_ENABLED,
+    filterTimeoutMs: CHAT_CONDUCT_FILTER_TIMEOUT_MS,
+    filterOnError: CHAT_CONDUCT_FILTER_ON_ERROR,
     publicOnly: policy.publicOnly,
     bannedTermsCount: policy.bannedTerms.size,
     strikeLimit: policy.strikeLimit,
@@ -6280,6 +6334,24 @@ function normalizeChatTermsRefreshValue(rawValue, fallback) {
     return fallbackValue;
   }
   return Math.max(5000, Math.min(24 * 60 * 60 * 1000, Math.floor(parsed)));
+}
+
+function normalizeAddonFilterTimeoutMs(rawValue, fallback = 0) {
+  const fallbackValue =
+    Number.isFinite(Number(fallback)) && Number(fallback) > 0 ? Math.floor(Number(fallback)) : 0;
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallbackValue;
+  }
+  return Math.max(0, Math.min(60 * 1000, Math.floor(parsed)));
+}
+
+function normalizeAddonFilterOnErrorMode(rawValue, fallback = "noop") {
+  const normalized = typeof rawValue === "string" ? rawValue.trim().toLowerCase() : "";
+  if (normalized === "noop" || normalized === "block") {
+    return normalized;
+  }
+  return fallback === "block" ? "block" : "noop";
 }
 
 function resolveChatConductTerms(rawValue, fallbackTerms = new Set()) {
@@ -9646,20 +9718,21 @@ function relayRealtimeSocketMessage(client, session, payload, now = Date.now()) 
       sendSocketError(client, "room_channel_invalid_message", "room_channel_invalid_message");
       return;
     }
-    const chatConductState = ensureSessionChatConductState(session, now);
-    const conductEvaluation = evaluateRoomChannelConduct({
-      policy: getChatConductPolicy(),
-      state: chatConductState,
-      playerId: client.playerId,
-      channel: normalizedChannel,
-      message: normalizedMessage,
-      now,
-    });
-    if (conductEvaluation.stateChanged) {
+    const roomChannelFilterDecision = roomChannelFilterRegistry.execute(
+      ROOM_CHANNEL_FILTER_SCOPE_INBOUND,
+      {
+        session,
+        playerId: client.playerId,
+        channel: normalizedChannel,
+        message: normalizedMessage,
+        now,
+      }
+    );
+    if (roomChannelFilterDecision.stateChanged) {
       shouldPersistChatConduct = true;
     }
-    if (!conductEvaluation.allowed) {
-      const warning = buildChatConductWarning(conductEvaluation, now);
+    if (!roomChannelFilterDecision.allowed) {
+      const warning = roomChannelFilterDecision.outcome?.warning ?? null;
       if (warning) {
         sendSocketPayload(client, {
           type: "player_notification",
@@ -9676,15 +9749,23 @@ function relayRealtimeSocketMessage(client, session, payload, now = Date.now()) 
         });
       }
       const failureCode =
-        typeof conductEvaluation.code === "string" && conductEvaluation.code.length > 0
-          ? conductEvaluation.code
+        typeof roomChannelFilterDecision.code === "string" &&
+        roomChannelFilterDecision.code.length > 0
+          ? roomChannelFilterDecision.code
+          : typeof roomChannelFilterDecision.outcome?.code === "string" &&
+              roomChannelFilterDecision.outcome.code.length > 0
+            ? roomChannelFilterDecision.outcome.code
           : "room_channel_message_blocked";
       const failureReason =
-        typeof conductEvaluation.reason === "string" && conductEvaluation.reason.length > 0
-          ? conductEvaluation.reason
+        typeof roomChannelFilterDecision.reason === "string" &&
+        roomChannelFilterDecision.reason.length > 0
+          ? roomChannelFilterDecision.reason
+          : typeof roomChannelFilterDecision.outcome?.reason === "string" &&
+              roomChannelFilterDecision.outcome.reason.length > 0
+            ? roomChannelFilterDecision.outcome.reason
           : failureCode;
       sendSocketError(client, failureCode, failureReason);
-      if (conductEvaluation.shouldAutoBan) {
+      if (roomChannelFilterDecision.outcome?.shouldAutoBan === true) {
         const participant = session.participants?.[client.playerId];
         const offenderLabel =
           typeof participant?.displayName === "string" && participant.displayName.trim().length > 0
