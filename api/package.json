@@ -26,6 +26,10 @@
     "test:admin-mutations": "node admin/adminMutationService.test.mjs",
     "test:admin-services": "npm run test:admin-security-audit && npm run test:admin-mutations",
     "test:multiplayer-session-control": "node multiplayer/sessionControlService.test.mjs",
+    "test:multiplayer-session-membership": "node multiplayer/sessionMembershipService.test.mjs",
+    "test:multiplayer-session-mutations": "node multiplayer/sessionMutationService.test.mjs",
+    "test:multiplayer-session-provisioning": "node multiplayer/sessionProvisioningService.test.mjs",
+    "test:multiplayer-services": "npm run test:multiplayer-session-control && npm run test:multiplayer-session-membership && npm run test:multiplayer-session-mutations && npm run test:multiplayer-session-provisioning",
     "test:storage-file": "node storage/fileStore.test.mjs",
     "test:storage-sync-controller": "node storage/storeSyncController.test.mjs",
     "test:storage-auth-adapters": "npm run test:auth-token-adapter && npm run test:auth-admin-access && npm run test:auth-request-authorizer && npm run test:auth-firebase-identity && npm run test:storage-file && npm run test:storage-sync-controller"

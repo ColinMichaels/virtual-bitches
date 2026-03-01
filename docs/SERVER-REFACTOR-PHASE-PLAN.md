@@ -155,12 +155,32 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
 ## Phase 07 - Multiplayer Session Control Boundaries
 - Isolate multiplayer session-control endpoint orchestration from `server.mjs` into dedicated service modules.
 - Keep HTTP route contracts stable for session join/heartbeat/refresh/queue lifecycle flows.
-- Status: ✅ In progress checkpoint landed
+- Status: ✅ Follow-through checkpoint landed
 - Delivered in branch:
   - `api/multiplayer/sessionControlService.mjs`
   - `api/server.mjs` delegates multiplayer session-control route orchestration (`join`, `heartbeat`, `auth/refresh`, `queue-next`) to extracted session control service
   - `api/multiplayer/sessionControlService.test.mjs`
   - `api/package.json` includes `test:multiplayer-session-control` for isolated session-control service validation
+  - `api/multiplayer/sessionMutationService.mjs`
+  - `api/server.mjs` delegates multiplayer session mutation route orchestration (`participant-state`, demo controls, `leave`, moderation) to extracted session mutation service
+  - `api/multiplayer/sessionMutationService.test.mjs`
+  - `api/multiplayer/sessionProvisioningService.mjs`
+  - `api/server.mjs` delegates multiplayer room provisioning/listing route orchestration (`create-session`, `list-rooms`) to extracted session provisioning service
+  - `api/multiplayer/sessionProvisioningService.test.mjs`
+  - `api/multiplayer/sessionMembershipService.mjs`
+  - `api/server.mjs` delegates shared participant-removal membership orchestration (`removeParticipantFromSession`) to extracted session membership service used by admin/session/socket flows
+  - `api/multiplayer/sessionMembershipService.test.mjs`
+  - `api/package.json` includes `test:multiplayer-services` (`session-control` + `session-membership` + `session-mutations` + `session-provisioning`) for multiplayer service boundary validation
+
+## Phase 08 - Multiplayer Rehydrate/Retry Resilience Boundaries
+- Extract session rehydrate/retry helper orchestration from `server.mjs` into dedicated multiplayer resilience service modules.
+- Keep auth/session recovery behavior stable for distributed Cloud Run flows.
+- Candidate extraction targets:
+  - `rehydrateSessionWithRetry`
+  - `rehydrateSessionParticipantWithRetry`
+  - shared delay/backoff policy helpers
+- Validation target:
+  - focused resilience service unit tests + existing `test:multiplayer-services` regression coverage
 
 ## Guardrails
 

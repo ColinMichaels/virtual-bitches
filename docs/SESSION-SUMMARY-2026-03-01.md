@@ -1,6 +1,6 @@
 # BISCUITS - Session Summary
 **Date:** March 1, 2026  
-**Focus:** Unified game config follow-through plus iterative Phase 01-06 server refactor checkpoints (routing, engine boundaries, filter registry, websocket transport extraction, storage/auth adapters, admin service boundaries)
+**Focus:** Unified game config follow-through plus iterative Phase 01-07 server refactor checkpoints (routing, engine boundaries, filter registry, websocket transport extraction, storage/auth adapters, admin service boundaries, multiplayer service boundaries)
 
 ---
 
@@ -144,6 +144,28 @@
   - `queue-next` (`/multiplayer/sessions/:id/queue-next`)
 - Added focused regression coverage for extracted session-control flows:
   - `api/multiplayer/sessionControlService.test.mjs`
+- Extracted multiplayer session mutation endpoint orchestration from `api/server.mjs` into:
+  - `api/multiplayer/sessionMutationService.mjs`
+- Delegated session mutation route use-cases to the extracted service while preserving route contracts:
+  - `participant-state` (`/multiplayer/sessions/:id/participant-state`)
+  - demo controls (`/multiplayer/sessions/:id/demo-controls`)
+  - `leave` (`/multiplayer/sessions/:id/leave`)
+  - moderation (`/multiplayer/sessions/:id/moderate-participant`)
+- Added focused regression coverage for extracted session-mutation flows:
+  - `api/multiplayer/sessionMutationService.test.mjs`
+- Extracted multiplayer room provisioning/list endpoint orchestration from `api/server.mjs` into:
+  - `api/multiplayer/sessionProvisioningService.mjs`
+- Delegated multiplayer room provisioning/list route use-cases to the extracted service while preserving route contracts:
+  - `create-session` (`/multiplayer/sessions/create`)
+  - `list-rooms` (`/multiplayer/rooms`)
+- Added focused regression coverage for extracted provisioning/list flows:
+  - `api/multiplayer/sessionProvisioningService.test.mjs`
+- Extracted shared multiplayer membership orchestration from `api/server.mjs` into:
+  - `api/multiplayer/sessionMembershipService.mjs`
+- Delegated shared participant-removal orchestration to the extracted service while preserving mutation/transport contracts:
+  - `removeParticipantFromSession` flow now composed through injected dependencies for admin mutation, multiplayer mutation, and socket moderation paths
+- Added focused regression coverage for extracted membership/removal flow:
+  - `api/multiplayer/sessionMembershipService.test.mjs`
 
 ---
 
@@ -171,6 +193,10 @@
 - `cd api && npm run test:admin-mutations` passes.
 - `cd api && npm run test:admin-services` passes.
 - `cd api && npm run test:multiplayer-session-control` passes.
+- `cd api && npm run test:multiplayer-session-membership` passes.
+- `cd api && npm run test:multiplayer-session-mutations` passes.
+- `cd api && npm run test:multiplayer-session-provisioning` passes.
+- `cd api && npm run test:multiplayer-services` passes.
 - `cd api && npm run test:storage-auth-adapters` passes.
 - `cd api && npm run test:ws-transport` passes.
 - `npm run build` passes.
@@ -178,6 +204,12 @@
 
 ### Notes
 - `public/updates.git.json` regenerated during build (`updates:generate`).
+
+### Deploy Gate Checklist (Phase 07 Follow-through)
+- `node --check api/server.mjs` ✅
+- `cd api && npm run test:storage-auth-adapters` ✅
+- `cd api && npm run test:ws-transport` ✅
+- `cd api && npm run test:multiplayer-services` ✅
 
 ---
 
@@ -201,6 +233,6 @@
 
 ## Next Phase Candidate
 
-1. Phase 07 follow-through: extract remaining multiplayer session mutation orchestration (`participant-state`, demo controls, moderation/leave) into service modules while preserving route/WS contracts.
+1. Phase 08 candidate: extract multiplayer rehydrate/retry resilience helpers (`rehydrateSessionWithRetry`, `rehydrateSessionParticipantWithRetry`, delay/backoff policy) into a dedicated multiplayer service module used by route services.
 2. Add a lightweight deploy-gate checklist section to incremental phase session summaries (`node --check api/server.mjs`, `npm run test:storage-auth-adapters`, `npm run test:ws-transport`, phase-specific service tests).
-3. Add targeted integration-level admin + multiplayer route tests once phase-07 extraction stabilizes to keep CI runtime bounded.
+3. Add targeted integration-level admin + multiplayer route tests now that phase-07 extraction has stabilized, while keeping CI runtime bounded.
