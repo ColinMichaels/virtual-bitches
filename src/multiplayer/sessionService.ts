@@ -35,6 +35,7 @@ export class MultiplayerSessionService {
   private readonly playerId: string;
   private activeSession: MultiplayerSessionRecord | null = null;
   private heartbeatHandle?: ReturnType<typeof setInterval>;
+  private heartbeatInFlight = false;
   private lastJoinFailureReason: MultiplayerJoinFailureReason | null = null;
 
   constructor(playerId: string = getLocalPlayerId()) {
@@ -523,19 +524,59 @@ export class MultiplayerSessionService {
   }
 
   private async sendHeartbeat(): Promise<void> {
-    if (!this.activeSession) return;
+    const current = this.activeSession;
+    if (!current || this.heartbeatInFlight) return;
 
-    const response = await backendApiService.heartbeatMultiplayerSession(
-      this.activeSession.sessionId,
-      this.playerId
-    );
-    if (!response?.ok) {
-      if (response?.reason === "session_expired") {
-        this.handleSessionExpired("session_expired");
+    this.heartbeatInFlight = true;
+    const sessionId = current.sessionId;
+    try {
+      const response = await backendApiService.heartbeatMultiplayerSession(sessionId, this.playerId);
+      const latest = this.activeSession;
+      if (!latest || latest.sessionId !== sessionId) {
         return;
       }
-      log.warn(`Session heartbeat failed: ${this.activeSession.sessionId}`);
+      if (!response?.ok) {
+        if (response?.reason === "session_expired") {
+          const recovered = await this.recoverSessionAfterHeartbeatExpiry(sessionId);
+          if (recovered) {
+            return;
+          }
+          const stillActive = this.activeSession;
+          if (!stillActive || stillActive.sessionId !== sessionId) {
+            return;
+          }
+          this.handleSessionExpired("session_expired");
+          return;
+        }
+        log.warn(`Session heartbeat failed: ${sessionId}`);
+      }
+    } finally {
+      this.heartbeatInFlight = false;
     }
+  }
+
+  private async recoverSessionAfterHeartbeatExpiry(sessionId: string): Promise<boolean> {
+    const refreshed = await backendApiService.refreshMultiplayerSessionAuth(sessionId, this.playerId);
+    if (refreshed && refreshed.sessionId === sessionId) {
+      this.setActiveSession(refreshed);
+      log.info(`Recovered multiplayer session after transient heartbeat expiry via auth refresh: ${sessionId}`);
+      return true;
+    }
+
+    const rejoined = await backendApiService.joinMultiplayerSession(sessionId, {
+      playerId: this.playerId,
+    });
+    if (rejoined.session && rejoined.session.sessionId === sessionId) {
+      this.lastJoinFailureReason = null;
+      this.setActiveSession(rejoined.session);
+      log.info(`Recovered multiplayer session after transient heartbeat expiry via rejoin: ${sessionId}`);
+      return true;
+    }
+
+    log.warn(
+      `Failed to recover multiplayer session after heartbeat expiry: ${sessionId} (${rejoined.reason ?? "unknown"})`
+    );
+    return false;
   }
 
   private handleSessionExpired(reason: string): void {

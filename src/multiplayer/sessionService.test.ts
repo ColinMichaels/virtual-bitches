@@ -85,6 +85,7 @@ await test("dispatches sessionExpired with session id and clears auth on expired
 
   const originalJoin = backendApiService.joinMultiplayerSession.bind(backendApiService);
   const originalHeartbeat = backendApiService.heartbeatMultiplayerSession.bind(backendApiService);
+  const originalRefresh = backendApiService.refreshMultiplayerSessionAuth.bind(backendApiService);
   const originalAuthClear = authSessionService.clear.bind(authSessionService);
 
   const capturedEvents: Array<{ reason?: string; sessionId?: string }> = [];
@@ -94,12 +95,26 @@ await test("dispatches sessionExpired with session id and clears auth on expired
     capturedEvents.push(detail ?? {});
   });
 
+  let joinCallCount = 0;
   (backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession })
-    .joinMultiplayerSession = async () => ({
-      session: createSession({ sessionId: "session-expired-case" }),
-    });
+    .joinMultiplayerSession = async () => {
+      joinCallCount += 1;
+      if (joinCallCount === 1) {
+        return {
+          session: createSession({ sessionId: "session-expired-case" }),
+        };
+      }
+      return {
+        session: null,
+        reason: "session_expired",
+        status: 410,
+      };
+    };
   (backendApiService as { heartbeatMultiplayerSession: typeof backendApiService.heartbeatMultiplayerSession })
     .heartbeatMultiplayerSession = async () => ({ ok: false, reason: "session_expired" });
+  (backendApiService as {
+    refreshMultiplayerSessionAuth: typeof backendApiService.refreshMultiplayerSessionAuth;
+  }).refreshMultiplayerSessionAuth = async () => null;
   (authSessionService as { clear: typeof authSessionService.clear }).clear = (reason?: string) => {
     clearedReasons.push(reason ?? "");
   };
@@ -126,6 +141,78 @@ await test("dispatches sessionExpired with session id and clears auth on expired
         heartbeatMultiplayerSession: typeof backendApiService.heartbeatMultiplayerSession;
       }
     ).heartbeatMultiplayerSession = originalHeartbeat;
+    (
+      backendApiService as {
+        refreshMultiplayerSessionAuth: typeof backendApiService.refreshMultiplayerSessionAuth;
+      }
+    ).refreshMultiplayerSessionAuth = originalRefresh;
+    (authSessionService as { clear: typeof authSessionService.clear }).clear = originalAuthClear;
+    documentShim.restore();
+  }
+});
+
+await test("recovers session when heartbeat returns transient session_expired", async () => {
+  const documentShim = installDocumentShim();
+  const service = new MultiplayerSessionService("player-alpha");
+
+  const originalJoin = backendApiService.joinMultiplayerSession.bind(backendApiService);
+  const originalHeartbeat = backendApiService.heartbeatMultiplayerSession.bind(backendApiService);
+  const originalRefresh = backendApiService.refreshMultiplayerSessionAuth.bind(backendApiService);
+  const originalAuthClear = authSessionService.clear.bind(authSessionService);
+
+  let expiredEventCount = 0;
+  let authClearCount = 0;
+  documentShim.target.addEventListener("multiplayer:sessionExpired", () => {
+    expiredEventCount += 1;
+  });
+
+  (backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession })
+    .joinMultiplayerSession = async () => ({
+      session: createSession({ sessionId: "session-recoverable", roomCode: "ROOM1" }),
+    });
+  (backendApiService as { heartbeatMultiplayerSession: typeof backendApiService.heartbeatMultiplayerSession })
+    .heartbeatMultiplayerSession = async () => ({ ok: false, reason: "session_expired" });
+  (backendApiService as {
+    refreshMultiplayerSessionAuth: typeof backendApiService.refreshMultiplayerSessionAuth;
+  }).refreshMultiplayerSessionAuth = async () =>
+    createSession({
+      sessionId: "session-recoverable",
+      roomCode: "ROOM2",
+      auth: {
+        accessToken: "recovered-access",
+        refreshToken: "recovered-refresh",
+        expiresAt: Date.now() + 60_000,
+      },
+    });
+  (authSessionService as { clear: typeof authSessionService.clear }).clear = () => {
+    authClearCount += 1;
+  };
+
+  try {
+    const joined = await service.joinSession("session-recoverable");
+    assert(joined !== null, "Expected joined session before heartbeat");
+
+    await invokePrivateSendHeartbeat(service);
+
+    assertEqual(expiredEventCount, 0, "Expected no expiry dispatch when recovery succeeds");
+    assertEqual(authClearCount, 0, "Expected no auth clear when recovery succeeds");
+    assertEqual(service.getActiveSession()?.sessionId, "session-recoverable", "Expected active session preserved");
+    assertEqual(service.getActiveSession()?.roomCode, "ROOM2", "Expected active session synced from refresh");
+  } finally {
+    service.dispose();
+    (
+      backendApiService as { joinMultiplayerSession: typeof backendApiService.joinMultiplayerSession }
+    ).joinMultiplayerSession = originalJoin;
+    (
+      backendApiService as {
+        heartbeatMultiplayerSession: typeof backendApiService.heartbeatMultiplayerSession;
+      }
+    ).heartbeatMultiplayerSession = originalHeartbeat;
+    (
+      backendApiService as {
+        refreshMultiplayerSessionAuth: typeof backendApiService.refreshMultiplayerSessionAuth;
+      }
+    ).refreshMultiplayerSessionAuth = originalRefresh;
     (authSessionService as { clear: typeof authSessionService.clear }).clear = originalAuthClear;
     documentShim.restore();
   }
