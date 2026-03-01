@@ -16,6 +16,7 @@
     "test:ws-upgrade-auth": "node ws/socketUpgradeAuth.test.mjs",
     "test:ws-lifecycle": "node ws/socketLifecycle.test.mjs",
     "test:ws-relay": "node ws/socketRelay.test.mjs",
-    "test:ws-transport": "npm run test:ws-protocol && npm run test:ws-validation && npm run test:ws-upgrade-auth && npm run test:ws-turn-handlers && npm run test:ws-router && npm run test:ws-lifecycle && npm run test:ws-relay"
+    "test:ws-orchestration": "node ws/socketOrchestration.test.mjs",
+    "test:ws-transport": "npm run test:ws-protocol && npm run test:ws-validation && npm run test:ws-upgrade-auth && npm run test:ws-turn-handlers && npm run test:ws-router && npm run test:ws-lifecycle && npm run test:ws-relay && npm run test:ws-orchestration"
   }
 }

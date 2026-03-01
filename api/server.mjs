@@ -36,6 +36,7 @@ import {
 } from "./ws/socketProtocol.mjs";
 import { createSocketLifecycle } from "./ws/socketLifecycle.mjs";
 import { createSocketMessageRouter } from "./ws/socketMessageRouter.mjs";
+import { createSocketOrchestration } from "./ws/socketOrchestration.mjs";
 import { isSupportedSocketPayload } from "./ws/socketPayloadValidation.mjs";
 import { createSocketRelay } from "./ws/socketRelay.mjs";
 import { createSocketTurnMessageHandlers } from "./ws/socketTurnHandlers.mjs";
@@ -439,8 +440,28 @@ const server = createServer((req, res) => {
 });
 const wsSessionClients = new Map();
 const wsClientMeta = new WeakMap();
-let socketMessageRouter = null;
-let socketTurnHandlers = null;
+const socketOrchestration = createSocketOrchestration({
+  writeSocketFrame,
+  buildSessionStateMessage,
+  buildTurnStartMessage,
+  log,
+});
+const {
+  rejectUpgrade,
+  handleSocketMessage,
+  handleTurnActionMessage,
+  handleTurnEndMessage,
+  broadcastSessionState,
+  sendTurnSyncPayload,
+  disconnectPlayerSockets,
+  broadcastToSession,
+  sendToSessionPlayer,
+  broadcastRoomChannelToSession,
+  broadcastRealtimeSocketMessageToSession,
+  sendSocketPayload,
+  sendSocketError,
+  safeCloseSocket,
+} = socketOrchestration;
 const socketRelay = createSocketRelay({
   wsSessionClients,
   writeSocketFrame,
@@ -449,6 +470,7 @@ const socketRelay = createSocketRelay({
   hasRoomChannelBlockRelationship,
   log,
 });
+socketOrchestration.setSocketRelay(socketRelay);
 const authenticateSocketUpgrade = createSocketUpgradeAuthenticator({
   getSession: (sessionId) => store.multiplayerSessions[sessionId],
   rehydrateStoreFromAdapter,
@@ -478,6 +500,7 @@ const socketLifecycle = createSocketLifecycle({
   safeCloseSocket,
   log,
 });
+socketOrchestration.setSocketLifecycle(socketLifecycle);
 const botSessionLoops = new Map();
 const sessionTurnTimeoutLoops = new Map();
 const sessionPostGameLoops = new Map();
@@ -632,7 +655,7 @@ roomChannelFilterRegistry.registerFilter({
     onError: DIRECT_MESSAGE_BLOCK_FILTER_ON_ERROR,
   },
 });
-socketTurnHandlers = createSocketTurnMessageHandlers({
+const socketTurnHandlers = createSocketTurnMessageHandlers({
   turnPhases: TURN_PHASES,
   ensureSessionTurnState,
   normalizeTurnPhase,
@@ -649,7 +672,8 @@ socketTurnHandlers = createSocketTurnMessageHandlers({
   advanceSessionTurn,
   log,
 });
-socketMessageRouter = createSocketMessageRouter({
+socketOrchestration.setSocketTurnHandlers(socketTurnHandlers);
+const socketMessageRouter = createSocketMessageRouter({
   wsClientMeta,
   isSupportedSocketPayload,
   getSession: (sessionId) => store.multiplayerSessions[sessionId],
@@ -680,6 +704,7 @@ socketMessageRouter = createSocketMessageRouter({
   now: () => Date.now(),
   log,
 });
+socketOrchestration.setSocketMessageRouter(socketMessageRouter);
 
 void beginBootstrap();
 
@@ -9423,60 +9448,6 @@ function cleanupExpiredRecords() {
   }
 }
 
-function rejectUpgrade(socket, status, reason) {
-  if (socket.destroyed) return;
-  socket.write(
-    `HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`
-  );
-  socket.destroy();
-}
-
-function handleSocketMessage(client, rawMessage) {
-  if (!socketMessageRouter) {
-    return;
-  }
-  socketMessageRouter.handleSocketMessage(client, rawMessage);
-}
-
-function handleTurnActionMessage(client, session, payload) {
-  if (!socketTurnHandlers) {
-    return;
-  }
-  socketTurnHandlers.handleTurnActionMessage(client, session, payload);
-}
-
-function handleTurnEndMessage(client, session) {
-  if (!socketTurnHandlers) {
-    return;
-  }
-  socketTurnHandlers.handleTurnEndMessage(client, session);
-}
-
-function broadcastSessionState(session, source = "server", sender = null) {
-  const message = buildSessionStateMessage(session, { source });
-  if (!message) {
-    return;
-  }
-
-  broadcastToSession(session.sessionId, JSON.stringify(message), sender);
-}
-
-function sendTurnSyncPayload(client, session, source = "sync") {
-  const sessionState = buildSessionStateMessage(session, { source });
-  if (sessionState) {
-    sendSocketPayload(client, sessionState);
-  }
-
-  const turnStart = buildTurnStartMessage(session, { source });
-  if (turnStart) {
-    sendSocketPayload(client, turnStart);
-  }
-}
-
-function disconnectPlayerSockets(sessionId, playerId, closeCode, reason) {
-  socketLifecycle.disconnectPlayerSockets(sessionId, playerId, closeCode, reason);
-}
-
 function expireSession(sessionId, reason) {
   stopSessionLoops(sessionId);
   if (store.multiplayerSessions[sessionId]) {
@@ -9496,56 +9467,6 @@ function expireSession(sessionId, reason) {
     }
 
     safeCloseSocket(client, WS_CLOSE_CODES.normal, reason);
-  }
-}
-
-function broadcastToSession(sessionId, rawMessage, sender) {
-  socketRelay.broadcastToSession(sessionId, rawMessage, sender);
-}
-
-function sendToSessionPlayer(sessionId, playerId, rawMessage, sender = null) {
-  socketRelay.sendToSessionPlayer(sessionId, playerId, rawMessage, sender);
-}
-
-function broadcastRoomChannelToSession(session, payload, sender = null) {
-  socketRelay.broadcastRoomChannelToSession(session, payload, sender);
-}
-
-function broadcastRealtimeSocketMessageToSession(session, payload, sender = null) {
-  socketRelay.broadcastRealtimeSocketMessageToSession(session, payload, sender);
-}
-
-function sendSocketPayload(client, payload) {
-  socketRelay.sendSocketPayload(client, payload);
-}
-
-function sendSocketError(client, code, message) {
-  socketRelay.sendSocketError(client, code, message);
-}
-
-function safeCloseSocket(client, closeCode, closeReason) {
-  if (!client || client.closed) return;
-  client.closed = true;
-  socketLifecycle.unregisterSocketClient(client);
-
-  if (client.socket.destroyed) {
-    return;
-  }
-
-  const reasonBuffer = Buffer.from(
-    String(closeReason ?? "closed").slice(0, 123),
-    "utf8"
-  );
-  const payload = Buffer.alloc(2 + reasonBuffer.length);
-  payload.writeUInt16BE(closeCode, 0);
-  reasonBuffer.copy(payload, 2);
-
-  try {
-    writeSocketFrame(client.socket, 0x8, payload);
-    client.socket.end();
-  } catch (error) {
-    log.warn("Failed to close WebSocket cleanly", error);
-    client.socket.destroy();
   }
 }
 
