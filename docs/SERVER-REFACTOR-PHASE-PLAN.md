@@ -152,6 +152,16 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
   - `api/admin/adminMutationService.test.mjs`
   - `api/package.json` includes `test:admin-services` (`test:admin-security-audit` + `test:admin-mutations`) for isolated admin service validation
 
+## Phase 07 - Multiplayer Session Control Boundaries
+- Isolate multiplayer session-control endpoint orchestration from `server.mjs` into dedicated service modules.
+- Keep HTTP route contracts stable for session join/heartbeat/refresh/queue lifecycle flows.
+- Status: ✅ In progress checkpoint landed
+- Delivered in branch:
+  - `api/multiplayer/sessionControlService.mjs`
+  - `api/server.mjs` delegates multiplayer session-control route orchestration (`join`, `heartbeat`, `auth/refresh`, `queue-next`) to extracted session control service
+  - `api/multiplayer/sessionControlService.test.mjs`
+  - `api/package.json` includes `test:multiplayer-session-control` for isolated session-control service validation
+
 ## Guardrails
 
 - No big-bang rewrite.

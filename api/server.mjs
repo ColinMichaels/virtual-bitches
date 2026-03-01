@@ -9,6 +9,7 @@ import { cloneStore } from "./storage/defaultStore.mjs";
 import { createStoreSyncController } from "./storage/storeSyncController.mjs";
 import { createAdminSecurityAuditService } from "./admin/adminSecurityAuditService.mjs";
 import { createAdminMutationService } from "./admin/adminMutationService.mjs";
+import { createSessionControlService } from "./multiplayer/sessionControlService.mjs";
 import { createBotEngine } from "./bot/engine.mjs";
 import { createSessionTurnEngine } from "./engine/sessionTurnEngine.mjs";
 import { createSessionLifecycleEngine } from "./engine/sessionLifecycleEngine.mjs";
@@ -504,6 +505,55 @@ const {
   clearSessionConductPlayer: clearAdminSessionConductPlayer,
   clearSessionConductState: clearAdminSessionConductState,
 } = adminMutationService;
+const sessionControlService = createSessionControlService({
+  getStore: () => store,
+  gameDifficulties: GAME_DIFFICULTIES,
+  roomKinds: ROOM_KINDS,
+  maxMultiplayerHumanPlayers: MAX_MULTIPLAYER_HUMAN_PLAYERS,
+  rehydrateStoreFromAdapter,
+  rehydrateSessionWithRetry,
+  rehydrateSessionParticipantWithRetry,
+  findJoinableSessionByRoomCode,
+  normalizeOptionalRoomCode,
+  isPlayerBannedFromSession,
+  resolveJoinRequestGameSettings,
+  getHumanParticipantCount,
+  resolveParticipantBlockedPlayerIds,
+  normalizeParticipantDisplayName,
+  normalizeAvatarUrl,
+  normalizeProviderId,
+  isBotParticipant,
+  normalizeQueuedForNextGame,
+  isParticipantSeated,
+  normalizeParticipantScore,
+  normalizeParticipantRemainingDice,
+  normalizeParticipantTimeoutRound,
+  normalizeParticipantTimeoutCount,
+  normalizeParticipantCompletedAt,
+  getSessionRoomKind,
+  ensureSessionOwner,
+  addBotsToSession,
+  resolveSessionGameConfig,
+  markSessionActivity,
+  ensureSessionTurnState,
+  reconcileSessionLoops,
+  broadcastSessionState,
+  reconcilePublicRoomInventory,
+  issueAuthTokenBundle,
+  buildSessionResponse,
+  persistStore,
+  authorizeSessionActionRequest,
+  shouldRetrySessionAuthFromStore,
+  areCurrentGameParticipantsComplete,
+  scheduleSessionPostGameLifecycle,
+  buildSessionSnapshot,
+});
+const {
+  joinSessionByTarget,
+  heartbeat: heartbeatSessionParticipant,
+  queueParticipantForNextGame: queueSessionParticipantForNextGame,
+  refreshSessionAuth: refreshSessionParticipantAuth,
+} = sessionControlService;
 const requestAuthorizer = createRequestAuthorizer({
   extractBearerToken,
   verifyAccessToken,
@@ -1853,167 +1903,23 @@ async function handleJoinRoomByCode(req, res, pathname) {
 }
 
 async function handleJoinSessionByTarget(req, res, target) {
-  const now = Date.now();
-  let session = null;
-  if (typeof target?.sessionId === "string" && target.sessionId.trim().length > 0) {
-    const sessionId = target.sessionId.trim();
-    let sessionById = store.multiplayerSessions[sessionId];
-    if (!sessionById || sessionById.expiresAt <= now) {
-      sessionById = await rehydrateSessionWithRetry(sessionId, "join_session", {
-        attempts: 6,
-        baseDelayMs: 150,
-      });
-    }
-    if (!sessionById || sessionById.expiresAt <= now) {
-      sendJson(res, 410, { error: "Session expired", reason: "session_expired" });
-      return;
-    }
-    session = sessionById;
-  } else if (typeof target?.roomCode === "string" && target.roomCode.trim().length > 0) {
-    const normalizedRoomCode = normalizeOptionalRoomCode(target.roomCode);
-    if (!normalizedRoomCode) {
-      sendJson(res, 404, { error: "Room code not found", reason: "room_not_found" });
-      return;
-    }
-    let sessionByRoomCode = findJoinableSessionByRoomCode(normalizedRoomCode, now);
-    if (!sessionByRoomCode) {
-      await rehydrateStoreFromAdapter(`join_room_code:${normalizedRoomCode}`, { force: true });
-      sessionByRoomCode = findJoinableSessionByRoomCode(normalizedRoomCode, now);
-    }
-    if (!sessionByRoomCode) {
-      sendJson(res, 404, { error: "Room code not found", reason: "room_not_found" });
-      return;
-    }
-    session = sessionByRoomCode;
-  } else {
-    sendJson(res, 400, { error: "sessionId or roomCode is required" });
-    return;
-  }
-
   const body = await parseJsonBody(req);
-  const playerId = typeof body?.playerId === "string" ? body.playerId : "";
-  if (!playerId) {
-    sendJson(res, 400, { error: "playerId is required" });
-    return;
-  }
-  if (isPlayerBannedFromSession(session, playerId)) {
-    sendJson(res, 403, { error: "Player banned from room", reason: "room_banned" });
-    return;
-  }
-  const joinGameSettings = resolveJoinRequestGameSettings(body);
-  const requestedBotCount = joinGameSettings.requestedBotCount;
-  const hasSessionDifficulty =
-    typeof session.gameDifficulty === "string" &&
-    GAME_DIFFICULTIES.has(session.gameDifficulty.trim().toLowerCase());
-  if (!hasSessionDifficulty) {
-    session.gameDifficulty = joinGameSettings.requestedDifficulty;
-  }
-
-  const existingParticipant = session.participants[playerId];
-  const isReturningParticipant = Boolean(existingParticipant && !isBotParticipant(existingParticipant));
-  const queuedForNextGame = isReturningParticipant
-    ? normalizeQueuedForNextGame(existingParticipant?.queuedForNextGame)
-    : false;
-  if (!isReturningParticipant && getHumanParticipantCount(session) >= MAX_MULTIPLAYER_HUMAN_PLAYERS) {
-    sendJson(res, 409, { error: "Room is full", reason: "room_full" });
-    return;
-  }
-
-  const participantBlockedPlayerIds = resolveParticipantBlockedPlayerIds(playerId, {
-    candidateBlockedPlayerIds: body?.blockedPlayerIds,
-    fallbackBlockedPlayerIds: existingParticipant?.blockedPlayerIds,
+  const joinResult = await joinSessionByTarget({
+    target,
+    body,
   });
-  const normalizedDisplayName =
-    normalizeParticipantDisplayName(body?.displayName) ??
-    normalizeParticipantDisplayName(existingParticipant?.displayName);
-  session.participants[playerId] = {
-    playerId,
-    ...(normalizedDisplayName ? { displayName: normalizedDisplayName } : {}),
-    avatarUrl: normalizeAvatarUrl(body?.avatarUrl) ?? normalizeAvatarUrl(existingParticipant?.avatarUrl),
-    providerId:
-      normalizeProviderId(body?.providerId) ?? normalizeProviderId(existingParticipant?.providerId),
-    ...(participantBlockedPlayerIds.length > 0
-      ? { blockedPlayerIds: participantBlockedPlayerIds }
-      : {}),
-    joinedAt: existingParticipant?.joinedAt ?? now,
-    lastHeartbeatAt: now,
-    isSeated: isReturningParticipant ? isParticipantSeated(existingParticipant) : false,
-    isReady: isReturningParticipant
-      ? existingParticipant?.isReady === true && isParticipantSeated(existingParticipant)
-      : false,
-    score: normalizeParticipantScore(existingParticipant?.score),
-    remainingDice: normalizeParticipantRemainingDice(existingParticipant?.remainingDice),
-    turnTimeoutRound: normalizeParticipantTimeoutRound(existingParticipant?.turnTimeoutRound),
-    turnTimeoutCount: normalizeParticipantTimeoutCount(existingParticipant?.turnTimeoutCount),
-    queuedForNextGame,
-    isComplete: existingParticipant?.isComplete === true,
-    completedAt: normalizeParticipantCompletedAt(existingParticipant?.completedAt),
-  };
-  if (getSessionRoomKind(session) === ROOM_KINDS.private) {
-    ensureSessionOwner(session, playerId);
-  }
-  addBotsToSession(session, requestedBotCount, now);
-  session.gameConfig = resolveSessionGameConfig(session);
-  const sessionId = session.sessionId;
-  markSessionActivity(session, playerId, now);
-  ensureSessionTurnState(session);
-  reconcileSessionLoops(sessionId);
-  broadcastSessionState(session, "join");
-  const roomInventoryChanged = reconcilePublicRoomInventory(now);
-
-  const auth = issueAuthTokenBundle(playerId, sessionId);
-  const response = buildSessionResponse(session, playerId, auth);
-  if (roomInventoryChanged) {
-    await persistStore();
-    sendJson(res, 200, response);
-    return;
-  }
-  await persistStore();
-  sendJson(res, 200, response);
+  sendJson(res, joinResult.status, joinResult.payload);
 }
 
 async function handleSessionHeartbeat(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
-  let session = store.multiplayerSessions[sessionId];
-  if (!session || session.expiresAt <= Date.now()) {
-    session = await rehydrateSessionWithRetry(sessionId, "heartbeat_session", {
-      attempts: 6,
-      baseDelayMs: 150,
-    });
-  }
-  if (!session || session.expiresAt <= Date.now()) {
-    sendJson(res, 200, { ok: false, reason: "session_expired" });
-    return;
-  }
-
   const body = await parseJsonBody(req);
-  const playerId = typeof body?.playerId === "string" ? body.playerId : "";
-  if (!playerId || !session.participants[playerId]) {
-    await rehydrateStoreFromAdapter(`heartbeat_participant:${sessionId}:${playerId || "unknown"}`, {
-      force: true,
-    });
-    session = store.multiplayerSessions[sessionId];
-  }
-  if (!session || !playerId || !session.participants[playerId]) {
-    sendJson(res, 200, { ok: false, reason: "unknown_player" });
-    return;
-  }
-
-  let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-  if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
-    await rehydrateStoreFromAdapter(`heartbeat_auth:${sessionId}:${playerId}`, { force: true });
-    authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-  }
-  if (!authCheck.ok) {
-    sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "unauthorized" });
-    return;
-  }
-
-  const now = Date.now();
-  session.participants[playerId].lastHeartbeatAt = now;
-  markSessionActivity(session, playerId, now);
-  await persistStore();
-  sendJson(res, 200, { ok: true });
+  const heartbeatResult = await heartbeatSessionParticipant({
+    req,
+    sessionId,
+    body,
+  });
+  sendJson(res, heartbeatResult.status, heartbeatResult.payload);
 }
 
 async function handleUpdateParticipantState(req, res, pathname) {
@@ -2364,88 +2270,13 @@ async function handleUpdateSessionDemoControls(req, res, pathname) {
 
 async function handleQueueParticipantForNextGame(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
-  let session = store.multiplayerSessions[sessionId];
-  if (!session || session.expiresAt <= Date.now()) {
-    session = await rehydrateSessionWithRetry(sessionId, "queue_next_session", {
-      attempts: 6,
-      baseDelayMs: 150,
-    });
-  }
-  if (!session || session.expiresAt <= Date.now()) {
-    sendJson(res, 200, {
-      ok: false,
-      queuedForNextGame: false,
-      reason: "session_expired",
-    });
-    return;
-  }
-
   const body = await parseJsonBody(req);
-  const playerId = typeof body?.playerId === "string" ? body.playerId : "";
-  let participant = playerId ? session.participants[playerId] : null;
-  if (!playerId || !participant || isBotParticipant(participant)) {
-    await rehydrateStoreFromAdapter(`queue_next_participant:${sessionId}:${playerId || "unknown"}`, {
-      force: true,
-    });
-    session = store.multiplayerSessions[sessionId];
-    participant = playerId && session ? session.participants[playerId] : null;
-  }
-  if (!session || !playerId || !participant || isBotParticipant(participant)) {
-    sendJson(res, 200, {
-      ok: false,
-      queuedForNextGame: false,
-      reason: "unknown_player",
-    });
-    return;
-  }
-
-  let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-  if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
-    await rehydrateStoreFromAdapter(`queue_next_auth:${sessionId}:${playerId}`, { force: true });
-    authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-  }
-  if (!authCheck.ok) {
-    sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "unauthorized" });
-    return;
-  }
-
-  if (!areCurrentGameParticipantsComplete(session)) {
-    sendJson(res, 200, {
-      ok: false,
-      queuedForNextGame: false,
-      reason: "round_in_progress",
-    });
-    return;
-  }
-
-  if (!isParticipantSeated(participant)) {
-    sendJson(res, 200, {
-      ok: false,
-      queuedForNextGame: false,
-      reason: "not_seated",
-    });
-    return;
-  }
-
-  const now = Date.now();
-  participant.lastHeartbeatAt = now;
-  participant.queuedForNextGame = true;
-  participant.isReady = true;
-  markSessionActivity(session, playerId, now);
-  scheduleSessionPostGameLifecycle(session, now);
-  ensureSessionTurnState(session);
-  broadcastSessionState(session, "queue_next_game");
-  reconcileSessionLoops(sessionId);
-  await persistStore();
-
-  sendJson(res, 200, {
-    ok: true,
-    queuedForNextGame: true,
-    session: {
-      ...buildSessionSnapshot(session),
-      serverNow: now,
-    },
+  const queueResult = await queueSessionParticipantForNextGame({
+    req,
+    sessionId,
+    body,
   });
+  sendJson(res, queueResult.status, queueResult.payload);
 }
 
 async function handleLeaveSession(req, res, pathname) {
@@ -2747,107 +2578,12 @@ function removeParticipantFromSession(
 async function handleRefreshSessionAuth(req, res, pathname) {
   const sessionId = decodeURIComponent(pathname.split("/")[4]);
   const body = await parseJsonBody(req);
-  const playerId = typeof body?.playerId === "string" ? body.playerId : "";
-  if (!playerId) {
-    sendJson(res, 400, { error: "playerId is required" });
-    return;
-  }
-
-  let session = store.multiplayerSessions[sessionId];
-  if (!session || session.expiresAt <= Date.now()) {
-    session = await rehydrateSessionWithRetry(sessionId, "refresh_auth_session", {
-      attempts: 7,
-      baseDelayMs: 200,
-    });
-  }
-  if (!session) {
-    sendJson(res, 410, { error: "Session expired", reason: "session_expired" });
-    return;
-  }
-
-  let participant = session.participants[playerId];
-  if (!participant) {
-    const recovered = await rehydrateSessionParticipantWithRetry(
-      sessionId,
-      playerId,
-      "refresh_auth_participant",
-      {
-        attempts: 7,
-        baseDelayMs: 200,
-      }
-    );
-    session = recovered.session;
-    participant = recovered.participant;
-  }
-
-  if (!session || !participant) {
-    sendJson(res, 404, { error: "Player not in session" });
-    return;
-  }
-
-  // During high write load with external storage, session expiry can be observed transiently.
-  // Allow an authenticated participant refresh to revive liveness instead of hard-expiring.
-  const sessionExpired =
-    !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now();
-  if (sessionExpired) {
-    let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-    if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
-      const recovered = await rehydrateSessionParticipantWithRetry(
-        sessionId,
-        playerId,
-        "refresh_auth_expired_retry",
-        {
-          attempts: 5,
-          baseDelayMs: 160,
-        }
-      );
-      session = recovered.session;
-      participant = recovered.participant;
-      authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-    }
-    if (!session || !participant || !authCheck.ok) {
-      sendJson(res, 410, { error: "Session expired", reason: "session_expired" });
-      return;
-    }
-  }
-
-  let authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-  if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
-    const recovered = await rehydrateSessionParticipantWithRetry(
-      sessionId,
-      playerId,
-      "refresh_auth_authorize",
-      {
-        attempts: 5,
-        baseDelayMs: 160,
-      }
-    );
-    session = recovered.session;
-    participant = recovered.participant;
-    authCheck = authorizeSessionActionRequest(req, playerId, sessionId);
-  }
-  if (!session || !participant) {
-    sendJson(res, 404, { error: "Player not in session" });
-    return;
-  }
-  if (!authCheck.ok) {
-    sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "unauthorized" });
-    return;
-  }
-
-  const now = Date.now();
-  if (participant && typeof participant === "object") {
-    participant.lastHeartbeatAt = now;
-  }
-  // Token refresh is an authenticated presence signal and should keep the participant active,
-  // including post-game queue windows.
-  markSessionActivity(session, playerId, now);
-  reconcileSessionLoops(sessionId);
-
-  const auth = issueAuthTokenBundle(playerId, sessionId);
-  const response = buildSessionResponse(session, playerId, auth);
-  await persistStore();
-  sendJson(res, 200, response);
+  const refreshResult = await refreshSessionParticipantAuth({
+    req,
+    sessionId,
+    body,
+  });
+  sendJson(res, refreshResult.status, refreshResult.payload);
 }
 
 async function rehydrateSessionWithRetry(sessionId, reasonPrefix, options = {}) {
