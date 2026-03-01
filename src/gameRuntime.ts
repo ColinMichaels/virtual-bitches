@@ -33,6 +33,7 @@ import { Color3, PointerEventTypes, Vector3 } from "@babylonjs/core";
 import { audioService } from "./services/audio.js";
 import { hapticsService } from "./services/haptics.js";
 import { settingsService } from "./services/settings.js";
+import { analyticsService } from "./services/analytics.js";
 import { ControlInversionService } from "./services/controlInversion.js";
 import { initParticleService, particleService } from "./services/particleService.js";
 import { registerGameEffects } from "./particles/presets/gameEffects.js";
@@ -1505,10 +1506,21 @@ class Game implements GameCallbacks {
       gameConfig: this.resolveRequestedMultiplayerGameConfig(),
     });
     if (!createdSession) {
+      analyticsService.logEvent("multiplayer_session_create_failed", {
+        difficulty: requestedDifficulty,
+        requested_bot_count: Math.max(0, Math.floor(this.multiplayerOptions.botCount ?? 0)),
+      });
       notificationService.show("Failed to create multiplayer session. Continuing in solo mode.", "warning", 2800);
       return;
     }
 
+    analyticsService.logEvent("multiplayer_session_created", {
+      difficulty: createdSession.gameDifficulty ?? requestedDifficulty,
+      room_type: createdSession.roomType ?? "unknown",
+      bot_count: Math.max(0, Math.floor(this.multiplayerOptions.botCount ?? 0)),
+      demo_mode: createdSession.demoMode === true,
+      demo_speed_mode: createdSession.demoSpeedMode === true,
+    });
     this.bindMultiplayerSession(createdSession, true);
     const botCount = Math.max(0, Math.floor(this.multiplayerOptions.botCount ?? 0));
     if (botCount > 0) {
@@ -1542,8 +1554,12 @@ class Game implements GameCallbacks {
     });
     if (!session) {
       playerDataSyncService.setSessionId(undefined);
+      const joinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason() ?? "unknown";
+      analyticsService.logEvent("multiplayer_session_join_failed", {
+        join_method: "session_id",
+        reason: joinFailureReason,
+      });
       if (!options?.suppressFailureNotification) {
-        const joinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason();
         if (joinFailureReason === "room_full") {
           notificationService.show("Room is full. Pick another room or create a new one.", "warning", 2800);
         } else if (joinFailureReason === "room_banned") {
@@ -1559,6 +1575,13 @@ class Game implements GameCallbacks {
       return false;
     }
 
+    analyticsService.logEvent("multiplayer_session_joined", {
+      join_method: "session_id",
+      from_invite_link: fromInviteLink,
+      room_type: session.roomType ?? "unknown",
+      difficulty: session.gameDifficulty ?? "unknown",
+      demo_mode: session.demoMode === true,
+    });
     this.bindMultiplayerSession(session, !fromInviteLink);
     if (fromInviteLink) {
       notificationService.show(`Joined multiplayer room ${session.roomCode}.`, "success", 2600);
@@ -1588,8 +1611,12 @@ class Game implements GameCallbacks {
       gameDifficulty: this.resolveRequestedMultiplayerDifficulty(),
     });
     if (!session) {
+      const joinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason() ?? "unknown";
+      analyticsService.logEvent("multiplayer_session_join_failed", {
+        join_method: "room_code",
+        reason: joinFailureReason,
+      });
       if (!options?.suppressFailureNotification) {
-        const joinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason();
         if (joinFailureReason === "room_not_found") {
           notificationService.show("Room code not found.", "warning", 2600);
         } else if (joinFailureReason === "room_full") {
@@ -1605,6 +1632,13 @@ class Game implements GameCallbacks {
       return false;
     }
 
+    analyticsService.logEvent("multiplayer_session_joined", {
+      join_method: "room_code",
+      from_invite_link: fromInviteLink,
+      room_type: session.roomType ?? "unknown",
+      difficulty: session.gameDifficulty ?? "unknown",
+      demo_mode: session.demoMode === true,
+    });
     this.bindMultiplayerSession(session, !fromInviteLink);
     if (fromInviteLink) {
       notificationService.show(`Joined multiplayer room ${session.roomCode}.`, "success", 2600);
@@ -6097,6 +6131,13 @@ class Game implements GameCallbacks {
 
     // Check for game complete
     if (prevState.status !== "COMPLETE" && this.state.status === "COMPLETE") {
+      analyticsService.logEvent("game_complete", {
+        play_mode: this.playMode,
+        difficulty: this.state.mode.difficulty,
+        score: this.state.score,
+        roll_count: this.state.rollIndex,
+        duration_ms: Math.max(0, Date.now() - this.gameStartTime),
+      });
       const waitState = this.resolveWaitForNextGameViewState();
       this.gameOverController.showGameOver(this.state, this.gameStartTime, {
         showWaitForNextGame: waitState.showWaitForNextGame,

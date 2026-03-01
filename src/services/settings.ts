@@ -55,12 +55,17 @@ export interface GameSettings {
   difficulty: GameDifficulty;
 }
 
+export interface PrivacySettings {
+  analyticsEnabled: boolean;
+}
+
 export interface Settings {
   audio: AudioSettings;
   display: DisplaySettings;
   controls: ControlSettings;
   camera?: CameraSettings;
   game: GameSettings;
+  privacy: PrivacySettings;
   haptics?: boolean; // Optional for backwards compatibility
 }
 
@@ -106,6 +111,9 @@ const DEFAULT_SETTINGS: Settings = {
     add2ndD10: false,
     d100Mode: false,
     difficulty: "normal",
+  },
+  privacy: {
+    analyticsEnabled: false,
   },
   haptics: true,
 };
@@ -163,6 +171,11 @@ export class SettingsService {
    * Merge loaded settings with defaults (handles missing keys)
    */
   private mergeWithDefaults(loaded: any): Settings {
+    const analyticsEnabled =
+      typeof loaded?.privacy?.analyticsEnabled === "boolean"
+        ? loaded.privacy.analyticsEnabled
+        : DEFAULT_SETTINGS.privacy.analyticsEnabled;
+
     return {
       audio: { ...DEFAULT_SETTINGS.audio, ...loaded.audio },
       display: {
@@ -176,6 +189,7 @@ export class SettingsService {
       controls: { ...DEFAULT_SETTINGS.controls, ...loaded.controls },
       camera: { ...DEFAULT_CAMERA_SETTINGS, ...(loaded.camera || {}) },
       game: { ...DEFAULT_SETTINGS.game, ...loaded.game },
+      privacy: { ...DEFAULT_SETTINGS.privacy, ...(loaded.privacy || {}), analyticsEnabled },
       haptics: typeof loaded.haptics === "boolean" ? loaded.haptics : DEFAULT_SETTINGS.haptics,
     };
   }
@@ -293,6 +307,16 @@ export class SettingsService {
    */
   updateGame(game: Partial<GameSettings>): void {
     this.settings.game = { ...this.settings.game, ...game };
+    this.touchUpdatedAt();
+    this.saveSettings();
+    this.notifyListeners();
+  }
+
+  /**
+   * Update privacy settings
+   */
+  updatePrivacy(privacy: Partial<PrivacySettings>): void {
+    this.settings.privacy = { ...this.settings.privacy, ...privacy };
     this.touchUpdatedAt();
     this.saveSettings();
     this.notifyListeners();

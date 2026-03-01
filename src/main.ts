@@ -3,6 +3,7 @@ import { LoadingScreen } from "./ui/loadingScreen.js";
 import { notificationService } from "./ui/notifications.js";
 import { themeManager } from "./services/themeManager.js";
 import { settingsService } from "./services/settings.js";
+import { analyticsService } from "./services/analytics.js";
 import { getBrandLogoUrl } from "./services/assetUrl.js";
 import { environment } from "@env";
 import { logger } from "./utils/logger.js";
@@ -68,6 +69,7 @@ applyMobileDiceLayoutPreference(settingsService.getSettings().controls.mobileDic
 settingsService.onChange((settings) => {
   applyMobileDiceLayoutPreference(settings.controls.mobileDiceLayout);
 });
+void analyticsService.start();
 
 bootLoadingScreen.show();
 setBootStatus(t("main.boot.loadingThemeCatalog"), 8);
@@ -175,11 +177,25 @@ async function startGame(startOptions: SplashStartOptions): Promise<boolean> {
       gameConfig: resolvedStartOptions.gameConfig,
       multiplayer: resolvedStartOptions.multiplayer,
     });
+    analyticsService.logEvent("game_start", {
+      play_mode: resolvedStartOptions.playMode,
+      from_invite:
+        resolvedStartOptions.playMode === "multiplayer" &&
+        Boolean(
+          resolvedStartOptions.multiplayer?.sessionId || resolvedStartOptions.multiplayer?.roomCode
+        ),
+      bot_count: Math.max(0, Math.floor(resolvedStartOptions.multiplayer?.botCount ?? 0)),
+      tutorial_forced: resolvedStartOptions.forceTutorialReplay === true,
+    });
 
     gameStarted = true;
     return true;
   } catch (error) {
     log.error("Failed to load game runtime:", error);
+    analyticsService.logEvent("game_start_failed", {
+      play_mode: resolvedStartOptions.playMode,
+      stage: "runtime_load_or_init",
+    });
     notificationService.show(t("main.error.loadGameEngine"), "error", 3200);
     return false;
   }

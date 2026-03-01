@@ -21,6 +21,7 @@ import {
   type PlayerDataSyncStatus,
 } from "../services/playerDataSync.js";
 import { scoreHistoryService } from "../services/score-history.js";
+import { analyticsService } from "../services/analytics.js";
 import type { AuthenticatedUserProfile } from "../services/backendApi.js";
 import {
   adminApiService,
@@ -690,6 +691,9 @@ export class SettingsModal {
       }
       settingsService.resetToDefaults();
       this.refresh();
+      if (this.activeTab === "account") {
+        void this.refreshAccountSection();
+      }
     });
 
     // Close on backdrop click
@@ -780,6 +784,8 @@ export class SettingsModal {
       const providerLabel = providerId ? `${provider} (${providerId})` : provider;
       const photoUrl = accountProfile?.photoUrl?.trim() || firebaseProfile?.photoURL?.trim() || "";
       const leaderboardName = accountProfile?.leaderboardName?.trim() ?? "";
+      const analyticsConfigured = analyticsService.isConfigured();
+      const analyticsEnabled = settingsService.getSettings().privacy.analyticsEnabled === true;
       const accountAdminRole = this.normalizeAdminRoleValue(accountProfile?.admin?.role);
       const authLabel = authConfigured
         ? isAuthenticated
@@ -882,6 +888,25 @@ export class SettingsModal {
               </p>`
         }
 
+        <div class="settings-account-privacy">
+          <div class="settings-account-privacy-title">${t("settings.analytics.title")}</div>
+          <p class="settings-account-privacy-description">${t("settings.analytics.description")}</p>
+          <label class="settings-account-privacy-toggle">
+            <input
+              type="checkbox"
+              data-action="settings-analytics-toggle"
+              ${analyticsEnabled ? "checked" : ""}
+              ${analyticsConfigured ? "" : "disabled"}
+            />
+            <span>${t("settings.analytics.toggle")}</span>
+          </label>
+          ${
+            analyticsConfigured
+              ? ""
+              : `<p class="settings-account-privacy-note">${t("settings.analytics.unavailable")}</p>`
+          }
+        </div>
+
         <div class="settings-account-stats-grid">
           <div class="settings-account-stat">
             <span>${t("settings.account.stats.games")}</span>
@@ -961,6 +986,21 @@ export class SettingsModal {
           this.savingLeaderboardName = false;
           void this.refreshAccountSection();
         });
+    });
+
+    const analyticsToggle = panel.querySelector(
+      '[data-action="settings-analytics-toggle"]'
+    ) as HTMLInputElement | null;
+    analyticsToggle?.addEventListener("change", () => {
+      settingsService.updatePrivacy({ analyticsEnabled: analyticsToggle.checked });
+      notificationService.show(
+        analyticsToggle.checked
+          ? t("settings.notification.analyticsEnabled")
+          : t("settings.notification.analyticsDisabled"),
+        "info",
+        1800
+      );
+      audioService.playSfx("click");
     });
 
     panel
