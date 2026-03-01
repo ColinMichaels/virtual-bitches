@@ -115,34 +115,52 @@
                 </svg>
             </button>
         </div>
-        <button
-            id="seat-status-btn"
-            class="btn btn-secondary seat-status-btn"
-            title="Seat Status"
-            aria-label="Seat Status Toggle"
-            style="display: none;"
-        >
-            <span class="seat-status-btn__icon seat-status-btn__icon--sit" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="9"/>
-                    <path d="M12 8v8"/>
-                    <path d="M8 12h8"/>
-                </svg>
-            </span>
-            <span class="seat-status-btn__icon seat-status-btn__icon--ready" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="9"/>
-                    <path d="M8 12.5l2.6 2.6L16.5 9.5"/>
-                </svg>
-            </span>
-            <span class="seat-status-btn__icon seat-status-btn__icon--stand" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="9"/>
-                    <path d="M8 12h8"/>
-                </svg>
-            </span>
-            <span id="seat-status-btn-label" class="seat-status-btn__label">Sit Down</span>
-        </button>
+        <div id="aux-controls-row" aria-label="Session controls">
+            <button
+                id="seat-status-btn"
+                class="btn btn-secondary seat-status-btn"
+                title="Seat Status"
+                aria-label="Seat Status Toggle"
+                style="display: none;"
+            >
+                <span class="seat-status-btn__icon seat-status-btn__icon--sit" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="9"/>
+                        <path d="M12 8v8"/>
+                        <path d="M8 12h8"/>
+                    </svg>
+                </span>
+                <span class="seat-status-btn__icon seat-status-btn__icon--ready" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="9"/>
+                        <path d="M8 12.5l2.6 2.6L16.5 9.5"/>
+                    </svg>
+                </span>
+                <span class="seat-status-btn__icon seat-status-btn__icon--stand" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="9"/>
+                        <path d="M8 12h8"/>
+                    </svg>
+                </span>
+                <span id="seat-status-btn-label" class="seat-status-btn__label">Sit Down</span>
+            </button>
+            <button
+                id="demo-run-toggle-btn"
+                class="btn btn-secondary demo-control-btn"
+                title="Pause or resume demo autoplay"
+                style="display: none;"
+            >
+                Pause Demo
+            </button>
+            <button
+                id="demo-speed-toggle-btn"
+                class="btn btn-secondary demo-control-btn"
+                title="Toggle demo gameplay speed"
+                style="display: none;"
+            >
+                Speed: Fast
+            </button>
+        </div>
     </div>
 
     <!-- Mobile Menu Toggle Button (shown only on mobile) -->
@@ -201,6 +219,21 @@
                         </svg>
                         <span data-i18n="shell.mobile.returnLobby">Return To Lobby</span>
                     </button>
+                    <button id="mobile-demo-run-toggle-btn" class="mobile-menu-btn mobile-menu-action" title="Toggle auto-run" style="display: none;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M8 5v14"/>
+                            <path d="M16 5v14"/>
+                        </svg>
+                        <span>Pause Auto-Run</span>
+                    </button>
+                    <button id="mobile-demo-speed-toggle-btn" class="mobile-menu-btn mobile-menu-action" title="Toggle gameplay speed" style="display: none;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 12h5"/>
+                            <path d="M16 12h5"/>
+                            <circle cx="12" cy="12" r="4"/>
+                        </svg>
+                        <span>Speed: Normal</span>
+                    </button>
                 </div>
                 <div class="mobile-menu-action-group">
                     <div class="mobile-menu-group-title" data-i18n="shell.mobile.group.social">Social</div>
@@ -257,6 +290,16 @@
 
     <!-- Desktop Controls (hidden on mobile) -->
     <button id="settings-gear-btn" class="desktop-only" title="Settings (ESC)" data-i18n-title="shell.desktop.settingsEscTitle">
+        <img
+            id="settings-gear-avatar"
+            class="settings-gear-avatar"
+            src=""
+            alt=""
+            referrerpolicy="no-referrer"
+            loading="lazy"
+            decoding="async"
+            style="display: none;"
+        />
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"/>
             <path d="M12 1v6m0 6v6M5.6 5.6l4.2 4.2m4.4 4.4l4.2 4.2M1 12h6m6 0h6M5.6 18.4l4.2-4.2m4.4-4.4l4.2-4.2"/>

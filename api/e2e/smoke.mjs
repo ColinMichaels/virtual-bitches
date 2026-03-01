@@ -14,6 +14,7 @@ const assertAdminModerationTerms = process.env.E2E_ASSERT_ADMIN_MODERATION_TERMS
 const assertStorageCutover = process.env.E2E_ASSERT_STORAGE_CUTOVER === "1";
 const assertTimeoutStrikeObserver = process.env.E2E_ASSERT_TIMEOUT_STRIKE_OBSERVER !== "0";
 const assertEightPlayerBotTimeout = process.env.E2E_ASSERT_EIGHT_PLAYER_BOT_TIMEOUT !== "0";
+const assertDemoAutoRunControls = process.env.E2E_ASSERT_DEMO_AUTORUN_CONTROLS !== "0";
 const adminToken = process.env.E2E_ADMIN_TOKEN?.trim() ?? "";
 const roomExpiryWaitMs = Number(process.env.E2E_ROOM_EXPIRY_WAIT_MS ?? 9000);
 const roomOverflowWaitMs = Number(process.env.E2E_ROOM_OVERFLOW_WAIT_MS ?? 8000);
@@ -25,8 +26,12 @@ const timeoutStrikeHeartbeatIntervalMs = Number(
 );
 // Production defaults to a 60s post-round auto-start window; keep smoke timeout above that.
 const queueLifecycleWaitMs = Number(process.env.E2E_QUEUE_LIFECYCLE_WAIT_MS ?? 75000);
+const demoAutoRunProgressWaitMs = Number(process.env.E2E_DEMO_AUTORUN_PROGRESS_WAIT_MS ?? 14000);
+const demoAutoRunPauseStabilityWaitMs = Number(process.env.E2E_DEMO_PAUSE_STABILITY_WAIT_MS ?? 5000);
+const demoAutoRunPollIntervalMs = Number(process.env.E2E_DEMO_AUTORUN_POLL_INTERVAL_MS ?? 250);
 const expectedStorageBackend = normalizeOptionalString(process.env.E2E_EXPECT_STORAGE_BACKEND).toLowerCase();
 const expectedFirestorePrefix = normalizeOptionalString(process.env.E2E_EXPECT_FIRESTORE_PREFIX);
+const expectedSpeedProfile = normalizeOptionalString(process.env.E2E_EXPECT_SPEED_PROFILE).toLowerCase();
 const expectedStoreSections = getStoreSections();
 const expectedStorageSectionMinCounts = parseStorageSectionMinCountSpec(
   process.env.E2E_EXPECT_STORAGE_SECTION_MIN_COUNTS
@@ -58,6 +63,19 @@ async function run() {
   log(`WS base URL:  ${targets.wsBaseUrl}`);
 
   const health = await apiRequest("/health", { method: "GET" });
+  const reportedSpeedProfile = normalizeOptionalString(health?.multiplayer?.speedProfile).toLowerCase();
+  const reportedTurnTimeoutByDifficulty = health?.multiplayer?.turnTimeoutByDifficultyMs ?? null;
+  const reportedBotTickRange = health?.multiplayer?.botTickRangeMs ?? null;
+  const reportedBotTurnAdvanceRange = health?.multiplayer?.botTurnAdvanceRangeMs ?? null;
+  log(
+    `Smoke runtime profile: speedProfile=${reportedSpeedProfile || "unknown"} turnTimeoutByDifficultyMs=${JSON.stringify(reportedTurnTimeoutByDifficulty)} botTickRangeMs=${JSON.stringify(reportedBotTickRange)} botTurnAdvanceRangeMs=${JSON.stringify(reportedBotTurnAdvanceRange)}`
+  );
+  if (expectedSpeedProfile) {
+    assert(
+      reportedSpeedProfile === expectedSpeedProfile,
+      `unexpected speed profile from /health (expected=${expectedSpeedProfile}, actual=${reportedSpeedProfile || "unknown"})`
+    );
+  }
   if (expectedStorageBackend) {
     const reportedBackend =
       typeof health?.storage?.backend === "string"
@@ -106,6 +124,22 @@ async function run() {
       `Winner queue lifecycle encountered transient failure; retrying once with a fresh session (${firstAttemptMessage}).`
     );
     await runWinnerQueueLifecycleChecks(`${runSuffix}-retry`);
+  }
+  if (assertDemoAutoRunControls) {
+    try {
+      await runDemoAutoRunControlChecks(runSuffix);
+    } catch (error) {
+      if (!isTransientDemoAutoRunControlFailure(error)) {
+        throw error;
+      }
+      const firstAttemptMessage = error instanceof Error ? error.message : String(error);
+      log(
+        `Demo auto-run control checks encountered transient failure; retrying once with a fresh session (${firstAttemptMessage}).`
+      );
+      await runDemoAutoRunControlChecks(`${runSuffix}-retry`);
+    }
+  } else {
+    log("Skipping demo auto-run control checks (set E2E_ASSERT_DEMO_AUTORUN_CONTROLS=1 to enable).");
   }
   if (assertTimeoutStrikeObserver) {
     try {
@@ -1924,6 +1958,155 @@ async function runWinnerQueueLifecycleChecks(runSuffix) {
   }
 }
 
+async function runDemoAutoRunControlChecks(runSuffix) {
+  log("Running demo auto-run control checks...");
+
+  const demoHostPlayerId = `e2e-demo-host-${runSuffix}`;
+  const demoHostDisplayName = "E2E Demo Host";
+  const created = await apiRequest("/multiplayer/sessions", {
+    method: "POST",
+    body: {
+      playerId: demoHostPlayerId,
+      displayName: demoHostDisplayName,
+      botCount: 2,
+      gameDifficulty: "normal",
+    },
+  });
+  assert(typeof created?.sessionId === "string", "demo auto-run create session returned no sessionId");
+  assert(created?.auth?.accessToken, "demo auto-run create session returned no host access token");
+
+  const demoSessionId = created.sessionId;
+  let demoHostAccessToken = created.auth.accessToken;
+  let demoHostSocket = null;
+  let demoHostMessageBuffer = null;
+
+  try {
+    try {
+      demoHostSocket = await openSocket(
+        "demo-autoplay-host",
+        buildSocketUrl(demoSessionId, demoHostPlayerId, demoHostAccessToken)
+      );
+      demoHostMessageBuffer = createSocketMessageBuffer(demoHostSocket);
+    } catch (error) {
+      log(`Demo auto-run host socket unavailable; falling back to HTTP-only polling (${String(error)}).`);
+    }
+
+    const startResult = await applyDemoControlActionWithRecovery({
+      sessionId: demoSessionId,
+      playerId: demoHostPlayerId,
+      displayName: demoHostDisplayName,
+      accessToken: demoHostAccessToken,
+      action: "resume",
+      label: "demo auto-run start",
+    });
+    demoHostAccessToken = startResult.accessToken;
+    const startedSession = startResult.snapshot;
+    assert(startedSession?.demoMode === true, "demo auto-run start expected demoMode=true");
+    assert(startedSession?.demoAutoRun === true, "demo auto-run start expected demoAutoRun=true");
+    const startedHost = findSnapshotParticipant(startedSession, demoHostPlayerId);
+    assert(startedHost, "demo auto-run start snapshot missing host participant");
+    assert(
+      startedHost?.isSeated === false,
+      "demo auto-run start expected host to be moved to observer/lounge (isSeated=false)"
+    );
+    assert(startedHost?.isReady !== true, "demo auto-run start expected host unready");
+    const startedBots = Array.isArray(startedSession?.participants)
+      ? startedSession.participants.filter((participant) => participant?.isBot === true)
+      : [];
+    assert(startedBots.length >= 1, "demo auto-run start expected at least one seeded bot");
+    assert(
+      startedBots.every((participant) => participant?.isSeated === true),
+      "demo auto-run start expected all seeded bots seated at the table"
+    );
+    assert(
+      startedBots.every((participant) => participant?.isReady === true),
+      "demo auto-run start expected all seeded bots ready"
+    );
+
+    const startedFingerprint = extractDemoTurnFingerprint(startedSession, demoHostPlayerId);
+    const startProgress = await waitForDemoTurnProgress({
+      sessionId: demoSessionId,
+      hostPlayerId: demoHostPlayerId,
+      hostDisplayName: demoHostDisplayName,
+      accessToken: demoHostAccessToken,
+      baselineFingerprint: startedFingerprint,
+      waitTimeoutMs: demoAutoRunProgressWaitMs,
+      messageBuffer: demoHostMessageBuffer,
+    });
+    demoHostAccessToken = startProgress.accessToken;
+
+    const pauseResult = await applyDemoControlActionWithRecovery({
+      sessionId: demoSessionId,
+      playerId: demoHostPlayerId,
+      displayName: demoHostDisplayName,
+      accessToken: demoHostAccessToken,
+      action: "pause",
+      label: "demo auto-run pause",
+    });
+    demoHostAccessToken = pauseResult.accessToken;
+    const pausedSession = pauseResult.snapshot;
+    assert(pausedSession?.demoMode === true, "demo auto-run pause expected demoMode=true");
+    assert(pausedSession?.demoAutoRun === false, "demo auto-run pause expected demoAutoRun=false");
+    const pausedFingerprint = extractDemoTurnFingerprint(pausedSession, demoHostPlayerId);
+    await assertDemoTurnStateFrozen({
+      sessionId: demoSessionId,
+      hostPlayerId: demoHostPlayerId,
+      hostDisplayName: demoHostDisplayName,
+      accessToken: demoHostAccessToken,
+      baselineFingerprint: pausedFingerprint,
+      waitDurationMs: demoAutoRunPauseStabilityWaitMs,
+      messageBuffer: demoHostMessageBuffer,
+    });
+
+    const restartResult = await applyDemoControlActionWithRecovery({
+      sessionId: demoSessionId,
+      playerId: demoHostPlayerId,
+      displayName: demoHostDisplayName,
+      accessToken: demoHostAccessToken,
+      action: "resume",
+      label: "demo auto-run restart",
+    });
+    demoHostAccessToken = restartResult.accessToken;
+    const restartedSession = restartResult.snapshot;
+    assert(restartedSession?.demoMode === true, "demo auto-run restart expected demoMode=true");
+    assert(restartedSession?.demoAutoRun === true, "demo auto-run restart expected demoAutoRun=true");
+    const restartedHost = findSnapshotParticipant(restartedSession, demoHostPlayerId);
+    assert(restartedHost, "demo auto-run restart snapshot missing host participant");
+    assert(
+      restartedHost?.isSeated === false,
+      "demo auto-run restart expected host to remain in observer/lounge (isSeated=false)"
+    );
+    const restartedBots = Array.isArray(restartedSession?.participants)
+      ? restartedSession.participants.filter((participant) => participant?.isBot === true)
+      : [];
+    assert(restartedBots.length >= 1, "demo auto-run restart expected at least one respawned bot");
+    assert(
+      restartedBots.every((participant) => participant?.isSeated === true),
+      "demo auto-run restart expected all respawned bots seated at the table"
+    );
+    assert(
+      restartedBots.every((participant) => participant?.isReady === true),
+      "demo auto-run restart expected all respawned bots ready"
+    );
+    const restartFingerprint = extractDemoTurnFingerprint(restartedSession, demoHostPlayerId);
+    const restartProgress = await waitForDemoTurnProgress({
+      sessionId: demoSessionId,
+      hostPlayerId: demoHostPlayerId,
+      hostDisplayName: demoHostDisplayName,
+      accessToken: demoHostAccessToken,
+      baselineFingerprint: restartFingerprint,
+      waitTimeoutMs: demoAutoRunProgressWaitMs,
+      messageBuffer: demoHostMessageBuffer,
+    });
+    demoHostAccessToken = restartProgress.accessToken;
+
+    log("Demo auto-run control checks passed.");
+  } finally {
+    await safeCloseSocket(demoHostSocket);
+    await safeLeave(demoSessionId, demoHostPlayerId);
+  }
+}
+
 async function runTimeoutStrikeObserverChecks(runSuffix) {
   log("Running timeout strike observer checks...");
 
@@ -3725,6 +3908,283 @@ async function waitForTurnAutoAdvanceForPlayer({
   );
 }
 
+async function applyDemoControlActionWithRecovery({
+  sessionId,
+  playerId,
+  displayName,
+  accessToken,
+  action,
+  label,
+  maxAttempts = 6,
+  initialDelayMs = 200,
+}) {
+  let token = typeof accessToken === "string" ? accessToken : "";
+  let lastFailure = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const response = await apiRequestWithStatus(
+      `/multiplayer/sessions/${encodeURIComponent(sessionId)}/demo-controls`,
+      {
+        method: "POST",
+        accessToken: token,
+        body: {
+          playerId,
+          action,
+        },
+      }
+    );
+    if (response.ok) {
+      return {
+        snapshot: response.body?.session ?? null,
+        accessToken: token,
+      };
+    }
+
+    if (!isTransientDemoControlRequestFailure(response)) {
+      throw new Error(
+        `${label} failed status=${response.status} body=${JSON.stringify(response.body)}`
+      );
+    }
+    lastFailure = response;
+
+    const recovered = await refreshSessionAuthWithRecovery({
+      sessionId,
+      playerId,
+      displayName,
+      accessToken: token,
+      maxAttempts: 8,
+      initialDelayMs: 250,
+    });
+    token = recovered.accessToken;
+
+    if (attempt >= maxAttempts - 1) {
+      break;
+    }
+    const backoffMs = Math.max(50, initialDelayMs * (attempt + 1));
+    await waitMs(backoffMs);
+  }
+
+  throw new Error(
+    `${label} did not recover after ${maxAttempts} attempt(s) (status=${lastFailure?.status ?? "unknown"} body=${JSON.stringify(lastFailure?.body ?? null)})`
+  );
+}
+
+async function waitForDemoTurnProgress({
+  sessionId,
+  hostPlayerId,
+  hostDisplayName,
+  accessToken,
+  baselineFingerprint,
+  waitTimeoutMs,
+  messageBuffer,
+}) {
+  const deadline = Date.now() + normalizeDemoWaitMs(waitTimeoutMs, 12000);
+  let token = accessToken;
+  let lastFingerprint = baselineFingerprint;
+  if (Array.isArray(messageBuffer)) {
+    messageBuffer.length = 0;
+  }
+
+  while (Date.now() < deadline) {
+    const refreshed = await refreshSessionAuthWithRecovery({
+      sessionId,
+      playerId: hostPlayerId,
+      displayName: hostDisplayName,
+      accessToken: token,
+      maxAttempts: 8,
+      initialDelayMs: 250,
+    });
+    token = refreshed.accessToken;
+    const snapshot = refreshed.snapshot;
+    const currentFingerprint = extractDemoTurnFingerprint(snapshot, hostPlayerId);
+    lastFingerprint = currentFingerprint;
+    if (hasDemoTurnProgress(baselineFingerprint, currentFingerprint)) {
+      return {
+        snapshot,
+        accessToken: token,
+      };
+    }
+    await waitMs(Math.max(80, Math.floor(demoAutoRunPollIntervalMs)));
+  }
+
+  throw new Error(
+    `demo auto-run did not progress within ${normalizeDemoWaitMs(waitTimeoutMs, 12000)}ms (last=${JSON.stringify(lastFingerprint)})`
+  );
+}
+
+async function assertDemoTurnStateFrozen({
+  sessionId,
+  hostPlayerId,
+  hostDisplayName,
+  accessToken,
+  baselineFingerprint,
+  waitDurationMs,
+  messageBuffer,
+}) {
+  const waitMsForFreeze = normalizeDemoWaitMs(waitDurationMs, 4000);
+  const deadline = Date.now() + waitMsForFreeze;
+  let token = accessToken;
+  if (Array.isArray(messageBuffer)) {
+    messageBuffer.length = 0;
+  }
+
+  while (Date.now() < deadline) {
+    const refreshed = await refreshSessionAuthWithRecovery({
+      sessionId,
+      playerId: hostPlayerId,
+      displayName: hostDisplayName,
+      accessToken: token,
+      maxAttempts: 8,
+      initialDelayMs: 250,
+    });
+    token = refreshed.accessToken;
+    const snapshot = refreshed.snapshot;
+    const currentFingerprint = extractDemoTurnFingerprint(snapshot, hostPlayerId);
+    if (!isSameDemoTurnFingerprint(baselineFingerprint, currentFingerprint)) {
+      throw new Error(
+        `demo auto-run pause expected frozen turn state but changed from ${JSON.stringify(baselineFingerprint)} to ${JSON.stringify(currentFingerprint)}`
+      );
+    }
+    await waitMs(Math.max(80, Math.floor(demoAutoRunPollIntervalMs)));
+  }
+
+  if (Array.isArray(messageBuffer)) {
+    await assertNoBufferedMessage(
+      messageBuffer,
+      (payload) => isDemoTurnProgressPayload(payload, sessionId),
+      waitMsForFreeze,
+      "demo auto-run pause"
+    );
+  }
+
+  return {
+    accessToken: token,
+  };
+}
+
+function extractDemoTurnFingerprint(snapshot, hostPlayerId) {
+  const turnState = snapshot?.turnState ?? null;
+  const hostParticipant = findSnapshotParticipant(snapshot, hostPlayerId);
+  const turnNumber =
+    Number.isFinite(turnState?.turnNumber) && turnState.turnNumber > 0
+      ? Math.floor(turnState.turnNumber)
+      : 1;
+  const activeTurnPlayerId =
+    typeof turnState?.activeTurnPlayerId === "string" ? turnState.activeTurnPlayerId : "";
+  const phase = typeof turnState?.phase === "string" ? turnState.phase : "";
+  const gameStartedAt =
+    Number.isFinite(snapshot?.gameStartedAt) && snapshot.gameStartedAt > 0
+      ? Math.floor(snapshot.gameStartedAt)
+      : 0;
+  return {
+    round: normalizeE2ERoundNumber(turnState?.round, 1),
+    turnNumber,
+    activeTurnPlayerId,
+    phase,
+    gameStartedAt,
+    demoAutoRun: snapshot?.demoAutoRun === true,
+    sessionComplete: snapshot?.sessionComplete === true,
+    hostIsSeated: hostParticipant?.isSeated === true,
+    hostIsReady: hostParticipant?.isReady === true,
+    hostScore: Number.isFinite(hostParticipant?.score) ? Math.floor(hostParticipant.score) : 0,
+    hostRemainingDice: Number.isFinite(hostParticipant?.remainingDice)
+      ? Math.floor(hostParticipant.remainingDice)
+      : -1,
+    hostIsComplete: hostParticipant?.isComplete === true,
+  };
+}
+
+function hasDemoTurnProgress(baseline, current) {
+  if (!baseline || !current) {
+    return false;
+  }
+  if (current.gameStartedAt > baseline.gameStartedAt) {
+    return true;
+  }
+  if (current.round > baseline.round) {
+    return true;
+  }
+  if (current.round === baseline.round && current.turnNumber > baseline.turnNumber) {
+    return true;
+  }
+  if (
+    current.round === baseline.round &&
+    current.turnNumber === baseline.turnNumber &&
+    current.activeTurnPlayerId !== baseline.activeTurnPlayerId
+  ) {
+    return true;
+  }
+  if (
+    current.round === baseline.round &&
+    current.turnNumber === baseline.turnNumber &&
+    current.phase !== baseline.phase &&
+    current.demoAutoRun === true
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function isSameDemoTurnFingerprint(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+  return (
+    left.round === right.round &&
+    left.turnNumber === right.turnNumber &&
+    left.activeTurnPlayerId === right.activeTurnPlayerId &&
+    left.phase === right.phase &&
+    left.gameStartedAt === right.gameStartedAt &&
+    left.demoAutoRun === right.demoAutoRun &&
+    left.sessionComplete === right.sessionComplete &&
+    left.hostIsSeated === right.hostIsSeated &&
+    left.hostIsReady === right.hostIsReady &&
+    left.hostScore === right.hostScore &&
+    left.hostRemainingDice === right.hostRemainingDice &&
+    left.hostIsComplete === right.hostIsComplete
+  );
+}
+
+function isDemoTurnProgressPayload(payload, sessionId) {
+  if (!payload || typeof payload !== "object" || payload.sessionId !== sessionId) {
+    return false;
+  }
+  if (payload.type === "turn_auto_advanced") {
+    return true;
+  }
+  if (payload.type === "turn_action" && typeof payload.source === "string") {
+    return payload.source.includes("bot_auto") || payload.source.includes("timeout_auto");
+  }
+  if (payload.type === "turn_end" && typeof payload.source === "string") {
+    return payload.source.includes("bot_auto") || payload.source.includes("timeout_auto");
+  }
+  if (payload.type === "turn_start" && typeof payload.source === "string") {
+    return payload.source.includes("bot_auto") || payload.source.includes("timeout_auto");
+  }
+  return false;
+}
+
+function isTransientDemoControlRequestFailure(result) {
+  if (!result) {
+    return false;
+  }
+  if (isTransientQueueRefreshFailure(result)) {
+    return true;
+  }
+  if (result.status === 404 && result.body?.reason === "unknown_player") {
+    return true;
+  }
+  return false;
+}
+
+function normalizeDemoWaitMs(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return Math.max(1000, Math.floor(fallback));
+  }
+  return Math.max(1000, Math.floor(parsed));
+}
+
 async function assertNoBufferedMessage(buffer, matcher, waitDurationMs, label) {
   const startedAt = Date.now();
   const waitLimitMs =
@@ -3835,6 +4295,17 @@ function isTransientWinnerQueueLifecycleFailure(error) {
   return (
     normalized.includes("queue lifecycle did not auto-start a fresh round") ||
     normalized.includes("session_expired")
+  );
+}
+
+function isTransientDemoAutoRunControlFailure(error) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("demo auto-run did not progress") ||
+    normalized.includes("did not recover after") ||
+    normalized.includes("session_expired") ||
+    normalized.includes("timeout strike refresh did not recover session auth")
   );
 }
 

@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-28 (private-room create/join UX refresh + game updates entry)
+**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-28 (deploy stabilization docs + multiplayer speed-profile foundation)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -84,19 +84,51 @@ Reference docs:
   - [ ] Add structured Cloud Run log filters/alerts for websocket auth failures and moderation abuse spikes.
 
 ### Multiplayer Test-Speed Profile + UI Demo Mode (2026-02-28)
-- **Status**: 🔵 Planned
+- **Status**: 🟡 In Progress
 - **Why**:
   - 8-player timeout/bot smoke coverage is high-value but slow at production pacing.
   - We want faster CI/local validation without changing real gameplay defaults.
   - A controlled "demo speed" mode could be useful for live showcases in UI.
 - **Implementation Targets**:
-  - [ ] Make bot pacing env-configurable in API (tick interval + bot turn-advance delay ranges) with safe defaults matching current production behavior.
-  - [ ] Add a dedicated "fast test speed" env profile for local/CI smoke (`api/e2e/run-local.mjs` + workflow vars) that shortens bot pacing and timeout windows only in test lanes.
-  - [ ] Keep production deploy workflow on normal speed unless an explicit CI variable enables the fast profile.
-  - [ ] Add smoke diagnostics that print active speed profile values at startup for easier debugging.
-  - [ ] Add docs for new speed knobs in `docs/ENVIRONMENT-REFERENCE.md`.
-  - [ ] Add an optional UI-facing "Demo Speed Mode" (private room only) behind a flag, with clear visual badge + reset path.
-  - [ ] Add guardrails so demo/test speed settings cannot be accidentally enabled globally in production.
+  - [x] Make bot pacing env-configurable in API (tick interval + bot turn-advance delay ranges) with safe defaults matching current production behavior.
+  - [x] Add a dedicated "fast test speed" env profile for local/CI smoke (`api/e2e/run-local.mjs` + workflow vars) that shortens bot pacing and timeout windows only in test lanes.
+  - [x] Keep production deploy workflow on normal speed unless an explicit CI variable enables the fast profile.
+  - [x] Add smoke diagnostics that print active speed profile values at startup for easier debugging.
+  - [x] Add docs for new speed knobs in `docs/ENVIRONMENT-REFERENCE.md`.
+  - [x] Add an optional UI-facing "Demo Speed Mode" (private room only) behind a flag, with clear visual badge + reset path.
+  - [x] Add guardrails so demo/test speed settings cannot be accidentally enabled globally in production.
+  - [x] Auto-seed bots when creating a private demo room and keep host in observer/controller mode by default.
+  - [x] Add host-only demo control API + UI actions (`pause/resume`, `speed normal/fast`) for private demo rooms.
+  - [x] Update server session lifecycle so demo observer-host rooms can run bot-only turns without being killed by no-seated-human gating.
+
+### Multiplayer Host-Control + Observer UX (2026-03-01)
+- **Status**: 🟡 In Progress
+- **Summary**:
+  - Private-room host controls are now available outside demo-create mode.
+  - Observer clients no longer fall back into local solo turn flow while connected to active multiplayer rooms.
+  - Settings `Main Menu` button has been removed; return-to-menu is now routed through shared confirmation flow.
+- **Next Steps**:
+  - [x] Extend host controls from demo-only to all private rooms (owner only).
+  - [x] Route `Esc` in settings through the return-to-menu confirmation flow used by gameplay main-menu actions.
+  - [x] Temporarily remove game-variant die toggles from Settings UI until mechanics are stabilized.
+  - [ ] Add pure offline-solo "host-control sandbox" parity mode (no backend session) if we want this outside multiplayer-private practice rooms.
+  - [ ] Add focused multiplayer regression checks for observer-host + bot-only continuity in private rooms (local + CI smoke lane).
+
+### Unified Game Config (2026-03-01)
+- **Status**: 🟡 In Progress
+- **Goal**:
+  - Use one normalized game config contract across solo, multiplayer, and demo entry paths.
+  - Keep mechanics/actions/animations unified; vary only rules/params/capabilities by mode.
+- **Phase 1 (compatibility-first)**:
+  - [x] Add optional `gameConfig` create-session contract with legacy fallback support.
+  - [x] Normalize `gameConfig` server-side and map to existing session behavior.
+  - [x] Include derived `gameConfig` in session snapshots for debugging visibility.
+  - [x] Add focused contract passthrough tests (`backendApi`, `sessionService`, `gameConfig` unit tests).
+  - [x] Document shape + temporary debug checklist in `docs/GAME-CONFIG-UNIFIED-MODES.md`.
+- **Phase 2 (after stability gate)**:
+  - [ ] Move solo game creation to the same config contract path.
+  - [ ] Centralize capability enforcement policy (chaos/gifting/moderation/banning) from config instead of scattered mode checks.
+  - [ ] Remove legacy create fields once all clients use `gameConfig`.
 
 ### Camera System & Machinima Tools (Phase 1 COMPLETE, Phase 2 PARTIAL) 📷
 - **Status**: ✅ Phase 1 COMPLETE (2026-02-24) • 🟡 Phase 2 PARTIAL (2026-02-25 foundation work)

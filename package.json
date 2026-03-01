@@ -25,6 +25,7 @@
     "test:chaos-execution": "tsx src/chaos/upgrades/executionProfile.test.ts",
     "test:chaos-upgrades": "tsx src/chaos/upgrades/progressionService.test.ts",
     "test:controls": "tsx src/services/controlInversion.test.ts",
+    "test:game-config": "tsx src/gameplay/gameConfig.test.ts",
     "test:i18n": "tsx src/i18n/i18n.test.ts",
     "test:network": "tsx src/multiplayer/networkService.test.ts",
     "test:session-service": "tsx src/multiplayer/sessionService.test.ts",

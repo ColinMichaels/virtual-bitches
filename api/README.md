@@ -145,7 +145,15 @@ Planned (not implemented yet):
   - `participants[]` snapshot (`playerId`, `displayName`, optional `avatarUrl`, optional `providerId`, `isBot`, `joinedAt`, `lastHeartbeatAt`)
   - `turnState` snapshot (`order[]`, `activeTurnPlayerId`, `round`, `turnNumber`, `phase`, `activeRollServerId`, optional `activeRoll`, `updatedAt`)
 - `POST /api/multiplayer/sessions` accepts optional `displayName`, `avatarUrl`, `providerId`, and `botCount` (`0..4`) to seed the local participant profile and bot seats.
+- `POST /api/multiplayer/sessions` also accepts optional `gameConfig` for unified mode/timing/capability automation input:
+  - `mode`: `solo` | `multiplayer` | `demo` (this endpoint normalizes `solo` -> `multiplayer`)
+  - `difficulty`: `easy` | `normal` | `hard`
+  - `timingProfile`: `standard` | `demo_fast` | `test_fast`
+  - `capabilities`: `{ chaos, gifting, moderation, banning, hostControls, privateChat }`
+  - `automation`: `{ enabled, autoRun, botCount, speedMode }` where `speedMode` is `normal` | `fast`
+  - Legacy fields (`botCount`, `gameDifficulty`, `demoSpeedMode`) remain supported and are used as fallbacks.
 - `POST /api/multiplayer/sessions/:sessionId/join` and `POST /api/multiplayer/rooms/:roomCode/join` accept optional `displayName`, `avatarUrl`, `providerId`, and `botCount` (`0..4`) to update joining participant profile data and seed bots into an existing room.
+- Join endpoints also accept optional `gameConfig`; currently its `difficulty` and `automation.botCount` are used as normalized fallbacks for legacy join payload fields.
 - Join can return `room_banned` when the player has been room-banned by the room owner/admin.
 - Multiplayer mutation endpoints now require a valid session bearer token:
   - `POST /api/multiplayer/sessions/:sessionId/heartbeat`
@@ -272,6 +280,9 @@ Notes:
 - `E2E_ASSERT_CHAT_CONDUCT` is opt-in for deployed smoke.
 - local harness (`npm run test:e2e:api:local`) enables it by default with a deterministic test term.
 - local harness defaults `E2E_ASSERT_ROOM_EXPIRY=1` only when short TTL mode is enabled (`E2E_SHORT_TTLS!=0`); otherwise it defaults to `0` to match long-lived production TTLs.
+- local harness defaults to `MULTIPLAYER_SPEED_PROFILE=fast` when short TTL mode is enabled, and `normal` otherwise.
+- override local speed profile with `E2E_MULTIPLAYER_SPEED_PROFILE=normal|fast` (or set `MULTIPLAYER_SPEED_PROFILE` explicitly).
+- smoke startup logs active speed/timer diagnostics from `/api/health`; set `E2E_EXPECT_SPEED_PROFILE=normal|fast` for strict assertion.
 
 Optional timeout-strike observer/lounge assertion segment:
 

@@ -29,6 +29,8 @@
 - Added dedicated timeout-strike smoke assertion for "two turn timeouts in one round => observer/lounge" with explicit participant-state validation.
 - Added transient timeout-strike retry behavior plus Cloud Run distributed fallback: repeated transient `session_expired` can be marked inconclusive (non-fatal) unless `E2E_FAIL_ON_TRANSIENT_TIMEOUT_STRIKE_SESSION_EXPIRED=1` is set.
 - Hardened session-id join probes in smoke (main flow, queue lifecycle, and timeout-strike setup) with transient-aware retries to reduce false negatives from short-lived session-store drift.
+- Hardened participant-state recovery in smoke under distributed `session_expired` churn and retry-raced auth refresh.
+- Hardened realtime relay smoke checks to recover after transient websocket/socket churn and mark repeated auth churn inconclusive by default (`E2E_FAIL_ON_TRANSIENT_REALTIME_RELAY_SESSION_EXPIRED=1` to fail hard).
 
 ### Multiplayer Post-Round Lifecycle Fixes
 - Fixed next-game scheduling baseline so `nextGameStartsAt` is now computed from **round completion time** instead of prior `gameStartedAt`.
@@ -64,6 +66,42 @@
 - Removed active-round fallback countdown behavior (`gameStart + roundCycle`) that previously forced countdown mode during live rounds.
 - Result: active rounds now show elapsed game time correctly; post-round states continue to show countdown when scheduled.
 
+### Multiplayer Test-Speed Profile + UI Demo Mode Foundation
+- Added API speed profile support (`MULTIPLAYER_SPEED_PROFILE=normal|fast`, with `demo` alias -> `fast`) for bot pacing defaults.
+- Added production guardrail: `MULTIPLAYER_SPEED_PROFILE=fast` is ignored in production unless `MULTIPLAYER_ALLOW_FAST_PROFILE_IN_PRODUCTION=1`.
+- Added env-configurable bot pacing ranges:
+  - `MULTIPLAYER_BOT_TICK_MIN_MS`, `MULTIPLAYER_BOT_TICK_MAX_MS`
+  - `MULTIPLAYER_BOT_TURN_ADVANCE_MIN_MS`, `MULTIPLAYER_BOT_TURN_ADVANCE_MAX_MS`
+  - profile ranges: `MULTIPLAYER_BOT_TURN_ADVANCE_{CAUTIOUS|BALANCED|AGGRESSIVE}_{MIN|MAX}_MS`
+- Exposed active speed diagnostics in `/api/health` multiplayer runtime:
+  - `speedProfile`, `speedProfileRequested`
+  - `botTickRangeMs`, `botTurnAdvanceRangeMs`, `botTurnAdvanceByProfileMs`
+- Updated local smoke harness (`api/e2e/run-local.mjs`) to default to a fast profile in short-TTL mode and log active local speed profile.
+- Updated smoke startup output (`api/e2e/smoke.mjs`) to print speed + timeout diagnostics and support optional `E2E_EXPECT_SPEED_PROFILE` assertions.
+- Added frontend env plumbing for demo-mode badging:
+  - `VITE_MULTIPLAYER_DEMO_SPEED_MODE_ENABLED`
+  - `VITE_MULTIPLAYER_DEMO_SPEED_LABEL`
+- Added splash multiplayer panel demo badge (flagged, default off): `${label} (private rooms only)`.
+- Added private-room demo-speed toggle/reset UX path:
+  - toggle appears in private-room create intent when feature flag is enabled
+  - toggle auto-resets when switching to public room selection or invite-code join intent
+  - `demoSpeedMode` is now carried in multiplayer start/create payloads and surfaced in API session responses.
+- Promoted demo mode from badge-only to a controllable room mode:
+  - demo private-room create now auto-seeds bots and disables auto-seat/ready so host starts as observer/controller.
+  - added host-only demo controls (`pause/resume` + `speed normal/fast`) via `POST /api/multiplayer/sessions/:sessionId/demo-controls`.
+  - added persistent session flags (`demoMode`, `demoAutoRun`, `demoSpeedMode`) in API responses + websocket session-state payloads.
+  - updated bot/turn/no-seated lifecycle gating so demo rooms can run bot-only rounds without requiring seated humans, while still expiring when no live human controller remains.
+
+### Multiplayer Host-Control + Menu UX Follow-up (2026-03-01)
+- Extended host control eligibility from demo-only rooms to all private rooms (owner only), so private-room hosts can control auto-run/speed without requiring demo creation mode.
+- Updated demo-control API mutation behavior to auto-enable host-control mode on first control action in private rooms (instead of rejecting with `demo_mode_disabled`).
+- Updated private-room bot/liveness gating to treat connected private-room observers as live humans for bot-loop continuity, reducing bot-prune dead-ends when host is observing.
+- Fixed client-side turn enforcement so unseated observers no longer drop into local solo fallback while connected to active multiplayer sessions.
+- Unified return-to-menu confirmation flow:
+  - `Esc` from settings now follows the same return-to-menu confirmation path as main-menu actions.
+  - removed in-settings `Main Menu` button (return action is now routed through the shared confirmation flow used by gameplay controls).
+- Temporarily removed game-variant die toggles from Settings UI while gameplay-mechanic stabilization continues.
+
 ---
 
 ## Validation Snapshot
@@ -74,6 +112,7 @@
 - `npm run test:e2e:api:local` passes, including winner queue lifecycle auto-restart checks.
 - GitHub Actions `deploy-api` completed successfully on February 28, 2026 after smoke hardening and transient distributed-flow guards.
 - Latest successful `deploy-api` run retained queue lifecycle + timeout-strike observer segments as inconclusive (non-fatal) under repeated transient distributed `session_expired`, then continued to full smoke pass.
+- Follow-up successful `deploy-api` run (Cloud Run revision `biscuits-api-00161-868`) verified end-to-end deploy viability after realtime-relay transient recovery hardening.
 - Latest successful `deploy-api` run still skipped optional smoke lanes that require additional CI config/auth:
   - admin storage cutover/admin monitor/admin moderation-term assertions
   - chat-conduct admin clear verification

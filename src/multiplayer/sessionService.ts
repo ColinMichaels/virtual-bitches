@@ -8,6 +8,7 @@ import {
   type MultiplayerParticipantStateAction,
   type MultiplayerSessionRecord,
 } from "../services/backendApi.js";
+import type { UnifiedGameCreateConfig } from "../gameplay/gameConfig.js";
 import { getLocalPlayerId } from "../services/playerIdentity.js";
 import { authSessionService } from "../services/authSession.js";
 
@@ -61,6 +62,8 @@ export class MultiplayerSessionService {
       blockedPlayerIds?: string[];
       botCount?: number;
       gameDifficulty?: MultiplayerGameDifficulty;
+      demoSpeedMode?: boolean;
+      gameConfig?: UnifiedGameCreateConfig;
     } = {}
   ): Promise<MultiplayerSessionRecord | null> {
     const created = await backendApiService.createMultiplayerSession({
@@ -72,6 +75,8 @@ export class MultiplayerSessionService {
       blockedPlayerIds: options.blockedPlayerIds,
       botCount: options.botCount,
       gameDifficulty: options.gameDifficulty,
+      demoSpeedMode: options.demoSpeedMode === true,
+      gameConfig: options.gameConfig,
     });
     if (!created) return null;
 
@@ -169,6 +174,10 @@ export class MultiplayerSessionService {
         expiresAt: response.session.expiresAt,
         serverNow: response.session.serverNow,
         gameDifficulty: response.session.gameDifficulty,
+        gameConfig: response.session.gameConfig,
+        demoMode: response.session.demoMode,
+        demoAutoRun: response.session.demoAutoRun,
+        demoSpeedMode: response.session.demoSpeedMode,
         ownerPlayerId: response.session.ownerPlayerId,
       });
       if (synced) {
@@ -216,6 +225,10 @@ export class MultiplayerSessionService {
         expiresAt: response.session.expiresAt,
         serverNow: response.session.serverNow,
         gameDifficulty: response.session.gameDifficulty,
+        gameConfig: response.session.gameConfig,
+        demoMode: response.session.demoMode,
+        demoAutoRun: response.session.demoAutoRun,
+        demoSpeedMode: response.session.demoSpeedMode,
         ownerPlayerId: response.session.ownerPlayerId,
       });
       if (synced) {
@@ -266,6 +279,10 @@ export class MultiplayerSessionService {
         expiresAt: result.session.expiresAt,
         serverNow: result.session.serverNow,
         gameDifficulty: result.session.gameDifficulty,
+        gameConfig: result.session.gameConfig,
+        demoMode: result.session.demoMode,
+        demoAutoRun: result.session.demoAutoRun,
+        demoSpeedMode: result.session.demoSpeedMode,
         ownerPlayerId: result.session.ownerPlayerId,
       });
       if (synced) {
@@ -274,6 +291,57 @@ export class MultiplayerSessionService {
     }
 
     return result;
+  }
+
+  async updateDemoControls(
+    action: "pause" | "resume" | "speed_normal" | "speed_fast"
+  ): Promise<MultiplayerSessionRecord | null> {
+    const current = this.activeSession;
+    if (!current) return null;
+
+    const response = await backendApiService.updateMultiplayerDemoControls(
+      current.sessionId,
+      this.playerId,
+      action
+    );
+    if (!response?.ok) {
+      if (response?.reason === "session_expired") {
+        this.handleSessionExpired("session_expired");
+      } else {
+        log.warn(
+          `Failed to update multiplayer demo controls: ${current.sessionId} (${response?.reason ?? "unknown"})`
+        );
+      }
+      return null;
+    }
+
+    if (response.session) {
+      const synced = this.syncSessionState({
+        sessionId: response.session.sessionId,
+        roomCode: response.session.roomCode,
+        participants: response.session.participants,
+        standings: response.session.standings,
+        turnState: response.session.turnState ?? null,
+        sessionComplete: response.session.sessionComplete,
+        completedAt: response.session.completedAt ?? null,
+        gameStartedAt: response.session.gameStartedAt,
+        nextGameStartsAt: response.session.nextGameStartsAt,
+        nextGameAutoStartDelayMs: response.session.nextGameAutoStartDelayMs,
+        expiresAt: response.session.expiresAt,
+        serverNow: response.session.serverNow,
+        gameDifficulty: response.session.gameDifficulty,
+        gameConfig: response.session.gameConfig,
+        demoMode: response.session.demoMode,
+        demoAutoRun: response.session.demoAutoRun,
+        demoSpeedMode: response.session.demoSpeedMode,
+        ownerPlayerId: response.session.ownerPlayerId,
+      });
+      if (synced) {
+        return synced;
+      }
+    }
+
+    return this.activeSession;
   }
 
   async refreshSessionAuth(): Promise<MultiplayerSessionRecord | null> {
@@ -307,6 +375,10 @@ export class MultiplayerSessionService {
     expiresAt?: number;
     serverNow?: number;
     gameDifficulty?: MultiplayerGameDifficulty;
+    gameConfig?: MultiplayerSessionRecord["gameConfig"];
+    demoMode?: boolean;
+    demoAutoRun?: boolean;
+    demoSpeedMode?: boolean;
     ownerPlayerId?: string;
   }): MultiplayerSessionRecord | null {
     const current = this.activeSession;
@@ -376,6 +448,22 @@ export class MultiplayerSessionService {
         nextSession.gameDifficulty = normalizedDifficulty;
       }
     }
+    if (Object.prototype.hasOwnProperty.call(update, "gameConfig")) {
+      if (update.gameConfig && typeof update.gameConfig === "object") {
+        nextSession.gameConfig = update.gameConfig;
+      } else if (Object.prototype.hasOwnProperty.call(nextSession, "gameConfig")) {
+        delete nextSession.gameConfig;
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(update, "demoMode")) {
+      nextSession.demoMode = update.demoMode === true;
+    }
+    if (Object.prototype.hasOwnProperty.call(update, "demoAutoRun")) {
+      nextSession.demoAutoRun = update.demoAutoRun === true;
+    }
+    if (Object.prototype.hasOwnProperty.call(update, "demoSpeedMode")) {
+      nextSession.demoSpeedMode = update.demoSpeedMode === true;
+    }
     if (Object.prototype.hasOwnProperty.call(update, "ownerPlayerId")) {
       nextSession.ownerPlayerId =
         typeof update.ownerPlayerId === "string" && update.ownerPlayerId.trim().length > 0
@@ -399,20 +487,30 @@ export class MultiplayerSessionService {
       ...sessionWithoutDifficulty
     } = session;
     const normalizedDifficulty = normalizeMultiplayerDifficulty(session.gameDifficulty);
+    const normalizedDemoMode = session.demoMode === true || session.demoSpeedMode === true;
+    const normalizedDemoAutoRun = normalizedDemoMode && session.demoAutoRun !== false;
+    const normalizedDemoSpeedMode = normalizedDemoMode && session.demoSpeedMode === true;
     const normalizedOwnerPlayerId =
       typeof session.ownerPlayerId === "string" && session.ownerPlayerId.trim().length > 0
         ? session.ownerPlayerId.trim()
         : undefined;
-    this.activeSession = normalizedDifficulty
+    const normalizedSession = normalizedDifficulty
       ? {
           ...sessionWithoutDifficulty,
           gameDifficulty: normalizedDifficulty,
+          demoMode: normalizedDemoMode,
+          demoAutoRun: normalizedDemoAutoRun,
+          demoSpeedMode: normalizedDemoSpeedMode,
           ...(normalizedOwnerPlayerId ? { ownerPlayerId: normalizedOwnerPlayerId } : {}),
         }
       : {
           ...sessionWithoutDifficulty,
+          demoMode: normalizedDemoMode,
+          demoAutoRun: normalizedDemoAutoRun,
+          demoSpeedMode: normalizedDemoSpeedMode,
           ...(normalizedOwnerPlayerId ? { ownerPlayerId: normalizedOwnerPlayerId } : {}),
         };
+    this.activeSession = normalizedSession;
     this.lastJoinFailureReason = null;
     if (session.auth?.accessToken) {
       authSessionService.setTokens(session.auth);

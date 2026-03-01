@@ -1,8 +1,148 @@
 {
-  "generatedAt": "2026-02-28T21:53:44.446Z",
+  "generatedAt": "2026-03-01T01:23:23.466Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-be700be",
+      "date": "2026-02-28T23:51:14.000Z",
+      "title": "add private-room demo speed toggle and reset flow",
+      "content": "<p>add private-room demo speed toggle and reset flow</p><p><strong>Commit:</strong> <code>be700be</code></p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "be700be4e8e066126ad324feec4a42c7048bce56",
+        "shortHash": "be700be",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/be700be4e8e066126ad324feec4a42c7048bce56"
+      }
+    },
+    {
+      "id": "git-a96b203",
+      "date": "2026-02-28T23:43:20.000Z",
+      "title": "add speed profile foundation and deployment stabilization docs",
+      "content": "<p>add speed profile foundation and deployment stabilization docs</p><p><strong>Commit:</strong> <code>a96b203</code></p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "a96b203a2f1814658ed9dbb081421841bbc08804",
+        "shortHash": "a96b203",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a96b203a2f1814658ed9dbb081421841bbc08804"
+      }
+    },
+    {
+      "id": "git-848e58d",
+      "date": "2026-02-28T23:14:40.000Z",
+      "title": "e2e: mark realtime relay auth churn inconclusive by default",
+      "content": "<p>e2e: mark realtime relay auth churn inconclusive by default</p><p><strong>Commit:</strong> <code>848e58d</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "848e58d4c630200b34595cd960a1f6f69afb54b5",
+        "shortHash": "848e58d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/848e58d4c630200b34595cd960a1f6f69afb54b5"
+      }
+    },
+    {
+      "id": "git-eb1cb59",
+      "date": "2026-02-28T22:56:21.000Z",
+      "title": "track multiplayer test-speed and demo mode proposal",
+      "content": "<p>track multiplayer test-speed and demo mode proposal</p><p><strong>Commit:</strong> <code>eb1cb59</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "eb1cb59f82e8338df7f8d1d034f63982f48a20aa",
+        "shortHash": "eb1cb59",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/eb1cb59f82e8338df7f8d1d034f63982f48a20aa"
+      }
+    },
+    {
+      "id": "git-12f26f1",
+      "date": "2026-02-28T22:56:15.000Z",
+      "title": "e2e: recover realtime relay checks after transient socket churn",
+      "content": "<p>e2e: recover realtime relay checks after transient socket churn</p><p><strong>Commit:</strong> <code>12f26f1</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "12f26f1b65b637cf84b806365e14201e13e0778c",
+        "shortHash": "12f26f1",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/12f26f1b65b637cf84b806365e14201e13e0778c"
+      }
+    },
+    {
+      "id": "git-7909a2f",
+      "date": "2026-02-28T22:38:43.000Z",
+      "title": "e2e: harden participant-state recovery against transient session_expired",
+      "content": "<p>e2e: harden participant-state recovery against transient session_expired</p><p><strong>Commit:</strong> <code>7909a2f</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "7909a2ff789462661aac347ea90f03d9bced759a",
+        "shortHash": "7909a2f",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/7909a2ff789462661aac347ea90f03d9bced759a"
+      }
+    },
+    {
+      "id": "git-e363af1",
+      "date": "2026-02-28T22:26:50.000Z",
+      "title": "Update `updates.git.json` with the latest deploy notes and bugfixes for timeout-strike handling in #bugfix/fix-api-deploy.",
+      "content": "<p>Update `updates.git.json` with the latest deploy notes and bugfixes for timeout-strike handling in #bugfix/fix-api-deploy.</p><p><strong>Commit:</strong> <code>e363af1</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "e363af161524c09d28c1d419bb8bc960b60e75ab",
+        "shortHash": "e363af1",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/e363af161524c09d28c1d419bb8bc960b60e75ab"
+      }
+    },
+    {
+      "id": "git-2ea43fb",
+      "date": "2026-02-28T22:23:21.000Z",
+      "title": "e2e: add 8-player mixed bot timeout smoke scenario",
+      "content": "<p>e2e: add 8-player mixed bot timeout smoke scenario</p><p><strong>Commit:</strong> <code>2ea43fb</code></p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "2ea43fb94d7088e1fe1bd9916363ff1c7b60c7b5",
+        "shortHash": "2ea43fb",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/2ea43fb94d7088e1fe1bd9916363ff1c7b60c7b5"
+      }
+    },
+    {
+      "id": "git-afc3d08",
+      "date": "2026-02-28T22:11:32.000Z",
+      "title": "e2e: add 2-player timeout strike observer smoke coverage",
+      "content": "<p>e2e: add 2-player timeout strike observer smoke coverage</p><p><strong>Commit:</strong> <code>afc3d08</code></p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "afc3d08776158d5804702086d7656c5b4de527ce",
+        "shortHash": "afc3d08",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/afc3d08776158d5804702086d7656c5b4de527ce"
+      }
+    },
+    {
+      "id": "git-629a3d0",
+      "date": "2026-02-28T22:01:38.000Z",
+      "title": "auto-stand repeat timeouts and move observers to lounge",
+      "content": "<p>auto-stand repeat timeouts and move observers to lounge</p><p><strong>Commit:</strong> <code>629a3d0</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "629a3d04c9d4868c2d38e770476dae01254a2fe4",
+        "shortHash": "629a3d0",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/629a3d04c9d4868c2d38e770476dae01254a2fe4"
+      }
+    },
     {
       "id": "git-6a0f30a",
       "date": "2026-02-28T21:47:54.000Z",
@@ -351,76 +491,6 @@
         "hash": "d0756e305006f6b7d3c324eb1122be0901b08725",
         "shortHash": "d0756e3",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d0756e305006f6b7d3c324eb1122be0901b08725"
-      }
-    },
-    {
-      "id": "git-b24ff2e",
-      "date": "2026-02-28T07:23:52.000Z",
-      "title": "Refactor room joining logic and add retries for transient failures",
-      "content": "<p>Refactor room joining logic and add retries for transient failures</p><p><strong>Commit:</strong> <code>b24ff2e</code></p><p>- Introduced `joinRoomByCodeWithTransientRetry` to handle retries on transient room lookup failures.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "b24ff2e09e85ce8a4bdc7f39997667050d50c0cf",
-        "shortHash": "b24ff2e",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/b24ff2e09e85ce8a4bdc7f39997667050d50c0cf"
-      }
-    },
-    {
-      "id": "git-cc1ca11",
-      "date": "2026-02-28T06:50:41.000Z",
-      "title": "Refactor session and store persistence flow",
-      "content": "<p>Refactor session and store persistence flow</p><p><strong>Commit:</strong> <code>cc1ca11</code></p><p>- Updated `handleRefreshSessionAuth` to improve session and participant validation and retry expired sessions.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "cc1ca1108791cbe0608f0600a333f2c6b34bec4e",
-        "shortHash": "cc1ca11",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/cc1ca1108791cbe0608f0600a333f2c6b34bec4e"
-      }
-    },
-    {
-      "id": "git-8367832",
-      "date": "2026-02-28T06:28:59.000Z",
-      "title": "Revamp private room create/join flow",
-      "content": "<p>Revamp private room create/join flow</p><p><strong>Commit:</strong> <code>8367832</code></p><p>- Refactored private room functionality to split &quot;Create Room&quot; and &quot;Join by Invite Code&quot; into distinct workflows.</p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "8367832655a28e763af3b4a4ea1dc421cdb2baae",
-        "shortHash": "8367832",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8367832655a28e763af3b4a4ea1dc421cdb2baae"
-      }
-    },
-    {
-      "id": "git-607954d",
-      "date": "2026-02-28T06:10:15.000Z",
-      "title": "Normalize store and session data during bootstrap and rehydration processes to reduce payload inconsistencies, ensure participant/session integrity, and retry session auth on specific failures.",
-      "content": "<p>Normalize store and session data during bootstrap and rehydration processes to reduce payload inconsistencies, ensure participant/session integrity, and retry session auth on specific failures.</p><p><strong>Commit:</strong> <code>607954d</code></p><p>Ticket: SIT-stand-funciton</p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "607954dc344e7f7b28289d6794ced34de493c10d",
-        "shortHash": "607954d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/607954dc344e7f7b28289d6794ced34de493c10d"
-      }
-    },
-    {
-      "id": "git-8c04a81",
-      "date": "2026-02-28T06:00:15.000Z",
-      "title": "Fetch latest Cloud Build details in deployment workflow and remove unused `db` directory from `Dockerfile`.",
-      "content": "<p>Fetch latest Cloud Build details in deployment workflow and remove unused `db` directory from `Dockerfile`.</p><p><strong>Commit:</strong> <code>8c04a81</code></p><p>Ticket: SIT-stand-funciton</p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "8c04a814b5b7e81a838d61a83238257288a2222b",
-        "shortHash": "8c04a81",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/8c04a814b5b7e81a838d61a83238257288a2222b"
       }
     }
   ]

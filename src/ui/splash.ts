@@ -28,6 +28,7 @@ export interface SplashStartOptions {
     sessionId?: string;
     roomCode?: string;
     autoSeatReady?: boolean;
+    demoSpeedMode?: boolean;
   };
 }
 
@@ -42,6 +43,7 @@ export class SplashScreen {
   private joinBotCount = 1;
   private seedBotsOnJoin = false;
   private autoSeatReadyOnJoin = environment.features.multiplayerAutoSeatReady;
+  private privateRoomDemoSpeedMode = false;
   private privateRoomMode = false;
   private privateRoomName = "";
   private privateRoomMaxPlayers = 8;
@@ -145,6 +147,11 @@ export class SplashScreen {
                 &times;
               </button>
             </div>
+            ${
+              environment.features.multiplayerDemoSpeedMode
+                ? `<p class="splash-multiplayer-demo-badge">${environment.features.multiplayerDemoSpeedLabel} (private rooms only)</p>`
+                : ""
+            }
 
             <div class="splash-multiplayer-scroll">
               <div class="splash-multiplayer-section">
@@ -288,6 +295,17 @@ export class SplashScreen {
                       </div>
                     </div>
                     <p class="splash-private-room-limit-note">${t("splash.multiplayer.privatePlayerLimitNote")}</p>
+                    ${
+                      environment.features.multiplayerDemoSpeedMode
+                        ? `<div class="splash-private-demo-speed-toggle">
+                            <label for="splash-private-demo-speed">
+                              <input id="splash-private-demo-speed" type="checkbox" />
+                              ${environment.features.multiplayerDemoSpeedLabel}
+                            </label>
+                           </div>
+                           <p id="splash-private-demo-speed-note" class="splash-private-demo-speed-note"></p>`
+                        : ""
+                    }
                   </div>
                   <div class="splash-private-room-panel splash-private-room-panel-join">
                     <div class="splash-private-room-panel-head">
@@ -410,9 +428,14 @@ export class SplashScreen {
       this.container.querySelector<HTMLSelectElement>("#splash-join-bot-count");
     const autoSeatReadyCheckbox =
       this.container.querySelector<HTMLInputElement>("#splash-auto-seat-ready");
+    const privateDemoSpeedCheckbox =
+      this.container.querySelector<HTMLInputElement>("#splash-private-demo-speed");
     if (autoSeatReadyCheckbox) {
       autoSeatReadyCheckbox.checked = this.autoSeatReadyOnJoin;
       autoSeatReadyCheckbox.disabled = !environment.features.multiplayerAutoSeatReady;
+    }
+    if (privateDemoSpeedCheckbox) {
+      privateDemoSpeedCheckbox.checked = this.privateRoomDemoSpeedMode;
     }
     const roomGrid = this.container.querySelector<HTMLElement>("#splash-room-grid");
     const roomFilterSearchInput =
@@ -455,6 +478,7 @@ export class SplashScreen {
         this.selectedRoomSessionId = null;
       } else {
         this.privateRoomCode = "";
+        this.resetPrivateRoomDemoSpeedMode();
         if (roomCodeInput) {
           roomCodeInput.value = "";
         }
@@ -554,6 +578,12 @@ export class SplashScreen {
     autoSeatReadyCheckbox?.addEventListener("change", () => {
       this.autoSeatReadyOnJoin = autoSeatReadyCheckbox.checked === true;
     });
+    privateDemoSpeedCheckbox?.addEventListener("change", () => {
+      this.privateRoomDemoSpeedMode =
+        privateDemoSpeedCheckbox.checked === true && this.isPrivateRoomDemoSpeedModeAllowed();
+      this.updatePrivateRoomDemoSpeedModeUi();
+      this.updateRoomStatus();
+    });
 
     roomGrid?.addEventListener("click", (event) => {
       const target = event.target;
@@ -568,6 +598,7 @@ export class SplashScreen {
 
       this.selectedRoomSessionId = sessionId;
       this.privateRoomMode = false;
+      this.resetPrivateRoomDemoSpeedMode();
       const selectedRoom = this.roomList.find((room) => room.sessionId === sessionId);
       if (selectedRoom) {
         this.multiplayerDifficulty = this.resolveRoomDifficulty(selectedRoom);
@@ -594,6 +625,7 @@ export class SplashScreen {
       if (normalized.length > 0) {
         this.privateRoomMode = true;
         this.selectedRoomSessionId = null;
+        this.resetPrivateRoomDemoSpeedMode();
         if (privateRoomToggle) {
           privateRoomToggle.checked = true;
         }
@@ -617,6 +649,7 @@ export class SplashScreen {
       this.playMode = "multiplayer";
       this.syncPlayModeUi();
       this.privateRoomMode = true;
+      this.resetPrivateRoomDemoSpeedMode();
       if (privateRoomToggle) {
         privateRoomToggle.checked = true;
       }
@@ -713,6 +746,7 @@ export class SplashScreen {
       this.playMode = "multiplayer";
       this.syncPlayModeUi();
       this.privateRoomMode = true;
+      this.resetPrivateRoomDemoSpeedMode();
       if (privateRoomToggle) {
         privateRoomToggle.checked = true;
       }
@@ -893,16 +927,24 @@ export class SplashScreen {
       return undefined;
     }
     const privateModeEnabled = this.isPrivateRoomModeEnabled();
+    const privateJoinIntent = privateModeEnabled ? this.getPrivateRoomJoinIntent() : "create";
     const publicJoinTarget = privateModeEnabled ? null : this.resolveSelectedPublicRoomJoinTarget();
+    const demoCreateMode =
+      privateModeEnabled &&
+      privateJoinIntent === "create" &&
+      this.privateRoomDemoSpeedMode &&
+      this.isPrivateRoomDemoSpeedModeAllowed();
+    const createBotCount = demoCreateMode ? 4 : this.botCount;
     return {
-      botCount: this.botCount,
+      botCount: createBotCount,
       joinBotCount: this.getJoinBotSeedCount(),
       gameDifficulty: this.multiplayerDifficulty,
       sessionId: privateModeEnabled ? undefined : publicJoinTarget?.sessionId,
       roomCode: privateModeEnabled
         ? this.privateRoomCode || undefined
         : publicJoinTarget?.roomCode,
-      autoSeatReady: this.autoSeatReadyOnJoin,
+      autoSeatReady: demoCreateMode ? false : this.autoSeatReadyOnJoin,
+      demoSpeedMode: demoCreateMode ? true : undefined,
     };
   }
 
@@ -972,6 +1014,50 @@ export class SplashScreen {
       } else {
         delete privateRoomSettings.dataset.intent;
       }
+    }
+    this.updatePrivateRoomDemoSpeedModeUi();
+  }
+
+  private isPrivateRoomDemoSpeedModeAllowed(): boolean {
+    return (
+      environment.features.multiplayerDemoSpeedMode &&
+      this.isPrivateRoomModeEnabled() &&
+      this.getPrivateRoomJoinIntent() === "create"
+    );
+  }
+
+  private resetPrivateRoomDemoSpeedMode(): void {
+    if (!this.privateRoomDemoSpeedMode) {
+      this.updatePrivateRoomDemoSpeedModeUi();
+      return;
+    }
+    this.privateRoomDemoSpeedMode = false;
+    this.updatePrivateRoomDemoSpeedModeUi();
+  }
+
+  private updatePrivateRoomDemoSpeedModeUi(): void {
+    const privateDemoSpeedCheckbox =
+      this.container.querySelector<HTMLInputElement>("#splash-private-demo-speed");
+    const privateDemoSpeedNote =
+      this.container.querySelector<HTMLElement>("#splash-private-demo-speed-note");
+    if (!privateDemoSpeedCheckbox) {
+      return;
+    }
+
+    const featureEnabled = environment.features.multiplayerDemoSpeedMode;
+    const allowed = this.isPrivateRoomDemoSpeedModeAllowed();
+    if (!featureEnabled) {
+      this.privateRoomDemoSpeedMode = false;
+    } else if (!allowed && this.privateRoomDemoSpeedMode) {
+      this.privateRoomDemoSpeedMode = false;
+    }
+
+    privateDemoSpeedCheckbox.checked = this.privateRoomDemoSpeedMode;
+    privateDemoSpeedCheckbox.disabled = !allowed;
+    if (privateDemoSpeedNote) {
+      privateDemoSpeedNote.textContent = allowed
+        ? "Auto-seeds bots, keeps host in observer control mode, and enables faster pacing."
+        : "Demo speed applies when creating a private room.";
     }
   }
 

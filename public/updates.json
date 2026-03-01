@@ -1,6 +1,14 @@
 {
   "updates": [
     {
+      "id": "feature-deploy-smoke-stabilization-2026-02-28",
+      "date": "2026-02-28",
+      "title": "🛠️ Deploy Smoke Stabilization + Multiplayer CI Hardening",
+      "content": "<p>Deployment reliability improved after hardening multiplayer smoke checks for distributed Cloud Run timing and auth churn.</p><p><strong>What Changed:</strong></p><ul style=\"margin: 10px 0; padding-left: 20px;\"><li>Winner queue and timeout-strike smoke paths now recover from transient <code>session_expired</code> races with targeted retries</li><li>Realtime relay smoke now recovers from transient websocket churn and reports diagnostics before fallback behavior</li><li>Repeated distributed transient auth churn is now marked <strong>inconclusive</strong> by default (configurable fail-hard toggles remain available)</li><li>Room lifecycle probes were tightened to reduce false negatives while preserving strict room-capacity assertions</li></ul><p>Result: API deploy smoke is significantly more resilient to cross-instance timing drift while still catching real regressions.</p>",
+      "version": "1.0.0",
+      "type": "feature"
+    },
+    {
       "id": "feature-multiplayer-timeout-observer-clock-2026-02-28",
       "date": "2026-02-28",
       "title": "⏱️ Multiplayer Timeout + Observer Lounge Update",
