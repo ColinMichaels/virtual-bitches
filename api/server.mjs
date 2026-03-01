@@ -35,6 +35,9 @@ import {
   writeSocketFrame,
 } from "./ws/socketProtocol.mjs";
 import { createSocketLifecycle } from "./ws/socketLifecycle.mjs";
+import { isSupportedSocketPayload } from "./ws/socketPayloadValidation.mjs";
+import { createSocketRelay } from "./ws/socketRelay.mjs";
+import { createSocketUpgradeAuthenticator } from "./ws/socketUpgradeAuth.mjs";
 import {
   buildChatConductWarning,
   createChatConductPolicy,
@@ -434,6 +437,25 @@ const server = createServer((req, res) => {
 });
 const wsSessionClients = new Map();
 const wsClientMeta = new WeakMap();
+const socketRelay = createSocketRelay({
+  wsSessionClients,
+  writeSocketFrame,
+  safeCloseSocket,
+  wsCloseCodes: WS_CLOSE_CODES,
+  hasRoomChannelBlockRelationship,
+  log,
+});
+const authenticateSocketUpgrade = createSocketUpgradeAuthenticator({
+  getSession: (sessionId) => store.multiplayerSessions[sessionId],
+  rehydrateStoreFromAdapter,
+  verifyAccessToken,
+  isPlayerBannedFromSession,
+  isBotParticipant,
+  markSessionActivity,
+  persistStore,
+  sessionUpgradeGraceMs: WS_SESSION_UPGRADE_GRACE_MS,
+  log,
+});
 const socketLifecycle = createSocketLifecycle({
   wsSessionClients,
   wsClientMeta,
@@ -9357,81 +9379,6 @@ function rejectUpgrade(socket, status, reason) {
   socket.destroy();
 }
 
-async function authenticateSocketUpgrade(requestUrl) {
-  const sessionId = requestUrl.searchParams.get("session")?.trim() ?? "";
-  const playerId = requestUrl.searchParams.get("playerId")?.trim() ?? "";
-  const token = requestUrl.searchParams.get("token")?.trim() ?? "";
-
-  if (!sessionId || !playerId || !token) {
-    return { ok: false, status: 401, reason: "Unauthorized" };
-  }
-
-  let session = store.multiplayerSessions[sessionId];
-  if (!session || session.expiresAt <= Date.now()) {
-    await rehydrateStoreFromAdapter(`ws_upgrade_session:${sessionId}`, { force: true });
-    session = store.multiplayerSessions[sessionId];
-  }
-  if (!session) {
-    return { ok: false, status: 410, reason: "Gone" };
-  }
-
-  const now = Date.now();
-  const sessionExpiresAt =
-    typeof session.expiresAt === "number" && Number.isFinite(session.expiresAt)
-      ? Math.floor(session.expiresAt)
-      : 0;
-  const sessionExpired = sessionExpiresAt <= now;
-  const sessionExpiredBeyondGrace =
-    sessionExpired &&
-    (sessionExpiresAt <= 0 || now - sessionExpiresAt > WS_SESSION_UPGRADE_GRACE_MS);
-  if (sessionExpiredBeyondGrace) {
-    return { ok: false, status: 410, reason: "Gone" };
-  }
-
-  if (isPlayerBannedFromSession(session, playerId)) {
-    return { ok: false, status: 403, reason: "Forbidden" };
-  }
-
-  if (!session.participants[playerId]) {
-    await rehydrateStoreFromAdapter(`ws_upgrade_participant:${sessionId}:${playerId}`, { force: true });
-    session = store.multiplayerSessions[sessionId];
-  }
-  if (!session || !session.participants[playerId]) {
-    return { ok: false, status: 403, reason: "Forbidden" };
-  }
-
-  let accessRecord = verifyAccessToken(token);
-  if (!accessRecord) {
-    await rehydrateStoreFromAdapter(`ws_upgrade_token:${sessionId}:${playerId}`, { force: true });
-    accessRecord = verifyAccessToken(token);
-  }
-  if (!accessRecord) {
-    return { ok: false, status: 401, reason: "Unauthorized" };
-  }
-
-  if (accessRecord.playerId !== playerId || accessRecord.sessionId !== sessionId) {
-    return { ok: false, status: 403, reason: "Forbidden" };
-  }
-
-  if (sessionExpired) {
-    const participant = session.participants[playerId];
-    if (participant && !isBotParticipant(participant)) {
-      participant.lastHeartbeatAt = now;
-    }
-    markSessionActivity(session, playerId, now, { countAsPlayerAction: false });
-    persistStore().catch((error) => {
-      log.warn("Failed to persist revived session during WebSocket upgrade", error);
-    });
-  }
-
-  return {
-    ok: true,
-    sessionId,
-    playerId,
-    tokenExpiresAt: accessRecord.expiresAt,
-  };
-}
-
 function handleSocketMessage(client, rawMessage) {
   if (!wsClientMeta.get(client.socket)) return;
 
@@ -9487,42 +9434,6 @@ function handleSocketMessage(client, rawMessage) {
   }
 
   broadcastToSession(client.sessionId, rawMessage, client);
-}
-
-function isSupportedSocketPayload(payload) {
-  if (!payload || typeof payload !== "object") return false;
-  const messageType = payload.type;
-  if (messageType === "chaos_attack" || messageType === "particle:emit") {
-    return true;
-  }
-  if (messageType === "game_update") {
-    return (
-      typeof payload.title === "string" &&
-      payload.title.trim().length > 0 &&
-      typeof payload.content === "string" &&
-      payload.content.trim().length > 0
-    );
-  }
-  if (messageType === "player_notification") {
-    return (
-      typeof payload.message === "string" &&
-      payload.message.trim().length > 0
-    );
-  }
-  if (messageType === "room_channel") {
-    return (
-      (payload.channel === "public" || payload.channel === "direct") &&
-      typeof payload.message === "string" &&
-      payload.message.trim().length > 0
-    );
-  }
-  if (messageType === "turn_end") {
-    return true;
-  }
-  if (messageType === "turn_action") {
-    return payload.action === "roll" || payload.action === "score" || payload.action === "select";
-  }
-  return false;
 }
 
 function relayRealtimeSocketMessage(client, session, payload, now = Date.now()) {
@@ -9871,148 +9782,27 @@ function expireSession(sessionId, reason) {
 }
 
 function broadcastToSession(sessionId, rawMessage, sender) {
-  const clients = wsSessionClients.get(sessionId);
-  if (!clients || clients.size === 0) return;
-
-  for (const client of clients) {
-    if (client === sender || client.closed || client.socket.destroyed) {
-      continue;
-    }
-
-    try {
-      writeSocketFrame(client.socket, 0x1, Buffer.from(rawMessage, "utf8"));
-    } catch (error) {
-      log.warn("Failed to broadcast WebSocket message", error);
-      safeCloseSocket(client, WS_CLOSE_CODES.internalError, "send_failed");
-    }
-  }
+  socketRelay.broadcastToSession(sessionId, rawMessage, sender);
 }
 
 function sendToSessionPlayer(sessionId, playerId, rawMessage, sender = null) {
-  const targetPlayerId = typeof playerId === "string" ? playerId.trim() : "";
-  if (!targetPlayerId) {
-    return;
-  }
-
-  const clients = wsSessionClients.get(sessionId);
-  if (!clients || clients.size === 0) {
-    return;
-  }
-
-  for (const client of clients) {
-    if (client === sender || client.closed || client.socket.destroyed) {
-      continue;
-    }
-    if (client.playerId !== targetPlayerId) {
-      continue;
-    }
-
-    try {
-      writeSocketFrame(client.socket, 0x1, Buffer.from(rawMessage, "utf8"));
-    } catch (error) {
-      log.warn("Failed to send WebSocket direct message", error);
-      safeCloseSocket(client, WS_CLOSE_CODES.internalError, "send_failed");
-    }
-  }
+  socketRelay.sendToSessionPlayer(sessionId, playerId, rawMessage, sender);
 }
 
 function broadcastRoomChannelToSession(session, payload, sender = null) {
-  const sessionId = typeof session?.sessionId === "string" ? session.sessionId.trim() : "";
-  if (!sessionId) {
-    return;
-  }
-  const sourcePlayerId =
-    typeof payload?.sourcePlayerId === "string" ? payload.sourcePlayerId.trim() : "";
-  if (!sourcePlayerId) {
-    return;
-  }
-
-  const clients = wsSessionClients.get(sessionId);
-  if (!clients || clients.size === 0) {
-    return;
-  }
-
-  const rawMessage = JSON.stringify(payload);
-  for (const client of clients) {
-    if (client === sender || client.closed || client.socket.destroyed) {
-      continue;
-    }
-    const recipientPlayerId = typeof client.playerId === "string" ? client.playerId.trim() : "";
-    if (!recipientPlayerId || recipientPlayerId === sourcePlayerId) {
-      continue;
-    }
-    if (
-      hasRoomChannelBlockRelationship(session, recipientPlayerId, sourcePlayerId) ||
-      hasRoomChannelBlockRelationship(session, sourcePlayerId, recipientPlayerId)
-    ) {
-      continue;
-    }
-
-    try {
-      writeSocketFrame(client.socket, 0x1, Buffer.from(rawMessage, "utf8"));
-    } catch (error) {
-      log.warn("Failed to broadcast room channel WebSocket message", error);
-      safeCloseSocket(client, WS_CLOSE_CODES.internalError, "send_failed");
-    }
-  }
+  socketRelay.broadcastRoomChannelToSession(session, payload, sender);
 }
 
 function broadcastRealtimeSocketMessageToSession(session, payload, sender = null) {
-  const sessionId = typeof session?.sessionId === "string" ? session.sessionId.trim() : "";
-  if (!sessionId) {
-    return;
-  }
-
-  const clients = wsSessionClients.get(sessionId);
-  if (!clients || clients.size === 0) {
-    return;
-  }
-
-  const sourcePlayerId =
-    typeof payload?.sourcePlayerId === "string" ? payload.sourcePlayerId.trim() : "";
-  const rawMessage = JSON.stringify(payload);
-  for (const client of clients) {
-    if (client === sender || client.closed || client.socket.destroyed) {
-      continue;
-    }
-    const recipientPlayerId = typeof client.playerId === "string" ? client.playerId.trim() : "";
-    if (
-      sourcePlayerId &&
-      recipientPlayerId &&
-      recipientPlayerId !== sourcePlayerId &&
-      (hasRoomChannelBlockRelationship(session, recipientPlayerId, sourcePlayerId) ||
-        hasRoomChannelBlockRelationship(session, sourcePlayerId, recipientPlayerId))
-    ) {
-      continue;
-    }
-
-    try {
-      writeSocketFrame(client.socket, 0x1, Buffer.from(rawMessage, "utf8"));
-    } catch (error) {
-      log.warn("Failed to broadcast realtime WebSocket message", error);
-      safeCloseSocket(client, WS_CLOSE_CODES.internalError, "send_failed");
-    }
-  }
+  socketRelay.broadcastRealtimeSocketMessageToSession(session, payload, sender);
 }
 
 function sendSocketPayload(client, payload) {
-  if (!client || client.closed || client.socket.destroyed) return;
-  try {
-    const raw = JSON.stringify(payload);
-    writeSocketFrame(client.socket, 0x1, Buffer.from(raw, "utf8"));
-  } catch (error) {
-    log.warn("Failed to send WebSocket payload", error);
-  }
+  socketRelay.sendSocketPayload(client, payload);
 }
 
 function sendSocketError(client, code, message) {
-  if (client.closed || client.socket.destroyed) return;
-  const payload = {
-    type: "error",
-    code,
-    message,
-  };
-  sendSocketPayload(client, payload);
+  socketRelay.sendSocketError(client, code, message);
 }
 
 function safeCloseSocket(client, closeCode, closeReason) {
