@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-03-01T04:34:40.970Z",
+  "generatedAt": "2026-03-01T04:42:02.169Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-05e00c3",
+      "date": "2026-03-01T04:36:03.000Z",
+      "title": "extract bot turn engine boundary module",
+      "content": "<p>extract bot turn engine boundary module</p><p><strong>Commit:</strong> <code>05e00c3</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "05e00c36fc4b30d1823251603c794d198eca9e29",
+        "shortHash": "05e00c3",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/05e00c36fc4b30d1823251603c794d198eca9e29"
+      }
+    },
     {
       "id": "git-99b7fd1",
       "date": "2026-03-01T04:07:04.000Z",

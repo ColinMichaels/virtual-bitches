@@ -10,6 +10,7 @@ import { createBotEngine } from "./bot/engine.mjs";
 import { createSessionTurnEngine } from "./engine/sessionTurnEngine.mjs";
 import { createSessionLifecycleEngine } from "./engine/sessionLifecycleEngine.mjs";
 import { createBotTurnEngine } from "./engine/botTurnEngine.mjs";
+import { createTurnTimeoutEngine } from "./engine/turnTimeoutEngine.mjs";
 import { dispatchApiRoute } from "./http/routeDispatcher.mjs";
 import { createApiRouteHandlers } from "./http/routeHandlers.mjs";
 import {
@@ -449,6 +450,20 @@ const botTurnController = createBotTurnEngine({
   parseTurnRollPayload,
   buildTurnActionMessage,
   applyParticipantScoreUpdate,
+});
+const turnTimeoutController = createTurnTimeoutEngine({
+  turnPhases: TURN_PHASES,
+  turnTimeoutStandStrikeLimit: TURN_TIMEOUT_STAND_STRIKE_LIMIT,
+  normalizeTurnPhase,
+  normalizeTurnScoreSummary,
+  normalizeTurnRollSnapshot,
+  applyParticipantScoreUpdate,
+  buildTurnActionMessage,
+  completeSessionRoundWithWinner,
+  registerParticipantTimeoutStrike,
+  standParticipantIntoObserverMode,
+  resolveSessionTurnTimeoutMs,
+  advanceSessionTurn,
 });
 
 void beginBootstrap();
@@ -8293,106 +8308,60 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
     return;
   }
 
-  let timeoutReason = "turn_timeout";
   const timeoutNow = Date.now();
   const timeoutRoundScope = resolveSessionGameStartedAt(session, timeoutNow);
-  const timeoutPhase = normalizeTurnPhase(turnState.phase);
-  if (timeoutPhase === TURN_PHASES.awaitScore) {
-    const pendingScoreSummary = normalizeTurnScoreSummary(turnState.lastScoreSummary);
-    const normalizedRollSnapshot = normalizeTurnRollSnapshot(turnState.lastRollSnapshot);
-    const canAutoScore =
-      pendingScoreSummary &&
-      normalizedRollSnapshot &&
-      pendingScoreSummary.rollServerId === normalizedRollSnapshot.serverRollId;
-    if (canAutoScore) {
-      const rollDiceCount = Array.isArray(normalizedRollSnapshot.dice)
-        ? normalizedRollSnapshot.dice.length
-        : 0;
-      const scoreUpdate = applyParticipantScoreUpdate(
-        timedOutParticipant,
-        pendingScoreSummary,
-        rollDiceCount
-      );
-      const finalizedScoreSummary = {
-        ...pendingScoreSummary,
-        projectedTotalScore: scoreUpdate.nextScore,
-        remainingDice: scoreUpdate.nextRemainingDice,
-        isComplete: scoreUpdate.didComplete,
-        updatedAt: timeoutNow,
-      };
-      turnState.lastRollSnapshot = normalizedRollSnapshot;
-      turnState.lastScoreSummary = finalizedScoreSummary;
-      turnState.phase = TURN_PHASES.readyToEnd;
-      turnState.updatedAt = timeoutNow;
-      timeoutReason = "turn_timeout_auto_score";
-
-      const timeoutScoreAction = buildTurnActionMessage(
-        session,
-        timedOutPlayerId,
-        "score",
-        { score: finalizedScoreSummary },
-        { source: "timeout_auto" }
-      );
-      if (timeoutScoreAction) {
-        broadcastToSession(sessionId, JSON.stringify(timeoutScoreAction), null);
-      }
-
-      if (scoreUpdate.didComplete) {
-        const completedRound = completeSessionRoundWithWinner(session, timedOutPlayerId, timeoutNow);
-        if (completedRound.ok) {
-          broadcastRoundWinnerResolved(session, timedOutPlayerId, timeoutNow, "timeout_auto_complete");
-          markSessionActivity(session, timedOutPlayerId, timeoutNow);
-          broadcastSessionState(session, "timeout_auto_complete");
-          persistStore().catch((error) => {
-            log.warn("Failed to persist session after timeout auto-complete", error);
-          });
-          reconcileSessionLoops(sessionId);
-          return;
-        }
-      }
+  const timeoutTransition = turnTimeoutController.processTurnTimeoutTransition(
+    session,
+    turnState,
+    {
+      timedOutPlayerId,
+      timeoutNow,
+      timeoutRoundScope,
     }
-  }
-
-  const timeoutStrikeCount = registerParticipantTimeoutStrike(timedOutParticipant, timeoutRoundScope);
-  let forcedObserverStand = false;
-  if (timeoutStrikeCount >= TURN_TIMEOUT_STAND_STRIKE_LIMIT) {
-    forcedObserverStand = standParticipantIntoObserverMode(timedOutParticipant, timeoutNow);
-    if (forcedObserverStand) {
-      const timedOutName =
-        typeof timedOutParticipant.displayName === "string" && timedOutParticipant.displayName.trim().length > 0
-          ? timedOutParticipant.displayName.trim()
-          : timedOutPlayerId;
-      broadcastSystemRoomChannelMessage(sessionId, {
-        topic: "seat_state",
-        title: timedOutName,
-        message: `${timedOutName} timed out twice and moved to observer lounge.`,
-        severity: "warning",
-        timestamp: timeoutNow,
-      });
-    }
-    timeoutReason =
-      timeoutReason === "turn_timeout_auto_score"
-        ? "turn_timeout_auto_score_stand"
-        : "turn_timeout_stand";
-  }
-
-  if (normalizeTurnPhase(turnState.phase) !== TURN_PHASES.readyToEnd) {
-    turnState.phase = TURN_PHASES.readyToEnd;
-    turnState.lastRollSnapshot = null;
-    turnState.lastScoreSummary = null;
-    turnState.updatedAt = timeoutNow;
-  }
-
-  const timeoutMs = resolveSessionTurnTimeoutMs(session, turnState.turnTimeoutMs);
-  const previousRound = turnState.round;
-  const previousTurnNumber = turnState.turnNumber;
-  const advanced = advanceSessionTurn(session, timedOutPlayerId, {
-    source: "timeout_auto",
-  });
-  if (!advanced) {
+  );
+  if (!timeoutTransition.ok) {
     reconcileTurnTimeoutLoop(sessionId);
     return;
   }
+
+  if (timeoutTransition.timeoutScoreAction) {
+    broadcastToSession(
+      sessionId,
+      JSON.stringify(timeoutTransition.timeoutScoreAction),
+      null
+    );
+  }
+
+  if (timeoutTransition.stage === "completed_round") {
+    broadcastRoundWinnerResolved(
+      session,
+      timedOutPlayerId,
+      timeoutTransition.timeoutNow,
+      "timeout_auto_complete"
+    );
+    markSessionActivity(session, timedOutPlayerId, timeoutTransition.timeoutNow);
+    broadcastSessionState(session, "timeout_auto_complete");
+    persistStore().catch((error) => {
+      log.warn("Failed to persist session after timeout auto-complete", error);
+    });
+    reconcileSessionLoops(sessionId);
+    return;
+  }
+
+  if (timeoutTransition.forcedObserverStand) {
+    const timedOutName =
+      typeof timedOutParticipant.displayName === "string" && timedOutParticipant.displayName.trim().length > 0
+        ? timedOutParticipant.displayName.trim()
+        : timedOutPlayerId;
+    broadcastSystemRoomChannelMessage(sessionId, {
+      topic: "seat_state",
+      title: timedOutName,
+      message: `${timedOutName} timed out twice and moved to observer lounge.`,
+      severity: "warning",
+      timestamp: timeoutTransition.timeoutNow,
+    });
+  }
+
   turnAdvanceMetrics.timeoutAutoAdvanceCount += 1;
 
   broadcastToSession(
@@ -8401,18 +8370,18 @@ function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
       type: "turn_auto_advanced",
       sessionId,
       playerId: timedOutPlayerId,
-      round: previousRound,
-      turnNumber: previousTurnNumber,
-      timeoutMs,
-      reason: timeoutReason,
+      round: timeoutTransition.previousRound,
+      turnNumber: timeoutTransition.previousTurnNumber,
+      timeoutMs: timeoutTransition.timeoutMs,
+      reason: timeoutTransition.timeoutReason,
       timestamp: Date.now(),
       source: "timeout_auto",
     }),
     null
   );
-  broadcastToSession(sessionId, JSON.stringify(advanced.turnEnd), null);
-  if (advanced.turnStart) {
-    broadcastToSession(sessionId, JSON.stringify(advanced.turnStart), null);
+  broadcastToSession(sessionId, JSON.stringify(timeoutTransition.advanced.turnEnd), null);
+  if (timeoutTransition.advanced.turnStart) {
+    broadcastToSession(sessionId, JSON.stringify(timeoutTransition.advanced.turnStart), null);
   }
   markSessionActivity(session, undefined, Date.now());
   broadcastSessionState(session, "timeout_auto");
