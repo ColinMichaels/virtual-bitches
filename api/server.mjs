@@ -7,6 +7,7 @@ import { logger } from "./logger.mjs";
 import { createStoreAdapter, DEFAULT_STORE } from "./storage/index.mjs";
 import { cloneStore } from "./storage/defaultStore.mjs";
 import { createStoreSyncController } from "./storage/storeSyncController.mjs";
+import { createAdminSecurityAuditService } from "./admin/adminSecurityAuditService.mjs";
 import { createBotEngine } from "./bot/engine.mjs";
 import { createSessionTurnEngine } from "./engine/sessionTurnEngine.mjs";
 import { createSessionLifecycleEngine } from "./engine/sessionLifecycleEngine.mjs";
@@ -29,6 +30,8 @@ import {
 import { dispatchApiRoute } from "./http/routeDispatcher.mjs";
 import { createApiRouteHandlers } from "./http/routeHandlers.mjs";
 import { createFirebaseIdentityVerifier } from "./auth/firebaseIdentityVerifier.mjs";
+import { createAdminAccessAuthorizer } from "./auth/adminAccessAuthorizer.mjs";
+import { createRequestAuthorizer } from "./auth/requestAuthorizer.mjs";
 import { createTokenAuthAdapter } from "./auth/tokenAuthAdapter.mjs";
 import {
   completeSocketHandshake,
@@ -445,6 +448,64 @@ const firebaseIdentityVerifier = createFirebaseIdentityVerifier({
   log,
 });
 const { verifyFirebaseIdToken } = firebaseIdentityVerifier;
+const adminSecurityAuditService = createAdminSecurityAuditService({
+  getStore: () => store,
+  adminRoles: ADMIN_ROLES,
+  adminRoleLevels: ADMIN_ROLE_LEVELS,
+  ownerUidAllowlist: ADMIN_OWNER_UID_ALLOWLIST,
+  ownerEmailAllowlist: ADMIN_OWNER_EMAIL_ALLOWLIST,
+  adminRoomListLimitDefault: ADMIN_ROOM_LIST_LIMIT_DEFAULT,
+  adminRoomListLimitMax: ADMIN_ROOM_LIST_LIMIT_MAX,
+  adminAuditListLimitDefault: ADMIN_AUDIT_LIST_LIMIT_DEFAULT,
+  adminAuditListLimitMax: ADMIN_AUDIT_LIST_LIMIT_MAX,
+  adminConductListLimitDefault: ADMIN_CONDUCT_LIST_LIMIT_DEFAULT,
+  adminConductListLimitMax: ADMIN_CONDUCT_LIST_LIMIT_MAX,
+  compactLogStore,
+  randomUUID,
+});
+const {
+  normalizeAdminRole,
+  hasRequiredAdminRole,
+  resolveAdminRoleForIdentity,
+  isBootstrapOwnerUid,
+  hasBootstrapAdminOwnersConfigured,
+  parseAdminRoomLimit,
+  parseAdminAuditLimit,
+  parseAdminConductLimit,
+  parseAdminModerationTermLimit,
+  buildAdminPrincipal,
+  collectAdminAuditEntries,
+  recordAdminAuditEvent,
+  collectAdminRoleRecords,
+  buildAdminRoleRecord,
+} = adminSecurityAuditService;
+const requestAuthorizer = createRequestAuthorizer({
+  extractBearerToken,
+  verifyAccessToken,
+  verifyFirebaseIdToken,
+  normalizeAvatarUrl,
+  normalizeProviderId,
+});
+const {
+  authorizeIdentityRequest,
+  authorizeRequest,
+  authorizeSessionActionRequest,
+  shouldRetrySessionAuthFromStore,
+} = requestAuthorizer;
+const adminAccessAuthorizer = createAdminAccessAuthorizer({
+  adminAccessMode: ADMIN_ACCESS_MODE,
+  adminToken: ADMIN_TOKEN,
+  nodeEnv: NODE_ENV,
+  adminRoles: ADMIN_ROLES,
+  normalizeAdminRole,
+  hasRequiredAdminRole,
+  hasBootstrapAdminOwnersConfigured,
+  extractBearerToken,
+  authorizeIdentityRequest,
+  upsertFirebasePlayer,
+  resolveAdminRoleForIdentity,
+});
+const { resolveAdminAccessMode, authorizeAdminRequest } = adminAccessAuthorizer;
 const storeSyncController = createStoreSyncController({
   getStore: () => store,
   setStore: (nextStore) => {
@@ -4043,533 +4104,6 @@ function getConnectedSessionPlayerIds(sessionId) {
   }
 
   return Array.from(ids.values());
-}
-
-function parseAdminRoomLimit(rawValue) {
-  const parsed = Number(rawValue);
-  if (!Number.isFinite(parsed)) {
-    return ADMIN_ROOM_LIST_LIMIT_DEFAULT;
-  }
-  return Math.max(1, Math.min(ADMIN_ROOM_LIST_LIMIT_MAX, Math.floor(parsed)));
-}
-
-function parseAdminAuditLimit(rawValue) {
-  const parsed = Number(rawValue);
-  if (!Number.isFinite(parsed)) {
-    return ADMIN_AUDIT_LIST_LIMIT_DEFAULT;
-  }
-  return Math.max(1, Math.min(ADMIN_AUDIT_LIST_LIMIT_MAX, Math.floor(parsed)));
-}
-
-function parseAdminConductLimit(rawValue) {
-  const parsed = Number(rawValue);
-  if (!Number.isFinite(parsed)) {
-    return ADMIN_CONDUCT_LIST_LIMIT_DEFAULT;
-  }
-  return Math.max(1, Math.min(ADMIN_CONDUCT_LIST_LIMIT_MAX, Math.floor(parsed)));
-}
-
-function parseAdminModerationTermLimit(rawValue) {
-  const parsed = Number(rawValue);
-  if (!Number.isFinite(parsed)) {
-    return 250;
-  }
-  return Math.max(1, Math.min(5000, Math.floor(parsed)));
-}
-
-async function authorizeAdminRequest(req, options = {}) {
-  const minimumRole = normalizeAdminRole(options.minimumRole) ?? ADMIN_ROLES.viewer;
-  const mode = resolveAdminAccessMode();
-  if (mode === "disabled") {
-    return {
-      ok: false,
-      status: 403,
-      reason: "admin_disabled",
-      mode,
-    };
-  }
-  if (mode === "open") {
-    return {
-      ok: true,
-      mode,
-      authType: "open",
-      role: ADMIN_ROLES.owner,
-      roleSource: "open",
-    };
-  }
-
-  const adminToken = extractAdminTokenFromRequest(req);
-  if (mode === "token") {
-    if (!adminToken) {
-      return {
-        ok: false,
-        status: 401,
-        reason: "missing_admin_token",
-        mode,
-      };
-    }
-    if (adminToken !== ADMIN_TOKEN) {
-      return {
-        ok: false,
-        status: 401,
-        reason: "invalid_admin_token",
-        mode,
-      };
-    }
-    return {
-      ok: true,
-      mode,
-      authType: "token",
-      role: ADMIN_ROLES.owner,
-      roleSource: "token",
-    };
-  }
-
-  if (mode === "hybrid" && adminToken && adminToken === ADMIN_TOKEN) {
-    return {
-      ok: true,
-      mode,
-      authType: "token",
-      role: ADMIN_ROLES.owner,
-      roleSource: "token",
-    };
-  }
-
-  const identity = await authorizeIdentityRequest(req, {
-    allowSessionToken: false,
-    requireNonAnonymous: true,
-  });
-  if (!identity.ok) {
-    return {
-      ok: false,
-      status: 401,
-      reason: identity.reason ?? "invalid_auth",
-      mode,
-    };
-  }
-
-  upsertFirebasePlayer(identity.uid, {
-    displayName: identity.displayName,
-    email: identity.email,
-    photoUrl: identity.photoUrl,
-    provider: identity.provider,
-    providerId: identity.providerId,
-    isAnonymous: false,
-  });
-
-  const roleInfo = resolveAdminRoleForIdentity(identity.uid, identity.email);
-  if (!roleInfo.role) {
-    return {
-      ok: false,
-      status: 403,
-      reason: "admin_role_required",
-      mode,
-      uid: identity.uid,
-      email: identity.email,
-    };
-  }
-  if (!hasRequiredAdminRole(roleInfo.role, minimumRole)) {
-    return {
-      ok: false,
-      status: 403,
-      reason: "admin_role_forbidden",
-      mode,
-      uid: identity.uid,
-      email: identity.email,
-      role: roleInfo.role,
-      roleSource: roleInfo.source,
-    };
-  }
-
-  return {
-    ok: true,
-    mode,
-    authType: "role",
-    uid: identity.uid,
-    email: identity.email,
-    role: roleInfo.role,
-    roleSource: roleInfo.source,
-  };
-}
-
-function resolveAdminAccessMode() {
-  if (ADMIN_ACCESS_MODE === "disabled") {
-    return "disabled";
-  }
-  if (ADMIN_ACCESS_MODE === "open") {
-    return "open";
-  }
-  if (ADMIN_ACCESS_MODE === "token") {
-    return ADMIN_TOKEN ? "token" : "disabled";
-  }
-  if (ADMIN_ACCESS_MODE === "role") {
-    return "role";
-  }
-  if (ADMIN_ACCESS_MODE === "hybrid") {
-    return ADMIN_TOKEN ? "hybrid" : "role";
-  }
-  if (ADMIN_TOKEN) {
-    return "hybrid";
-  }
-  if (hasBootstrapAdminOwnersConfigured()) {
-    return "role";
-  }
-  return NODE_ENV === "production" ? "role" : "open";
-}
-
-function buildAdminPrincipal(authResult) {
-  if (!authResult?.ok) {
-    return null;
-  }
-  return {
-    authType: authResult.authType ?? "unknown",
-    uid: authResult.uid ?? null,
-    role: authResult.role ?? null,
-    roleSource: authResult.roleSource ?? "none",
-  };
-}
-
-function collectAdminAuditEntries(limit = ADMIN_AUDIT_LIST_LIMIT_DEFAULT) {
-  const boundedLimit = Number.isFinite(limit)
-    ? Math.max(1, Math.min(ADMIN_AUDIT_LIST_LIMIT_MAX, Math.floor(limit)))
-    : ADMIN_AUDIT_LIST_LIMIT_DEFAULT;
-
-  return Object.values(store.gameLogs)
-    .filter((entry) => entry && entry.type === "admin_action")
-    .sort((left, right) => Number(right?.timestamp ?? 0) - Number(left?.timestamp ?? 0))
-    .slice(0, boundedLimit)
-    .map((entry) => {
-      const payload = entry?.payload && typeof entry.payload === "object" ? entry.payload : {};
-      const actor =
-        payload?.actor && typeof payload.actor === "object"
-          ? payload.actor
-          : {};
-      const target =
-        payload?.target && typeof payload.target === "object"
-          ? payload.target
-          : {};
-      return {
-        id: typeof entry?.id === "string" ? entry.id : randomUUID(),
-        timestamp: Number.isFinite(entry?.timestamp) ? Math.floor(entry.timestamp) : Date.now(),
-        action: typeof payload.action === "string" ? payload.action : "unknown",
-        summary: typeof payload.summary === "string" ? payload.summary : undefined,
-        actor: {
-          uid: typeof actor.uid === "string" ? actor.uid : null,
-          email: typeof actor.email === "string" ? actor.email : undefined,
-          role: normalizeAdminRole(actor.role),
-          authType: typeof actor.authType === "string" ? actor.authType : "unknown",
-        },
-        target: {
-          uid: typeof target.uid === "string" ? target.uid : undefined,
-          role: normalizeAdminRole(target.role),
-          sessionId: typeof target.sessionId === "string" ? target.sessionId : undefined,
-          playerId: typeof target.playerId === "string" ? target.playerId : undefined,
-        },
-      };
-    });
-}
-
-function recordAdminAuditEvent(authResult, action, details = {}) {
-  const timestamp = Date.now();
-  const actorUid = typeof authResult?.uid === "string" ? authResult.uid : null;
-  const actorEmail = typeof authResult?.email === "string" ? authResult.email : undefined;
-  const actorRole = normalizeAdminRole(authResult?.role);
-  const actorAuthType =
-    typeof authResult?.authType === "string" && authResult.authType
-      ? authResult.authType
-      : "unknown";
-  const rawDetails = details && typeof details === "object" ? details : {};
-  const targetUid =
-    typeof rawDetails.targetUid === "string" && rawDetails.targetUid.trim()
-      ? rawDetails.targetUid.trim()
-      : undefined;
-  const targetRole = normalizeAdminRole(rawDetails.role);
-  const targetSessionId =
-    typeof rawDetails.sessionId === "string" && rawDetails.sessionId.trim()
-      ? rawDetails.sessionId.trim()
-      : undefined;
-  const targetPlayerId =
-    typeof rawDetails.playerId === "string" && rawDetails.playerId.trim()
-      ? rawDetails.playerId.trim()
-      : undefined;
-  const summary =
-    typeof rawDetails.summary === "string" && rawDetails.summary.trim()
-      ? rawDetails.summary.trim()
-      : undefined;
-  const id = randomUUID();
-  const fallbackActorId =
-    actorUid ??
-    (typeof authResult?.authType === "string" && authResult.authType ? `admin:${authResult.authType}` : "admin:unknown");
-
-  const nextDetails = { ...rawDetails };
-  delete nextDetails.targetUid;
-  delete nextDetails.role;
-  delete nextDetails.sessionId;
-  delete nextDetails.playerId;
-  delete nextDetails.summary;
-
-  store.gameLogs[id] = {
-    id,
-    playerId: fallbackActorId,
-    sessionId: targetSessionId,
-    type: "admin_action",
-    timestamp,
-    payload: {
-      action,
-      summary,
-      actor: {
-        uid: actorUid,
-        email: actorEmail,
-        role: actorRole,
-        authType: actorAuthType,
-      },
-      target: {
-        uid: targetUid,
-        role: targetRole,
-        sessionId: targetSessionId,
-        playerId: targetPlayerId,
-      },
-      details: nextDetails,
-    },
-  };
-  compactLogStore();
-}
-
-function collectAdminRoleRecords() {
-  const records = [];
-  const seenUids = new Set();
-
-  Object.entries(store.firebasePlayers).forEach(([uid, playerRecord]) => {
-    const record = buildAdminRoleRecord(uid, playerRecord);
-    if (!record) {
-      return;
-    }
-    records.push(record);
-    seenUids.add(uid);
-  });
-
-  ADMIN_OWNER_UID_ALLOWLIST.forEach((uid) => {
-    if (seenUids.has(uid)) {
-      return;
-    }
-    records.push(
-      buildAdminRoleRecord(uid, {
-        uid,
-      })
-    );
-  });
-
-  return records;
-}
-
-function buildAdminRoleRecord(uid, playerRecord) {
-  if (typeof uid !== "string" || !uid.trim()) {
-    return null;
-  }
-  const record = playerRecord && typeof playerRecord === "object" ? playerRecord : {};
-  const normalizedUid = uid.trim();
-  const roleInfo = resolveAdminRoleForIdentity(normalizedUid, record.email);
-  return {
-    uid: normalizedUid,
-    displayName: typeof record.displayName === "string" ? record.displayName : undefined,
-    email: typeof record.email === "string" ? record.email : undefined,
-    photoUrl: typeof record.photoUrl === "string" ? record.photoUrl : undefined,
-    provider: typeof record.provider === "string" ? record.provider : undefined,
-    providerId: typeof record.providerId === "string" ? record.providerId : undefined,
-    role: roleInfo.role,
-    source: roleInfo.source,
-    updatedAt: Number.isFinite(record.updatedAt) ? Math.floor(record.updatedAt) : undefined,
-    roleUpdatedAt: Number.isFinite(record.adminRoleUpdatedAt)
-      ? Math.floor(record.adminRoleUpdatedAt)
-      : undefined,
-    roleUpdatedBy:
-      typeof record.adminRoleUpdatedBy === "string" ? record.adminRoleUpdatedBy : undefined,
-  };
-}
-
-function resolveAdminRoleForIdentity(uid, email) {
-  const normalizedUid = typeof uid === "string" ? uid.trim() : "";
-  const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
-  if (normalizedUid && ADMIN_OWNER_UID_ALLOWLIST.has(normalizedUid)) {
-    return {
-      role: ADMIN_ROLES.owner,
-      source: "bootstrap",
-    };
-  }
-  if (normalizedEmail && ADMIN_OWNER_EMAIL_ALLOWLIST.has(normalizedEmail)) {
-    return {
-      role: ADMIN_ROLES.owner,
-      source: "bootstrap",
-    };
-  }
-  const storedRole = normalizeAdminRole(store.firebasePlayers?.[normalizedUid]?.adminRole);
-  if (storedRole) {
-    return {
-      role: storedRole,
-      source: "assigned",
-    };
-  }
-  return {
-    role: null,
-    source: "none",
-  };
-}
-
-function normalizeAdminRole(rawValue) {
-  const normalized = typeof rawValue === "string" ? rawValue.trim().toLowerCase() : "";
-  if (normalized === ADMIN_ROLES.viewer) {
-    return ADMIN_ROLES.viewer;
-  }
-  if (normalized === ADMIN_ROLES.operator) {
-    return ADMIN_ROLES.operator;
-  }
-  if (normalized === ADMIN_ROLES.owner) {
-    return ADMIN_ROLES.owner;
-  }
-  return null;
-}
-
-function hasRequiredAdminRole(actualRole, requiredRole) {
-  const actual = normalizeAdminRole(actualRole);
-  const required = normalizeAdminRole(requiredRole) ?? ADMIN_ROLES.viewer;
-  if (!actual) {
-    return false;
-  }
-  return ADMIN_ROLE_LEVELS[actual] >= ADMIN_ROLE_LEVELS[required];
-}
-
-function isBootstrapOwnerUid(uid) {
-  const normalizedUid = typeof uid === "string" ? uid.trim() : "";
-  return Boolean(normalizedUid) && ADMIN_OWNER_UID_ALLOWLIST.has(normalizedUid);
-}
-
-function hasBootstrapAdminOwnersConfigured() {
-  return ADMIN_OWNER_UID_ALLOWLIST.size > 0 || ADMIN_OWNER_EMAIL_ALLOWLIST.size > 0;
-}
-
-function extractAdminTokenFromRequest(req) {
-  const headerToken =
-    typeof req?.headers?.["x-admin-token"] === "string"
-      ? req.headers["x-admin-token"].trim()
-      : "";
-  if (headerToken) {
-    return headerToken;
-  }
-
-  const authHeader = typeof req?.headers?.authorization === "string" ? req.headers.authorization : "";
-  const bearer = extractBearerToken(authHeader);
-  return bearer || "";
-}
-
-async function authorizeIdentityRequest(req, options = {}) {
-  const header = req.headers.authorization;
-  if (!header) {
-    return { ok: false, reason: "missing_authorization_header" };
-  }
-
-  const token = extractBearerToken(header);
-  if (!token) {
-    return { ok: false, reason: "invalid_bearer_header" };
-  }
-
-  if (options.allowSessionToken) {
-    const accessRecord = verifyAccessToken(token);
-    if (accessRecord) {
-      return {
-        ok: true,
-        uid: `local:${accessRecord.playerId}`,
-        displayName: accessRecord.playerId,
-        email: undefined,
-        photoUrl: undefined,
-        isAnonymous: true,
-        provider: "session",
-        providerId: "session",
-      };
-    }
-  }
-
-  const firebaseVerification = await verifyFirebaseIdToken(token);
-  if (!firebaseVerification.ok) {
-    return { ok: false, reason: firebaseVerification.reason };
-  }
-  const firebaseClaims = firebaseVerification.claims;
-  if (options.requireNonAnonymous && firebaseClaims.isAnonymous) {
-    return {
-      ok: false,
-      reason: "anonymous_not_allowed",
-    };
-  }
-
-  return {
-    ok: true,
-    uid: firebaseClaims.uid,
-    displayName: firebaseClaims.name,
-    email: firebaseClaims.email,
-    photoUrl: normalizeAvatarUrl(firebaseClaims.picture),
-    isAnonymous: firebaseClaims.isAnonymous,
-    provider: "firebase",
-    providerId: normalizeProviderId(firebaseClaims.signInProvider),
-  };
-}
-
-function authorizeRequest(req, expectedPlayerId, expectedSessionId) {
-  const header = req.headers.authorization;
-  if (!header) {
-    return { ok: true };
-  }
-
-  const token = extractBearerToken(header);
-  if (!token) {
-    return { ok: false };
-  }
-
-  const record = verifyAccessToken(token);
-  if (!record) {
-    return { ok: false };
-  }
-
-  if (expectedPlayerId && record.playerId !== expectedPlayerId) {
-    return { ok: false };
-  }
-  if (expectedSessionId && record.sessionId !== expectedSessionId) {
-    return { ok: false };
-  }
-
-  return { ok: true, playerId: record.playerId, sessionId: record.sessionId };
-}
-
-function authorizeSessionActionRequest(req, expectedPlayerId, expectedSessionId) {
-  const header = req.headers.authorization;
-  if (!header) {
-    return { ok: false, reason: "missing_authorization_header" };
-  }
-
-  const token = extractBearerToken(header);
-  if (!token) {
-    return { ok: false, reason: "invalid_bearer_header" };
-  }
-
-  const record = verifyAccessToken(token);
-  if (!record) {
-    return { ok: false, reason: "invalid_or_expired_access_token" };
-  }
-
-  if (expectedPlayerId && record.playerId !== expectedPlayerId) {
-    return { ok: false, reason: "player_mismatch" };
-  }
-  if (expectedSessionId && record.sessionId !== expectedSessionId) {
-    return { ok: false, reason: "session_mismatch" };
-  }
-
-  return { ok: true, playerId: record.playerId, sessionId: record.sessionId };
-}
-
-function shouldRetrySessionAuthFromStore(reason) {
-  return (
-    reason === "invalid_or_expired_access_token" ||
-    reason === "player_mismatch" ||
-    reason === "session_mismatch"
-  );
 }
 
 function normalizeReason(message) {

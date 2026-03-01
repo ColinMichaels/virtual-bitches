@@ -123,6 +123,12 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
   - `api/auth/tokenAuthAdapter.mjs`
   - `api/server.mjs` delegates access/refresh token issue+verify+revoke and bearer parsing to extracted auth adapter
   - `api/auth/tokenAuthAdapter.test.mjs`
+  - `api/auth/adminAccessAuthorizer.mjs`
+  - `api/server.mjs` delegates admin access mode resolution + token/identity/role authorization flow to extracted admin access authorizer adapter
+  - `api/auth/adminAccessAuthorizer.test.mjs`
+  - `api/auth/requestAuthorizer.mjs`
+  - `api/server.mjs` delegates identity/session/request authorization checks to extracted request authorizer adapter
+  - `api/auth/requestAuthorizer.test.mjs`
   - `api/auth/firebaseIdentityVerifier.mjs`
   - `api/server.mjs` delegates Firebase ID token verification (admin SDK + legacy lookup fallback + claim cache) to extracted identity verifier adapter
   - `api/auth/firebaseIdentityVerifier.test.mjs`
@@ -130,7 +136,17 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
   - `api/storage/storeSyncController.mjs`
   - `api/server.mjs` delegates persist queue + rehydrate/cooldown coordination to extracted store sync controller
   - `api/storage/storeSyncController.test.mjs`
-  - `api/package.json` includes `test:storage-auth-adapters` with storage sync coverage
+  - `api/package.json` includes `test:storage-auth-adapters` with admin access + request auth + storage sync coverage
+
+## Phase 06 - Admin Service Boundaries
+- Extract admin policy/audit/role support logic from `server.mjs` into dedicated admin services.
+- Keep admin route contracts stable while shrinking composition-root responsibilities.
+- Status: ✅ In progress checkpoint landed
+- Delivered in branch:
+  - `api/admin/adminSecurityAuditService.mjs`
+  - `api/server.mjs` delegates admin role normalization/hierarchy checks, owner allowlist role resolution, admin limit parsing, admin principal shaping, admin audit event write/read normalization, and admin role record shaping to extracted admin security/audit service
+  - `api/admin/adminSecurityAuditService.test.mjs`
+  - `api/package.json` includes `test:admin-security-audit` for isolated admin security/audit service validation
 
 ## Guardrails
 
