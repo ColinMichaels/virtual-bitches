@@ -23,6 +23,7 @@ import type { IControlInversionService } from "../services/controlInversion.js";
 export interface GameCallbacks {
   handleAction: () => void;
   handleSeatStatusToggle: () => void;
+  handleEscapePauseMenu: () => void;
   handleDeselectAll: () => void;
   handleUndo: () => void;
   handleCopyInviteLink: () => void;
@@ -569,7 +570,12 @@ export class InputController {
     if (code === "Escape") {
       e.preventDefault();
 
-      if (this.rulesModal.isVisible()) {
+      if (this.isElementVisibleById("confirm-modal")) {
+        const cancelButton = document.querySelector<HTMLButtonElement>(
+          "#confirm-modal .btn-confirm-cancel"
+        );
+        cancelButton?.click();
+      } else if (this.rulesModal.isVisible()) {
         this.rulesModal.hide();
       } else if (this.leaderboardModal.isVisible()) {
         this.leaderboardModal.hide();
@@ -588,9 +594,11 @@ export class InputController {
       } else if (this.chaosUpgradeMenu.isVisible()) {
         this.chaosUpgradeMenu.hide();
       } else if (this.isElementVisibleById("settings-modal")) {
-        this.callbacks.togglePause();
+        this.callbacks.handleEscapePauseMenu();
+      } else if (this.isElementVisibleById("pause-menu-modal")) {
+        this.callbacks.handleEscapePauseMenu();
       } else {
-        this.callbacks.togglePause();
+        this.callbacks.handleEscapePauseMenu();
       }
       return;
     }

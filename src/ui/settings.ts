@@ -53,7 +53,6 @@ export class SettingsModal {
   private onClose: (() => void) | null = null;
   private onNewGame: (() => void) | null = null;
   private onHowToPlay: (() => void) | null = null;
-  private onReturnToLobby: (() => void) | null = null;
   private checkGameInProgress: (() => boolean) | null = null;
   private activeTab: SettingsTab = "game";
   private savingLeaderboardName = false;
@@ -186,38 +185,6 @@ export class SettingsModal {
             </div>
           </div>
 
-          <div class="settings-section">
-            <h3>${t("settings.section.gameVariants.title")}</h3>
-            <p class="setting-description">${t("settings.section.gameVariants.description")}</p>
-
-            <div class="setting-row">
-              <label>
-                <input type="checkbox" id="variant-d20" ${this.settings.game.addD20 ? "checked" : ""}>
-                ${t("settings.controls.variant.addD20")}
-              </label>
-            </div>
-
-            <div class="setting-row">
-              <label>
-                <input type="checkbox" id="variant-d4" ${this.settings.game.addD4 ? "checked" : ""}>
-                ${t("settings.controls.variant.addD4")}
-              </label>
-            </div>
-
-            <div class="setting-row">
-              <label>
-                <input type="checkbox" id="variant-2nd-d10" ${this.settings.game.add2ndD10 ? "checked" : ""}>
-                ${t("settings.controls.variant.add2ndD10")}
-              </label>
-            </div>
-
-            <div class="setting-row">
-              <label>
-                <input type="checkbox" id="variant-d100" ${this.settings.game.d100Mode ? "checked" : ""}>
-                ${t("settings.controls.variant.d100")}
-              </label>
-            </div>
-          </div>
           </div>
 
           <div class="settings-tab-panel" data-tab-panel="graphics">
@@ -318,7 +285,6 @@ export class SettingsModal {
         </div>
 
         <div class="settings-buttons">
-          <button id="settings-return-lobby" class="btn btn-secondary">${t("settings.buttons.mainMenu")}</button>
           <button id="settings-how-to-play" class="btn btn-outline">${t("settings.buttons.howToPlay")}</button>
           <button id="settings-new-game" class="btn btn-danger danger">${t("settings.buttons.newGame")}</button>
           <button id="settings-reset" class="btn btn-secondary">${t("settings.buttons.resetDefaults")}</button>
@@ -567,131 +533,11 @@ export class SettingsModal {
       }
     });
 
-    // Game Variants
-    const variantD20 = document.getElementById("variant-d20") as HTMLInputElement;
-    variantD20.addEventListener("change", async () => {
-      if (this.isGameInProgress()) {
-        const confirmed = await confirmAction({
-          title: t("settings.confirm.startNewGame.title"),
-          message: t("settings.confirm.startNewGame.variantsMessage"),
-          confirmLabel: t("settings.confirm.startNewGame.confirm"),
-          cancelLabel: t("settings.confirm.startNewGame.cancel"),
-          tone: "danger",
-        });
-        if (!confirmed) {
-          variantD20.checked = this.settings.game.addD20;
-          return;
-        }
-      }
-      settingsService.updateGame({ addD20: variantD20.checked });
-      audioService.playSfx("click");
-      if (this.isGameInProgress() && this.onNewGame) {
-        this.hide();
-        this.onNewGame();
-      }
-    });
-
-    const variantD4 = document.getElementById("variant-d4") as HTMLInputElement;
-    variantD4.addEventListener("change", async () => {
-      if (this.isGameInProgress()) {
-        const confirmed = await confirmAction({
-          title: t("settings.confirm.startNewGame.title"),
-          message: t("settings.confirm.startNewGame.variantsMessage"),
-          confirmLabel: t("settings.confirm.startNewGame.confirm"),
-          cancelLabel: t("settings.confirm.startNewGame.cancel"),
-          tone: "danger",
-        });
-        if (!confirmed) {
-          variantD4.checked = this.settings.game.addD4;
-          return;
-        }
-      }
-      settingsService.updateGame({ addD4: variantD4.checked });
-      audioService.playSfx("click");
-      if (this.isGameInProgress() && this.onNewGame) {
-        this.hide();
-        this.onNewGame();
-      }
-    });
-
-    const variant2ndD10 = document.getElementById("variant-2nd-d10") as HTMLInputElement;
-    variant2ndD10.addEventListener("change", async () => {
-      if (this.isGameInProgress()) {
-        const confirmed = await confirmAction({
-          title: t("settings.confirm.startNewGame.title"),
-          message: t("settings.confirm.startNewGame.variantsMessage"),
-          confirmLabel: t("settings.confirm.startNewGame.confirm"),
-          cancelLabel: t("settings.confirm.startNewGame.cancel"),
-          tone: "danger",
-        });
-        if (!confirmed) {
-          variant2ndD10.checked = this.settings.game.add2ndD10;
-          return;
-        }
-      }
-      settingsService.updateGame({ add2ndD10: variant2ndD10.checked });
-      audioService.playSfx("click");
-      if (!variant2ndD10.checked && this.settings.game.d100Mode) {
-        settingsService.updateGame({ d100Mode: false });
-        (document.getElementById("variant-d100") as HTMLInputElement).checked = false;
-      }
-      if (this.isGameInProgress() && this.onNewGame) {
-        this.hide();
-        this.onNewGame();
-      }
-    });
-
-    const variantD100 = document.getElementById("variant-d100") as HTMLInputElement;
-    variantD100.addEventListener("change", async () => {
-      if (this.isGameInProgress()) {
-        const confirmed = await confirmAction({
-          title: t("settings.confirm.startNewGame.title"),
-          message: t("settings.confirm.startNewGame.variantsMessage"),
-          confirmLabel: t("settings.confirm.startNewGame.confirm"),
-          cancelLabel: t("settings.confirm.startNewGame.cancel"),
-          tone: "danger",
-        });
-        if (!confirmed) {
-          variantD100.checked = this.settings.game.d100Mode;
-          return;
-        }
-      }
-      if (variantD100.checked && !this.settings.game.add2ndD10) {
-        settingsService.updateGame({ add2ndD10: true });
-        (document.getElementById("variant-2nd-d10") as HTMLInputElement).checked = true;
-      }
-      settingsService.updateGame({ d100Mode: variantD100.checked });
-      audioService.playSfx("click");
-      if (this.isGameInProgress() && this.onNewGame) {
-        this.hide();
-        this.onNewGame();
-      }
-    });
-
     // How to Play button
     document.getElementById("settings-how-to-play")?.addEventListener("click", () => {
       audioService.playSfx("click");
       if (this.onHowToPlay) {
         this.onHowToPlay();
-      }
-    });
-
-    // Main Menu button
-    document.getElementById("settings-return-lobby")?.addEventListener("click", async () => {
-      audioService.playSfx("click");
-      const confirmed = await confirmAction({
-        title: t("settings.confirm.returnLobby.title"),
-        message: t("settings.confirm.returnLobby.message"),
-        confirmLabel: t("settings.confirm.returnLobby.confirm"),
-        cancelLabel: t("settings.confirm.returnLobby.cancel"),
-        tone: "danger",
-      });
-      if (!confirmed) {
-        return;
-      }
-      this.hide();
-      if (this.onReturnToLobby) {
-        this.onReturnToLobby();
       }
     });
 
@@ -2291,13 +2137,6 @@ export class SettingsModal {
    */
   setOnHowToPlay(callback: () => void): void {
     this.onHowToPlay = callback;
-  }
-
-  /**
-   * Set callback for when return to lobby is requested
-   */
-  setOnReturnToLobby(callback: () => void): void {
-    this.onReturnToLobby = callback;
   }
 
   /**

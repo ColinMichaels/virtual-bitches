@@ -211,6 +211,12 @@ const API_ROUTE_DEFINITIONS = Object.freeze([
   }),
   Object.freeze({
     method: "POST",
+    pattern: /^\/api\/multiplayer\/sessions\/[^/]+\/demo-controls$/,
+    handlerKey: "updateSessionDemoControls",
+    args: Object.freeze(["req", "res", "pathname"]),
+  }),
+  Object.freeze({
+    method: "POST",
     pattern: /^\/api\/multiplayer\/sessions\/[^/]+\/moderate$/,
     handlerKey: "moderateSessionParticipant",
     args: Object.freeze(["req", "res", "pathname"]),

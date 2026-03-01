@@ -86,6 +86,21 @@
   - toggle appears in private-room create intent when feature flag is enabled
   - toggle auto-resets when switching to public room selection or invite-code join intent
   - `demoSpeedMode` is now carried in multiplayer start/create payloads and surfaced in API session responses.
+- Promoted demo mode from badge-only to a controllable room mode:
+  - demo private-room create now auto-seeds bots and disables auto-seat/ready so host starts as observer/controller.
+  - added host-only demo controls (`pause/resume` + `speed normal/fast`) via `POST /api/multiplayer/sessions/:sessionId/demo-controls`.
+  - added persistent session flags (`demoMode`, `demoAutoRun`, `demoSpeedMode`) in API responses + websocket session-state payloads.
+  - updated bot/turn/no-seated lifecycle gating so demo rooms can run bot-only rounds without requiring seated humans, while still expiring when no live human controller remains.
+
+### Multiplayer Host-Control + Menu UX Follow-up (2026-03-01)
+- Extended host control eligibility from demo-only rooms to all private rooms (owner only), so private-room hosts can control auto-run/speed without requiring demo creation mode.
+- Updated demo-control API mutation behavior to auto-enable host-control mode on first control action in private rooms (instead of rejecting with `demo_mode_disabled`).
+- Updated private-room bot/liveness gating to treat connected private-room observers as live humans for bot-loop continuity, reducing bot-prune dead-ends when host is observing.
+- Fixed client-side turn enforcement so unseated observers no longer drop into local solo fallback while connected to active multiplayer sessions.
+- Unified return-to-menu confirmation flow:
+  - `Esc` from settings now follows the same return-to-menu confirmation path as main-menu actions.
+  - removed in-settings `Main Menu` button (return action is now routed through the shared confirmation flow used by gameplay controls).
+- Temporarily removed game-variant die toggles from Settings UI while gameplay-mechanic stabilization continues.
 
 ---
 

@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-03-01T03:14:50.266Z",
+  "generatedAt": "2026-03-01T03:25:20.589Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-c11d2ba",
+      "date": "2026-03-01T03:15:48.000Z",
+      "title": "extract api route dispatch module",
+      "content": "<p>extract api route dispatch module</p><p><strong>Commit:</strong> <code>c11d2ba</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "c11d2ba06409c59ff7fd83e8eff0093e05b6f3ef",
+        "shortHash": "c11d2ba",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c11d2ba06409c59ff7fd83e8eff0093e05b6f3ef"
+      }
+    },
     {
       "id": "git-64e06e3",
       "date": "2026-03-01T03:09:00.000Z",
