@@ -37,6 +37,7 @@ import {
 import { createSocketLifecycle } from "./ws/socketLifecycle.mjs";
 import { isSupportedSocketPayload } from "./ws/socketPayloadValidation.mjs";
 import { createSocketRelay } from "./ws/socketRelay.mjs";
+import { createSocketUpgradeAuthenticator } from "./ws/socketUpgradeAuth.mjs";
 import {
   buildChatConductWarning,
   createChatConductPolicy,
@@ -442,6 +443,17 @@ const socketRelay = createSocketRelay({
   safeCloseSocket,
   wsCloseCodes: WS_CLOSE_CODES,
   hasRoomChannelBlockRelationship,
+  log,
+});
+const authenticateSocketUpgrade = createSocketUpgradeAuthenticator({
+  getSession: (sessionId) => store.multiplayerSessions[sessionId],
+  rehydrateStoreFromAdapter,
+  verifyAccessToken,
+  isPlayerBannedFromSession,
+  isBotParticipant,
+  markSessionActivity,
+  persistStore,
+  sessionUpgradeGraceMs: WS_SESSION_UPGRADE_GRACE_MS,
   log,
 });
 const socketLifecycle = createSocketLifecycle({
@@ -9365,81 +9377,6 @@ function rejectUpgrade(socket, status, reason) {
     `HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`
   );
   socket.destroy();
-}
-
-async function authenticateSocketUpgrade(requestUrl) {
-  const sessionId = requestUrl.searchParams.get("session")?.trim() ?? "";
-  const playerId = requestUrl.searchParams.get("playerId")?.trim() ?? "";
-  const token = requestUrl.searchParams.get("token")?.trim() ?? "";
-
-  if (!sessionId || !playerId || !token) {
-    return { ok: false, status: 401, reason: "Unauthorized" };
-  }
-
-  let session = store.multiplayerSessions[sessionId];
-  if (!session || session.expiresAt <= Date.now()) {
-    await rehydrateStoreFromAdapter(`ws_upgrade_session:${sessionId}`, { force: true });
-    session = store.multiplayerSessions[sessionId];
-  }
-  if (!session) {
-    return { ok: false, status: 410, reason: "Gone" };
-  }
-
-  const now = Date.now();
-  const sessionExpiresAt =
-    typeof session.expiresAt === "number" && Number.isFinite(session.expiresAt)
-      ? Math.floor(session.expiresAt)
-      : 0;
-  const sessionExpired = sessionExpiresAt <= now;
-  const sessionExpiredBeyondGrace =
-    sessionExpired &&
-    (sessionExpiresAt <= 0 || now - sessionExpiresAt > WS_SESSION_UPGRADE_GRACE_MS);
-  if (sessionExpiredBeyondGrace) {
-    return { ok: false, status: 410, reason: "Gone" };
-  }
-
-  if (isPlayerBannedFromSession(session, playerId)) {
-    return { ok: false, status: 403, reason: "Forbidden" };
-  }
-
-  if (!session.participants[playerId]) {
-    await rehydrateStoreFromAdapter(`ws_upgrade_participant:${sessionId}:${playerId}`, { force: true });
-    session = store.multiplayerSessions[sessionId];
-  }
-  if (!session || !session.participants[playerId]) {
-    return { ok: false, status: 403, reason: "Forbidden" };
-  }
-
-  let accessRecord = verifyAccessToken(token);
-  if (!accessRecord) {
-    await rehydrateStoreFromAdapter(`ws_upgrade_token:${sessionId}:${playerId}`, { force: true });
-    accessRecord = verifyAccessToken(token);
-  }
-  if (!accessRecord) {
-    return { ok: false, status: 401, reason: "Unauthorized" };
-  }
-
-  if (accessRecord.playerId !== playerId || accessRecord.sessionId !== sessionId) {
-    return { ok: false, status: 403, reason: "Forbidden" };
-  }
-
-  if (sessionExpired) {
-    const participant = session.participants[playerId];
-    if (participant && !isBotParticipant(participant)) {
-      participant.lastHeartbeatAt = now;
-    }
-    markSessionActivity(session, playerId, now, { countAsPlayerAction: false });
-    persistStore().catch((error) => {
-      log.warn("Failed to persist revived session during WebSocket upgrade", error);
-    });
-  }
-
-  return {
-    ok: true,
-    sessionId,
-    playerId,
-    tokenExpiresAt: accessRecord.expiresAt,
-  };
 }
 
 function handleSocketMessage(client, rawMessage) {
