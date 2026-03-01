@@ -8,6 +8,7 @@ import { createStoreAdapter, DEFAULT_STORE } from "./storage/index.mjs";
 import { cloneStore } from "./storage/defaultStore.mjs";
 import { createBotEngine } from "./bot/engine.mjs";
 import { createSessionTurnEngine } from "./engine/sessionTurnEngine.mjs";
+import { createSessionLifecycleEngine } from "./engine/sessionLifecycleEngine.mjs";
 import { dispatchApiRoute } from "./http/routeDispatcher.mjs";
 import { createApiRouteHandlers } from "./http/routeHandlers.mjs";
 import {
@@ -394,6 +395,23 @@ const botEngine = createBotEngine({
     max: BOT_TURN_ADVANCE_MAX_MS,
   },
   turnDelayByProfile: BOT_TURN_ADVANCE_DELAY_BY_PROFILE,
+});
+const sessionLifecycleController = createSessionLifecycleEngine({
+  turnPhases: TURN_PHASES,
+  defaultParticipantDiceCount: DEFAULT_PARTICIPANT_DICE_COUNT,
+  nextGameAutoStartDelayMs: NEXT_GAME_AUTO_START_DELAY_MS,
+  postGameInactivityTimeoutMs: POST_GAME_INACTIVITY_TIMEOUT_MS,
+  normalizeTurnPhase,
+  isParticipantActiveForCurrentGame,
+  normalizeParticipantScore,
+  normalizeParticipantRemainingDice,
+  isParticipantComplete,
+  isParticipantQueuedForNextGame,
+  normalizeParticipantCompletedAt,
+  isBotParticipant,
+  ensureSessionTurnState,
+  markSessionActivity,
+  resolveSessionNextGameStartsAt,
 });
 const sessionTurnController = createSessionTurnEngine({
   turnPhases: TURN_PHASES,
@@ -7030,263 +7048,47 @@ function isParticipantComplete(participant) {
 }
 
 function isSessionGameInProgress(session) {
-  if (!session || typeof session !== "object") {
-    return false;
-  }
-
-  const turnState = session.turnState ?? null;
-  const phase = normalizeTurnPhase(turnState?.phase);
-  const round =
-    Number.isFinite(turnState?.round) && turnState.round > 0
-      ? Math.floor(turnState.round)
-      : 1;
-  const turnNumber =
-    Number.isFinite(turnState?.turnNumber) && turnState.turnNumber > 0
-      ? Math.floor(turnState.turnNumber)
-      : 1;
-
-  if (phase !== TURN_PHASES.awaitRoll) {
-    return true;
-  }
-  if (round > 1 || turnNumber > 1) {
-    return true;
-  }
-
-  return Object.values(session.participants ?? {}).some((participant) => {
-    if (
-      !participant ||
-      typeof participant !== "object" ||
-      !isParticipantActiveForCurrentGame(participant)
-    ) {
-      return false;
-    }
-    return (
-      normalizeParticipantScore(participant.score) > 0 ||
-      normalizeParticipantRemainingDice(participant.remainingDice) <
-        DEFAULT_PARTICIPANT_DICE_COUNT ||
-      isParticipantComplete(participant)
-    );
-  });
+  return sessionLifecycleController.isSessionGameInProgress(session);
 }
 
 function shouldQueueParticipantForNextGame(session) {
-  return isSessionGameInProgress(session);
+  return sessionLifecycleController.shouldQueueParticipantForNextGame(session);
 }
 
 function hasQueuedParticipantsForNextGame(session) {
-  if (!session?.participants) {
-    return false;
-  }
-  return Object.values(session.participants).some((participant) =>
-    isParticipantQueuedForNextGame(participant)
-  );
+  return sessionLifecycleController.hasQueuedParticipantsForNextGame(session);
 }
 
 function areCurrentGameParticipantsComplete(session) {
-  if (!session?.participants) {
-    return false;
-  }
-
-  const activeParticipants = Object.values(session.participants).filter(
-    (participant) => participant && isParticipantActiveForCurrentGame(participant)
-  );
-  if (activeParticipants.length === 0) {
-    return hasQueuedParticipantsForNextGame(session);
-  }
-
-  return activeParticipants.every((participant) => isParticipantComplete(participant));
+  return sessionLifecycleController.areCurrentGameParticipantsComplete(session);
 }
 
 function normalizePostGameTimestamp(value) {
-  if (!Number.isFinite(value) || value <= 0) {
-    return null;
-  }
-  return Math.floor(value);
+  return sessionLifecycleController.normalizePostGameTimestamp(value);
 }
 
 function clearSessionPostGameLifecycleState(session) {
-  if (!session || typeof session !== "object") {
-    return false;
-  }
-  let changed = false;
-  if (Object.prototype.hasOwnProperty.call(session, "nextGameStartsAt")) {
-    delete session.nextGameStartsAt;
-    changed = true;
-  }
-  if (Object.prototype.hasOwnProperty.call(session, "postGameActivityAt")) {
-    delete session.postGameActivityAt;
-    changed = true;
-  }
-  if (Object.prototype.hasOwnProperty.call(session, "postGameIdleExpiresAt")) {
-    delete session.postGameIdleExpiresAt;
-    changed = true;
-  }
-  return changed;
+  return sessionLifecycleController.clearSessionPostGameLifecycleState(session);
 }
 
 function scheduleSessionPostGameLifecycle(session, timestamp = Date.now()) {
-  if (!areCurrentGameParticipantsComplete(session)) {
-    return false;
-  }
-
-  const completedAt = Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
-  const currentNextGameStartsAt = normalizePostGameTimestamp(session?.nextGameStartsAt);
-  const nextGameStartsAt =
-    currentNextGameStartsAt !== null
-      ? currentNextGameStartsAt
-      : completedAt + NEXT_GAME_AUTO_START_DELAY_MS;
-  const postGameIdleFloor = nextGameStartsAt + 1000;
-  const currentPostGameActivityAt = normalizePostGameTimestamp(session?.postGameActivityAt);
-  const postGameActivityAt =
-    currentPostGameActivityAt !== null ? currentPostGameActivityAt : completedAt;
-  const currentPostGameIdleExpiresAt = normalizePostGameTimestamp(session?.postGameIdleExpiresAt);
-  const postGameIdleCandidate =
-    currentPostGameIdleExpiresAt !== null
-      ? currentPostGameIdleExpiresAt
-      : postGameActivityAt + POST_GAME_INACTIVITY_TIMEOUT_MS;
-  const postGameIdleExpiresAt = Math.max(postGameIdleCandidate, postGameIdleFloor);
-
-  let changed = false;
-  if (normalizePostGameTimestamp(session.nextGameStartsAt) !== nextGameStartsAt) {
-    session.nextGameStartsAt = nextGameStartsAt;
-    changed = true;
-  }
-  if (normalizePostGameTimestamp(session.postGameActivityAt) !== postGameActivityAt) {
-    session.postGameActivityAt = postGameActivityAt;
-    changed = true;
-  }
-  if (normalizePostGameTimestamp(session.postGameIdleExpiresAt) !== postGameIdleExpiresAt) {
-    session.postGameIdleExpiresAt = postGameIdleExpiresAt;
-    changed = true;
-  }
-  return changed;
+  return sessionLifecycleController.scheduleSessionPostGameLifecycle(session, timestamp);
 }
 
 function markSessionPostGamePlayerAction(session, timestamp = Date.now()) {
-  if (!areCurrentGameParticipantsComplete(session)) {
-    return false;
-  }
-  const actionAt = Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
-  const nextGameStartsAt = resolveSessionNextGameStartsAt(session, actionAt);
-  const postGameIdleFloor = nextGameStartsAt + 1000;
-  const postGameIdleExpiresAt = Math.max(actionAt + POST_GAME_INACTIVITY_TIMEOUT_MS, postGameIdleFloor);
-  let changed = false;
-  if (normalizePostGameTimestamp(session.postGameActivityAt) !== actionAt) {
-    session.postGameActivityAt = actionAt;
-    changed = true;
-  }
-  if (normalizePostGameTimestamp(session.postGameIdleExpiresAt) !== postGameIdleExpiresAt) {
-    session.postGameIdleExpiresAt = postGameIdleExpiresAt;
-    changed = true;
-  }
-  return changed;
+  return sessionLifecycleController.markSessionPostGamePlayerAction(session, timestamp);
 }
 
 function resetSessionForNextGame(session, timestamp = Date.now()) {
-  if (!session?.participants) {
-    return false;
-  }
-
-  const now = Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
-  let changed = false;
-
-  Object.values(session.participants).forEach((participant) => {
-    if (!participant || typeof participant !== "object") {
-      return;
-    }
-    if (isParticipantQueuedForNextGame(participant)) {
-      changed = true;
-    }
-    if (
-      normalizeParticipantScore(participant.score) !== 0 ||
-      normalizeParticipantRemainingDice(participant.remainingDice) !==
-        DEFAULT_PARTICIPANT_DICE_COUNT ||
-      participant.isComplete === true ||
-      normalizeParticipantCompletedAt(participant.completedAt) !== null
-    ) {
-      changed = true;
-    }
-
-    participant.score = 0;
-    participant.remainingDice = DEFAULT_PARTICIPANT_DICE_COUNT;
-    participant.turnTimeoutRound = null;
-    participant.turnTimeoutCount = 0;
-    participant.queuedForNextGame = false;
-    participant.isComplete = false;
-    participant.completedAt = null;
-    if (isBotParticipant(participant)) {
-      participant.isReady = true;
-    }
-  });
-
-  if (clearSessionPostGameLifecycleState(session)) {
-    changed = true;
-  }
-  if (!changed) {
-    return false;
-  }
-
-  session.gameStartedAt = now;
-  session.turnState = null;
-  ensureSessionTurnState(session);
-  markSessionActivity(session, "", now);
-  return true;
+  return sessionLifecycleController.resetSessionForNextGame(session, timestamp);
 }
 
 function completeSessionRoundWithWinner(session, winnerPlayerId, timestamp = Date.now()) {
-  if (!session?.participants || typeof winnerPlayerId !== "string" || !winnerPlayerId) {
-    return { ok: false };
-  }
-
-  const winner = session.participants[winnerPlayerId];
-  if (!winner || !isParticipantActiveForCurrentGame(winner)) {
-    return { ok: false };
-  }
-
-  const completedAt =
-    Number.isFinite(timestamp) && timestamp > 0 ? Math.floor(timestamp) : Date.now();
-  winner.isComplete = true;
-  winner.remainingDice = 0;
-  winner.completedAt = normalizeParticipantCompletedAt(winner.completedAt) ?? completedAt;
-
-  let completionCursor = completedAt + 1;
-  Object.entries(session.participants).forEach(([playerId, participant]) => {
-    if (
-      playerId === winnerPlayerId ||
-      !participant ||
-      typeof participant !== "object" ||
-      !isParticipantActiveForCurrentGame(participant)
-    ) {
-      return;
-    }
-
-    if (participant.isComplete !== true) {
-      participant.isComplete = true;
-    }
-    if (normalizeParticipantCompletedAt(participant.completedAt) === null) {
-      participant.completedAt = completionCursor;
-      completionCursor += 1;
-    }
-  });
-
-  const turnState = ensureSessionTurnState(session);
-  if (turnState) {
-    turnState.activeTurnPlayerId = null;
-    turnState.order = turnState.order.filter((playerId) => {
-      const participant = session.participants?.[playerId];
-      return Boolean(participant) && isParticipantActiveForCurrentGame(participant);
-    });
-    turnState.phase = TURN_PHASES.awaitRoll;
-    turnState.lastRollSnapshot = null;
-    turnState.lastScoreSummary = null;
-    turnState.turnExpiresAt = null;
-    turnState.updatedAt = completedAt;
-  }
-
-  scheduleSessionPostGameLifecycle(session, completedAt);
-  return {
-    ok: true,
-  };
+  return sessionLifecycleController.completeSessionRoundWithWinner(
+    session,
+    winnerPlayerId,
+    timestamp
+  );
 }
 
 function broadcastRoundWinnerResolved(session, winnerPlayerId, timestamp = Date.now(), source = "winner_complete") {

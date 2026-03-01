@@ -39,6 +39,8 @@
 ### Phase 02 - Engine Boundaries (Incremental Refactor)
 - Extracted turn/session progression logic from `api/server.mjs` into:
   - `api/engine/sessionTurnEngine.mjs`
+- Extracted post-game/session lifecycle state transition logic from `api/server.mjs` into:
+  - `api/engine/sessionLifecycleEngine.mjs`
 - Added dependency-injected engine composition in `server.mjs` so core turn transitions run behind explicit interfaces.
 - Kept transport and orchestration call sites stable via wrapper delegation:
   - `ensureSessionTurnState`
@@ -47,6 +49,15 @@
   - `buildTurnActionMessage`
   - `advanceSessionTurn`
   - `applyParticipantScoreUpdate`
+- Added stable wrapper delegation for lifecycle transition operations:
+  - `isSessionGameInProgress`
+  - `shouldQueueParticipantForNextGame`
+  - `hasQueuedParticipantsForNextGame`
+  - `areCurrentGameParticipantsComplete`
+  - `scheduleSessionPostGameLifecycle`
+  - `markSessionPostGamePlayerAction`
+  - `resetSessionForNextGame`
+  - `completeSessionRoundWithWinner`
 - Preserved API/WebSocket behavior while isolating core game transition logic from the server composition root.
 
 ---
@@ -56,6 +67,7 @@
 ### Confirmed
 - `npm run test:game-config` passes.
 - `npm run test:backend-api` passes.
+- `node --check api/engine/sessionLifecycleEngine.mjs` passes.
 - `node --check api/engine/sessionTurnEngine.mjs` passes.
 - `node --check api/server.mjs` passes.
 - `node --check api/http/routeDispatcher.mjs` passes.
