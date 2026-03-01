@@ -52,7 +52,7 @@ export const environment: Environment = {
     storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET ?? "",
     messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? "",
     appId: env.VITE_FIREBASE_APP_ID ?? "",
-    measurementId: env.VITE_FIREBASE_MEASUREMENT_ID ?? "",
+    measurementId: env.VITE_FIREBASE_MEASUREMENT_ID ?? "G-581MTJ86B6",
   },
   debug: true,
 };

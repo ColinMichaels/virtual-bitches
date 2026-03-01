@@ -1,8 +1,36 @@
 {
-  "generatedAt": "2026-03-01T22:21:15.106Z",
+  "generatedAt": "2026-03-01T22:46:00.574Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-2f3bfe8",
+      "date": "2026-03-01T22:28:36.000Z",
+      "title": "update(updates.git",
+      "content": "<p>update(updates.git</p><p><strong>Commit:</strong> <code>2f3bfe8</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "2f3bfe86bc98d1c669bdeaa1139f72d7ce9a00cc",
+        "shortHash": "2f3bfe8",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/2f3bfe86bc98d1c669bdeaa1139f72d7ce9a00cc"
+      }
+    },
+    {
+      "id": "git-400df34",
+      "date": "2026-03-01T22:27:47.000Z",
+      "title": "add typed event catalog and consent-first sdk init",
+      "content": "<p>add typed event catalog and consent-first sdk init</p><p><strong>Commit:</strong> <code>400df34</code></p><p>- add centralized analytics event constants + typed param map</p>",
+      "version": "1.0.0",
+      "type": "feature",
+      "source": "commit",
+      "commit": {
+        "hash": "400df34e1354e9b6a2814f2e5b484c83ebd2a076",
+        "shortHash": "400df34",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/400df34e1354e9b6a2814f2e5b484c83ebd2a076"
+      }
+    },
     {
       "id": "git-4a17c43",
       "date": "2026-03-01T22:18:12.000Z",
@@ -351,20 +379,6 @@
         "hash": "b19fa4fb7e6b5500c241a7aef0459c6749b5db4a",
         "shortHash": "b19fa4f",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/b19fa4fb7e6b5500c241a7aef0459c6749b5db4a"
-      }
-    },
-    {
-      "id": "git-3ee2f2f",
-      "date": "2026-03-01T15:28:53.000Z",
-      "title": "extract websocket message router",
-      "content": "<p>extract websocket message router</p><p><strong>Commit:</strong> <code>3ee2f2f</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "3ee2f2fceb19c79a8ae00b844bc02d64128ada19",
-        "shortHash": "3ee2f2f",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/3ee2f2fceb19c79a8ae00b844bc02d64128ada19"
       }
     }
   ]
