@@ -124,7 +124,10 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
   - `api/server.mjs` delegates access/refresh token issue+verify+revoke and bearer parsing to extracted auth adapter
   - `api/auth/tokenAuthAdapter.test.mjs`
   - `api/storage/fileStore.test.mjs`
-  - `api/package.json` includes `test:storage-auth-adapters`
+  - `api/storage/storeSyncController.mjs`
+  - `api/server.mjs` delegates persist queue + rehydrate/cooldown coordination to extracted store sync controller
+  - `api/storage/storeSyncController.test.mjs`
+  - `api/package.json` includes `test:storage-auth-adapters` with storage sync coverage
 
 ## Guardrails
 
