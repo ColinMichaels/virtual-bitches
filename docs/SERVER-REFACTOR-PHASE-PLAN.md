@@ -87,11 +87,18 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
 - Delivered in branch:
   - `api/filters/addonRegistry.mjs`
   - `api/filters/roomChannelChatConductFilter.mjs`
+  - `api/filters/roomChannelSenderRestrictionFilter.mjs`
+  - `api/filters/directMessageBlockRelationshipFilter.mjs`
   - `api/server.mjs` delegates room-channel chat-conduct gating through a registry-managed filter chain
+  - `api/server.mjs` delegates room-channel sender restriction and direct-message block-relationship policy checks through registry-managed filters
   - fail-open default policy for addon/filter execution errors (`onError: noop`)
   - policy wiring for filter execution controls:
     - `MULTIPLAYER_CHAT_CONDUCT_FILTER_TIMEOUT_MS`
     - `MULTIPLAYER_CHAT_CONDUCT_FILTER_ON_ERROR`
+    - `MULTIPLAYER_ROOM_CHANNEL_SENDER_FILTER_TIMEOUT_MS`
+    - `MULTIPLAYER_ROOM_CHANNEL_SENDER_FILTER_ON_ERROR`
+    - `MULTIPLAYER_DIRECT_MESSAGE_BLOCK_FILTER_TIMEOUT_MS`
+    - `MULTIPLAYER_DIRECT_MESSAGE_BLOCK_FILTER_ON_ERROR`
 
 ## Phase 04 - Transport + WS Decoupling
 - Separate websocket frame/protocol handling from domain operations.

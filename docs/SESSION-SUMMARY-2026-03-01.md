@@ -78,11 +78,19 @@
   - supports `enabled`, `timeoutMs`, and `onError: noop | block`
 - Added chat-conduct room-channel filter adapter:
   - `api/filters/roomChannelChatConductFilter.mjs`
+- Added sender/direct-policy room filters:
+  - `api/filters/roomChannelSenderRestrictionFilter.mjs`
+  - `api/filters/directMessageBlockRelationshipFilter.mjs`
 - Refactored room-channel moderation gate in `api/server.mjs` to run through registry-managed filter execution.
+- Refactored sender restriction and direct-message block relationship checks in `api/server.mjs` to run through registry-managed filter execution.
 - Preserved current chat-conduct behavior while moving moderation policy enforcement out of the WebSocket relay control flow.
 - Added deploy/runtime env wiring for filter policy controls:
   - `MULTIPLAYER_CHAT_CONDUCT_FILTER_TIMEOUT_MS`
   - `MULTIPLAYER_CHAT_CONDUCT_FILTER_ON_ERROR`
+  - `MULTIPLAYER_ROOM_CHANNEL_SENDER_FILTER_TIMEOUT_MS`
+  - `MULTIPLAYER_ROOM_CHANNEL_SENDER_FILTER_ON_ERROR`
+  - `MULTIPLAYER_DIRECT_MESSAGE_BLOCK_FILTER_TIMEOUT_MS`
+  - `MULTIPLAYER_DIRECT_MESSAGE_BLOCK_FILTER_ON_ERROR`
 
 ---
 
@@ -98,6 +106,8 @@
 - `node --check api/server.mjs` passes.
 - `node --check api/filters/addonRegistry.mjs` passes.
 - `node --check api/filters/roomChannelChatConductFilter.mjs` passes.
+- `node --check api/filters/roomChannelSenderRestrictionFilter.mjs` passes.
+- `node --check api/filters/directMessageBlockRelationshipFilter.mjs` passes.
 - `node --check api/http/routeDispatcher.mjs` passes.
 - `node --check api/http/routeHandlers.mjs` passes.
 - `npm run build` passes.
