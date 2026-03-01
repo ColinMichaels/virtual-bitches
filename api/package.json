@@ -20,6 +20,7 @@
     "test:ws-transport": "npm run test:ws-protocol && npm run test:ws-validation && npm run test:ws-upgrade-auth && npm run test:ws-turn-handlers && npm run test:ws-router && npm run test:ws-lifecycle && npm run test:ws-relay && npm run test:ws-orchestration",
     "test:auth-token-adapter": "node auth/tokenAuthAdapter.test.mjs",
     "test:storage-file": "node storage/fileStore.test.mjs",
-    "test:storage-auth-adapters": "npm run test:auth-token-adapter && npm run test:storage-file"
+    "test:storage-sync-controller": "node storage/storeSyncController.test.mjs",
+    "test:storage-auth-adapters": "npm run test:auth-token-adapter && npm run test:storage-file && npm run test:storage-sync-controller"
   }
 }

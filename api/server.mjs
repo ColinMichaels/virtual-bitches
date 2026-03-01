@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { logger } from "./logger.mjs";
 import { createStoreAdapter, DEFAULT_STORE } from "./storage/index.mjs";
 import { cloneStore } from "./storage/defaultStore.mjs";
+import { createStoreSyncController } from "./storage/storeSyncController.mjs";
 import { createBotEngine } from "./bot/engine.mjs";
 import { createSessionTurnEngine } from "./engine/sessionTurnEngine.mjs";
 import { createSessionLifecycleEngine } from "./engine/sessionLifecycleEngine.mjs";
@@ -433,11 +434,26 @@ const {
   revokeRefreshToken,
   extractBearerToken,
 } = tokenAuthAdapter;
+const storeSyncController = createStoreSyncController({
+  getStore: () => store,
+  setStore: (nextStore) => {
+    store = nextStore;
+  },
+  cloneStore,
+  rehydrateCooldownMs: STORE_REHYDRATE_COOLDOWN_MS,
+  beforePersist: () => {
+    exportChatModerationTermsToStore();
+  },
+  afterRehydrate: () => {
+    const consistencyChanged = normalizeStoreConsistency(Date.now());
+    hydrateChatModerationTermsFromStore();
+    return { persist: consistencyChanged };
+  },
+  now: () => Date.now(),
+  log,
+});
 let storeAdapter = null;
 let firebaseAdminAuthClientPromise = null;
-let storeRehydratePromise = null;
-let lastStoreRehydrateAt = 0;
-let persistStoreQueue = Promise.resolve();
 let chatConductTermRefreshHandle = null;
 let bootstrapPromise = null;
 let bootstrapRetryHandle = null;
@@ -837,6 +853,7 @@ async function bootstrap() {
     firestorePrefix: FIRESTORE_COLLECTION_PREFIX,
     logger: log,
   });
+  storeSyncController.setAdapter(storeAdapter);
   const loadedStore = await storeAdapter.load();
   store = cloneStore(loadedStore);
   const consistencyChanged = normalizeStoreConsistency(Date.now());
@@ -9659,18 +9676,7 @@ function sendJson(res, status, payload) {
 }
 
 async function persistStore() {
-  if (!storeAdapter) {
-    return;
-  }
-  persistStoreQueue = persistStoreQueue
-    .catch(() => {
-      // Keep persist operations flowing even if a prior save failed.
-    })
-    .then(async () => {
-      exportChatModerationTermsToStore();
-      await storeAdapter.save(store);
-    });
-  await persistStoreQueue;
+  await storeSyncController.persistStore();
 }
 
 async function refreshChatModerationTermsFromRemote(options = {}) {
@@ -9700,52 +9706,5 @@ async function refreshChatModerationTermsFromRemote(options = {}) {
 }
 
 async function rehydrateStoreFromAdapter(reason, options = {}) {
-  if (!storeAdapter || typeof storeAdapter.load !== "function") {
-    return false;
-  }
-
-  // Avoid reading stale remote state while local saves are still being flushed.
-  await persistStoreQueue.catch(() => {
-    // Rehydrate can still continue and try to recover from adapter state.
-  });
-
-  if (storeRehydratePromise) {
-    return storeRehydratePromise;
-  }
-
-  const now = Date.now();
-  if (
-    options.force !== true &&
-    lastStoreRehydrateAt > 0 &&
-    now - lastStoreRehydrateAt < STORE_REHYDRATE_COOLDOWN_MS
-  ) {
-    return false;
-  }
-
-  storeRehydratePromise = (async () => {
-    try {
-      const loaded = await storeAdapter.load();
-      if (!loaded || typeof loaded !== "object") {
-        return false;
-      }
-      store = cloneStore(loaded);
-      const consistencyChanged = normalizeStoreConsistency(Date.now());
-      hydrateChatModerationTermsFromStore();
-      if (consistencyChanged) {
-        await persistStore();
-      }
-      lastStoreRehydrateAt = Date.now();
-      log.debug(`Store rehydrated from adapter (${reason})`);
-      return true;
-    } catch (error) {
-      log.warn(`Failed to rehydrate store (${reason})`, error);
-      return false;
-    }
-  })();
-
-  try {
-    return await storeRehydratePromise;
-  } finally {
-    storeRehydratePromise = null;
-  }
+  return storeSyncController.rehydrateStore(reason, options);
 }
