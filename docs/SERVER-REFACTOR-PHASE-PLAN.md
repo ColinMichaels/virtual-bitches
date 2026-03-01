@@ -123,6 +123,9 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
   - `api/auth/tokenAuthAdapter.mjs`
   - `api/server.mjs` delegates access/refresh token issue+verify+revoke and bearer parsing to extracted auth adapter
   - `api/auth/tokenAuthAdapter.test.mjs`
+  - `api/auth/firebaseIdentityVerifier.mjs`
+  - `api/server.mjs` delegates Firebase ID token verification (admin SDK + legacy lookup fallback + claim cache) to extracted identity verifier adapter
+  - `api/auth/firebaseIdentityVerifier.test.mjs`
   - `api/storage/fileStore.test.mjs`
   - `api/storage/storeSyncController.mjs`
   - `api/server.mjs` delegates persist queue + rehydrate/cooldown coordination to extracted store sync controller

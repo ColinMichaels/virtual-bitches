@@ -20,6 +20,9 @@ const log = logger.create('GameOver');
 
 interface GameOverViewOptions {
   showWaitForNextGame?: boolean;
+  queuedForNextGame?: boolean;
+  waitForNextGamePending?: boolean;
+  nextGameStartsAtMs?: number | null;
 }
 
 export class GameOverController {
@@ -28,6 +31,14 @@ export class GameOverController {
   private shareLinkEl: HTMLElement;
   private newGameBtn: HTMLButtonElement | null;
   private waitNextGameBtn: HTMLButtonElement | null;
+  private nextGameInfoEl: HTMLElement | null;
+  private nextGameStatusEl: HTMLElement | null;
+  private nextGameCountdownEl: HTMLElement | null;
+  private nextGameCountdownTimer: ReturnType<typeof setInterval> | null = null;
+  private waitForNextGameVisible = false;
+  private queuedForNextGame = false;
+  private waitForNextGamePending = false;
+  private nextGameStartsAtMs: number | null = null;
   private scene: GameScene;
 
   constructor(scene: GameScene) {
@@ -37,6 +48,9 @@ export class GameOverController {
     this.shareLinkEl = document.getElementById("share-link")!;
     this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement | null;
     this.waitNextGameBtn = document.getElementById("wait-next-game-btn") as HTMLButtonElement | null;
+    this.nextGameInfoEl = document.getElementById("next-game-info");
+    this.nextGameStatusEl = document.getElementById("next-game-status");
+    this.nextGameCountdownEl = document.getElementById("next-game-countdown");
     this.localizeStaticCopy();
   }
 
@@ -97,6 +111,8 @@ export class GameOverController {
 
     // Show game over modal
     this.gameOverEl.classList.add("show");
+    this.renderNextGameInfo();
+    this.syncNextGameCountdownTimer();
 
     log.debug("Game Over - Score saved:", savedScore);
     log.debug("Your rank:", rank);
@@ -182,19 +198,99 @@ export class GameOverController {
    */
   hide(): void {
     this.gameOverEl.classList.remove("show");
-    this.configureActionButtons({});
+    this.configureActionButtons({
+      showWaitForNextGame: false,
+      queuedForNextGame: false,
+      waitForNextGamePending: false,
+      nextGameStartsAtMs: null,
+    });
+  }
+
+  updateWaitForNextGame(options: GameOverViewOptions): void {
+    this.configureActionButtons(options);
   }
 
   private configureActionButtons(options: GameOverViewOptions): void {
     const showWaitForNextGame = options.showWaitForNextGame === true;
+    const queuedForNextGame = options.queuedForNextGame === true;
+    const waitForNextGamePending = options.waitForNextGamePending === true;
+    const nextGameStartsAtMs =
+      typeof options.nextGameStartsAtMs === "number" && Number.isFinite(options.nextGameStartsAtMs)
+        ? Math.floor(options.nextGameStartsAtMs)
+        : null;
+
+    this.waitForNextGameVisible = showWaitForNextGame;
+    this.queuedForNextGame = queuedForNextGame;
+    this.waitForNextGamePending = waitForNextGamePending;
+    this.nextGameStartsAtMs = nextGameStartsAtMs;
+
     if (this.waitNextGameBtn) {
       this.waitNextGameBtn.style.display = showWaitForNextGame ? "inline-flex" : "none";
-      this.waitNextGameBtn.disabled = false;
+      this.waitNextGameBtn.disabled = !showWaitForNextGame || waitForNextGamePending || queuedForNextGame;
+      if (showWaitForNextGame) {
+        if (waitForNextGamePending) {
+          this.waitNextGameBtn.textContent = t("gameOver.button.waitNextGameQueueing");
+        } else if (queuedForNextGame) {
+          this.waitNextGameBtn.textContent = t("gameOver.button.waitNextGameQueued");
+        } else {
+          this.waitNextGameBtn.textContent = t("gameOver.button.waitNextGame");
+        }
+      }
     }
     if (this.newGameBtn) {
       this.newGameBtn.style.display = showWaitForNextGame ? "none" : "inline-flex";
       this.newGameBtn.disabled = false;
     }
+    if (this.nextGameInfoEl) {
+      this.nextGameInfoEl.style.display = showWaitForNextGame ? "block" : "none";
+    }
+    this.renderNextGameInfo();
+    this.syncNextGameCountdownTimer();
+  }
+
+  private syncNextGameCountdownTimer(): void {
+    const shouldRun = this.waitForNextGameVisible && this.gameOverEl.classList.contains("show");
+    if (shouldRun && this.nextGameCountdownTimer === null) {
+      this.nextGameCountdownTimer = setInterval(() => {
+        this.renderNextGameInfo();
+      }, 250);
+      return;
+    }
+    if (!shouldRun && this.nextGameCountdownTimer !== null) {
+      clearInterval(this.nextGameCountdownTimer);
+      this.nextGameCountdownTimer = null;
+    }
+  }
+
+  private renderNextGameInfo(): void {
+    if (!this.waitForNextGameVisible) {
+      return;
+    }
+    if (this.nextGameStatusEl) {
+      if (this.waitForNextGamePending) {
+        this.nextGameStatusEl.textContent = t("gameOver.nextGame.statusQueueing");
+      } else if (this.queuedForNextGame) {
+        this.nextGameStatusEl.textContent = t("gameOver.nextGame.statusQueued");
+      } else {
+        this.nextGameStatusEl.textContent = t("gameOver.nextGame.statusPrompt");
+      }
+    }
+    if (this.nextGameCountdownEl) {
+      this.nextGameCountdownEl.textContent = this.buildNextGameCountdownMessage();
+    }
+  }
+
+  private buildNextGameCountdownMessage(): string {
+    if (typeof this.nextGameStartsAtMs !== "number" || this.nextGameStartsAtMs <= 0) {
+      return t("gameOver.nextGame.countdownPending");
+    }
+
+    const secondsRemaining = Math.max(0, Math.ceil((this.nextGameStartsAtMs - Date.now()) / 1000));
+    if (secondsRemaining <= 0) {
+      return t("gameOver.nextGame.countdownStarting");
+    }
+
+    return t("gameOver.nextGame.countdown", { seconds: secondsRemaining });
   }
 
   private localizeStaticCopy(): void {
@@ -238,6 +334,12 @@ export class GameOverController {
     }
     if (this.waitNextGameBtn) {
       this.waitNextGameBtn.textContent = t("gameOver.button.waitNextGame");
+    }
+    if (this.nextGameStatusEl) {
+      this.nextGameStatusEl.textContent = t("gameOver.nextGame.statusPrompt");
+    }
+    if (this.nextGameCountdownEl) {
+      this.nextGameCountdownEl.textContent = t("gameOver.nextGame.countdownPending");
     }
   }
 
