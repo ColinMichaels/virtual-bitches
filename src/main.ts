@@ -256,7 +256,12 @@ function hydrateBrandAssets(): void {
 function hydrateShellIcons(): void {
   const desktopSettingsButton = document.getElementById("settings-gear-btn");
   if (desktopSettingsButton) {
-    desktopSettingsButton.innerHTML = renderSettingsIconSvg(20);
+    const existingSvg = desktopSettingsButton.querySelector("svg");
+    if (existingSvg) {
+      existingSvg.outerHTML = renderSettingsIconSvg(20);
+    } else {
+      desktopSettingsButton.insertAdjacentHTML("afterbegin", renderSettingsIconSvg(20));
+    }
   }
 
   const mobileSettingsButton = document.getElementById("mobile-settings-btn");

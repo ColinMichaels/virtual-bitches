@@ -1,8 +1,22 @@
 {
-  "generatedAt": "2026-03-01T03:02:04.794Z",
+  "generatedAt": "2026-03-01T03:21:07.549Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-64e06e3",
+      "date": "2026-03-01T03:09:00.000Z",
+      "title": "checkpoint unified game-config wiring and refactor plan",
+      "content": "<p>checkpoint unified game-config wiring and refactor plan</p><p><strong>Commit:</strong> <code>64e06e3</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "64e06e3e3bc36b58caeeac71d09c4fb61bb5ea7a",
+        "shortHash": "64e06e3",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/64e06e3e3bc36b58caeeac71d09c4fb61bb5ea7a"
+      }
+    },
     {
       "id": "git-8f1f6a0",
       "date": "2026-03-01T02:31:18.000Z",
@@ -491,20 +505,6 @@
         "hash": "a4dc94f0f064c098fec5322cb39534949cb6591a",
         "shortHash": "a4dc94f",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a4dc94f0f064c098fec5322cb39534949cb6591a"
-      }
-    },
-    {
-      "id": "git-d0756e3",
-      "date": "2026-02-28T07:36:00.000Z",
-      "title": "Ensure room code assignment for public overflow sessions",
-      "content": "<p>Ensure room code assignment for public overflow sessions</p><p><strong>Commit:</strong> <code>d0756e3</code></p><p>- Added `ensurePublicOverflowRoomCode` function to handle code normalization and reassignment for public overflow rooms.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "d0756e305006f6b7d3c324eb1122be0901b08725",
-        "shortHash": "d0756e3",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d0756e305006f6b7d3c324eb1122be0901b08725"
       }
     }
   ]

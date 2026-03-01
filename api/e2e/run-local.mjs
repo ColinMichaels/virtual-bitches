@@ -144,6 +144,8 @@ function runSmoke(baseUrl) {
           process.env.E2E_ASSERT_ADMIN_MODERATION_TERMS ?? "1",
         E2E_ASSERT_CHAT_CONDUCT: process.env.E2E_ASSERT_CHAT_CONDUCT ?? "1",
         E2E_CHAT_CONDUCT_TEST_TERM: chatConductTestTerm,
+        E2E_ASSERT_DEMO_AUTORUN_CONTROLS:
+          process.env.E2E_ASSERT_DEMO_AUTORUN_CONTROLS ?? "1",
       },
       stdio: "inherit",
     });

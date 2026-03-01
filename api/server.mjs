@@ -195,9 +195,12 @@ const BOT_TICK_MAX_MS = BOT_TICK_DELAY_RANGE_MS.max;
 const BOT_NAMES = ["Byte Bessie", "Lag Larry", "Packet Patty", "Dicebot Dave"];
 const BOT_PROFILES = ["cautious", "balanced", "aggressive"];
 const GAME_DIFFICULTIES = new Set(["easy", "normal", "hard"]);
-const UNIFIED_GAME_MODES = new Set(["solo", "multiplayer", "demo"]);
-const UNIFIED_GAME_TIMING_PROFILES = new Set(["standard", "demo_fast", "test_fast"]);
-const UNIFIED_GAME_AUTOMATION_SPEED_MODES = new Set(["normal", "fast"]);
+const GAME_CREATE_MODES = new Set(["solo", "multiplayer", "demo"]);
+const GAME_TIMING_PROFILES = new Set(["standard", "demo_fast", "test_fast"]);
+const GAME_AUTOMATION_SPEED_MODES = new Set(["normal", "fast"]);
+const UNIFIED_GAME_MODES = GAME_CREATE_MODES;
+const UNIFIED_GAME_TIMING_PROFILES = GAME_TIMING_PROFILES;
+const UNIFIED_GAME_AUTOMATION_SPEED_MODES = GAME_AUTOMATION_SPEED_MODES;
 const UNIFIED_GAME_DEFAULT_CAPABILITIES = Object.freeze({
   solo: Object.freeze({
     chaos: false,
@@ -225,6 +228,7 @@ const UNIFIED_GAME_DEFAULT_CAPABILITIES = Object.freeze({
   }),
 });
 const PARTICIPANT_STATE_ACTIONS = new Set(["sit", "stand", "ready", "unready"]);
+const DEMO_CONTROL_ACTIONS = new Set(["pause", "resume", "speed_normal", "speed_fast"]);
 const SESSION_MODERATION_ACTIONS = new Set(["kick", "ban"]);
 const BOT_CAMERA_EFFECTS = ["shake"];
 const MAX_SESSION_ROOM_BANS = 256;
@@ -297,6 +301,8 @@ const NO_SEATED_ROOM_TIMEOUT_MS = normalizeTurnTimeoutValue(
   process.env.MULTIPLAYER_NO_SEATED_ROOM_TIMEOUT_MS,
   3 * 60 * 1000
 );
+const DEMO_FAST_TURN_TIMEOUT_FACTOR = 0.6;
+const DEMO_FAST_TURN_TIMEOUT_MIN_MS = 5000;
 const BOOTSTRAP_WAIT_TIMEOUT_MS = normalizeTurnTimeoutValue(
   process.env.API_BOOTSTRAP_WAIT_TIMEOUT_MS,
   20000
@@ -927,6 +933,11 @@ async function handleRequest(req, res) {
       return;
     }
 
+    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/demo-controls$/.test(pathname)) {
+      await handleUpdateSessionDemoControls(req, res, pathname);
+      return;
+    }
+
     if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/moderate$/.test(pathname)) {
       await handleModerateSessionParticipant(req, res, pathname);
       return;
@@ -1454,6 +1465,8 @@ async function handleCreateSession(req, res) {
   const botCount = resolvedGameSettings.botCount;
   const gameDifficulty = resolvedGameSettings.gameDifficulty;
   const demoSpeedMode = resolvedGameSettings.demoSpeedMode;
+  const demoMode = resolvedGameSettings.demoMode;
+  const demoAutoRun = resolvedGameSettings.demoAutoRun;
   const gameConfig = resolvedGameSettings.gameConfig;
   const now = Date.now();
   const requestedRoomCode = normalizeOptionalRoomCode(body?.roomCode);
@@ -1502,6 +1515,8 @@ async function handleCreateSession(req, res) {
     roomCode,
     gameDifficulty,
     gameConfig,
+    demoMode,
+    demoAutoRun,
     demoSpeedMode,
     wsUrl: WS_BASE_URL,
     roomKind: ROOM_KINDS.private,
@@ -1859,6 +1874,191 @@ async function handleUpdateParticipantState(req, res, pathname) {
       isSeated: isParticipantSeated(participant),
       isReady: participant.isReady === true,
       queuedForNextGame: isParticipantQueuedForNextGame(participant),
+    },
+    session: {
+      ...buildSessionSnapshot(session),
+      serverNow: now,
+    },
+  });
+}
+
+async function handleUpdateSessionDemoControls(req, res, pathname) {
+  const sessionId = decodeURIComponent(pathname.split("/")[4] ?? "").trim();
+  if (!sessionId) {
+    sendJson(res, 400, { error: "Invalid session ID", reason: "invalid_session_id" });
+    return;
+  }
+
+  let session = store.multiplayerSessions[sessionId];
+  if (!session || session.expiresAt <= Date.now()) {
+    await rehydrateStoreFromAdapter(`demo_controls_session:${sessionId}`, { force: true });
+    session = store.multiplayerSessions[sessionId];
+  }
+  if (!session || session.expiresAt <= Date.now()) {
+    sendJson(res, 410, { error: "Session expired", reason: "session_expired" });
+    return;
+  }
+
+  const body = await parseJsonBody(req);
+  const requestedPlayerId = typeof body?.playerId === "string" ? body.playerId.trim() : "";
+  const action = normalizeDemoControlAction(body?.action);
+  if (!action) {
+    sendJson(res, 400, { error: "Invalid demo control action", reason: "invalid_action" });
+    return;
+  }
+
+  let authCheck = authorizeSessionActionRequest(req, undefined, sessionId);
+  if (!authCheck.ok && shouldRetrySessionAuthFromStore(authCheck.reason)) {
+    await rehydrateStoreFromAdapter(
+      `demo_controls_auth:${sessionId}:${requestedPlayerId || "unknown"}`,
+      { force: true }
+    );
+    authCheck = authorizeSessionActionRequest(req, undefined, sessionId);
+  }
+  if (!authCheck.ok) {
+    sendJson(res, 401, { error: "Unauthorized", reason: authCheck.reason ?? "unauthorized" });
+    return;
+  }
+  const authenticatedPlayerId =
+    typeof authCheck.playerId === "string" ? authCheck.playerId.trim() : "";
+  const playerId =
+    authenticatedPlayerId ||
+    requestedPlayerId;
+  if (!playerId) {
+    sendJson(res, 400, { error: "playerId is required", reason: "invalid_player_id" });
+    return;
+  }
+  const participant = session.participants?.[playerId];
+  if (!participant || isBotParticipant(participant)) {
+    sendJson(res, 404, { error: "Unknown player", reason: "unknown_player" });
+    return;
+  }
+
+  if (getSessionRoomKind(session) !== ROOM_KINDS.private) {
+    sendJson(res, 409, { error: "Demo controls are private-room only", reason: "room_not_private" });
+    return;
+  }
+  const ownerPlayerId = ensureSessionOwner(session);
+  if (!ownerPlayerId || ownerPlayerId !== playerId) {
+    sendJson(res, 403, { error: "Only room owner can control demo", reason: "not_room_owner" });
+    return;
+  }
+  const now = Date.now();
+  let changed = false;
+  let didRestartAutoRun = false;
+  let seededBotCount = getBotParticipants(session).length;
+
+  if (session.demoMode !== true) {
+    session.demoMode = true;
+    changed = true;
+  }
+  if (action === "pause") {
+    if (session.demoAutoRun !== false) {
+      session.demoAutoRun = false;
+      changed = true;
+    }
+  } else if (action === "resume") {
+    if (session.demoAutoRun !== true) {
+      session.demoAutoRun = true;
+      changed = true;
+    }
+    if (participant.isSeated === true) {
+      participant.isSeated = false;
+      changed = true;
+    }
+    if (participant.isReady === true) {
+      participant.isReady = false;
+      changed = true;
+    }
+    if (participant.queuedForNextGame === true) {
+      participant.queuedForNextGame = false;
+      changed = true;
+    }
+
+    const seatedHumanCount = getSeatedHumanParticipantCount(session);
+    const availableSeatCount = Math.max(0, MAX_MULTIPLAYER_HUMAN_PLAYERS - seatedHumanCount);
+    const targetBotCount =
+      availableSeatCount > 0
+        ? Math.max(1, Math.min(MAX_MULTIPLAYER_BOTS, availableSeatCount))
+        : 0;
+    const botPrune = pruneSessionBots(sessionId, session, {
+      removeAll: true,
+      now,
+    });
+    if (botPrune.changed) {
+      changed = true;
+    }
+    const addedBotCount = addBotsToSession(session, targetBotCount, now);
+    if (addedBotCount > 0) {
+      changed = true;
+    }
+
+    const restarted = resetSessionForNextGame(session, now);
+    if (restarted) {
+      changed = true;
+    } else {
+      session.gameStartedAt = now;
+      session.turnState = null;
+      ensureSessionTurnState(session);
+      changed = true;
+    }
+    const normalizedBots = normalizeSessionBotsForAutoRun(session, now);
+    if (normalizedBots.changed) {
+      changed = true;
+    }
+    seededBotCount = normalizedBots.count;
+    didRestartAutoRun = true;
+  } else if (action === "speed_fast") {
+    if (session.demoSpeedMode !== true) {
+      session.demoSpeedMode = true;
+      changed = true;
+    }
+  } else if (action === "speed_normal") {
+    if (session.demoSpeedMode !== false) {
+      session.demoSpeedMode = false;
+      changed = true;
+    }
+  }
+
+  participant.lastHeartbeatAt = now;
+  markSessionActivity(session, playerId, now);
+  ensureSessionTurnState(session);
+
+  if (changed) {
+    resetSessionBotLoopSchedule(sessionId);
+    reconcileSessionLoops(sessionId);
+    const isRunning = isSessionDemoAutoRunEnabled(session);
+    const speedLabel = isSessionDemoFastMode(session) ? "fast" : "normal";
+    broadcastSystemRoomChannelMessage(sessionId, {
+      topic: "demo_control",
+      title: participant.displayName || participant.playerId,
+      message:
+        action === "pause"
+          ? "Demo paused by host."
+          : action === "resume"
+            ? `Demo restarted with ${seededBotCount} bot${seededBotCount === 1 ? "" : "s"}.`
+            : `Demo speed set to ${speedLabel}.`,
+      severity: "info",
+      timestamp: now,
+    });
+    if (didRestartAutoRun && isRunning) {
+      const nextTurnStart = buildTurnStartMessage(session, {
+        source: "demo_restart",
+      });
+      if (nextTurnStart) {
+        broadcastToSession(sessionId, JSON.stringify(nextTurnStart), null);
+      }
+    }
+    broadcastSessionState(session, "demo_controls");
+  }
+
+  await persistStore();
+  sendJson(res, 200, {
+    ok: true,
+    controls: {
+      demoMode: isDemoModeSession(session),
+      demoAutoRun: isSessionDemoAutoRunEnabled(session),
+      demoSpeedMode: isSessionDemoFastMode(session),
     },
     session: {
       ...buildSessionSnapshot(session),
@@ -4528,6 +4728,8 @@ function buildSessionResponse(session, playerId, auth) {
     roomCode: snapshot.roomCode,
     gameDifficulty: snapshot.gameDifficulty,
     gameConfig: snapshot.gameConfig,
+    demoMode: snapshot.demoMode,
+    demoAutoRun: snapshot.demoAutoRun,
     demoSpeedMode: snapshot.demoSpeedMode,
     ownerPlayerId: snapshot.ownerPlayerId,
     roomType: snapshot.roomType,
@@ -4574,12 +4776,16 @@ function buildSessionSnapshot(session) {
   const sessionComplete =
     activeGameParticipants.length > 0 &&
     activeGameParticipants.every((participant) => participant.isComplete === true);
-  const demoSpeedMode = roomKind === ROOM_KINDS.private && session?.demoSpeedMode === true;
+  const demoMode = roomKind === ROOM_KINDS.private && session?.demoMode === true;
+  const demoAutoRun = demoMode && session?.demoAutoRun !== false;
+  const demoSpeedMode = demoMode && session?.demoSpeedMode === true;
   return {
     sessionId: session.sessionId,
     roomCode: session.roomCode,
     gameDifficulty: resolveSessionGameDifficulty(session),
     gameConfig,
+    demoMode,
+    demoAutoRun,
     demoSpeedMode,
     ownerPlayerId: getSessionOwnerPlayerId(session),
     roomType: roomKind,
@@ -4777,6 +4983,8 @@ function createPublicRoom(roomKind, now = Date.now(), slot = null, options = {})
     sessionId,
     roomCode,
     gameDifficulty: sessionDifficulty,
+    demoMode: false,
+    demoAutoRun: false,
     demoSpeedMode: false,
     wsUrl: WS_BASE_URL,
     roomKind: normalizedKind,
@@ -4815,6 +5023,8 @@ function resetPublicRoomForIdle(session, now = Date.now()) {
   session.chatConductState = createEmptyChatConductState();
   delete session.ownerPlayerId;
   session.turnState = null;
+  session.demoMode = false;
+  session.demoAutoRun = false;
   session.demoSpeedMode = false;
   session.gameDifficulty =
     roomKind === ROOM_KINDS.publicDefault
@@ -5060,6 +5270,43 @@ function resolveSessionGameDifficulty(session) {
   return normalizeGameDifficulty(session.gameDifficulty);
 }
 
+function isDemoModeSession(session) {
+  if (!session || typeof session !== "object") {
+    return false;
+  }
+  return getSessionRoomKind(session) === ROOM_KINDS.private && session.demoMode === true;
+}
+
+function isSessionDemoAutoRunEnabled(session) {
+  return isDemoModeSession(session) && session.demoAutoRun !== false;
+}
+
+function isSessionDemoFastMode(session) {
+  return isDemoModeSession(session) && session.demoSpeedMode === true;
+}
+
+function resolveSessionBotTickDelayRange(session) {
+  if (isSessionDemoFastMode(session)) {
+    return BOT_SPEED_PROFILE_DEFAULTS.fast.tickRangeMs;
+  }
+  return BOT_TICK_DELAY_RANGE_MS;
+}
+
+function resolveSessionBotTickDelayMs(session) {
+  const range = resolveSessionBotTickDelayRange(session);
+  const min = Math.max(200, Math.floor(range.min));
+  const max = Math.max(min, Math.floor(range.max));
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function resolveSessionBotTurnDelayMs(session, input = {}) {
+  const baseDelay = botEngine.resolveTurnDelayMs(input);
+  if (!isSessionDemoFastMode(session)) {
+    return baseDelay;
+  }
+  return Math.max(200, Math.floor(baseDelay * 0.35));
+}
+
 function resolveSessionGameStartedAt(session, fallback = Date.now()) {
   if (!session || typeof session !== "object") {
     return Number.isFinite(fallback) && fallback > 0 ? Math.floor(fallback) : Date.now();
@@ -5091,7 +5338,14 @@ function resolveTurnTimeoutMsForDifficulty(difficulty) {
 
 function resolveSessionTurnTimeoutMs(session, value) {
   const fallbackTimeoutMs = resolveTurnTimeoutMsForDifficulty(resolveSessionGameDifficulty(session));
-  return normalizeTurnTimeoutMs(value, fallbackTimeoutMs);
+  const baseTimeoutMs = normalizeTurnTimeoutMs(value, fallbackTimeoutMs);
+  if (!isSessionDemoFastMode(session)) {
+    return baseTimeoutMs;
+  }
+  return Math.max(
+    DEMO_FAST_TURN_TIMEOUT_MIN_MS,
+    Math.floor(baseTimeoutMs * DEMO_FAST_TURN_TIMEOUT_FACTOR)
+  );
 }
 
 function resolveSessionNextGameStartsAt(session, fallback = Date.now()) {
@@ -5831,15 +6085,22 @@ function ensureSessionTurnState(session) {
     }
   });
 
-  const allHumansReady = areAllHumansReady(session);
-  const hasSeatedHumanParticipant = getActiveHumanParticipants(session).length > 0;
+  const activeHumanParticipants = getActiveHumanParticipants(session);
+  const hasActiveHumanParticipant = activeHumanParticipants.length > 0;
+  const allHumansReady = hasActiveHumanParticipant ? areAllHumansReady(session) : false;
+  const hasBotParticipant = participantIds.some((playerId) =>
+    isBotParticipant(session?.participants?.[playerId])
+  );
+  const demoBotAutoplayReady =
+    isSessionDemoAutoRunEnabled(session) && !hasActiveHumanParticipant && hasBotParticipant;
+  const turnFlowReady = demoBotAutoplayReady || (hasActiveHumanParticipant && allHumansReady);
   const now = Date.now();
   let activeTurnPlayerId =
     typeof currentState?.activeTurnPlayerId === "string"
       ? currentState.activeTurnPlayerId
       : null;
   let activeTurnRecovered = false;
-  if (!allHumansReady || participantIds.length === 0 || !hasSeatedHumanParticipant) {
+  if (!turnFlowReady || participantIds.length === 0) {
     activeTurnPlayerId = null;
   } else if (!activeTurnPlayerId || !nextOrder.includes(activeTurnPlayerId)) {
     activeTurnPlayerId = nextOrder[0] ?? null;
@@ -5867,7 +6128,7 @@ function ensureSessionTurnState(session) {
       ? Math.floor(currentState.turnExpiresAt)
       : null;
 
-  if (!allHumansReady || nextOrder.length === 0) {
+  if (!turnFlowReady || nextOrder.length === 0) {
     phase = TURN_PHASES.awaitRoll;
     lastRollSnapshot = null;
     lastScoreSummary = null;
@@ -5896,13 +6157,13 @@ function ensureSessionTurnState(session) {
   }
 
   if (
-    allHumansReady &&
+    turnFlowReady &&
     nextOrder.length > 0 &&
     activeTurnPlayerId &&
     !turnExpiresAt
   ) {
     turnExpiresAt = now + turnTimeoutMs;
-  } else if (!allHumansReady || !activeTurnPlayerId || nextOrder.length === 0) {
+  } else if (!turnFlowReady || !activeTurnPlayerId || nextOrder.length === 0) {
     turnExpiresAt = null;
   }
 
@@ -5920,7 +6181,7 @@ function ensureSessionTurnState(session) {
   };
 
   if (
-    allHumansReady &&
+    turnFlowReady &&
     !session.turnState.activeTurnPlayerId &&
     session.turnState.order.length > 0
   ) {
@@ -6205,8 +6466,19 @@ function normalizeStoreConsistency(now = Date.now()) {
       rawSession.roomKind = normalizedRoomKind;
       changed = true;
     }
-    const normalizedDemoSpeedMode =
-      normalizedRoomKind === ROOM_KINDS.private && rawSession.demoSpeedMode === true;
+    const normalizedDemoMode =
+      normalizedRoomKind === ROOM_KINDS.private &&
+      (rawSession.demoMode === true || rawSession.demoSpeedMode === true);
+    if (rawSession.demoMode !== normalizedDemoMode) {
+      rawSession.demoMode = normalizedDemoMode;
+      changed = true;
+    }
+    const normalizedDemoAutoRun = normalizedDemoMode && rawSession.demoAutoRun !== false;
+    if (rawSession.demoAutoRun !== normalizedDemoAutoRun) {
+      rawSession.demoAutoRun = normalizedDemoAutoRun;
+      changed = true;
+    }
+    const normalizedDemoSpeedMode = normalizedDemoMode && rawSession.demoSpeedMode === true;
     if (rawSession.demoSpeedMode !== normalizedDemoSpeedMode) {
       rawSession.demoSpeedMode = normalizedDemoSpeedMode;
       changed = true;
@@ -6570,6 +6842,165 @@ function generateUniquePrivateRoomCode(now = Date.now()) {
   return "";
 }
 
+function isObjectRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeGameCreateMode(value, fallback = "multiplayer") {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (GAME_CREATE_MODES.has(normalized)) {
+      return normalized;
+    }
+  }
+  return fallback === "demo" || fallback === "solo" ? fallback : "multiplayer";
+}
+
+function normalizeGameTimingProfile(value, fallback = "standard") {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (GAME_TIMING_PROFILES.has(normalized)) {
+      return normalized;
+    }
+  }
+  return fallback === "demo_fast" || fallback === "test_fast" ? fallback : "standard";
+}
+
+function normalizeGameAutomationSpeedMode(value, fallback = "normal") {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (GAME_AUTOMATION_SPEED_MODES.has(normalized)) {
+      return normalized;
+    }
+  }
+  return fallback === "fast" ? "fast" : "normal";
+}
+
+function resolveDefaultGameCapabilities(mode, roomKind = ROOM_KINDS.private) {
+  const hostControls = roomKind === ROOM_KINDS.private;
+  if (mode === "solo") {
+    return {
+      chaos: false,
+      gifting: false,
+      moderation: false,
+      banning: false,
+      hostControls: true,
+      privateChat: false,
+    };
+  }
+  if (mode === "demo") {
+    return {
+      chaos: false,
+      gifting: false,
+      moderation: true,
+      banning: true,
+      hostControls,
+      privateChat: true,
+    };
+  }
+  return {
+    chaos: false,
+    gifting: false,
+    moderation: true,
+    banning: true,
+    hostControls,
+    privateChat: true,
+  };
+}
+
+function normalizeGameCapabilities(value, mode, roomKind = ROOM_KINDS.private) {
+  const defaults = resolveDefaultGameCapabilities(mode, roomKind);
+  if (!isObjectRecord(value)) {
+    return defaults;
+  }
+  return {
+    chaos: value.chaos === true,
+    gifting: value.gifting === true,
+    moderation: value.moderation === true,
+    banning: value.banning === true,
+    hostControls: value.hostControls === true || defaults.hostControls,
+    privateChat: value.privateChat === true || defaults.privateChat,
+  };
+}
+
+function normalizeGameCreateConfig(value, options = {}) {
+  const fallbackDifficulty = normalizeGameDifficulty(options?.fallbackDifficulty);
+  const fallbackBotCount = normalizeBotCount(options?.fallbackBotCount);
+  const fallbackDemoSpeedMode = options?.fallbackDemoSpeedMode === true;
+  const fallbackMode = fallbackDemoSpeedMode ? "demo" : normalizeGameCreateMode(options?.fallbackMode);
+  const rawConfig = isObjectRecord(value) ? value : {};
+
+  let mode = normalizeGameCreateMode(rawConfig.mode, fallbackMode);
+  if (options?.forceMultiplayerMode === true && mode === "solo") {
+    mode = "multiplayer";
+  }
+
+  const difficulty = normalizeGameDifficulty(
+    Object.prototype.hasOwnProperty.call(rawConfig, "difficulty")
+      ? rawConfig.difficulty
+      : fallbackDifficulty
+  );
+  const rawAutomation = isObjectRecord(rawConfig.automation) ? rawConfig.automation : {};
+  const botCount = Object.prototype.hasOwnProperty.call(rawAutomation, "botCount")
+    ? normalizeBotCount(rawAutomation.botCount)
+    : fallbackBotCount;
+  const speedMode = normalizeGameAutomationSpeedMode(
+    Object.prototype.hasOwnProperty.call(rawAutomation, "speedMode")
+      ? rawAutomation.speedMode
+      : fallbackDemoSpeedMode
+        ? "fast"
+        : "normal",
+    fallbackDemoSpeedMode ? "fast" : "normal"
+  );
+  const autoRun = Object.prototype.hasOwnProperty.call(rawAutomation, "autoRun")
+    ? rawAutomation.autoRun === true
+    : mode === "demo";
+  const enabled = Object.prototype.hasOwnProperty.call(rawAutomation, "enabled")
+    ? rawAutomation.enabled === true
+    : mode === "demo" || botCount > 0;
+  const timingProfile = normalizeGameTimingProfile(
+    rawConfig.timingProfile,
+    speedMode === "fast" || mode === "demo" ? "demo_fast" : "standard"
+  );
+  const capabilities = normalizeGameCapabilities(
+    rawConfig.capabilities,
+    mode,
+    options?.roomKind ?? ROOM_KINDS.private
+  );
+
+  return {
+    mode,
+    difficulty,
+    timingProfile,
+    capabilities,
+    automation: {
+      enabled,
+      autoRun,
+      botCount,
+      speedMode,
+    },
+  };
+}
+
+function buildSessionGameConfig(session) {
+  const roomKind = getSessionRoomKind(session);
+  const mode = isDemoModeSession(session) ? "demo" : "multiplayer";
+  const speedMode = isSessionDemoFastMode(session) ? "fast" : "normal";
+  const botCount = getBotParticipants(session).length;
+  return {
+    mode,
+    difficulty: resolveSessionGameDifficulty(session),
+    timingProfile: speedMode === "fast" ? "demo_fast" : "standard",
+    capabilities: resolveDefaultGameCapabilities(mode, roomKind),
+    automation: {
+      enabled: mode === "demo" || botCount > 0,
+      autoRun: isSessionDemoAutoRunEnabled(session),
+      botCount,
+      speedMode,
+    },
+  };
+}
+
 function normalizeBotCount(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
@@ -6592,6 +7023,14 @@ function normalizeParticipantStateAction(value) {
   }
   const normalized = value.trim().toLowerCase();
   return PARTICIPANT_STATE_ACTIONS.has(normalized) ? normalized : "";
+}
+
+function normalizeDemoControlAction(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const normalized = value.trim().toLowerCase();
+  return DEMO_CONTROL_ACTIONS.has(normalized) ? normalized : "";
 }
 
 function isParticipantSeated(participant) {
@@ -6783,30 +7222,31 @@ function normalizeUnifiedGameConfig(value, options = {}) {
 }
 
 function buildUnifiedSessionGameConfig(options = {}) {
-  const mode = options.demoSpeedMode === true ? "demo" : "multiplayer";
+  const mode = options.demoMode === true || options.demoSpeedMode === true ? "demo" : "multiplayer";
   const difficulty = normalizeGameDifficulty(options.gameDifficulty);
   const botCount = normalizeBotCount(options.botCount);
-  const speedMode = mode === "demo" ? "fast" : "normal";
+  const speedMode = options.demoSpeedMode === true ? "fast" : "normal";
   const normalized = normalizeUnifiedGameConfig(options.gameConfig, {
     fallbackMode: mode,
     fallbackDifficulty: difficulty,
     fallbackBotCount: botCount,
     fallbackSpeedMode: speedMode,
-    fallbackTimingProfile: resolveDefaultUnifiedTimingProfile(mode, speedMode),
-    fallbackAutoRun: mode === "demo",
+    fallbackTimingProfile:
+      options.demoSpeedMode === true ? "demo_fast" : resolveDefaultUnifiedTimingProfile(mode, speedMode),
+    fallbackAutoRun: mode === "demo" ? options.demoAutoRun === true : false,
     fallbackAutomationEnabled: mode === "demo" || botCount > 0,
   });
   const resolvedTimingProfile =
-    mode === "demo"
+    options.demoSpeedMode === true
       ? normalizeUnifiedGameTimingProfile(normalized.timingProfile, "demo_fast")
       : normalizeUnifiedGameTimingProfile(
           normalized.timingProfile,
           resolveDefaultUnifiedTimingProfile(mode, normalized.automation.speedMode)
         );
-  const resolvedSpeedMode =
-    mode === "demo"
-      ? "fast"
-      : normalizeUnifiedAutomationSpeedMode(normalized.automation.speedMode, "normal");
+  const resolvedSpeedMode = normalizeUnifiedAutomationSpeedMode(
+    normalized.automation.speedMode,
+    options.demoSpeedMode === true ? "fast" : "normal"
+  );
 
   return {
     mode,
@@ -6815,7 +7255,7 @@ function buildUnifiedSessionGameConfig(options = {}) {
     capabilities: normalizeUnifiedCapabilities(normalized.capabilities, mode),
     automation: {
       enabled: mode === "demo" || botCount > 0 || normalized.automation.enabled === true,
-      autoRun: mode === "demo" ? true : normalized.automation.autoRun === true,
+      autoRun: mode === "demo" ? options.demoAutoRun === true : normalized.automation.autoRun === true,
       botCount,
       speedMode: resolvedSpeedMode,
     },
@@ -6841,16 +7281,25 @@ function resolveCreateSessionGameSettings(body) {
   const resolvedDemoSpeedMode = hasOwnProperty(payload, "demoSpeedMode")
     ? payload.demoSpeedMode === true
     : requestedConfigNormalized.mode === "demo";
+  const resolvedDemoMode = resolvedDemoSpeedMode || requestedConfigNormalized.mode === "demo";
+  const resolvedDemoAutoRun =
+    resolvedDemoMode &&
+    (requestedConfigNormalized.automation.autoRun === true ||
+      requestedConfigNormalized.mode === "demo");
   const gameConfig = buildUnifiedSessionGameConfig({
     gameDifficulty: resolvedDifficulty,
     botCount: resolvedBotCount,
+    demoMode: resolvedDemoMode,
     demoSpeedMode: resolvedDemoSpeedMode,
+    demoAutoRun: resolvedDemoAutoRun,
     gameConfig: requestedConfig,
   });
 
   return {
     gameDifficulty: resolvedDifficulty,
     botCount: resolvedBotCount,
+    demoMode: resolvedDemoMode,
+    demoAutoRun: resolvedDemoAutoRun,
     demoSpeedMode: resolvedDemoSpeedMode,
     gameConfig,
   };
@@ -6897,11 +7346,15 @@ function resolveSessionGameConfig(session) {
     return buildUnifiedSessionGameConfig();
   }
   const roomKind = getSessionRoomKind(session);
-  const demoSpeedMode = roomKind === ROOM_KINDS.private && session.demoSpeedMode === true;
+  const demoMode = roomKind === ROOM_KINDS.private && session.demoMode === true;
+  const demoSpeedMode = demoMode && session.demoSpeedMode === true;
+  const demoAutoRun = demoMode && session.demoAutoRun === true;
   return buildUnifiedSessionGameConfig({
     gameDifficulty: resolveSessionGameDifficulty(session),
     botCount: countSessionBotParticipants(session),
+    demoMode,
     demoSpeedMode,
+    demoAutoRun,
     gameConfig: isRecord(session.gameConfig) ? session.gameConfig : undefined,
   });
 }
@@ -7445,6 +7898,17 @@ function reconcileSessionNoSeatedTimeoutState(session, now = Date.now()) {
     return { changed: false, expired: false };
   }
 
+  if (isDemoModeSession(session)) {
+    const sessionId = typeof session.sessionId === "string" ? session.sessionId : "";
+    if (sessionId && hasLiveHumanParticipant(sessionId, session, now)) {
+      if (Object.prototype.hasOwnProperty.call(session, "noSeatedSince")) {
+        delete session.noSeatedSince;
+        return { changed: true, expired: false };
+      }
+      return { changed: false, expired: false };
+    }
+  }
+
   const seatedHumans = getSeatedHumanParticipantCount(session);
   if (seatedHumans > 0) {
     if (Object.prototype.hasOwnProperty.call(session, "noSeatedSince")) {
@@ -7538,11 +8002,12 @@ function hasConnectedHumanParticipant(sessionId, session) {
   if (!session?.participants) {
     return false;
   }
+  const includeObservers = getSessionRoomKind(session) === ROOM_KINDS.private;
   return Object.values(session.participants).some(
     (participant) =>
       participant &&
       !isBotParticipant(participant) &&
-      isParticipantActiveForCurrentGame(participant) &&
+      (includeObservers || isParticipantActiveForCurrentGame(participant)) &&
       isSessionParticipantConnected(sessionId, participant.playerId)
   );
 }
@@ -7551,11 +8016,12 @@ function hasLiveHumanParticipant(sessionId, session, now = Date.now()) {
   if (!session?.participants) {
     return false;
   }
+  const includeObservers = getSessionRoomKind(session) === ROOM_KINDS.private;
   return Object.values(session.participants).some(
     (participant) =>
       participant &&
       !isBotParticipant(participant) &&
-      isParticipantActiveForCurrentGame(participant) &&
+      (includeObservers || isParticipantActiveForCurrentGame(participant)) &&
       isRoomParticipantActive(sessionId, participant, now)
   );
 }
@@ -7624,6 +8090,71 @@ function addBotsToSession(session, requestedBotCount, now = Date.now()) {
   }
 
   return botsToAdd;
+}
+
+function normalizeSessionBotsForAutoRun(session, now = Date.now()) {
+  if (!session || typeof session !== "object" || !session.participants) {
+    return { changed: false, count: 0 };
+  }
+  const timestamp = Number.isFinite(now) && now > 0 ? Math.floor(now) : Date.now();
+  let changed = false;
+  let count = 0;
+
+  Object.values(session.participants).forEach((participant) => {
+    if (!participant || !isBotParticipant(participant)) {
+      return;
+    }
+    count += 1;
+
+    if (participant.isSeated !== true) {
+      participant.isSeated = true;
+      changed = true;
+    }
+    if (participant.isReady !== true) {
+      participant.isReady = true;
+      changed = true;
+    }
+    if (participant.queuedForNextGame === true) {
+      participant.queuedForNextGame = false;
+      changed = true;
+    }
+    if (participant.isComplete === true) {
+      participant.isComplete = false;
+      changed = true;
+    }
+    if (normalizeParticipantCompletedAt(participant.completedAt) !== null) {
+      participant.completedAt = null;
+      changed = true;
+    }
+    if (normalizeParticipantScore(participant.score) !== 0) {
+      participant.score = 0;
+      changed = true;
+    }
+    if (
+      normalizeParticipantRemainingDice(participant.remainingDice, DEFAULT_PARTICIPANT_DICE_COUNT) !==
+      DEFAULT_PARTICIPANT_DICE_COUNT
+    ) {
+      participant.remainingDice = DEFAULT_PARTICIPANT_DICE_COUNT;
+      changed = true;
+    }
+    if (normalizeParticipantTimeoutRound(participant.turnTimeoutRound) !== null) {
+      participant.turnTimeoutRound = null;
+      changed = true;
+    }
+    if (normalizeParticipantTimeoutCount(participant.turnTimeoutCount) !== 0) {
+      participant.turnTimeoutCount = 0;
+      changed = true;
+    }
+    if (normalizeEpochMs(participant.lastHeartbeatAt, 0) < timestamp) {
+      participant.lastHeartbeatAt = timestamp;
+      changed = true;
+    }
+  });
+
+  return {
+    changed,
+    count,
+  };
 }
 
 function pruneSessionBots(sessionId, session, options = {}) {
@@ -7725,6 +8256,11 @@ function reconcileBotLoop(sessionId) {
     return;
   }
 
+  if (isDemoModeSession(session) && !isSessionDemoAutoRunEnabled(session)) {
+    stopBotLoop(sessionId);
+    return;
+  }
+
   if (botSessionLoops.has(sessionId)) {
     scheduleBotTurnIfNeeded(sessionId);
     return;
@@ -7753,6 +8289,22 @@ function stopBotLoop(sessionId) {
   botSessionLoops.delete(sessionId);
 }
 
+function resetSessionBotLoopSchedule(sessionId) {
+  const loop = botSessionLoops.get(sessionId);
+  if (!loop) {
+    return;
+  }
+  if (loop.timer) {
+    clearTimeout(loop.timer);
+    loop.timer = null;
+  }
+  if (loop.turnTimer) {
+    clearTimeout(loop.turnTimer);
+    loop.turnTimer = null;
+  }
+  loop.scheduledTurnKey = "";
+}
+
 function scheduleNextBotTick(sessionId) {
   const loop = botSessionLoops.get(sessionId);
   if (!loop) {
@@ -7765,7 +8317,7 @@ function scheduleNextBotTick(sessionId) {
     return;
   }
 
-  const delay = BOT_TICK_MIN_MS + Math.floor(Math.random() * (BOT_TICK_MAX_MS - BOT_TICK_MIN_MS + 1));
+  const delay = resolveSessionBotTickDelayMs(session);
   loop.timer = setTimeout(() => {
     loop.timer = null;
     dispatchBotMessage(sessionId);
@@ -7977,6 +8529,10 @@ function scheduleBotTurnIfNeeded(sessionId) {
     loop.scheduledTurnKey = "";
     return;
   }
+  if (isDemoModeSession(session) && !isSessionDemoAutoRunEnabled(session)) {
+    loop.scheduledTurnKey = "";
+    return;
+  }
 
   const hasConnectedHuman = hasConnectedHumanParticipant(sessionId, session);
   if (!hasConnectedHuman) {
@@ -7984,7 +8540,7 @@ function scheduleBotTurnIfNeeded(sessionId) {
     return;
   }
 
-  const delayMs = botEngine.resolveTurnDelayMs({
+  const delayMs = resolveSessionBotTurnDelayMs(session, {
     botProfile: activeParticipant.botProfile,
     gameDifficulty: resolveSessionGameDifficulty(session),
     remainingDice: activeParticipant.remainingDice,
@@ -7998,6 +8554,10 @@ function scheduleBotTurnIfNeeded(sessionId) {
     loop.scheduledTurnKey = "";
     const latestSession = store.multiplayerSessions[sessionId];
     if (!latestSession) {
+      return;
+    }
+    if (isDemoModeSession(latestSession) && !isSessionDemoAutoRunEnabled(latestSession)) {
+      reconcileSessionLoops(sessionId);
       return;
     }
     if (!hasConnectedHumanParticipant(sessionId, latestSession)) {
@@ -8051,6 +8611,10 @@ function scheduleBotTurnIfNeeded(sessionId) {
 function reconcileTurnTimeoutLoop(sessionId) {
   const session = store.multiplayerSessions[sessionId];
   if (!session) {
+    stopTurnTimeoutLoop(sessionId);
+    return;
+  }
+  if (isDemoModeSession(session) && !isSessionDemoAutoRunEnabled(session)) {
     stopTurnTimeoutLoop(sessionId);
     return;
   }
@@ -8279,6 +8843,10 @@ function handlePostGameNextGameStart(sessionId, expectedNextGameStartsAt) {
     reconcileSessionLoops(sessionId);
     return;
   }
+  if (isDemoModeSession(session) && !isSessionDemoAutoRunEnabled(session)) {
+    stopPostGameLoop(sessionId);
+    return;
+  }
   const nextGameStartsAt = normalizePostGameTimestamp(session.nextGameStartsAt);
   if (nextGameStartsAt === null || nextGameStartsAt !== expectedNextGameStartsAt) {
     reconcileSessionLoops(sessionId);
@@ -8318,6 +8886,10 @@ function handlePostGameNextGameStart(sessionId, expectedNextGameStartsAt) {
 function reconcilePostGameLoop(sessionId) {
   const session = store.multiplayerSessions[sessionId];
   if (!session) {
+    stopPostGameLoop(sessionId);
+    return;
+  }
+  if (isDemoModeSession(session) && !isSessionDemoAutoRunEnabled(session)) {
     stopPostGameLoop(sessionId);
     return;
   }
@@ -8435,6 +9007,10 @@ function dispatchTurnTimeoutWarning(sessionId, expectedTurnKey) {
 function handleTurnTimeoutExpiry(sessionId, expectedTurnKey) {
   const session = store.multiplayerSessions[sessionId];
   if (!session) {
+    stopTurnTimeoutLoop(sessionId);
+    return;
+  }
+  if (isDemoModeSession(session) && !isSessionDemoAutoRunEnabled(session)) {
     stopTurnTimeoutLoop(sessionId);
     return;
   }

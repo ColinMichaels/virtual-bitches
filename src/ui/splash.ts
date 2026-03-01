@@ -934,22 +934,22 @@ export class SplashScreen {
     const privateModeEnabled = this.isPrivateRoomModeEnabled();
     const privateJoinIntent = privateModeEnabled ? this.getPrivateRoomJoinIntent() : "create";
     const publicJoinTarget = privateModeEnabled ? null : this.resolveSelectedPublicRoomJoinTarget();
+    const demoCreateMode =
+      privateModeEnabled &&
+      privateJoinIntent === "create" &&
+      this.privateRoomDemoSpeedMode &&
+      this.isPrivateRoomDemoSpeedModeAllowed();
+    const createBotCount = demoCreateMode ? 4 : this.botCount;
     return {
-      botCount: this.botCount,
+      botCount: createBotCount,
       joinBotCount: this.getJoinBotSeedCount(),
       gameDifficulty: this.multiplayerDifficulty,
       sessionId: privateModeEnabled ? undefined : publicJoinTarget?.sessionId,
       roomCode: privateModeEnabled
         ? this.privateRoomCode || undefined
         : publicJoinTarget?.roomCode,
-      autoSeatReady: this.autoSeatReadyOnJoin,
-      demoSpeedMode:
-        privateModeEnabled &&
-        privateJoinIntent === "create" &&
-        this.privateRoomDemoSpeedMode &&
-        this.isPrivateRoomDemoSpeedModeAllowed()
-          ? true
-          : undefined,
+      autoSeatReady: demoCreateMode ? false : this.autoSeatReadyOnJoin,
+      demoSpeedMode: demoCreateMode ? true : undefined,
     };
   }
 
@@ -1082,7 +1082,7 @@ export class SplashScreen {
     privateDemoSpeedCheckbox.disabled = !allowed;
     if (privateDemoSpeedNote) {
       privateDemoSpeedNote.textContent = allowed
-        ? "Faster pacing for private-room demo/testing runs."
+        ? "Auto-seeds bots, keeps host in observer control mode, and enables faster pacing."
         : "Demo speed applies when creating a private room.";
     }
   }
