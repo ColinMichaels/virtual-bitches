@@ -6,6 +6,52 @@ This document captures future feature ideas, enhancements, and expansion possibi
 
 ---
 
+## 🏗️ Server Platform Evolution
+
+### Server Decoupling - Phase 06 Follow-through
+- **Complexity**: Medium
+- **Description**: Continue shrinking `api/server.mjs` by extracting admin route use-cases into dedicated admin application services.
+- **Why**:
+  - Preserve behavior while reducing coupling in the composition root.
+  - Improve testability of moderation/admin orchestration paths without full server boot.
+- **Candidate Deliverables**:
+  - `api/admin/adminModerationService.mjs`
+  - `api/admin/adminRoomOpsService.mjs`
+  - focused integration tests around role-upsert/session-expire/remove-participant/conduct-clear flows
+- **AI Prompt**:
+  ```
+  Extract admin route orchestration from api/server.mjs into composable admin application services while preserving existing API contracts. Keep route handlers thin, move mutation logic and audit side-effects into services, and add focused tests for role upsert, session expire, participant remove, and conduct clear paths.
+  ```
+
+### Server Decoupling - Phase 07 Candidate (Multiplayer Session Control Services)
+- **Complexity**: High
+- **Description**: Isolate multiplayer session control endpoints (`join`, `heartbeat`, `refresh`, `queue-next`, participant-state updates) into application service modules.
+- **Why**:
+  - Improves reliability for auth/session lifecycle changes.
+  - Makes distributed-store consistency and retries easier to reason about.
+- **Candidate Deliverables**:
+  - `api/multiplayer/sessionControlService.mjs`
+  - `api/multiplayer/sessionAuthRecoveryService.mjs`
+  - endpoint-level tests for transient `session_expired` recovery behavior and retry policy boundaries
+- **AI Prompt**:
+  ```
+  Create multiplayer session control services that encapsulate join/heartbeat/refresh/queue-next orchestration currently in api/server.mjs. Preserve existing endpoint responses, move retry/rehydrate policies into service boundaries, and add focused regression tests for transient session_expired recovery paths.
+  ```
+
+### Deployment Observability + CI Confidence Lane
+- **Complexity**: Medium
+- **Description**: Improve deploy diagnostics and CI confidence for distributed Cloud Run behavior.
+- **Candidate Deliverables**:
+  - Cloud Logging read permission path for deploy workflow diagnostics
+  - stronger non-fatal transient signatures and recovery telemetry in smoke output
+  - opt-in fail-hard lane for transient session drift checks once consistency work lands
+- **AI Prompt**:
+  ```
+  Harden BISCUITS deploy diagnostics by improving Cloud Run log access and structured smoke telemetry for transient websocket/auth failures. Add a strict CI lane that can be toggled to fail hard on repeated transient session drift once reliability gates are met.
+  ```
+
+---
+
 ## 🎨 Theme System Enhancements
 
 ### Custom Theme Creator
@@ -769,5 +815,5 @@ Submit feature requests via GitHub Issues with:
 
 ---
 
-**Last Updated**: 2026-02-24
+**Last Updated**: 2026-03-01
 **Document Version**: 1.0
