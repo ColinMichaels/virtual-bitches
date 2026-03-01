@@ -23,6 +23,10 @@ import {
 } from "./ui/multiplayerChatPanel.js";
 import { confirmAction } from "./ui/confirmModal.js";
 import { notificationService } from "./ui/notifications.js";
+import {
+  showDebugAuditNotification,
+  showGameplayThemedNotification,
+} from "./ui/notificationThemes.js";
 import { reduce, undo, canUndo } from "./game/state.js";
 import { GameState, Action, GameDifficulty } from "./engine/types.js";
 import { Color3, PointerEventTypes, Vector3 } from "@babylonjs/core";
@@ -78,6 +82,7 @@ import {
 } from "./multiplayer/turnPlanner.js";
 import { resolveSessionExpiryOutcome } from "./multiplayer/sessionExpiryFlow.js";
 import { botMemeAvatarService } from "./services/botMemeAvatarService.js";
+import { buildUnifiedGameConfig } from "./gameplay/gameConfig.js";
 import { t } from "./i18n/index.js";
 
 const log = logger.create('Game');
@@ -208,6 +213,8 @@ const MULTIPLAYER_IDENTITY_CACHE_MS = 30000;
 const TURN_SELECTION_SYNC_DEBOUNCE_MS = 80;
 const DEFAULT_MULTIPLAYER_ROUND_CYCLE_MS = 60 * 1000;
 const PLAYER_INTERACTION_COMING_SOON_TOOLTIP = "Coming soon";
+const SPECTATOR_SCORE_COMMIT_DELAY_MS = 340;
+const SPECTATOR_SCORE_COMMIT_DELAY_FAST_MS = 180;
 
 class Game implements GameCallbacks {
   private state: GameState;
@@ -217,6 +224,7 @@ class Game implements GameCallbacks {
   private diceRow: DiceRow;
   private animating = false;
   private paused = false;
+  private suppressSettingsCloseResume = false;
   private settingsModal: SettingsModal;
   private leaderboardModal: LeaderboardModal;
   private debugView: DebugView;
@@ -258,6 +266,10 @@ class Game implements GameCallbacks {
   private pendingTurnTransitionSyncHandle: ReturnType<typeof setTimeout> | null = null;
   private selectionSyncDebounceHandle: ReturnType<typeof setTimeout> | null = null;
   private selectionSyncRollServerId: string | null = null;
+  private spectatorScoreCommitTimersByPlayerId = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
   private participantSeatById = new Map<string, number>();
   private participantIdBySeat = new Map<number, string>();
   private participantLabelById = new Map<string, string>();
@@ -272,6 +284,7 @@ class Game implements GameCallbacks {
   private waitForNextGameRequestInFlight = false;
   private participantStateUpdateInFlight = false;
   private autoSeatReadySyncInFlight = false;
+  private demoControlUpdateInFlight = false;
   private roomChatUnreadCount = 0;
   private roomInteractionAlertCount = 0;
   private roomChatIsOpen = false;
@@ -293,10 +306,17 @@ class Game implements GameCallbacks {
   private undoBtn: HTMLButtonElement;
   private newGameBtn: HTMLButtonElement | null = null;
   private waitNextGameBtn: HTMLButtonElement | null = null;
+  private demoRunToggleBtn: HTMLButtonElement | null = null;
+  private demoSpeedToggleBtn: HTMLButtonElement | null = null;
+  private mobileDemoRunToggleBtn: HTMLButtonElement | null = null;
+  private mobileDemoSpeedToggleBtn: HTMLButtonElement | null = null;
   private inviteLinkBtn: HTMLButtonElement | null = null;
   private roomChatBtn: HTMLButtonElement | null = null;
   private mobileInviteLinkBtn: HTMLButtonElement | null = null;
   private mobileRoomChatBtn: HTMLButtonElement | null = null;
+  private settingsGearBtn: HTMLButtonElement | null = null;
+  private settingsGearAvatarEl: HTMLImageElement | null = null;
+  private pauseMenuModal: HTMLElement | null = null;
   private roomChatBadgeEl: HTMLElement | null = null;
   private mobileRoomChatBadgeEl: HTMLElement | null = null;
   private turnActionBannerEl: HTMLElement | null = null;
@@ -409,7 +429,10 @@ class Game implements GameCallbacks {
       }
     });
     document.addEventListener("multiplayer:authExpired", () => {
-      notificationService.show("Multiplayer auth expired, refreshing session...", "warning", 2200);
+      showDebugAuditNotification("Multiplayer auth expired, refreshing session...", {
+        type: "warning",
+        duration: 2200,
+      });
     });
     document.addEventListener("multiplayer:sessionExpired", ((event: Event) => {
       const detail = (event as CustomEvent<{ reason?: string; sessionId?: string }>).detail;
@@ -570,10 +593,34 @@ class Game implements GameCallbacks {
     this.undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
     this.newGameBtn = document.getElementById("new-game-btn") as HTMLButtonElement | null;
     this.waitNextGameBtn = document.getElementById("wait-next-game-btn") as HTMLButtonElement | null;
+    this.demoRunToggleBtn = document.getElementById("demo-run-toggle-btn") as HTMLButtonElement | null;
+    this.demoSpeedToggleBtn = document.getElementById("demo-speed-toggle-btn") as HTMLButtonElement | null;
+    this.mobileDemoRunToggleBtn = document.getElementById(
+      "mobile-demo-run-toggle-btn"
+    ) as HTMLButtonElement | null;
+    this.mobileDemoSpeedToggleBtn = document.getElementById(
+      "mobile-demo-speed-toggle-btn"
+    ) as HTMLButtonElement | null;
     this.inviteLinkBtn = document.getElementById("invite-link-btn") as HTMLButtonElement | null;
     this.roomChatBtn = document.getElementById("room-chat-btn") as HTMLButtonElement | null;
+    this.settingsGearBtn = document.getElementById("settings-gear-btn") as HTMLButtonElement | null;
+    this.settingsGearAvatarEl = document.getElementById(
+      "settings-gear-avatar"
+    ) as HTMLImageElement | null;
     this.mobileInviteLinkBtn = document.getElementById("mobile-invite-link-btn") as HTMLButtonElement | null;
     this.mobileRoomChatBtn = document.getElementById("mobile-room-chat-btn") as HTMLButtonElement | null;
+    this.demoRunToggleBtn?.addEventListener("click", () => {
+      void this.handleDemoRunToggle();
+    });
+    this.demoSpeedToggleBtn?.addEventListener("click", () => {
+      void this.handleDemoSpeedToggle();
+    });
+    this.mobileDemoRunToggleBtn?.addEventListener("click", () => {
+      void this.handleDemoRunToggle();
+    });
+    this.mobileDemoSpeedToggleBtn?.addEventListener("click", () => {
+      void this.handleDemoSpeedToggle();
+    });
     this.ensureRoomChatNotificationBadges();
     this.turnActionBannerEl = this.ensureTurnActionBanner();
     this.playerInteractions = new PlayerInteractionsPanel({
@@ -761,6 +808,10 @@ class Game implements GameCallbacks {
 
     // Handle settings modal close to unpause game
     this.settingsModal.setOnClose(() => {
+      if (this.suppressSettingsCloseResume) {
+        this.suppressSettingsCloseResume = false;
+        return;
+      }
       if (this.paused) {
         this.paused = false;
         notificationService.show("Resume!", "info");
@@ -779,11 +830,6 @@ class Game implements GameCallbacks {
     });
     rulesModal.setOnReplayTutorial(() => {
       this.replayTutorialFromRules();
-    });
-
-    // Handle return to main menu / lobby from settings
-    this.settingsModal.setOnReturnToLobby(() => {
-      void this.returnToLobby();
     });
 
     // Handle player seat clicks for multiplayer invites and nudges
@@ -888,6 +934,7 @@ class Game implements GameCallbacks {
     });
 
     this.inputController.initialize();
+    this.ensurePauseMenuModal();
     this.updateInviteLinkControlVisibility();
     this.setupDiceSelection();
     GameFlowController.initializeAudio();
@@ -1152,6 +1199,11 @@ class Game implements GameCallbacks {
       const refreshedSession = await this.multiplayerSessionService.refreshSessionAuth();
       if (!refreshedSession) {
         this.hud.setTurnSyncStatus("error", "Resync Failed");
+        showDebugAuditNotification("Turn sync refresh failed.", {
+          type: "warning",
+          duration: 2200,
+          detail: reason,
+        });
         log.warn(`Turn sync refresh failed (${reason})`, {
           sessionId: activeSession.sessionId,
         });
@@ -1161,6 +1213,11 @@ class Game implements GameCallbacks {
       this.applyMultiplayerSeatState(refreshedSession);
       this.flushPendingTurnEndSync();
       this.hud.setTurnSyncStatus("ok", "Resynced");
+      showDebugAuditNotification("Turn sync refreshed.", {
+        type: "success",
+        duration: 1500,
+        detail: reason,
+      });
       log.info(`Turn sync refreshed (${reason})`, {
         sessionId: refreshedSession.sessionId,
       });
@@ -1357,6 +1414,14 @@ class Game implements GameCallbacks {
 
     const multiplayerIdentity = await this.resolveMultiplayerIdentityPayload();
     const requestedDifficulty = this.resolveRequestedMultiplayerDifficulty();
+    const demoSpeedMode = this.multiplayerOptions.demoSpeedMode === true;
+    const gameConfig = buildUnifiedGameConfig({
+      mode: demoSpeedMode ? "demo" : "multiplayer",
+      difficulty: requestedDifficulty,
+      botCount: this.multiplayerOptions.botCount,
+      demoSpeedMode,
+      autoRun: demoSpeedMode,
+    });
     this.state.mode.difficulty = requestedDifficulty;
     const createdSession = await this.multiplayerSessionService.createSession({
       roomCode: this.multiplayerOptions.roomCode,
@@ -1365,7 +1430,8 @@ class Game implements GameCallbacks {
       providerId: multiplayerIdentity.providerId,
       botCount: this.multiplayerOptions.botCount,
       gameDifficulty: requestedDifficulty,
-      demoSpeedMode: this.multiplayerOptions.demoSpeedMode === true,
+      demoSpeedMode,
+      gameConfig,
     });
     if (!createdSession) {
       notificationService.show("Failed to create multiplayer session. Continuing in solo mode.", "warning", 2800);
@@ -1574,6 +1640,7 @@ class Game implements GameCallbacks {
       now - this.cachedMultiplayerIdentity.fetchedAt < MULTIPLAYER_IDENTITY_CACHE_MS
     ) {
       this.localAvatarUrl = this.cachedMultiplayerIdentity.value.avatarUrl;
+      this.updateSettingsGearAvatar();
       return this.cachedMultiplayerIdentity.value;
     }
 
@@ -1613,11 +1680,32 @@ class Game implements GameCallbacks {
       providerId,
     };
     this.localAvatarUrl = avatarUrl;
+    this.updateSettingsGearAvatar();
     this.cachedMultiplayerIdentity = {
       value: identity,
       fetchedAt: now,
     };
     return identity;
+  }
+
+  private updateSettingsGearAvatar(): void {
+    if (!this.settingsGearBtn || !this.settingsGearAvatarEl) {
+      return;
+    }
+
+    const avatarUrl = this.localAvatarUrl;
+    if (typeof avatarUrl === "string" && avatarUrl.trim().length > 0) {
+      if (this.settingsGearAvatarEl.src !== avatarUrl) {
+        this.settingsGearAvatarEl.src = avatarUrl;
+      }
+      this.settingsGearAvatarEl.style.display = "";
+      this.settingsGearBtn.classList.add("has-profile-avatar");
+      return;
+    }
+
+    this.settingsGearAvatarEl.removeAttribute("src");
+    this.settingsGearAvatarEl.style.display = "none";
+    this.settingsGearBtn.classList.remove("has-profile-avatar");
   }
 
   private normalizeMultiplayerDisplayName(value: unknown): string | undefined {
@@ -2414,6 +2502,10 @@ class Game implements GameCallbacks {
   }
 
   private isAutoSeatReadyEnabled(): boolean {
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (activeSession?.demoMode === true) {
+      return false;
+    }
     return (
       this.playMode === "multiplayer" &&
       environment.features.multiplayerAutoSeatReady &&
@@ -2777,6 +2869,178 @@ class Game implements GameCallbacks {
     }
   }
 
+  private isPrivateRoomSession(session: MultiplayerSessionRecord | null | undefined): boolean {
+    if (!session) {
+      return false;
+    }
+    if (session.roomType === "private") {
+      return true;
+    }
+    return session.isPublic === false;
+  }
+
+  private isLocalPlayerPrivateRoomHost(
+    session: MultiplayerSessionRecord | null | undefined
+  ): boolean {
+    if (this.playMode !== "multiplayer" || !this.isPrivateRoomSession(session)) {
+      return false;
+    }
+    if (!session) {
+      return false;
+    }
+    const ownerPlayerId =
+      typeof session.ownerPlayerId === "string" ? session.ownerPlayerId.trim() : "";
+    return ownerPlayerId.length > 0 && ownerPlayerId === this.localPlayerId;
+  }
+
+  private async applyDemoControlUpdate(
+    action: "pause" | "resume" | "speed_normal" | "speed_fast"
+  ): Promise<void> {
+    if (this.demoControlUpdateInFlight) {
+      return;
+    }
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!this.isLocalPlayerPrivateRoomHost(activeSession)) {
+      showGameplayThemedNotification(
+        "host_control_forbidden",
+        "Only the room host can update host controls."
+      );
+      return;
+    }
+
+    this.demoControlUpdateInFlight = true;
+    this.updateUI();
+    try {
+      const updatedSession = await this.multiplayerSessionService.updateDemoControls(action);
+      if (!updatedSession) {
+        const activeSessionId =
+          typeof activeSession?.sessionId === "string" ? activeSession.sessionId : "unknown";
+        showGameplayThemedNotification(
+          "host_control_update_failed",
+          "Unable to update host controls right now."
+        );
+        showDebugAuditNotification(
+          "Host-control update request returned no session payload.",
+          {
+            type: "warning",
+            duration: 3200,
+            detail: `action=${action}; session=${activeSessionId}`,
+          }
+        );
+        return;
+      }
+
+      this.applyMultiplayerSeatState(updatedSession);
+      this.touchMultiplayerTurnSyncActivity();
+      if (action === "pause") {
+        showGameplayThemedNotification("host_control_paused", "Auto-run paused.");
+        showDebugAuditNotification("Host control applied.", {
+          detail: `action=${action}; session=${updatedSession.sessionId}`,
+        });
+      } else if (action === "resume") {
+        showGameplayThemedNotification("host_control_resumed", "Auto-run restarted with fresh bots.");
+        showDebugAuditNotification("Host control applied.", {
+          detail: `action=${action}; session=${updatedSession.sessionId}`,
+        });
+      } else if (action === "speed_fast") {
+        showGameplayThemedNotification("host_control_speed_fast", "Gameplay speed set to fast.");
+        showDebugAuditNotification("Host control applied.", {
+          detail: `action=${action}; session=${updatedSession.sessionId}`,
+        });
+      } else if (action === "speed_normal") {
+        showGameplayThemedNotification(
+          "host_control_speed_normal",
+          "Gameplay speed set to normal."
+        );
+        showDebugAuditNotification("Host control applied.", {
+          detail: `action=${action}; session=${updatedSession.sessionId}`,
+        });
+      }
+    } finally {
+      this.demoControlUpdateInFlight = false;
+      this.updateUI();
+    }
+  }
+
+  private async handleDemoRunToggle(): Promise<void> {
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession || !this.isLocalPlayerPrivateRoomHost(activeSession)) {
+      showGameplayThemedNotification(
+        "host_control_forbidden",
+        "Host controls are only available to the room host."
+      );
+      return;
+    }
+    const isRunning = activeSession.demoMode === true && activeSession.demoAutoRun !== false;
+    await this.applyDemoControlUpdate(isRunning ? "pause" : "resume");
+  }
+
+  private async handleDemoSpeedToggle(): Promise<void> {
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    if (!activeSession || !this.isLocalPlayerPrivateRoomHost(activeSession)) {
+      showGameplayThemedNotification(
+        "host_control_forbidden",
+        "Host controls are only available to the room host."
+      );
+      return;
+    }
+    const isFast = activeSession.demoMode === true && activeSession.demoSpeedMode === true;
+    await this.applyDemoControlUpdate(isFast ? "speed_normal" : "speed_fast");
+  }
+
+  private updateDemoControlButtons(): void {
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    const showControls = this.isLocalPlayerPrivateRoomHost(activeSession);
+    const isRunning = activeSession?.demoMode === true && activeSession?.demoAutoRun !== false;
+    const isFast = activeSession?.demoMode === true && activeSession?.demoSpeedMode === true;
+    const runLabel = isRunning ? "Pause Auto-Run" : "Start Auto-Run";
+    const speedLabel = isFast ? "Speed: Fast" : "Speed: Normal";
+    const controlsEl = document.getElementById("controls");
+    controlsEl?.classList.toggle("has-demo-controls", showControls);
+
+    if (this.demoRunToggleBtn) {
+      this.demoRunToggleBtn.style.display = showControls ? "inline-flex" : "none";
+      this.demoRunToggleBtn.textContent = runLabel;
+      this.demoRunToggleBtn.title = isRunning
+        ? "Pause bot autoplay in this room"
+        : "Start bot autoplay in this room";
+      this.demoRunToggleBtn.disabled = !showControls || this.demoControlUpdateInFlight;
+    }
+
+    if (this.demoSpeedToggleBtn) {
+      this.demoSpeedToggleBtn.style.display = showControls ? "inline-flex" : "none";
+      this.demoSpeedToggleBtn.textContent = speedLabel;
+      this.demoSpeedToggleBtn.title = "Toggle bot pacing speed";
+      this.demoSpeedToggleBtn.disabled = !showControls || this.demoControlUpdateInFlight;
+    }
+
+    if (this.mobileDemoRunToggleBtn) {
+      this.mobileDemoRunToggleBtn.style.display = "none";
+      const label = this.mobileDemoRunToggleBtn.querySelector("span");
+      if (label) {
+        label.textContent = runLabel;
+      } else {
+        this.mobileDemoRunToggleBtn.textContent = runLabel;
+      }
+      this.mobileDemoRunToggleBtn.title = isRunning
+        ? "Pause bot autoplay in this room"
+        : "Start bot autoplay in this room";
+      this.mobileDemoRunToggleBtn.disabled = !showControls || this.demoControlUpdateInFlight;
+    }
+
+    if (this.mobileDemoSpeedToggleBtn) {
+      this.mobileDemoSpeedToggleBtn.style.display = "none";
+      const label = this.mobileDemoSpeedToggleBtn.querySelector("span");
+      if (label) {
+        label.textContent = speedLabel;
+      } else {
+        this.mobileDemoSpeedToggleBtn.textContent = speedLabel;
+      }
+      this.mobileDemoSpeedToggleBtn.title = "Toggle bot pacing speed";
+      this.mobileDemoSpeedToggleBtn.disabled = !showControls || this.demoControlUpdateInFlight;
+    }
+  }
+
   private applyTurnStateFromSession(session: MultiplayerSessionRecord): void {
     this.awaitingMultiplayerRoll = false;
     this.applyTurnTiming(session.turnState?.turnExpiresAt);
@@ -2903,7 +3167,63 @@ class Game implements GameCallbacks {
     if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
       return;
     }
+    this.clearPendingSpectatorScoreCommit(targetPlayerId);
     this.diceRenderer.cancelSpectatorPreview(this.buildSpectatorPreviewKey(targetPlayerId));
+  }
+
+  private clearPendingSpectatorScoreCommit(playerId?: string | null): void {
+    const targetPlayerId = typeof playerId === "string" ? playerId.trim() : "";
+    if (targetPlayerId) {
+      const timer = this.spectatorScoreCommitTimersByPlayerId.get(targetPlayerId);
+      if (timer) {
+        clearTimeout(timer);
+        this.spectatorScoreCommitTimersByPlayerId.delete(targetPlayerId);
+      }
+      return;
+    }
+
+    this.spectatorScoreCommitTimersByPlayerId.forEach((timer) => {
+      clearTimeout(timer);
+    });
+    this.spectatorScoreCommitTimersByPlayerId.clear();
+  }
+
+  private resolveSpectatorScoreCommitDelayMs(): number {
+    const activeSession = this.multiplayerSessionService.getActiveSession();
+    const isFastDemo =
+      activeSession?.demoMode === true &&
+      activeSession?.demoSpeedMode === true;
+    return isFastDemo
+      ? SPECTATOR_SCORE_COMMIT_DELAY_FAST_MS
+      : SPECTATOR_SCORE_COMMIT_DELAY_MS;
+  }
+
+  private stageSpectatorScoreCommit(
+    playerId: string,
+    selectedDiceIds: string[],
+    seatScoreZone: { seatIndex: number; x: number; y: number; z: number } | null
+  ): void {
+    const key = this.buildSpectatorPreviewKey(playerId);
+    this.diceRenderer.updateSpectatorSelectionPreview(key, selectedDiceIds);
+    this.clearPendingSpectatorScoreCommit(playerId);
+    const delayMs = this.resolveSpectatorScoreCommitDelayMs();
+    const commitTimer = window.setTimeout(() => {
+      this.spectatorScoreCommitTimersByPlayerId.delete(playerId);
+      const previewCompleted = this.diceRenderer.completeSpectatorScorePreview(key, selectedDiceIds);
+      if (!previewCompleted && seatScoreZone) {
+        this.scene.playerSeatRenderer.pulseScoreZone(seatScoreZone.seatIndex);
+        particleService.emit({
+          effectId: "burst-gold",
+          position: new Vector3(seatScoreZone.x, seatScoreZone.y + 0.45, seatScoreZone.z),
+          options: {
+            scale: 0.4,
+            networkSync: false,
+          },
+        });
+      }
+      this.clearSpectatorRollingPreviewForPlayer(playerId);
+    }, Math.max(80, Math.floor(delayMs)));
+    this.spectatorScoreCommitTimersByPlayerId.set(playerId, commitTimer);
   }
 
   private getParticipantLabel(playerId: string): string {
@@ -3520,7 +3840,9 @@ class Game implements GameCallbacks {
       payload.targetPlayerId === this.localPlayerId
     ) {
       const title = payload.title?.trim() || (payload.targetPlayerId === this.localPlayerId ? "Direct" : "Multiplayer");
-      notificationService.show(`${title}: ${message}`, tone, 3200);
+      notificationService.show(`${title}: ${message}`, tone, 3200, {
+        channel: payload.targetPlayerId === this.localPlayerId ? "private" : "gameplay",
+      });
     }
 
     if (
@@ -3592,7 +3914,9 @@ class Game implements GameCallbacks {
         ? payload.title.trim()
         : fallbackTitle;
       const durationMs = topic === "next_game_countdown" ? 1400 : channel === "direct" ? 3600 : 2600;
-      notificationService.show(`${title}: ${message}`, tone, durationMs);
+      notificationService.show(`${title}: ${message}`, tone, durationMs, {
+        channel: channel === "direct" ? "private" : "gameplay",
+      });
     }
   }
 
@@ -3614,6 +3938,10 @@ class Game implements GameCallbacks {
       sessionId: message.sessionId,
       roomCode: message.roomCode,
       gameDifficulty: message.gameDifficulty,
+      gameConfig: message.gameConfig,
+      demoMode: message.demoMode,
+      demoAutoRun: message.demoAutoRun,
+      demoSpeedMode: message.demoSpeedMode,
       participants: message.participants,
       ...(hasStandings ? { standings: message.standings } : {}),
       ...(hasTurnState ? { turnState: message.turnState ?? null } : {}),
@@ -3664,7 +3992,7 @@ class Game implements GameCallbacks {
         typeof winnerPlayerId === "string" && winnerPlayerId.length > 0
           ? this.getParticipantLabel(winnerPlayerId)
           : "Winner";
-      notificationService.show(`${winnerLabel} wins the round.`, "success", 2800);
+      showGameplayThemedNotification("round_winner", `${winnerLabel} wins the round.`);
     } else if (syncedSession.sessionComplete !== true) {
       this.lastSessionComplete = false;
     }
@@ -3838,7 +4166,7 @@ class Game implements GameCallbacks {
   }
 
   private handleMultiplayerTurnAction(message: MultiplayerTurnActionMessage): void {
-    if (!this.isMultiplayerTurnEnforced()) {
+    if (this.playMode !== "multiplayer" || !environment.features.multiplayer) {
       return;
     }
 
@@ -3871,6 +4199,7 @@ class Game implements GameCallbacks {
     const seatScoreZone = this.getSeatScoreZonePosition(message.playerId);
     const spectatorPreviewKey = this.buildSpectatorPreviewKey(message.playerId);
     if (message.action === "roll" && seatScoreZone && message.roll) {
+      this.clearPendingSpectatorScoreCommit(message.playerId);
       this.diceRenderer.startSpectatorRollPreview(
         spectatorPreviewKey,
         message.roll,
@@ -3896,23 +4225,23 @@ class Game implements GameCallbacks {
       const selectedDiceIds = scoreSelection.filter(
         (dieId): dieId is string => typeof dieId === "string" && dieId.trim().length > 0
       );
-      const previewCompleted =
-        selectedDiceIds.length > 0
-          ? this.diceRenderer.completeSpectatorScorePreview(spectatorPreviewKey, selectedDiceIds)
-          : false;
-
-      if (!previewCompleted && seatScoreZone) {
-        this.scene.playerSeatRenderer.pulseScoreZone(seatScoreZone.seatIndex);
-        particleService.emit({
-          effectId: "burst-gold",
-          position: new Vector3(seatScoreZone.x, seatScoreZone.y + 0.45, seatScoreZone.z),
-          options: {
-            scale: 0.4,
-            networkSync: false,
-          },
-        });
+      if (selectedDiceIds.length > 0) {
+        this.stageSpectatorScoreCommit(message.playerId, selectedDiceIds, seatScoreZone);
+      } else {
+        this.clearPendingSpectatorScoreCommit(message.playerId);
+        if (seatScoreZone) {
+          this.scene.playerSeatRenderer.pulseScoreZone(seatScoreZone.seatIndex);
+          particleService.emit({
+            effectId: "burst-gold",
+            position: new Vector3(seatScoreZone.x, seatScoreZone.y + 0.45, seatScoreZone.z),
+            options: {
+              scale: 0.4,
+              networkSync: false,
+            },
+          });
+        }
+        this.clearSpectatorRollingPreviewForPlayer(message.playerId);
       }
-      this.clearSpectatorRollingPreviewForPlayer(message.playerId);
     }
 
     const actionLabel = message.action === "score" ? "Scored" : "Rolled";
@@ -3983,7 +4312,10 @@ class Game implements GameCallbacks {
     if (code === "turn_unavailable" || code === "turn_advance_failed") {
       this.awaitingMultiplayerRoll = false;
       this.pendingTurnEndSync = false;
-      notificationService.show("Turn state unavailable. Resyncing...", "warning", 2000);
+      showDebugAuditNotification("Turn state unavailable. Resyncing...", {
+        type: "warning",
+        duration: 2000,
+      });
       void this.requestTurnSyncRefresh(code);
       return;
     }
@@ -3996,7 +4328,10 @@ class Game implements GameCallbacks {
     if (code === "turn_action_invalid_phase") {
       this.awaitingMultiplayerRoll = false;
       this.pendingTurnEndSync = false;
-      notificationService.show("Turn sync conflict. Wait for turn update.", "warning", 2000);
+      showDebugAuditNotification("Turn sync conflict. Wait for turn update.", {
+        type: "warning",
+        duration: 2000,
+      });
       void this.requestTurnSyncRefresh("turn_action_invalid_phase");
       return;
     }
@@ -4008,7 +4343,10 @@ class Game implements GameCallbacks {
 
     if (code === "turn_action_invalid_payload") {
       this.awaitingMultiplayerRoll = false;
-      notificationService.show("Turn payload rejected. Syncing...", "warning", 2200);
+      showDebugAuditNotification("Turn payload rejected. Syncing...", {
+        type: "warning",
+        duration: 2200,
+      });
       void this.requestTurnSyncRefresh("turn_action_invalid_payload");
       return;
     }
@@ -4065,11 +4403,6 @@ class Game implements GameCallbacks {
     }
 
     if (this.multiplayerSessionService.getActiveSession()?.sessionComplete === true) {
-      return false;
-    }
-
-    const localSeatState = this.getLocalMultiplayerSeatState();
-    if (localSeatState && !localSeatState.isSeated) {
       return false;
     }
 
@@ -4517,7 +4850,11 @@ class Game implements GameCallbacks {
     }
 
     this.sessionExpiryRecoveryInProgress = true;
-    notificationService.show("Connection issue detected. Rejoining room...", "info", 2200);
+    showDebugAuditNotification("Connection issue detected. Rejoining room...", {
+      type: "info",
+      duration: 2200,
+      detail: reason,
+    });
 
     const retryDelaysMs = [0, 900];
     try {
@@ -4533,7 +4870,11 @@ class Game implements GameCallbacks {
           suppressFailureNotification: true,
         });
         if (joined) {
-          notificationService.show("Reconnected to multiplayer room.", "success", 2400);
+          showDebugAuditNotification("Reconnected to multiplayer room.", {
+            type: "success",
+            duration: 2400,
+            detail: reason,
+          });
           log.info("Recovered multiplayer session after expiry signal", {
             reason,
             sessionId: recoverySessionId,
@@ -4613,6 +4954,7 @@ class Game implements GameCallbacks {
     this.activeTurnPlayerId = this.localPlayerId;
     this.activeRollServerId = null;
     this.applyTurnTiming(null);
+    this.clearPendingSpectatorScoreCommit();
     this.diceRenderer.cancelAllSpectatorPreviews();
     this.lastTurnPlanPreview = "";
     this.lastSessionComplete = false;
@@ -4663,6 +5005,7 @@ class Game implements GameCallbacks {
     this.awaitingMultiplayerRoll = false;
     this.pendingTurnEndSync = false;
     this.applyTurnTiming(null);
+    this.clearPendingSpectatorScoreCommit();
     this.diceRenderer.cancelAllSpectatorPreviews();
     this.lastTurnPlanPreview = "";
     this.lastSessionComplete = false;
@@ -4878,9 +5221,143 @@ class Game implements GameCallbacks {
     if (!this.paused) {
       this.paused = true;
     }
+    this.hidePauseMenu();
     this.settingsModal.show({ preserveOpenModalIds: ["tutorial-modal"] });
     this.settingsModal.showTab(tab);
     this.updateUI();
+  }
+
+  private ensurePauseMenuModal(): void {
+    if (this.pauseMenuModal) {
+      return;
+    }
+
+    const modal = document.createElement("div");
+    modal.id = "pause-menu-modal";
+    modal.className = "modal";
+    modal.style.display = "none";
+    modal.innerHTML = `
+      <div class="modal-backdrop"></div>
+      <div class="modal-content pause-menu-content">
+        <div class="modal-header">
+          <h2>Paused</h2>
+          <button class="modal-close" type="button" aria-label="Resume">&times;</button>
+        </div>
+        <div class="pause-menu-body">
+          <p class="pause-menu-description">Game paused. Choose what to do next.</p>
+          <div class="pause-menu-actions">
+            <button id="pause-menu-return-lobby-btn" class="btn btn-danger">Return To Lobby</button>
+            <button id="pause-menu-settings-btn" class="btn btn-secondary">Settings</button>
+            <button id="pause-menu-resume-btn" class="btn btn-primary">Cancel</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const backdrop = modal.querySelector(".modal-backdrop");
+    backdrop?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      this.resumeFromPauseMenu();
+    });
+
+    const closeBtn = modal.querySelector<HTMLButtonElement>(".modal-close");
+    closeBtn?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      this.resumeFromPauseMenu();
+    });
+
+    const resumeBtn = modal.querySelector<HTMLButtonElement>("#pause-menu-resume-btn");
+    resumeBtn?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      this.resumeFromPauseMenu();
+    });
+
+    const settingsBtn = modal.querySelector<HTMLButtonElement>("#pause-menu-settings-btn");
+    settingsBtn?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      this.openSettingsFromPauseMenu();
+    });
+
+    const returnLobbyBtn = modal.querySelector<HTMLButtonElement>("#pause-menu-return-lobby-btn");
+    returnLobbyBtn?.addEventListener("click", () => {
+      audioService.playSfx("click");
+      this.hidePauseMenu();
+      void this.handleReturnToLobbyRequest().then((didProceed) => {
+        if (!didProceed) {
+          this.openPauseMenu({ notify: false });
+        }
+      });
+    });
+
+    document.body.appendChild(modal);
+    this.pauseMenuModal = modal;
+  }
+
+  private isPauseMenuVisible(): boolean {
+    return this.pauseMenuModal?.style.display === "flex";
+  }
+
+  private hidePauseMenu(): void {
+    if (!this.pauseMenuModal || this.pauseMenuModal.style.display === "none") {
+      return;
+    }
+    this.pauseMenuModal.style.display = "none";
+  }
+
+  private openPauseMenu(options?: { notify?: boolean }): void {
+    this.ensurePauseMenuModal();
+    if (!this.pauseMenuModal) {
+      return;
+    }
+    this.paused = true;
+    this.pauseMenuModal.style.display = "flex";
+    if (options?.notify !== false) {
+      notificationService.show("Paused", "info");
+    }
+    const resumeBtn = this.pauseMenuModal.querySelector<HTMLButtonElement>("#pause-menu-resume-btn");
+    resumeBtn?.focus();
+    this.updateUI();
+  }
+
+  private resumeFromPauseMenu(): void {
+    this.hidePauseMenu();
+    if (this.paused) {
+      this.paused = false;
+    }
+    notificationService.show("Resume!", "info");
+    this.updateUI();
+  }
+
+  private openSettingsFromPauseMenu(): void {
+    this.ensurePauseMenuModal();
+    this.hidePauseMenu();
+    this.paused = true;
+    const tutorialActive = tutorialModal.isActive();
+    this.settingsModal.show({
+      preserveOpenModalIds: tutorialActive ? ["tutorial-modal"] : undefined,
+    });
+    if (tutorialActive) {
+      tutorialModal.onPlayerAction("openSettings");
+      const preferredSettingsTab = tutorialModal.getPreferredSettingsTab();
+      if (preferredSettingsTab) {
+        this.settingsModal.showTab(preferredSettingsTab);
+      }
+    }
+    this.updateUI();
+  }
+
+  handleEscapePauseMenu(): void {
+    if (this.settingsModal.isVisible()) {
+      this.suppressSettingsCloseResume = true;
+      this.settingsModal.hide();
+      this.openPauseMenu({ notify: false });
+      return;
+    }
+    if (this.isPauseMenuVisible()) {
+      this.resumeFromPauseMenu();
+      return;
+    }
+    this.openPauseMenu();
   }
 
   togglePause(): void {
@@ -4888,6 +5365,7 @@ class Game implements GameCallbacks {
 
     if (this.paused) {
       notificationService.show("Paused", "info");
+      this.hidePauseMenu();
       const tutorialActive = tutorialModal.isActive();
       this.settingsModal.show({
         preserveOpenModalIds: tutorialActive ? ["tutorial-modal"] : undefined,
@@ -4901,6 +5379,7 @@ class Game implements GameCallbacks {
       }
     } else {
       notificationService.show("Resume!", "info");
+      this.hidePauseMenu();
       this.settingsModal.hide();
     }
 
@@ -5412,7 +5891,28 @@ class Game implements GameCallbacks {
   }
 
   handleReturnToMainMenu(): void {
-    void this.returnToLobby();
+    void this.handleReturnToLobbyRequest();
+  }
+
+  private async handleReturnToLobbyRequest(): Promise<boolean> {
+    const confirmed = await confirmAction({
+      title: t("settings.confirm.returnLobby.title"),
+      message: t("settings.confirm.returnLobby.message"),
+      confirmLabel: t("settings.confirm.returnLobby.confirm"),
+      cancelLabel: t("settings.confirm.returnLobby.cancel"),
+      tone: "danger",
+    });
+    if (!confirmed) {
+      return false;
+    }
+
+    if (this.settingsModal.isVisible()) {
+      this.suppressSettingsCloseResume = true;
+      this.settingsModal.hide();
+    }
+    this.hidePauseMenu();
+    await this.returnToLobby({ skipDisruptionConfirm: true });
+    return true;
   }
 
   startNewGame(): void {
@@ -5640,6 +6140,7 @@ class Game implements GameCallbacks {
   }
 
   private updateUI(): void {
+    this.updateSettingsGearAvatar();
     this.updateInviteLinkControlVisibility();
     this.hud.update(this.state);
     this.scene.playerSeatRenderer.updateSeat(this.scene.currentPlayerSeat, {
@@ -5671,6 +6172,7 @@ class Game implements GameCallbacks {
         ? "Joining Queue..."
         : "Wait for Next Game";
     }
+    this.updateDemoControlButtons();
 
     const localSeatState = this.getLocalMultiplayerSeatState();
     const controlsEl = document.getElementById("controls");
