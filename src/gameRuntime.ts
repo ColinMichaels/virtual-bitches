@@ -3319,6 +3319,24 @@ class Game implements GameCallbacks {
     this.diceRenderer.cancelSpectatorPreview(this.buildSpectatorPreviewKey(targetPlayerId));
   }
 
+  private clearSpectatorRollingDicePreviewForPlayer(
+    playerId: string | null | undefined,
+    options?: { clearSnapshot?: boolean }
+  ): void {
+    const targetPlayerId = typeof playerId === "string" ? playerId.trim() : "";
+    if (!targetPlayerId || targetPlayerId === this.localPlayerId) {
+      return;
+    }
+
+    this.clearScheduledSpectatorPreviewClear(targetPlayerId);
+    this.clearPendingSpectatorScoreCommit(targetPlayerId);
+    if (options?.clearSnapshot === true) {
+      this.spectatorRollSnapshotByPlayerId.delete(targetPlayerId);
+      this.spectatorRenderedRollKeyByPlayerId.delete(targetPlayerId);
+    }
+    this.diceRenderer.clearSpectatorRollingPreview(this.buildSpectatorPreviewKey(targetPlayerId));
+  }
+
   private clearScheduledSpectatorPreviewClear(playerId?: string | null): void {
     const targetPlayerId = typeof playerId === "string" ? playerId.trim() : "";
     if (targetPlayerId) {
@@ -3358,13 +3376,13 @@ class Game implements GameCallbacks {
         ? Math.max(0, Math.floor(delayMs))
         : this.resolveSpectatorPreviewClearDelayMs(targetPlayerId);
     if (resolvedDelayMs <= 0) {
-      this.clearSpectatorRollingPreviewForPlayer(targetPlayerId);
+      this.clearSpectatorRollingDicePreviewForPlayer(targetPlayerId, { clearSnapshot: true });
       return;
     }
 
     const clearHandle = window.setTimeout(() => {
       this.spectatorPreviewClearTimersByPlayerId.delete(targetPlayerId);
-      this.clearSpectatorRollingPreviewForPlayer(targetPlayerId);
+      this.clearSpectatorRollingDicePreviewForPlayer(targetPlayerId, { clearSnapshot: true });
     }, resolvedDelayMs);
     this.spectatorPreviewClearTimersByPlayerId.set(targetPlayerId, clearHandle);
   }
@@ -3419,7 +3437,6 @@ class Game implements GameCallbacks {
           },
         });
       }
-      this.scheduleSpectatorPreviewClearForPlayer(playerId);
     }, Math.max(80, Math.floor(delayMs)));
     this.spectatorScoreCommitTimersByPlayerId.set(playerId, commitTimer);
   }
@@ -4350,7 +4367,7 @@ class Game implements GameCallbacks {
       this.updateTurnSeatHighlight(null);
       this.scheduleTurnTransitionSyncRecovery("turn_auto_advanced_waiting_for_next", playerId);
     }
-    this.clearSpectatorRollingPreviewForPlayer(playerId);
+    this.clearSpectatorRollingDicePreviewForPlayer(playerId, { clearSnapshot: true });
     const autoStandReason =
       typeof message.reason === "string" &&
       (message.reason.includes("turn_timeout_stand") ||
