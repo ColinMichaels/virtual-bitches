@@ -66,8 +66,10 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
 - Status: ✅ In progress checkpoint landed (`feature/server-phase-02-engine-boundaries`)
 - Delivered in branch:
   - `api/engine/sessionTurnEngine.mjs`
+  - `api/engine/sessionLifecycleEngine.mjs`
   - `api/server.mjs` delegates turn-state/progression/scoring transitions to composed engine module
-  - dependency-injected side-effect boundary for post-game lifecycle scheduling
+  - `api/server.mjs` delegates post-game lifecycle transitions (queue/completion/restart timing state) to composed engine module
+  - dependency-injected side-effect boundary for post-game lifecycle scheduling/reset/completion logic
 
 ## Phase 03 - Filter/Addon Registry
 - Introduce registry + policy model:
