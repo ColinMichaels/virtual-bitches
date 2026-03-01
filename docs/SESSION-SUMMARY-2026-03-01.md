@@ -95,11 +95,17 @@
 ### Phase 04 - Transport + WS Decoupling (Incremental Refactor)
 - Extracted websocket protocol/frame handling into:
   - `api/ws/socketProtocol.mjs`
+- Extracted websocket connection lifecycle handling into:
+  - `api/ws/socketLifecycle.mjs`
 - Refactored `api/server.mjs` to delegate protocol-only websocket concerns:
   - upgrade header validation
   - handshake response composition
   - frame parsing
   - frame writing
+- Refactored `api/server.mjs` to delegate websocket lifecycle concerns:
+  - connection bootstrap
+  - frame ingestion loop + control frame handling
+  - session client register/unregister/disconnect paths
 - Preserved existing websocket/domain message handling flow while reducing transport implementation surface in the composition root.
 
 ---
@@ -121,6 +127,7 @@
 - `node --check api/http/routeDispatcher.mjs` passes.
 - `node --check api/http/routeHandlers.mjs` passes.
 - `node --check api/ws/socketProtocol.mjs` passes.
+- `node --check api/ws/socketLifecycle.mjs` passes.
 - `npm run build` passes.
 - `npm run test:e2e:api:local` passes.
 
@@ -148,6 +155,6 @@
 
 ## Next Phase Candidate
 
-1. Phase 04 follow-through: extract websocket connection lifecycle and relay orchestration handlers from `api/server.mjs`.
+1. Phase 04 follow-through: extract websocket relay orchestration helpers from `api/server.mjs`.
 2. Phase 04 follow-through: introduce transport-focused tests around protocol/frame and socket lifecycle behavior.
 3. Phase 05: Continue storage/auth adapter hardening with resilience-oriented failure-path tests.

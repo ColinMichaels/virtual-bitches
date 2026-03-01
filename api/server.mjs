@@ -34,6 +34,7 @@ import {
   validateSocketUpgradeHeaders,
   writeSocketFrame,
 } from "./ws/socketProtocol.mjs";
+import { createSocketLifecycle } from "./ws/socketLifecycle.mjs";
 import {
   buildChatConductWarning,
   createChatConductPolicy,
@@ -433,6 +434,24 @@ const server = createServer((req, res) => {
 });
 const wsSessionClients = new Map();
 const wsClientMeta = new WeakMap();
+const socketLifecycle = createSocketLifecycle({
+  wsSessionClients,
+  wsClientMeta,
+  maxMessageBytes: MAX_WS_MESSAGE_BYTES,
+  wsCloseCodes: WS_CLOSE_CODES,
+  parseSocketFrame,
+  writeSocketFrame,
+  getSession: (sessionId) => store.multiplayerSessions[sessionId],
+  isBotParticipant,
+  markSessionActivity,
+  sendTurnSyncPayload,
+  reconcileSessionLoops,
+  reconcileTurnTimeoutLoop,
+  handleSocketMessage,
+  sendSocketError,
+  safeCloseSocket,
+  log,
+});
 const botSessionLoops = new Map();
 const sessionTurnTimeoutLoops = new Map();
 const sessionPostGameLoops = new Map();
@@ -627,7 +646,7 @@ server.on("upgrade", async (req, socket) => {
     }
 
     completeSocketHandshake(socket, upgrade.acceptValue);
-    handleSocketConnection(socket, auth);
+    socketLifecycle.handleSocketConnection(socket, auth);
   } catch (error) {
     log.warn("Failed to process WebSocket upgrade", error);
     rejectUpgrade(socket, 500, "Internal Server Error");
@@ -9413,119 +9432,6 @@ async function authenticateSocketUpgrade(requestUrl) {
   };
 }
 
-function handleSocketConnection(socket, auth) {
-  const client = {
-    socket,
-    sessionId: auth.sessionId,
-    playerId: auth.playerId,
-    readBuffer: Buffer.alloc(0),
-    tokenExpiryTimer: null,
-    closed: false,
-    registered: false,
-  };
-
-  wsClientMeta.set(socket, client);
-  registerSocketClient(client, client.sessionId);
-  log.info(`WebSocket connected: session=${client.sessionId} player=${client.playerId}`);
-
-  const session = store.multiplayerSessions[client.sessionId];
-  if (session) {
-    const participant = session.participants[client.playerId];
-    const now = Date.now();
-    if (participant) {
-      participant.lastHeartbeatAt = now;
-    }
-    markSessionActivity(session, client.playerId, now);
-
-    sendTurnSyncPayload(client, session, "sync");
-    reconcileSessionLoops(client.sessionId);
-  }
-
-  const msUntilExpiry = Math.max(0, auth.tokenExpiresAt - Date.now());
-  client.tokenExpiryTimer = setTimeout(() => {
-    sendSocketError(client, "session_expired", "access_token_expired");
-    safeCloseSocket(client, WS_CLOSE_CODES.unauthorized, "access_token_expired");
-  }, msUntilExpiry);
-
-  socket.on("data", (chunk) => {
-    if (!Buffer.isBuffer(chunk)) {
-      return;
-    }
-    handleSocketData(client, chunk);
-  });
-
-  socket.on("close", () => {
-    client.closed = true;
-    unregisterSocketClient(client);
-  });
-
-  socket.on("end", () => {
-    client.closed = true;
-    unregisterSocketClient(client);
-  });
-
-  socket.on("error", (error) => {
-    client.closed = true;
-    unregisterSocketClient(client);
-    log.warn("WebSocket error", error);
-  });
-}
-
-function handleSocketData(client, chunk) {
-  if (client.closed) return;
-
-  client.readBuffer = Buffer.concat([client.readBuffer, chunk]);
-  if (client.readBuffer.length > MAX_WS_MESSAGE_BYTES * 2) {
-    sendSocketError(client, "message_too_large", "message_too_large");
-    safeCloseSocket(client, WS_CLOSE_CODES.badRequest, "message_too_large");
-    return;
-  }
-
-  while (true) {
-    const frame = parseSocketFrame(client.readBuffer);
-    if (!frame) {
-      return;
-    }
-
-    if (frame.error) {
-      sendSocketError(client, "invalid_payload", frame.error);
-      safeCloseSocket(client, WS_CLOSE_CODES.badRequest, frame.error);
-      return;
-    }
-
-    client.readBuffer = client.readBuffer.subarray(frame.bytesConsumed);
-
-    if (frame.opcode === 0x1) {
-      const raw = frame.payload.toString("utf8");
-      if (raw.length > MAX_WS_MESSAGE_BYTES) {
-        sendSocketError(client, "message_too_large", "message_too_large");
-        safeCloseSocket(client, WS_CLOSE_CODES.badRequest, "message_too_large");
-        return;
-      }
-      handleSocketMessage(client, raw);
-      continue;
-    }
-
-    if (frame.opcode === 0x8) {
-      safeCloseSocket(client, WS_CLOSE_CODES.normal, "client_closed");
-      return;
-    }
-
-    if (frame.opcode === 0x9) {
-      writeSocketFrame(client.socket, 0xA, frame.payload.subarray(0, 125));
-      continue;
-    }
-
-    if (frame.opcode === 0xA) {
-      continue;
-    }
-
-    sendSocketError(client, "unsupported_message_type", "unsupported_opcode");
-    safeCloseSocket(client, WS_CLOSE_CODES.badRequest, "unsupported_opcode");
-    return;
-  }
-}
-
 function handleSocketMessage(client, rawMessage) {
   if (!wsClientMeta.get(client.socket)) return;
 
@@ -9938,57 +9844,8 @@ function sendTurnSyncPayload(client, session, source = "sync") {
   }
 }
 
-function registerSocketClient(client, sessionId) {
-  const clients = wsSessionClients.get(sessionId) ?? new Set();
-  clients.add(client);
-  wsSessionClients.set(sessionId, clients);
-  client.registered = true;
-  reconcileTurnTimeoutLoop(sessionId);
-}
-
-function unregisterSocketClient(client) {
-  if (!client?.registered) return;
-  client.registered = false;
-
-  if (client.tokenExpiryTimer) {
-    clearTimeout(client.tokenExpiryTimer);
-    client.tokenExpiryTimer = null;
-  }
-
-  wsClientMeta.delete(client.socket);
-  const clients = wsSessionClients.get(client.sessionId);
-  if (clients) {
-    clients.delete(client);
-    if (clients.size === 0) {
-      wsSessionClients.delete(client.sessionId);
-    }
-  }
-
-  const session = store.multiplayerSessions[client.sessionId];
-  const participant = session?.participants?.[client.playerId];
-  if (participant && !isBotParticipant(participant)) {
-    // Keep readiness state during short disconnects so browser refresh reconnects do not
-    // deadlock turn sync. Stale participants are removed by heartbeat pruning + cleanup sweeps.
-    participant.lastHeartbeatAt =
-      Number.isFinite(participant.lastHeartbeatAt) && participant.lastHeartbeatAt > 0
-        ? participant.lastHeartbeatAt
-        : Date.now();
-  }
-
-  reconcileSessionLoops(client.sessionId);
-}
-
 function disconnectPlayerSockets(sessionId, playerId, closeCode, reason) {
-  const clients = wsSessionClients.get(sessionId);
-  if (!clients) return;
-
-  for (const client of clients) {
-    if (!client || client.playerId !== playerId) {
-      continue;
-    }
-
-    safeCloseSocket(client, closeCode, reason);
-  }
+  socketLifecycle.disconnectPlayerSockets(sessionId, playerId, closeCode, reason);
 }
 
 function expireSession(sessionId, reason) {
@@ -10161,7 +10018,7 @@ function sendSocketError(client, code, message) {
 function safeCloseSocket(client, closeCode, closeReason) {
   if (!client || client.closed) return;
   client.closed = true;
-  unregisterSocketClient(client);
+  socketLifecycle.unregisterSocketClient(client);
 
   if (client.socket.destroyed) {
     return;
