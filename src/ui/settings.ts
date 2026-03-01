@@ -1986,11 +1986,22 @@ export class SettingsModal {
       this.settings.controls.mobileDiceLayout;
     (document.getElementById("game-language") as HTMLSelectElement).value = getLocale();
 
-    (document.getElementById("variant-d20") as HTMLInputElement).checked = this.settings.game.addD20;
-    (document.getElementById("variant-d4") as HTMLInputElement).checked = this.settings.game.addD4;
-    (document.getElementById("variant-2nd-d10") as HTMLInputElement).checked =
-      this.settings.game.add2ndD10;
-    (document.getElementById("variant-d100") as HTMLInputElement).checked = this.settings.game.d100Mode;
+    const variantD20 = document.getElementById("variant-d20") as HTMLInputElement | null;
+    if (variantD20) {
+      variantD20.checked = this.settings.game.addD20;
+    }
+    const variantD4 = document.getElementById("variant-d4") as HTMLInputElement | null;
+    if (variantD4) {
+      variantD4.checked = this.settings.game.addD4;
+    }
+    const variant2ndD10 = document.getElementById("variant-2nd-d10") as HTMLInputElement | null;
+    if (variant2ndD10) {
+      variant2ndD10.checked = this.settings.game.add2ndD10;
+    }
+    const variantD100 = document.getElementById("variant-d100") as HTMLInputElement | null;
+    if (variantD100) {
+      variantD100.checked = this.settings.game.d100Mode;
+    }
 
     (document.getElementById("game-difficulty") as HTMLSelectElement).value =
       this.settings.game.difficulty;
