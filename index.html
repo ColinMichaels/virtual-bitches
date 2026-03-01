@@ -72,6 +72,16 @@
                 </div>
             </div>
             <button id="profile-btn" class="hud-icon-btn" title="Profile" data-i18n-title="shell.profile.title">
+                <img
+                    id="profile-btn-avatar"
+                    class="profile-btn-avatar"
+                    src=""
+                    alt=""
+                    referrerpolicy="no-referrer"
+                    loading="lazy"
+                    decoding="async"
+                    style="display: none;"
+                />
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M20 21a8 8 0 0 0-16 0"/>
                     <circle cx="12" cy="8" r="4"/>
@@ -290,16 +300,6 @@
 
     <!-- Desktop Controls (hidden on mobile) -->
     <button id="settings-gear-btn" class="desktop-only" title="Settings (ESC)" data-i18n-title="shell.desktop.settingsEscTitle">
-        <img
-            id="settings-gear-avatar"
-            class="settings-gear-avatar"
-            src=""
-            alt=""
-            referrerpolicy="no-referrer"
-            loading="lazy"
-            decoding="async"
-            style="display: none;"
-        />
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"/>
             <path d="M12 1v6m0 6v6M5.6 5.6l4.2 4.2m4.4 4.4l4.2 4.2M1 12h6m6 0h6M5.6 18.4l4.2-4.2m4.4-4.4l4.2-4.2"/>

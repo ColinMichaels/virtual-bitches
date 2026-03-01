@@ -17,6 +17,14 @@ import {
   createRoomChannelChatConductFilter,
   ROOM_CHANNEL_FILTER_SCOPE_INBOUND,
 } from "./filters/roomChannelChatConductFilter.mjs";
+import {
+  createRoomChannelSenderRestrictionFilter,
+  ROOM_CHANNEL_FILTER_SCOPE_PREFLIGHT,
+} from "./filters/roomChannelSenderRestrictionFilter.mjs";
+import {
+  createDirectMessageBlockRelationshipFilter,
+  REALTIME_FILTER_SCOPE_DIRECT_DELIVERY,
+} from "./filters/directMessageBlockRelationshipFilter.mjs";
 import { dispatchApiRoute } from "./http/routeDispatcher.mjs";
 import { createApiRouteHandlers } from "./http/routeHandlers.mjs";
 import {
@@ -104,6 +112,26 @@ const CHAT_CONDUCT_FILTER_TIMEOUT_MS = normalizeAddonFilterTimeoutMs(
 );
 const CHAT_CONDUCT_FILTER_ON_ERROR = normalizeAddonFilterOnErrorMode(
   process.env.MULTIPLAYER_CHAT_CONDUCT_FILTER_ON_ERROR,
+  "noop"
+);
+const ROOM_CHANNEL_SENDER_FILTER_ENABLED =
+  process.env.MULTIPLAYER_ROOM_CHANNEL_SENDER_FILTER_ENABLED !== "0";
+const ROOM_CHANNEL_SENDER_FILTER_TIMEOUT_MS = normalizeAddonFilterTimeoutMs(
+  process.env.MULTIPLAYER_ROOM_CHANNEL_SENDER_FILTER_TIMEOUT_MS,
+  100
+);
+const ROOM_CHANNEL_SENDER_FILTER_ON_ERROR = normalizeAddonFilterOnErrorMode(
+  process.env.MULTIPLAYER_ROOM_CHANNEL_SENDER_FILTER_ON_ERROR,
+  "noop"
+);
+const DIRECT_MESSAGE_BLOCK_FILTER_ENABLED =
+  process.env.MULTIPLAYER_DIRECT_MESSAGE_BLOCK_FILTER_ENABLED !== "0";
+const DIRECT_MESSAGE_BLOCK_FILTER_TIMEOUT_MS = normalizeAddonFilterTimeoutMs(
+  process.env.MULTIPLAYER_DIRECT_MESSAGE_BLOCK_FILTER_TIMEOUT_MS,
+  100
+);
+const DIRECT_MESSAGE_BLOCK_FILTER_ON_ERROR = normalizeAddonFilterOnErrorMode(
+  process.env.MULTIPLAYER_DIRECT_MESSAGE_BLOCK_FILTER_ON_ERROR,
   "noop"
 );
 const MODERATION_STORE_CHAT_TERMS_KEY = "chatTerms";
@@ -511,11 +539,27 @@ const roomChannelFilterRegistry = createAddonFilterRegistry({
     log.warn(message);
   },
 });
+const roomChannelSenderRestrictionFilter = createRoomChannelSenderRestrictionFilter({
+  isRoomChannelSenderRestricted,
+});
 const roomChannelChatConductFilter = createRoomChannelChatConductFilter({
   ensureSessionChatConductState,
   evaluateRoomChannelConduct,
   buildChatConductWarning,
   getChatConductPolicy,
+});
+const directMessageBlockRelationshipFilter = createDirectMessageBlockRelationshipFilter({
+  hasRoomChannelBlockRelationship,
+});
+roomChannelFilterRegistry.registerFilter({
+  id: roomChannelSenderRestrictionFilter.id,
+  scope: roomChannelSenderRestrictionFilter.scope,
+  run: roomChannelSenderRestrictionFilter.run,
+  policy: {
+    enabled: ROOM_CHANNEL_SENDER_FILTER_ENABLED,
+    timeoutMs: ROOM_CHANNEL_SENDER_FILTER_TIMEOUT_MS,
+    onError: ROOM_CHANNEL_SENDER_FILTER_ON_ERROR,
+  },
 });
 roomChannelFilterRegistry.registerFilter({
   id: roomChannelChatConductFilter.id,
@@ -525,6 +569,16 @@ roomChannelFilterRegistry.registerFilter({
     enabled: CHAT_CONDUCT_FILTER_ENABLED,
     timeoutMs: CHAT_CONDUCT_FILTER_TIMEOUT_MS,
     onError: CHAT_CONDUCT_FILTER_ON_ERROR,
+  },
+});
+roomChannelFilterRegistry.registerFilter({
+  id: directMessageBlockRelationshipFilter.id,
+  scope: directMessageBlockRelationshipFilter.scope,
+  run: directMessageBlockRelationshipFilter.run,
+  policy: {
+    enabled: DIRECT_MESSAGE_BLOCK_FILTER_ENABLED,
+    timeoutMs: DIRECT_MESSAGE_BLOCK_FILTER_TIMEOUT_MS,
+    onError: DIRECT_MESSAGE_BLOCK_FILTER_ON_ERROR,
   },
 });
 
@@ -3537,6 +3591,12 @@ function buildAdminChatConductPolicySummary(now = Date.now()) {
     filterEnabled: CHAT_CONDUCT_FILTER_ENABLED,
     filterTimeoutMs: CHAT_CONDUCT_FILTER_TIMEOUT_MS,
     filterOnError: CHAT_CONDUCT_FILTER_ON_ERROR,
+    senderFilterEnabled: ROOM_CHANNEL_SENDER_FILTER_ENABLED,
+    senderFilterTimeoutMs: ROOM_CHANNEL_SENDER_FILTER_TIMEOUT_MS,
+    senderFilterOnError: ROOM_CHANNEL_SENDER_FILTER_ON_ERROR,
+    directMessageBlockFilterEnabled: DIRECT_MESSAGE_BLOCK_FILTER_ENABLED,
+    directMessageBlockFilterTimeoutMs: DIRECT_MESSAGE_BLOCK_FILTER_TIMEOUT_MS,
+    directMessageBlockFilterOnError: DIRECT_MESSAGE_BLOCK_FILTER_ON_ERROR,
     publicOnly: policy.publicOnly,
     bannedTermsCount: policy.bannedTerms.size,
     strikeLimit: policy.strikeLimit,
@@ -9709,8 +9769,23 @@ function relayRealtimeSocketMessage(client, session, payload, now = Date.now()) 
         : "public";
 
   if (payload.type === "room_channel") {
-    if (isRoomChannelSenderRestricted(client.playerId)) {
-      sendSocketError(client, "room_channel_sender_restricted", "room_channel_sender_restricted");
+    const preflightDecision = roomChannelFilterRegistry.execute(ROOM_CHANNEL_FILTER_SCOPE_PREFLIGHT, {
+      session,
+      playerId: client.playerId,
+      channel: normalizedChannel,
+      payloadType: payload.type,
+      now,
+    });
+    if (!preflightDecision.allowed) {
+      const failureCode =
+        typeof preflightDecision.code === "string" && preflightDecision.code.length > 0
+          ? preflightDecision.code
+          : "room_channel_sender_restricted";
+      const failureReason =
+        typeof preflightDecision.reason === "string" && preflightDecision.reason.length > 0
+          ? preflightDecision.reason
+          : failureCode;
+      sendSocketError(client, failureCode, failureReason);
       return;
     }
     const normalizedMessage = normalizeRoomChannelMessage(payload.message);
@@ -9827,13 +9902,30 @@ function relayRealtimeSocketMessage(client, session, payload, now = Date.now()) 
       sendSocketError(client, "invalid_target_player", "target_player_required_for_direct");
       return;
     }
-    const blockErrorCode =
-      payload.type === "room_channel" ? "room_channel_blocked" : "interaction_blocked";
-    if (
-      hasRoomChannelBlockRelationship(session, client.playerId, directTargetPlayerId) ||
-      hasRoomChannelBlockRelationship(session, directTargetPlayerId, client.playerId)
-    ) {
-      sendSocketError(client, blockErrorCode, blockErrorCode);
+    const directDeliveryDecision = roomChannelFilterRegistry.execute(
+      REALTIME_FILTER_SCOPE_DIRECT_DELIVERY,
+      {
+        session,
+        sourcePlayerId: client.playerId,
+        targetPlayerId: directTargetPlayerId,
+        payloadType: payload.type,
+        now,
+      }
+    );
+    if (!directDeliveryDecision.allowed) {
+      const blockErrorCode =
+        payload.type === "room_channel" ? "room_channel_blocked" : "interaction_blocked";
+      const failureCode =
+        typeof directDeliveryDecision.code === "string" &&
+        directDeliveryDecision.code.length > 0
+          ? directDeliveryDecision.code
+          : blockErrorCode;
+      const failureReason =
+        typeof directDeliveryDecision.reason === "string" &&
+        directDeliveryDecision.reason.length > 0
+          ? directDeliveryDecision.reason
+          : failureCode;
+      sendSocketError(client, failureCode, failureReason);
       return;
     }
     base.targetPlayerId = directTargetPlayerId;

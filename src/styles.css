@@ -578,6 +578,8 @@ button.multiplayer-scoreboard__row {
 }
 
 #profile-btn {
+  position: relative;
+  overflow: hidden;
   width: 36px;
   height: 36px;
   border-radius: 999px;
@@ -588,6 +590,25 @@ button.multiplayer-scoreboard__row {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+#profile-btn .profile-btn-avatar {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+}
+
+#profile-btn.has-profile-avatar .profile-btn-avatar {
+  display: block;
+}
+
+#profile-btn.has-profile-avatar svg {
+  display: none;
 }
 
 #profile-btn svg {
@@ -1921,30 +1942,6 @@ button.multiplayer-scoreboard__row {
     calc(var(--control-edge-gap) + 180px),
     calc(env(safe-area-inset-right) + 180px)
   );
-  overflow: hidden;
-}
-
-#settings-gear-btn .settings-gear-avatar {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  object-fit: cover;
-  object-position: center;
-  pointer-events: none;
-}
-
-#settings-gear-btn.has-profile-avatar .settings-gear-avatar {
-  display: block;
-}
-
-#settings-gear-btn.has-profile-avatar {
-  padding: 0;
-}
-
-#settings-gear-btn.has-profile-avatar svg {
-  display: none;
 }
 
 #chaos-upgrades-btn {
@@ -1994,16 +1991,6 @@ button.multiplayer-scoreboard__row {
 
 #settings-gear-btn:active {
   transform: rotate(90deg) scale(0.95);
-}
-
-#settings-gear-btn.has-profile-avatar:hover {
-  background: rgba(var(--color-primary-rgb), 0.32);
-  border-color: rgba(255, 255, 255, 0.72);
-  transform: scale(1.08);
-}
-
-#settings-gear-btn.has-profile-avatar:active {
-  transform: scale(0.96);
 }
 
 #invite-link-btn:hover {

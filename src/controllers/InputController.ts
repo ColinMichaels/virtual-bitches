@@ -33,6 +33,7 @@ export interface GameCallbacks {
   startNewGame: () => void;
   canManualNewGame: () => boolean;
   togglePause: () => void;
+  openSettingsModal: () => void;
   handleDieClick: (dieId: string) => void;
   highlightFocusedDie: (dieId: string) => void;
   getGameState: () => GameState;
@@ -192,7 +193,7 @@ export class InputController {
     this.settingsGearBtn.addEventListener("click", () => {
       audioService.playSfx("click");
       hapticsService.buttonPress();
-      this.callbacks.togglePause();
+      this.callbacks.openSettingsModal();
     });
 
     this.roomChatBtn?.addEventListener("click", () => {
@@ -295,7 +296,7 @@ export class InputController {
       mobileSettingsBtn.addEventListener("click", () => {
         audioService.playSfx("click");
         hapticsService.buttonPress();
-        this.callbacks.togglePause();
+        this.callbacks.openSettingsModal();
         this.closeMobileMenu();
       });
     }
