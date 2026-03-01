@@ -42,7 +42,7 @@ Analytics runtime note:
 - Client analytics initializes only when all of these are true:
   - `VITE_ENABLE_ANALYTICS=1` (or feature default is enabled for the environment).
   - Firebase web config is present and valid.
-  - `VITE_FIREBASE_MEASUREMENT_ID` is configured.
+  - `VITE_FIREBASE_MEASUREMENT_ID` is either omitted or matches the Firebase Web App's canonical Analytics measurement ID.
   - The build/environment enables analytics (`environment.features.analytics`).
   - The player enables `Settings -> Account -> Usage Analytics` (stored locally as consent).
 - If browser console shows `firebaseinstallations.googleapis.com ... 403 PERMISSION_DENIED`, check Firebase Web API key restrictions in Google Cloud Console and confirm the Firebase Installations API is allowed for that key/project pairing.

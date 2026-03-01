@@ -7,6 +7,7 @@ import {
   type AnalyticsEventName,
   type AnalyticsEventParamsMap,
 } from "./analyticsEvents.js";
+import { getFirebaseAppOptions } from "./firebaseAppConfig.js";
 import { settingsService } from "./settings.js";
 
 const log = logger.create("AnalyticsService");
@@ -95,7 +96,7 @@ export class AnalyticsService {
         return;
       }
 
-      this.app = getApps()[0] ?? initializeApp(environment.firebaseConfig);
+      this.app = getApps()[0] ?? initializeApp(getFirebaseAppOptions());
       this.analytics = analyticsModule.getAnalytics(this.app);
       this.sdkSupported = true;
       log.info("Firebase analytics initialized");
@@ -165,8 +166,7 @@ function isAnalyticsConfigured(): boolean {
       config.authDomain &&
       config.projectId &&
       config.appId &&
-      config.messagingSenderId &&
-      config.measurementId
+      config.messagingSenderId
   );
 }
 
