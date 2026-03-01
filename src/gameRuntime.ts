@@ -82,7 +82,7 @@ import {
 } from "./multiplayer/turnPlanner.js";
 import { resolveSessionExpiryOutcome } from "./multiplayer/sessionExpiryFlow.js";
 import { botMemeAvatarService } from "./services/botMemeAvatarService.js";
-import { buildUnifiedGameConfig } from "./gameplay/gameConfig.js";
+import { buildUnifiedGameConfig, type UnifiedGameCreateConfig } from "./gameplay/gameConfig.js";
 import { t } from "./i18n/index.js";
 
 const log = logger.create('Game');
@@ -102,6 +102,7 @@ export interface MultiplayerBootstrapOptions {
 
 interface GameSessionBootstrapOptions {
   playMode: GamePlayMode;
+  gameConfig?: UnifiedGameCreateConfig;
   multiplayer?: MultiplayerBootstrapOptions;
 }
 
@@ -248,6 +249,7 @@ class Game implements GameCallbacks {
   private gameOverController: GameOverController;
   private readonly localPlayerId = getLocalPlayerId();
   private readonly playMode: GamePlayMode;
+  private readonly bootstrapGameConfig: UnifiedGameCreateConfig | null;
   private readonly multiplayerOptions: MultiplayerBootstrapOptions;
   private multiplayerTurnPlan: MultiplayerTurnPlan | null = null;
   private activeTurnPlayerId: string | null = null;
@@ -340,6 +342,36 @@ class Game implements GameCallbacks {
     );
   }
 
+  private resolveRequestedMultiplayerGameConfig(): UnifiedGameCreateConfig {
+    const requestedDifficulty = this.resolveRequestedMultiplayerDifficulty();
+    const botCount = Math.max(0, Math.floor(this.multiplayerOptions.botCount ?? 0));
+    const demoSpeedMode = this.multiplayerOptions.demoSpeedMode === true;
+    const fallbackMode = demoSpeedMode ? "demo" : "multiplayer";
+    const bootstrapConfig =
+      this.bootstrapGameConfig && this.bootstrapGameConfig.mode !== "solo"
+        ? this.bootstrapGameConfig
+        : null;
+    const mode = bootstrapConfig?.mode === "demo" || demoSpeedMode ? "demo" : fallbackMode;
+    const difficulty =
+      this.normalizeMultiplayerDifficulty(bootstrapConfig?.difficulty) ?? requestedDifficulty;
+    const timingProfile = bootstrapConfig?.timingProfile;
+    const capabilities = bootstrapConfig?.capabilities;
+    const autoRun =
+      mode === "demo"
+        ? bootstrapConfig?.automation?.autoRun !== false
+        : bootstrapConfig?.automation?.autoRun === true;
+
+    return buildUnifiedGameConfig({
+      mode,
+      difficulty,
+      botCount,
+      demoSpeedMode: mode === "demo",
+      autoRun,
+      timingProfile,
+      capabilities,
+    });
+  }
+
   private applyMultiplayerDifficultyIfPresent(value: unknown): void {
     const difficulty = this.normalizeMultiplayerDifficulty(value);
     if (!difficulty) {
@@ -363,13 +395,35 @@ class Game implements GameCallbacks {
 
   constructor(sessionBootstrap: GameSessionBootstrapOptions) {
     this.playMode = sessionBootstrap.playMode;
+    this.bootstrapGameConfig = sessionBootstrap.gameConfig ?? null;
     this.multiplayerOptions = sessionBootstrap.multiplayer ?? {};
+    if (this.playMode === "multiplayer") {
+      const bootstrapDifficulty = this.normalizeMultiplayerDifficulty(
+        this.bootstrapGameConfig?.difficulty
+      );
+      if (bootstrapDifficulty) {
+        this.multiplayerOptions.gameDifficulty = bootstrapDifficulty;
+      }
+      if (this.bootstrapGameConfig?.mode === "demo") {
+        this.multiplayerOptions.demoSpeedMode = true;
+      }
+      const bootstrapBotCount = this.bootstrapGameConfig?.automation?.botCount;
+      if (typeof bootstrapBotCount === "number" && Number.isFinite(bootstrapBotCount)) {
+        this.multiplayerOptions.botCount = Math.max(0, Math.floor(bootstrapBotCount));
+      }
+    }
     if (this.playMode === "multiplayer" && this.multiplayerOptions.autoSeatReady !== false) {
       this.multiplayerOptions.autoSeatReady = true;
     }
 
     // Initialize game state from URL or create new game
     this.state = GameFlowController.initializeGameState();
+    const bootstrapStateDifficulty = this.normalizeMultiplayerDifficulty(
+      this.bootstrapGameConfig?.difficulty
+    );
+    if (bootstrapStateDifficulty) {
+      this.state.mode.difficulty = bootstrapStateDifficulty;
+    }
     if (this.playMode === "multiplayer") {
       this.state.mode.difficulty = this.resolveRequestedMultiplayerDifficulty();
     }
@@ -1415,13 +1469,6 @@ class Game implements GameCallbacks {
     const multiplayerIdentity = await this.resolveMultiplayerIdentityPayload();
     const requestedDifficulty = this.resolveRequestedMultiplayerDifficulty();
     const demoSpeedMode = this.multiplayerOptions.demoSpeedMode === true;
-    const gameConfig = buildUnifiedGameConfig({
-      mode: demoSpeedMode ? "demo" : "multiplayer",
-      difficulty: requestedDifficulty,
-      botCount: this.multiplayerOptions.botCount,
-      demoSpeedMode,
-      autoRun: demoSpeedMode,
-    });
     this.state.mode.difficulty = requestedDifficulty;
     const createdSession = await this.multiplayerSessionService.createSession({
       roomCode: this.multiplayerOptions.roomCode,
@@ -1431,7 +1478,7 @@ class Game implements GameCallbacks {
       botCount: this.multiplayerOptions.botCount,
       gameDifficulty: requestedDifficulty,
       demoSpeedMode,
-      gameConfig,
+      gameConfig: this.resolveRequestedMultiplayerGameConfig(),
     });
     if (!createdSession) {
       notificationService.show("Failed to create multiplayer session. Continuing in solo mode.", "warning", 2800);
@@ -6308,6 +6355,7 @@ export interface GameRuntimeBootstrapOptions {
   tutorialModal: TutorialModal;
   profileModal: ProfileModal;
   playMode: GamePlayMode;
+  gameConfig?: UnifiedGameCreateConfig;
   multiplayer?: MultiplayerBootstrapOptions;
 }
 
@@ -6324,6 +6372,7 @@ export function startGameRuntime(options: GameRuntimeBootstrapOptions): void {
 
   gameInstance = new Game({
     playMode: options.playMode,
+    gameConfig: options.gameConfig,
     multiplayer: options.multiplayer,
   });
 }

@@ -198,6 +198,35 @@ const GAME_DIFFICULTIES = new Set(["easy", "normal", "hard"]);
 const GAME_CREATE_MODES = new Set(["solo", "multiplayer", "demo"]);
 const GAME_TIMING_PROFILES = new Set(["standard", "demo_fast", "test_fast"]);
 const GAME_AUTOMATION_SPEED_MODES = new Set(["normal", "fast"]);
+const UNIFIED_GAME_MODES = GAME_CREATE_MODES;
+const UNIFIED_GAME_TIMING_PROFILES = GAME_TIMING_PROFILES;
+const UNIFIED_GAME_AUTOMATION_SPEED_MODES = GAME_AUTOMATION_SPEED_MODES;
+const UNIFIED_GAME_DEFAULT_CAPABILITIES = Object.freeze({
+  solo: Object.freeze({
+    chaos: false,
+    gifting: false,
+    moderation: false,
+    banning: false,
+    hostControls: true,
+    privateChat: false,
+  }),
+  multiplayer: Object.freeze({
+    chaos: false,
+    gifting: false,
+    moderation: true,
+    banning: true,
+    hostControls: true,
+    privateChat: true,
+  }),
+  demo: Object.freeze({
+    chaos: false,
+    gifting: false,
+    moderation: true,
+    banning: true,
+    hostControls: true,
+    privateChat: true,
+  }),
+});
 const PARTICIPANT_STATE_ACTIONS = new Set(["sit", "stand", "ready", "unready"]);
 const DEMO_CONTROL_ACTIONS = new Set(["pause", "resume", "speed_normal", "speed_fast"]);
 const SESSION_MODERATION_ACTIONS = new Set(["kick", "ban"]);
@@ -1432,25 +1461,13 @@ async function handleCreateSession(req, res) {
   }
 
   const sessionId = randomUUID();
-  const requestedGameConfig = normalizeGameCreateConfig(body?.gameConfig, {
-    fallbackMode: "multiplayer",
-    fallbackDifficulty: body?.gameDifficulty,
-    fallbackBotCount: body?.botCount,
-    fallbackDemoSpeedMode: body?.demoSpeedMode === true,
-    forceMultiplayerMode: true,
-    roomKind: ROOM_KINDS.private,
-  });
-  const gameDifficulty = requestedGameConfig.difficulty;
-  const botCount = requestedGameConfig.automation.botCount;
-  const demoSpeedMode =
-    body?.demoSpeedMode === true ||
-    requestedGameConfig.automation.speedMode === "fast" ||
-    requestedGameConfig.timingProfile === "demo_fast";
-  const demoMode =
-    requestedGameConfig.mode === "demo" ||
-    demoSpeedMode ||
-    requestedGameConfig.automation.autoRun === true;
-  const demoAutoRun = demoMode && requestedGameConfig.automation.autoRun === true;
+  const resolvedGameSettings = resolveCreateSessionGameSettings(body);
+  const botCount = resolvedGameSettings.botCount;
+  const gameDifficulty = resolvedGameSettings.gameDifficulty;
+  const demoSpeedMode = resolvedGameSettings.demoSpeedMode;
+  const demoMode = resolvedGameSettings.demoMode;
+  const demoAutoRun = resolvedGameSettings.demoAutoRun;
+  const gameConfig = resolvedGameSettings.gameConfig;
   const now = Date.now();
   const requestedRoomCode = normalizeOptionalRoomCode(body?.roomCode);
   if (requestedRoomCode && isRoomCodeInUse(requestedRoomCode, now)) {
@@ -1497,6 +1514,7 @@ async function handleCreateSession(req, res) {
     sessionId,
     roomCode,
     gameDifficulty,
+    gameConfig,
     demoMode,
     demoAutoRun,
     demoSpeedMode,
@@ -1513,6 +1531,7 @@ async function handleCreateSession(req, res) {
     turnState: null,
   };
   addBotsToSession(session, botCount, now);
+  session.gameConfig = resolveSessionGameConfig(session);
 
   store.multiplayerSessions[sessionId] = session;
   ensureSessionTurnState(session);
@@ -1586,20 +1605,13 @@ async function handleJoinSessionByTarget(req, res, target) {
     sendJson(res, 403, { error: "Player banned from room", reason: "room_banned" });
     return;
   }
-  const requestedGameConfig = normalizeGameCreateConfig(body?.gameConfig, {
-    fallbackMode: "multiplayer",
-    fallbackDifficulty: body?.gameDifficulty,
-    fallbackBotCount: body?.botCount,
-    fallbackDemoSpeedMode: session.demoSpeedMode === true,
-    forceMultiplayerMode: true,
-    roomKind: getSessionRoomKind(session),
-  });
-  const requestedBotCount = requestedGameConfig.automation.botCount;
+  const joinGameSettings = resolveJoinRequestGameSettings(body);
+  const requestedBotCount = joinGameSettings.requestedBotCount;
   const hasSessionDifficulty =
     typeof session.gameDifficulty === "string" &&
     GAME_DIFFICULTIES.has(session.gameDifficulty.trim().toLowerCase());
   if (!hasSessionDifficulty) {
-    session.gameDifficulty = requestedGameConfig.difficulty;
+    session.gameDifficulty = joinGameSettings.requestedDifficulty;
   }
 
   const existingParticipant = session.participants[playerId];
@@ -1646,6 +1658,7 @@ async function handleJoinSessionByTarget(req, res, target) {
     ensureSessionOwner(session, playerId);
   }
   addBotsToSession(session, requestedBotCount, now);
+  session.gameConfig = resolveSessionGameConfig(session);
   const sessionId = session.sessionId;
   markSessionActivity(session, playerId, now);
   ensureSessionTurnState(session);
@@ -4755,6 +4768,7 @@ function buildSessionSnapshot(session) {
   const standings = buildSessionStandings(session);
   const gameStartedAt = resolveSessionGameStartedAt(session);
   const nextGameStartsAt = normalizePostGameTimestamp(session?.nextGameStartsAt);
+  const gameConfig = resolveSessionGameConfig(session);
   const humanCount = participants.filter((participant) => !isBotParticipant(participant)).length;
   const activeGameParticipants = participants.filter(
     (participant) => participant.isSeated === true && participant.queuedForNextGame !== true
@@ -4769,7 +4783,7 @@ function buildSessionSnapshot(session) {
     sessionId: session.sessionId,
     roomCode: session.roomCode,
     gameDifficulty: resolveSessionGameDifficulty(session),
-    gameConfig: buildSessionGameConfig(session),
+    gameConfig,
     demoMode,
     demoAutoRun,
     demoSpeedMode,
@@ -4986,6 +5000,7 @@ function createPublicRoom(roomKind, now = Date.now(), slot = null, options = {})
     participants: {},
     turnState: null,
   };
+  session.gameConfig = resolveSessionGameConfig(session);
   if (normalizedSlot !== null) {
     session.publicRoomSlot = normalizedSlot;
   }
@@ -5015,6 +5030,7 @@ function resetPublicRoomForIdle(session, now = Date.now()) {
     roomKind === ROOM_KINDS.publicDefault
       ? resolveDefaultPublicRoomDifficulty(normalizedSlot)
       : normalizeGameDifficulty(session.gameDifficulty);
+  session.gameConfig = resolveSessionGameConfig(session);
   session.gameStartedAt = now;
   session.lastActivityAt = now;
   session.expiresAt =
@@ -6559,6 +6575,12 @@ function normalizeStoreConsistency(now = Date.now()) {
       rawSession.participants = normalizedParticipants;
       changed = true;
     }
+
+    const normalizedGameConfig = resolveSessionGameConfig(rawSession);
+    if (JSON.stringify(rawSession.gameConfig ?? null) !== JSON.stringify(normalizedGameConfig)) {
+      rawSession.gameConfig = normalizedGameConfig;
+      changed = true;
+    }
   }
 
   return changed;
@@ -7055,6 +7077,286 @@ function normalizeGameDifficulty(value) {
     return "normal";
   }
   return normalized;
+}
+
+function hasOwnProperty(value, key) {
+  return Boolean(value && Object.prototype.hasOwnProperty.call(value, key));
+}
+
+function isRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeUnifiedGameMode(value, fallback = "multiplayer") {
+  const fallbackMode = UNIFIED_GAME_MODES.has(fallback) ? fallback : "multiplayer";
+  if (typeof value !== "string") {
+    return fallbackMode;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!UNIFIED_GAME_MODES.has(normalized)) {
+    return fallbackMode;
+  }
+  return normalized;
+}
+
+function normalizeUnifiedGameTimingProfile(value, fallback = "standard") {
+  const fallbackProfile = UNIFIED_GAME_TIMING_PROFILES.has(fallback) ? fallback : "standard";
+  if (typeof value !== "string") {
+    return fallbackProfile;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!UNIFIED_GAME_TIMING_PROFILES.has(normalized)) {
+    return fallbackProfile;
+  }
+  return normalized;
+}
+
+function normalizeUnifiedAutomationSpeedMode(value, fallback = "normal") {
+  const fallbackMode = UNIFIED_GAME_AUTOMATION_SPEED_MODES.has(fallback) ? fallback : "normal";
+  if (typeof value !== "string") {
+    return fallbackMode;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!UNIFIED_GAME_AUTOMATION_SPEED_MODES.has(normalized)) {
+    return fallbackMode;
+  }
+  return normalized;
+}
+
+function resolveDefaultUnifiedCapabilities(mode) {
+  if (mode === "solo") {
+    return UNIFIED_GAME_DEFAULT_CAPABILITIES.solo;
+  }
+  if (mode === "demo") {
+    return UNIFIED_GAME_DEFAULT_CAPABILITIES.demo;
+  }
+  return UNIFIED_GAME_DEFAULT_CAPABILITIES.multiplayer;
+}
+
+function normalizeUnifiedCapabilities(value, mode) {
+  const defaults = resolveDefaultUnifiedCapabilities(mode);
+  if (!isRecord(value)) {
+    return {
+      chaos: defaults.chaos,
+      gifting: defaults.gifting,
+      moderation: defaults.moderation,
+      banning: defaults.banning,
+      hostControls: defaults.hostControls,
+      privateChat: defaults.privateChat,
+    };
+  }
+
+  return {
+    chaos: typeof value.chaos === "boolean" ? value.chaos : defaults.chaos,
+    gifting: typeof value.gifting === "boolean" ? value.gifting : defaults.gifting,
+    moderation: typeof value.moderation === "boolean" ? value.moderation : defaults.moderation,
+    banning: typeof value.banning === "boolean" ? value.banning : defaults.banning,
+    hostControls:
+      typeof value.hostControls === "boolean" ? value.hostControls : defaults.hostControls,
+    privateChat: typeof value.privateChat === "boolean" ? value.privateChat : defaults.privateChat,
+  };
+}
+
+function resolveDefaultUnifiedTimingProfile(mode, speedMode) {
+  if (mode === "demo" || speedMode === "fast") {
+    return "demo_fast";
+  }
+  return "standard";
+}
+
+function normalizeUnifiedGameConfig(value, options = {}) {
+  const rawConfig = isRecord(value) ? value : {};
+  const fallbackMode = normalizeUnifiedGameMode(options.fallbackMode, "multiplayer");
+  const rawMode = normalizeUnifiedGameMode(rawConfig.mode, fallbackMode);
+  const mode = options.allowSoloMode === true || rawMode !== "solo" ? rawMode : "multiplayer";
+  const fallbackDifficulty = normalizeGameDifficulty(options.fallbackDifficulty);
+  const difficulty = hasOwnProperty(rawConfig, "difficulty")
+    ? normalizeGameDifficulty(rawConfig.difficulty)
+    : fallbackDifficulty;
+
+  const rawAutomation = isRecord(rawConfig.automation) ? rawConfig.automation : {};
+  const fallbackBotCount = normalizeBotCount(options.fallbackBotCount);
+  const botCount = hasOwnProperty(rawAutomation, "botCount")
+    ? normalizeBotCount(rawAutomation.botCount)
+    : fallbackBotCount;
+  const fallbackSpeedMode = normalizeUnifiedAutomationSpeedMode(
+    options.fallbackSpeedMode,
+    mode === "demo" ? "fast" : "normal"
+  );
+  const speedMode = hasOwnProperty(rawAutomation, "speedMode")
+    ? normalizeUnifiedAutomationSpeedMode(rawAutomation.speedMode, fallbackSpeedMode)
+    : fallbackSpeedMode;
+  const fallbackTimingProfile = normalizeUnifiedGameTimingProfile(
+    options.fallbackTimingProfile,
+    resolveDefaultUnifiedTimingProfile(mode, speedMode)
+  );
+  const timingProfile = hasOwnProperty(rawConfig, "timingProfile")
+    ? normalizeUnifiedGameTimingProfile(rawConfig.timingProfile, fallbackTimingProfile)
+    : fallbackTimingProfile;
+  const fallbackAutoRun = options.fallbackAutoRun === true || mode === "demo";
+  const autoRun =
+    mode === "demo"
+      ? true
+      : hasOwnProperty(rawAutomation, "autoRun")
+        ? rawAutomation.autoRun === true
+        : fallbackAutoRun;
+  const fallbackEnabled =
+    options.fallbackAutomationEnabled === true || mode === "demo" || botCount > 0;
+  const enabled = hasOwnProperty(rawAutomation, "enabled")
+    ? rawAutomation.enabled === true
+    : fallbackEnabled;
+  const capabilities = normalizeUnifiedCapabilities(rawConfig.capabilities, mode);
+
+  return {
+    mode,
+    difficulty,
+    timingProfile,
+    capabilities,
+    automation: {
+      enabled,
+      autoRun,
+      botCount,
+      speedMode,
+    },
+  };
+}
+
+function buildUnifiedSessionGameConfig(options = {}) {
+  const mode = options.demoMode === true || options.demoSpeedMode === true ? "demo" : "multiplayer";
+  const difficulty = normalizeGameDifficulty(options.gameDifficulty);
+  const botCount = normalizeBotCount(options.botCount);
+  const speedMode = options.demoSpeedMode === true ? "fast" : "normal";
+  const normalized = normalizeUnifiedGameConfig(options.gameConfig, {
+    fallbackMode: mode,
+    fallbackDifficulty: difficulty,
+    fallbackBotCount: botCount,
+    fallbackSpeedMode: speedMode,
+    fallbackTimingProfile:
+      options.demoSpeedMode === true ? "demo_fast" : resolveDefaultUnifiedTimingProfile(mode, speedMode),
+    fallbackAutoRun: mode === "demo" ? options.demoAutoRun === true : false,
+    fallbackAutomationEnabled: mode === "demo" || botCount > 0,
+  });
+  const resolvedTimingProfile =
+    options.demoSpeedMode === true
+      ? normalizeUnifiedGameTimingProfile(normalized.timingProfile, "demo_fast")
+      : normalizeUnifiedGameTimingProfile(
+          normalized.timingProfile,
+          resolveDefaultUnifiedTimingProfile(mode, normalized.automation.speedMode)
+        );
+  const resolvedSpeedMode = normalizeUnifiedAutomationSpeedMode(
+    normalized.automation.speedMode,
+    options.demoSpeedMode === true ? "fast" : "normal"
+  );
+
+  return {
+    mode,
+    difficulty,
+    timingProfile: resolvedTimingProfile,
+    capabilities: normalizeUnifiedCapabilities(normalized.capabilities, mode),
+    automation: {
+      enabled: mode === "demo" || botCount > 0 || normalized.automation.enabled === true,
+      autoRun: mode === "demo" ? options.demoAutoRun === true : normalized.automation.autoRun === true,
+      botCount,
+      speedMode: resolvedSpeedMode,
+    },
+  };
+}
+
+function resolveCreateSessionGameSettings(body) {
+  const payload = isRecord(body) ? body : {};
+  const requestedConfig = isRecord(payload.gameConfig) ? payload.gameConfig : undefined;
+  const requestedConfigNormalized = normalizeUnifiedGameConfig(requestedConfig, {
+    fallbackMode: "multiplayer",
+    fallbackDifficulty: "normal",
+    fallbackBotCount: 0,
+    fallbackSpeedMode: "normal",
+    fallbackTimingProfile: "standard",
+  });
+  const resolvedDifficulty = hasOwnProperty(payload, "gameDifficulty")
+    ? normalizeGameDifficulty(payload.gameDifficulty)
+    : requestedConfigNormalized.difficulty;
+  const resolvedBotCount = hasOwnProperty(payload, "botCount")
+    ? normalizeBotCount(payload.botCount)
+    : requestedConfigNormalized.automation.botCount;
+  const resolvedDemoSpeedMode = hasOwnProperty(payload, "demoSpeedMode")
+    ? payload.demoSpeedMode === true
+    : requestedConfigNormalized.mode === "demo";
+  const resolvedDemoMode = resolvedDemoSpeedMode || requestedConfigNormalized.mode === "demo";
+  const resolvedDemoAutoRun =
+    resolvedDemoMode &&
+    (requestedConfigNormalized.automation.autoRun === true ||
+      requestedConfigNormalized.mode === "demo");
+  const gameConfig = buildUnifiedSessionGameConfig({
+    gameDifficulty: resolvedDifficulty,
+    botCount: resolvedBotCount,
+    demoMode: resolvedDemoMode,
+    demoSpeedMode: resolvedDemoSpeedMode,
+    demoAutoRun: resolvedDemoAutoRun,
+    gameConfig: requestedConfig,
+  });
+
+  return {
+    gameDifficulty: resolvedDifficulty,
+    botCount: resolvedBotCount,
+    demoMode: resolvedDemoMode,
+    demoAutoRun: resolvedDemoAutoRun,
+    demoSpeedMode: resolvedDemoSpeedMode,
+    gameConfig,
+  };
+}
+
+function resolveJoinRequestGameSettings(body) {
+  const payload = isRecord(body) ? body : {};
+  const requestedConfig = isRecord(payload.gameConfig) ? payload.gameConfig : undefined;
+  const requestedConfigNormalized = normalizeUnifiedGameConfig(requestedConfig, {
+    fallbackMode: "multiplayer",
+    fallbackDifficulty: "normal",
+    fallbackBotCount: 0,
+    fallbackSpeedMode: "normal",
+    fallbackTimingProfile: "standard",
+  });
+  const requestedDifficulty = hasOwnProperty(payload, "gameDifficulty")
+    ? normalizeGameDifficulty(payload.gameDifficulty)
+    : requestedConfigNormalized.difficulty;
+  const requestedBotCount = hasOwnProperty(payload, "botCount")
+    ? normalizeBotCount(payload.botCount)
+    : requestedConfigNormalized.automation.botCount;
+
+  return {
+    requestedDifficulty,
+    requestedBotCount,
+  };
+}
+
+function countSessionBotParticipants(session) {
+  if (!session || typeof session !== "object" || !session.participants || typeof session.participants !== "object") {
+    return 0;
+  }
+  let botCount = 0;
+  for (const participant of Object.values(session.participants)) {
+    if (isBotParticipant(participant)) {
+      botCount += 1;
+    }
+  }
+  return botCount;
+}
+
+function resolveSessionGameConfig(session) {
+  if (!session || typeof session !== "object") {
+    return buildUnifiedSessionGameConfig();
+  }
+  const roomKind = getSessionRoomKind(session);
+  const demoMode = roomKind === ROOM_KINDS.private && session.demoMode === true;
+  const demoSpeedMode = demoMode && session.demoSpeedMode === true;
+  const demoAutoRun = demoMode && session.demoAutoRun === true;
+  return buildUnifiedSessionGameConfig({
+    gameDifficulty: resolveSessionGameDifficulty(session),
+    botCount: countSessionBotParticipants(session),
+    demoMode,
+    demoSpeedMode,
+    demoAutoRun,
+    gameConfig: isRecord(session.gameConfig) ? session.gameConfig : undefined,
+  });
 }
 
 function normalizeParticipantScore(value) {

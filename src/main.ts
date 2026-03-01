@@ -172,6 +172,7 @@ async function startGame(startOptions: SplashStartOptions): Promise<boolean> {
       tutorialModal,
       profileModal,
       playMode: resolvedStartOptions.playMode,
+      gameConfig: resolvedStartOptions.gameConfig,
       multiplayer: resolvedStartOptions.multiplayer,
     });
 

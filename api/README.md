@@ -139,6 +139,7 @@ Planned (not implemented yet):
   - profile payload includes provider details (`provider`, `providerId`) and optional `photoUrl` from social auth
 - `/api/players/:playerId/profile` accepts optional `blockedPlayerIds: string[]` to persist multiplayer chat block preferences.
 - Session creation/join returns:
+  - `gameConfig` snapshot (`mode`, `difficulty`, `timingProfile`, `capabilities`, `automation`) derived from persisted session controls for debugging/observability
   - `playerToken` for WS query auth
   - `auth` bundle (`accessToken`, `refreshToken`, `expiresAt`, `tokenType`)
   - `ownerPlayerId` for private room moderation ownership
@@ -151,7 +152,7 @@ Planned (not implemented yet):
   - `timingProfile`: `standard` | `demo_fast` | `test_fast`
   - `capabilities`: `{ chaos, gifting, moderation, banning, hostControls, privateChat }`
   - `automation`: `{ enabled, autoRun, botCount, speedMode }` where `speedMode` is `normal` | `fast`
-  - Legacy fields (`botCount`, `gameDifficulty`, `demoSpeedMode`) remain supported and are used as fallbacks.
+  - Legacy fields (`botCount`, `gameDifficulty`, `demoSpeedMode`) remain supported and take precedence when explicitly provided; otherwise matching values fall back to `gameConfig`.
 - `POST /api/multiplayer/sessions/:sessionId/join` and `POST /api/multiplayer/rooms/:roomCode/join` accept optional `displayName`, `avatarUrl`, `providerId`, and `botCount` (`0..4`) to update joining participant profile data and seed bots into an existing room.
 - Join endpoints also accept optional `gameConfig`; currently its `difficulty` and `automation.botCount` are used as normalized fallbacks for legacy join payload fields.
 - Join can return `room_banned` when the player has been room-banned by the room owner/admin.
