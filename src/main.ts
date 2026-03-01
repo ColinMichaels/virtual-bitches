@@ -4,6 +4,7 @@ import { notificationService } from "./ui/notifications.js";
 import { themeManager } from "./services/themeManager.js";
 import { settingsService } from "./services/settings.js";
 import { analyticsService } from "./services/analytics.js";
+import { ANALYTICS_EVENTS } from "./services/analyticsEvents.js";
 import { getBrandLogoUrl } from "./services/assetUrl.js";
 import { environment } from "@env";
 import { logger } from "./utils/logger.js";
@@ -177,7 +178,7 @@ async function startGame(startOptions: SplashStartOptions): Promise<boolean> {
       gameConfig: resolvedStartOptions.gameConfig,
       multiplayer: resolvedStartOptions.multiplayer,
     });
-    analyticsService.logEvent("game_start", {
+    analyticsService.logEvent(ANALYTICS_EVENTS.GAME_START, {
       play_mode: resolvedStartOptions.playMode,
       from_invite:
         resolvedStartOptions.playMode === "multiplayer" &&
@@ -192,7 +193,7 @@ async function startGame(startOptions: SplashStartOptions): Promise<boolean> {
     return true;
   } catch (error) {
     log.error("Failed to load game runtime:", error);
-    analyticsService.logEvent("game_start_failed", {
+    analyticsService.logEvent(ANALYTICS_EVENTS.GAME_START_FAILED, {
       play_mode: resolvedStartOptions.playMode,
       stage: "runtime_load_or_init",
     });

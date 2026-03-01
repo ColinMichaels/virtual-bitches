@@ -34,6 +34,7 @@ import { audioService } from "./services/audio.js";
 import { hapticsService } from "./services/haptics.js";
 import { settingsService } from "./services/settings.js";
 import { analyticsService } from "./services/analytics.js";
+import { ANALYTICS_EVENTS } from "./services/analyticsEvents.js";
 import { ControlInversionService } from "./services/controlInversion.js";
 import { initParticleService, particleService } from "./services/particleService.js";
 import { registerGameEffects } from "./particles/presets/gameEffects.js";
@@ -1506,7 +1507,7 @@ class Game implements GameCallbacks {
       gameConfig: this.resolveRequestedMultiplayerGameConfig(),
     });
     if (!createdSession) {
-      analyticsService.logEvent("multiplayer_session_create_failed", {
+      analyticsService.logEvent(ANALYTICS_EVENTS.MULTIPLAYER_SESSION_CREATE_FAILED, {
         difficulty: requestedDifficulty,
         requested_bot_count: Math.max(0, Math.floor(this.multiplayerOptions.botCount ?? 0)),
       });
@@ -1514,7 +1515,7 @@ class Game implements GameCallbacks {
       return;
     }
 
-    analyticsService.logEvent("multiplayer_session_created", {
+    analyticsService.logEvent(ANALYTICS_EVENTS.MULTIPLAYER_SESSION_CREATED, {
       difficulty: createdSession.gameDifficulty ?? requestedDifficulty,
       room_type: createdSession.roomType ?? "unknown",
       bot_count: Math.max(0, Math.floor(this.multiplayerOptions.botCount ?? 0)),
@@ -1555,7 +1556,7 @@ class Game implements GameCallbacks {
     if (!session) {
       playerDataSyncService.setSessionId(undefined);
       const joinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason() ?? "unknown";
-      analyticsService.logEvent("multiplayer_session_join_failed", {
+      analyticsService.logEvent(ANALYTICS_EVENTS.MULTIPLAYER_SESSION_JOIN_FAILED, {
         join_method: "session_id",
         reason: joinFailureReason,
       });
@@ -1575,7 +1576,7 @@ class Game implements GameCallbacks {
       return false;
     }
 
-    analyticsService.logEvent("multiplayer_session_joined", {
+    analyticsService.logEvent(ANALYTICS_EVENTS.MULTIPLAYER_SESSION_JOINED, {
       join_method: "session_id",
       from_invite_link: fromInviteLink,
       room_type: session.roomType ?? "unknown",
@@ -1612,7 +1613,7 @@ class Game implements GameCallbacks {
     });
     if (!session) {
       const joinFailureReason = this.multiplayerSessionService.getLastJoinFailureReason() ?? "unknown";
-      analyticsService.logEvent("multiplayer_session_join_failed", {
+      analyticsService.logEvent(ANALYTICS_EVENTS.MULTIPLAYER_SESSION_JOIN_FAILED, {
         join_method: "room_code",
         reason: joinFailureReason,
       });
@@ -1632,7 +1633,7 @@ class Game implements GameCallbacks {
       return false;
     }
 
-    analyticsService.logEvent("multiplayer_session_joined", {
+    analyticsService.logEvent(ANALYTICS_EVENTS.MULTIPLAYER_SESSION_JOINED, {
       join_method: "room_code",
       from_invite_link: fromInviteLink,
       room_type: session.roomType ?? "unknown",
@@ -6131,7 +6132,7 @@ class Game implements GameCallbacks {
 
     // Check for game complete
     if (prevState.status !== "COMPLETE" && this.state.status === "COMPLETE") {
-      analyticsService.logEvent("game_complete", {
+      analyticsService.logEvent(ANALYTICS_EVENTS.GAME_COMPLETE, {
         play_mode: this.playMode,
         difficulty: this.state.mode.difficulty,
         score: this.state.score,

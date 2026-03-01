@@ -352,6 +352,67 @@ test("heartbeat updates participant heartbeat and persists on success", async ()
   assert.equal(fixture.store.multiplayerSessions["session-1"].participants.host.lastHeartbeatAt, 10_000);
 });
 
+test("heartbeat recovers missing participant via participant rehydrate retry", async () => {
+  const session = createSessionFixture({ participants: {} });
+  const fixture = createFixture({
+    store: { multiplayerSessions: { "session-1": session } },
+    rehydrateSessionParticipantWithRetry: ({ sessionId, playerId, reasonPrefix, retryOptions, store }) => {
+      assert.equal(reasonPrefix, "heartbeat_participant");
+      assert.deepEqual(retryOptions, { attempts: 4, baseDelayMs: 120 });
+      const targetSession = store.multiplayerSessions[sessionId];
+      targetSession.participants[playerId] = {
+        playerId,
+        isBot: false,
+        isSeated: true,
+        isReady: false,
+      };
+      return {
+        session: targetSession,
+        participant: targetSession.participants[playerId],
+      };
+    },
+  });
+
+  const result = await fixture.service.heartbeat({
+    req: {},
+    sessionId: "session-1",
+    body: { playerId: "host" },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(fixture.calls.rehydrateParticipant.length, 1);
+  assert.equal(fixture.calls.persistStore, 1);
+});
+
+test("heartbeat retries auth with participant rehydrate flow on transient token mismatch", async () => {
+  const session = createSessionFixture();
+  let authChecks = 0;
+  const fixture = createFixture({
+    store: { multiplayerSessions: { "session-1": session } },
+    authorizeSessionActionRequest: () => {
+      authChecks += 1;
+      if (authChecks === 1) {
+        return { ok: false, reason: "token_not_found" };
+      }
+      return { ok: true, playerId: "host", sessionId: "session-1" };
+    },
+  });
+
+  const result = await fixture.service.heartbeat({
+    req: {},
+    sessionId: "session-1",
+    body: { playerId: "host" },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(fixture.calls.rehydrateParticipant.length, 1);
+  assert.equal(fixture.calls.rehydrateParticipant[0].reasonPrefix, "heartbeat_auth");
+  assert.deepEqual(fixture.calls.rehydrateParticipant[0].retryOptions, { attempts: 4, baseDelayMs: 120 });
+  assert.equal(fixture.calls.persistStore, 1);
+});
+
 test("queueParticipantForNextGame enforces round completion", async () => {
   const session = createSessionFixture();
   const fixture = createFixture({
@@ -397,6 +458,77 @@ test("queueParticipantForNextGame sets ready+queued and persists", async () => {
   assert.equal(session.participants.host.isReady, true);
   assert.equal(session.participants.host.queuedForNextGame, true);
   assert.equal(fixture.calls.schedulePostGame.length, 1);
+  assert.equal(fixture.calls.persistStore, 1);
+});
+
+test("queueParticipantForNextGame retries auth with participant rehydrate flow", async () => {
+  const session = createSessionFixture({
+    participants: {
+      host: {
+        playerId: "host",
+        isSeated: true,
+        isReady: false,
+        queuedForNextGame: false,
+        isBot: false,
+      },
+    },
+  });
+  let authChecks = 0;
+  const fixture = createFixture({
+    store: { multiplayerSessions: { "session-1": session } },
+    authorizeSessionActionRequest: () => {
+      authChecks += 1;
+      if (authChecks === 1) {
+        return { ok: false, reason: "session_token_mismatch" };
+      }
+      return { ok: true, playerId: "host", sessionId: "session-1" };
+    },
+  });
+
+  const result = await fixture.service.queueParticipantForNextGame({
+    req: {},
+    sessionId: "session-1",
+    body: { playerId: "host" },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(fixture.calls.rehydrateParticipant.length, 1);
+  assert.equal(fixture.calls.rehydrateParticipant[0].reasonPrefix, "queue_next_auth");
+  assert.deepEqual(fixture.calls.rehydrateParticipant[0].retryOptions, { attempts: 4, baseDelayMs: 120 });
+});
+
+test("queueParticipantForNextGame recovers missing participant via participant rehydrate retry", async () => {
+  const session = createSessionFixture({ participants: {} });
+  const fixture = createFixture({
+    store: { multiplayerSessions: { "session-1": session } },
+    rehydrateSessionParticipantWithRetry: ({ sessionId, playerId, reasonPrefix, retryOptions, store }) => {
+      assert.equal(reasonPrefix, "queue_next_participant");
+      assert.deepEqual(retryOptions, { attempts: 4, baseDelayMs: 120 });
+      const targetSession = store.multiplayerSessions[sessionId];
+      targetSession.participants[playerId] = {
+        playerId,
+        isSeated: true,
+        isReady: false,
+        queuedForNextGame: false,
+        isBot: false,
+      };
+      return {
+        session: targetSession,
+        participant: targetSession.participants[playerId],
+      };
+    },
+  });
+
+  const result = await fixture.service.queueParticipantForNextGame({
+    req: {},
+    sessionId: "session-1",
+    body: { playerId: "host" },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(fixture.calls.rehydrateParticipant.length, 1);
   assert.equal(fixture.calls.persistStore, 1);
 });
 

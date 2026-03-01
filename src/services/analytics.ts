@@ -2,6 +2,11 @@ import { environment } from "@env";
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import type { Analytics } from "firebase/analytics";
 import { logger } from "../utils/logger.js";
+import {
+  ANALYTICS_EVENTS,
+  type AnalyticsEventName,
+  type AnalyticsEventParamsMap,
+} from "./analyticsEvents.js";
 import { settingsService } from "./settings.js";
 
 const log = logger.create("AnalyticsService");
@@ -46,20 +51,23 @@ export class AnalyticsService {
 
     await this.applyCollectionState();
     if (this.isEnabled()) {
-      this.logEvent("app_shell_booted", {
+      this.logEvent(ANALYTICS_EVENTS.APP_SHELL_BOOTED, {
         build_mode: environment.production ? "production" : "development",
       });
     }
   }
 
-  logEvent(eventName: string, params: AnalyticsParams = {}): void {
+  logEvent<Name extends AnalyticsEventName>(
+    eventName: Name,
+    params: AnalyticsEventParamsMap[Name] = {} as AnalyticsEventParamsMap[Name]
+  ): void {
     if (!this.analyticsEnabled || !eventName.trim()) {
       return;
     }
-    void this.logEventAsync(eventName, params);
+    void this.logEventAsync(eventName, params as AnalyticsParams);
   }
 
-  private async logEventAsync(eventName: string, params: AnalyticsParams): Promise<void> {
+  private async logEventAsync(eventName: AnalyticsEventName, params: AnalyticsParams): Promise<void> {
     await this.initializeSdk();
     if (!this.analytics || !this.sdkSupported || !this.analyticsEnabled) {
       return;
@@ -112,7 +120,7 @@ export class AnalyticsService {
       const analyticsModule = await this.getAnalyticsModule();
       analyticsModule.setAnalyticsCollectionEnabled(this.analytics, this.analyticsEnabled);
       if (this.analyticsEnabled && this.lastAppliedCollectionEnabled !== true) {
-        analyticsModule.logEvent(this.analytics, "analytics_consent_enabled");
+        analyticsModule.logEvent(this.analytics, ANALYTICS_EVENTS.ANALYTICS_CONSENT_ENABLED);
       }
       this.lastAppliedCollectionEnabled = this.analyticsEnabled;
     } catch (error) {

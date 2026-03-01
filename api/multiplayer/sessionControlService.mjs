@@ -1,3 +1,5 @@
+import { resolveSessionRecoveryRetryOptions } from "./sessionRecoveryRetryProfiles.mjs";
+
 function requireFunction(name, value) {
   if (typeof value !== "function") {
     throw new Error(`Missing multiplayer session control dependency: ${name}`);
@@ -177,10 +179,11 @@ export function createSessionControlService({
       const sessionId = target.sessionId.trim();
       let sessionById = getSessionById(sessionId);
       if (!sessionById || sessionById.expiresAt <= requestNow) {
-        sessionById = await rehydrateSessionWithRetryImpl(sessionId, "join_session", {
-          attempts: 6,
-          baseDelayMs: 150,
-        });
+        sessionById = await rehydrateSessionWithRetryImpl(
+          sessionId,
+          "join_session",
+          resolveSessionRecoveryRetryOptions("sessionStandard")
+        );
       }
       if (!sessionById || sessionById.expiresAt <= requestNow) {
         return {
@@ -313,10 +316,11 @@ export function createSessionControlService({
   async function heartbeat({ req, sessionId, body }) {
     let session = getSessionById(sessionId);
     if (!session || session.expiresAt <= nowImpl()) {
-      session = await rehydrateSessionWithRetryImpl(sessionId, "heartbeat_session", {
-        attempts: 6,
-        baseDelayMs: 150,
-      });
+      session = await rehydrateSessionWithRetryImpl(
+        sessionId,
+        "heartbeat_session",
+        resolveSessionRecoveryRetryOptions("sessionStandard")
+      );
     }
     if (!session || session.expiresAt <= nowImpl()) {
       return {
@@ -327,10 +331,13 @@ export function createSessionControlService({
 
     const playerId = typeof body?.playerId === "string" ? body.playerId : "";
     if (!playerId || !session.participants[playerId]) {
-      await rehydrateStoreFromAdapterImpl(`heartbeat_participant:${sessionId}:${playerId || "unknown"}`, {
-        force: true,
-      });
-      session = getSessionById(sessionId);
+      const recovered = await rehydrateSessionParticipantWithRetryImpl(
+        sessionId,
+        playerId,
+        "heartbeat_participant",
+        resolveSessionRecoveryRetryOptions("sessionFast")
+      );
+      session = recovered.session;
     }
     if (!session || !playerId || !session.participants[playerId]) {
       return {
@@ -341,7 +348,13 @@ export function createSessionControlService({
 
     let authCheck = authorizeSessionActionRequestImpl(req, playerId, sessionId);
     if (!authCheck.ok && shouldRetrySessionAuthFromStoreImpl(authCheck.reason)) {
-      await rehydrateStoreFromAdapterImpl(`heartbeat_auth:${sessionId}:${playerId}`, { force: true });
+      const recovered = await rehydrateSessionParticipantWithRetryImpl(
+        sessionId,
+        playerId,
+        "heartbeat_auth",
+        resolveSessionRecoveryRetryOptions("sessionFast")
+      );
+      session = recovered.session;
       authCheck = authorizeSessionActionRequestImpl(req, playerId, sessionId);
     }
     if (!authCheck.ok) {
@@ -364,10 +377,11 @@ export function createSessionControlService({
   async function queueParticipantForNextGame({ req, sessionId, body }) {
     let session = getSessionById(sessionId);
     if (!session || session.expiresAt <= nowImpl()) {
-      session = await rehydrateSessionWithRetryImpl(sessionId, "queue_next_session", {
-        attempts: 6,
-        baseDelayMs: 150,
-      });
+      session = await rehydrateSessionWithRetryImpl(
+        sessionId,
+        "queue_next_session",
+        resolveSessionRecoveryRetryOptions("sessionStandard")
+      );
     }
     if (!session || session.expiresAt <= nowImpl()) {
       return {
@@ -383,11 +397,14 @@ export function createSessionControlService({
     const playerId = typeof body?.playerId === "string" ? body.playerId : "";
     let participant = playerId ? session.participants[playerId] : null;
     if (!playerId || !participant || isBotParticipantImpl(participant)) {
-      await rehydrateStoreFromAdapterImpl(`queue_next_participant:${sessionId}:${playerId || "unknown"}`, {
-        force: true,
-      });
-      session = getSessionById(sessionId);
-      participant = playerId && session ? session.participants[playerId] : null;
+      const recovered = await rehydrateSessionParticipantWithRetryImpl(
+        sessionId,
+        playerId,
+        "queue_next_participant",
+        resolveSessionRecoveryRetryOptions("sessionFast")
+      );
+      session = recovered.session;
+      participant = recovered.participant;
     }
     if (!session || !playerId || !participant || isBotParticipantImpl(participant)) {
       return {
@@ -402,7 +419,14 @@ export function createSessionControlService({
 
     let authCheck = authorizeSessionActionRequestImpl(req, playerId, sessionId);
     if (!authCheck.ok && shouldRetrySessionAuthFromStoreImpl(authCheck.reason)) {
-      await rehydrateStoreFromAdapterImpl(`queue_next_auth:${sessionId}:${playerId}`, { force: true });
+      const recovered = await rehydrateSessionParticipantWithRetryImpl(
+        sessionId,
+        playerId,
+        "queue_next_auth",
+        resolveSessionRecoveryRetryOptions("sessionFast")
+      );
+      session = recovered.session;
+      participant = recovered.participant;
       authCheck = authorizeSessionActionRequestImpl(req, playerId, sessionId);
     }
     if (!authCheck.ok) {
@@ -468,10 +492,11 @@ export function createSessionControlService({
 
     let session = getSessionById(sessionId);
     if (!session || session.expiresAt <= nowImpl()) {
-      session = await rehydrateSessionWithRetryImpl(sessionId, "refresh_auth_session", {
-        attempts: 7,
-        baseDelayMs: 200,
-      });
+      session = await rehydrateSessionWithRetryImpl(
+        sessionId,
+        "refresh_auth_session",
+        resolveSessionRecoveryRetryOptions("sessionRefreshAuth")
+      );
     }
     if (!session) {
       return {
@@ -486,10 +511,7 @@ export function createSessionControlService({
         sessionId,
         playerId,
         "refresh_auth_participant",
-        {
-          attempts: 7,
-          baseDelayMs: 200,
-        }
+        resolveSessionRecoveryRetryOptions("sessionRefreshAuth")
       );
       session = recovered.session;
       participant = recovered.participant;
@@ -509,10 +531,7 @@ export function createSessionControlService({
           sessionId,
           playerId,
           "refresh_auth_expired_retry",
-          {
-            attempts: 5,
-            baseDelayMs: 160,
-          }
+          resolveSessionRecoveryRetryOptions("authRecovery")
         );
         session = recovered.session;
         participant = recovered.participant;
@@ -532,10 +551,7 @@ export function createSessionControlService({
         sessionId,
         playerId,
         "refresh_auth_authorize",
-        {
-          attempts: 5,
-          baseDelayMs: 160,
-        }
+        resolveSessionRecoveryRetryOptions("authRecovery")
       );
       session = recovered.session;
       participant = recovered.participant;
