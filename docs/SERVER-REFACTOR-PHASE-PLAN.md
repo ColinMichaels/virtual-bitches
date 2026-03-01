@@ -109,6 +109,10 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
   - `api/server.mjs` delegates websocket protocol concerns (upgrade header validation, handshake response, frame parse/write) to extracted transport module
   - `api/ws/socketLifecycle.mjs`
   - `api/server.mjs` delegates websocket connection lifecycle concerns (connection bootstrap, frame ingestion, client register/unregister/disconnect) to extracted lifecycle module
+  - `api/ws/socketOrchestration.mjs`
+  - `api/server.mjs` delegates websocket orchestration helpers (router/turn delegation, relay delegation, close-frame safety, session sync payload emission) to extracted orchestration bridge
+  - `api/ws/socketOrchestration.test.mjs`
+  - `api/package.json` now includes `test:ws-orchestration` in `test:ws-transport`
 
 ## Phase 05 - Storage/Auth Adapter Hardening
 - Formalize repositories/adapters for storage and auth providers.
