@@ -33,7 +33,7 @@ jobs:
   resolve_target:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy_api || inputs.deploy_web }}
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'dev' && 'dev' || 'prod' }}
+    environment: ${{ (github.ref_name == 'main' || github.ref_name == 'master') && 'prod' || 'dev' }}
     outputs:
       project_id: ${{ steps.target.outputs.project_id }}
       api_base_url: ${{ steps.target.outputs.api_base_url }}
@@ -144,7 +144,9 @@ jobs:
             FB_MEASUREMENT_ID="$(resolve_value "$VITE_FIREBASE_MEASUREMENT_ID_PROD_SECRET" "$VITE_FIREBASE_MEASUREMENT_ID_ENV_SECRET" "$VITE_FIREBASE_MEASUREMENT_ID_PROD_VAR" "$VITE_FIREBASE_MEASUREMENT_ID_ENV_VAR")"
             EXPECTED_ENV_SUFFIX="PROD"
             EXPECTED_ENV_NAME="prod"
-          elif [ "$BRANCH_NAME" = "dev" ]; then
+          else
+            # Non-main/master branches (for example feature/* phase branches) deploy
+            # against dev environment defaults so incremental validation can run safely.
             PROJECT_ID="$(resolve_value "$FIREBASE_PROJECT_ID_DEV_SECRET" "$FIREBASE_PROJECT_ID_ENV_SECRET" "$FIREBASE_PROJECT_ID_DEV_VAR" "$FIREBASE_PROJECT_ID_ENV_VAR")"
             if [ -z "$PROJECT_ID" ]; then
               PROJECT_ID="$(resolve_value "$VITE_FIREBASE_PROJECT_ID_DEV_SECRET" "$VITE_FIREBASE_PROJECT_ID_ENV_SECRET" "$VITE_FIREBASE_PROJECT_ID_DEV_VAR" "$VITE_FIREBASE_PROJECT_ID_ENV_VAR")"
@@ -160,9 +162,9 @@ jobs:
             FB_MEASUREMENT_ID="$(resolve_value "$VITE_FIREBASE_MEASUREMENT_ID_DEV_SECRET" "$VITE_FIREBASE_MEASUREMENT_ID_ENV_SECRET" "$VITE_FIREBASE_MEASUREMENT_ID_DEV_VAR" "$VITE_FIREBASE_MEASUREMENT_ID_ENV_VAR")"
             EXPECTED_ENV_SUFFIX="DEV"
             EXPECTED_ENV_NAME="dev"
-          else
-            echo "Unsupported branch: $BRANCH_NAME"
-            exit 1
+            if [ "$BRANCH_NAME" != "dev" ]; then
+              echo "Branch '$BRANCH_NAME' is not main/master; defaulting deploy target to dev environment."
+            fi
           fi
 
           missing=()
@@ -245,7 +247,7 @@ jobs:
   deploy-api:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy_api }}
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'dev' && 'dev' || 'prod' }}
+    environment: ${{ (github.ref_name == 'main' || github.ref_name == 'master') && 'prod' || 'dev' }}
     permissions:
       contents: read
       id-token: write
@@ -618,7 +620,7 @@ jobs:
   deploy-web:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy_web }}
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'dev' && 'dev' || 'prod' }}
+    environment: ${{ (github.ref_name == 'main' || github.ref_name == 'master') && 'prod' || 'dev' }}
     permissions:
       contents: read
       id-token: write
@@ -803,7 +805,7 @@ jobs:
   deploy-assets:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy_assets }}
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'dev' && 'dev' || 'prod' }}
+    environment: ${{ (github.ref_name == 'main' || github.ref_name == 'master') && 'prod' || 'dev' }}
     permissions:
       contents: read
       id-token: write
@@ -861,16 +863,16 @@ jobs:
             fi
             FB_STORAGE_BUCKET="$(resolve_value "$VITE_FIREBASE_STORAGE_BUCKET_PROD_SECRET" "$VITE_FIREBASE_STORAGE_BUCKET_ENV_SECRET" "$VITE_FIREBASE_STORAGE_BUCKET_PROD_VAR" "$VITE_FIREBASE_STORAGE_BUCKET_ENV_VAR")"
             EXPECTED_ENV_NAME="prod"
-          elif [ "$BRANCH_NAME" = "dev" ]; then
+          else
             PROJECT_ID="$(resolve_value "$FIREBASE_PROJECT_ID_DEV_SECRET" "$FIREBASE_PROJECT_ID_ENV_SECRET" "$FIREBASE_PROJECT_ID_DEV_VAR" "$FIREBASE_PROJECT_ID_ENV_VAR")"
             if [ -z "$PROJECT_ID" ]; then
               PROJECT_ID="$(resolve_value "$VITE_FIREBASE_PROJECT_ID_DEV_SECRET" "$VITE_FIREBASE_PROJECT_ID_ENV_SECRET" "$VITE_FIREBASE_PROJECT_ID_DEV_VAR" "$VITE_FIREBASE_PROJECT_ID_ENV_VAR")"
             fi
             FB_STORAGE_BUCKET="$(resolve_value "$VITE_FIREBASE_STORAGE_BUCKET_DEV_SECRET" "$VITE_FIREBASE_STORAGE_BUCKET_ENV_SECRET" "$VITE_FIREBASE_STORAGE_BUCKET_DEV_VAR" "$VITE_FIREBASE_STORAGE_BUCKET_ENV_VAR")"
             EXPECTED_ENV_NAME="dev"
-          else
-            echo "Unsupported branch: $BRANCH_NAME"
-            exit 1
+            if [ "$BRANCH_NAME" != "dev" ]; then
+              echo "Branch '$BRANCH_NAME' is not main/master; defaulting asset deploy target to dev environment."
+            fi
           fi
 
           if [ -z "${PROJECT_ID:-}" ]; then
