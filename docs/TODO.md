@@ -1,6 +1,6 @@
 # BISCUITS - TODO List
 
-**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-02-28 (deploy stabilization docs + multiplayer speed-profile foundation)
+**Project Status**: Active Development • v1.0.0 • Last Updated: 2026-03-01 (server decoupling phase-05/06 checkpoints + deploy stabilization follow-through)
 
 This document tracks all pending work, active bugs, technical debt, and backlog items for the BISCUITS project.
 
@@ -11,6 +11,19 @@ Reference docs:
 ---
 
 ## 🔴 High Priority
+
+### Server Decoupling Continuation (2026-03-01)
+- **Status**: 🟡 In Progress
+- **Plan Doc**: `docs/SERVER-REFACTOR-PHASE-PLAN.md`
+- **Current Checkpoint**:
+  - [x] Phase 05 follow-through extracted request/session auth and admin access authorization from `api/server.mjs`.
+  - [x] Phase 06 checkpoint extracted admin security/audit/role support service from `api/server.mjs`.
+  - [x] Added isolated test coverage for new auth/admin services (`api/package.json`: `test:auth-admin-access`, `test:auth-request-authorizer`, `test:admin-security-audit`, `test:admin-mutations`).
+- **Next Steps**:
+  - [x] Phase 06 follow-through: extract admin route use-case orchestration into dedicated admin application service modules.
+  - [x] Add focused regression coverage for admin route mutation flows (role upsert, session expire, participant remove, conduct clear operations).
+  - [ ] Phase 07 candidate: isolate multiplayer session control endpoint orchestration (`join`/`heartbeat`/`refresh`/`queue-next`) into service boundaries.
+  - [ ] Add a lightweight deploy gate checklist section to session summary notes for each phase checkpoint (`node --check api/server.mjs`, `npm run test:storage-auth-adapters`, `npm run test:ws-transport`).
 
 ### Branding + I18N Overhaul (2026-02-27)
 - **Status**: 🟡 In Progress

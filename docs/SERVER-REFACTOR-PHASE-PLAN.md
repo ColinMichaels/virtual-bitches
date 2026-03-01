@@ -18,6 +18,7 @@ Use one branch per incremental phase:
 - `feature/server-phase-03-filter-addon-registry`
 - `feature/server-phase-04-transport-ws-decoupling`
 - `feature/server-phase-05-storage-auth-adapters`
+- `feature/server-phase-06-admin-service-boundaries`
 
 If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-filter-registry-core`).
 
@@ -141,12 +142,15 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
 ## Phase 06 - Admin Service Boundaries
 - Extract admin policy/audit/role support logic from `server.mjs` into dedicated admin services.
 - Keep admin route contracts stable while shrinking composition-root responsibilities.
-- Status: ✅ In progress checkpoint landed
+- Status: ✅ Follow-through checkpoint landed
 - Delivered in branch:
   - `api/admin/adminSecurityAuditService.mjs`
   - `api/server.mjs` delegates admin role normalization/hierarchy checks, owner allowlist role resolution, admin limit parsing, admin principal shaping, admin audit event write/read normalization, and admin role record shaping to extracted admin security/audit service
   - `api/admin/adminSecurityAuditService.test.mjs`
-  - `api/package.json` includes `test:admin-security-audit` for isolated admin security/audit service validation
+  - `api/admin/adminMutationService.mjs`
+  - `api/server.mjs` delegates admin mutation route orchestration (role upsert, session expire, participant remove, and conduct clear operations) to extracted admin mutation service
+  - `api/admin/adminMutationService.test.mjs`
+  - `api/package.json` includes `test:admin-services` (`test:admin-security-audit` + `test:admin-mutations`) for isolated admin service validation
 
 ## Guardrails
 
@@ -155,3 +159,12 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
   - behavior parity checks
   - smoke/test validation notes
   - rollback-friendly commit boundary
+
+## Checkpoint Validation Gate
+
+Before merging/deploying a server refactor checkpoint, run:
+
+1. `node --check api/server.mjs`
+2. `cd api && npm run test:storage-auth-adapters`
+3. `cd api && npm run test:ws-transport`
+4. Any phase-specific module tests introduced in that checkpoint (example: `cd api && npm run test:admin-security-audit`)

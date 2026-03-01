@@ -8,6 +8,7 @@ import { createStoreAdapter, DEFAULT_STORE } from "./storage/index.mjs";
 import { cloneStore } from "./storage/defaultStore.mjs";
 import { createStoreSyncController } from "./storage/storeSyncController.mjs";
 import { createAdminSecurityAuditService } from "./admin/adminSecurityAuditService.mjs";
+import { createAdminMutationService } from "./admin/adminMutationService.mjs";
 import { createBotEngine } from "./bot/engine.mjs";
 import { createSessionTurnEngine } from "./engine/sessionTurnEngine.mjs";
 import { createSessionLifecycleEngine } from "./engine/sessionLifecycleEngine.mjs";
@@ -479,6 +480,30 @@ const {
   collectAdminRoleRecords,
   buildAdminRoleRecord,
 } = adminSecurityAuditService;
+const adminMutationService = createAdminMutationService({
+  getStore: () => store,
+  adminRoles: ADMIN_ROLES,
+  normalizeAdminRole,
+  isBootstrapOwnerUid,
+  buildAdminRoleRecord,
+  recordAdminAuditEvent,
+  persistStore,
+  expireSession,
+  reconcilePublicRoomInventory,
+  removeParticipantFromSession,
+  ensureSessionChatConductState,
+  normalizeChatConductState,
+  chatConductBasePolicy: CHAT_CONDUCT_BASE_POLICY,
+  buildAdminChatConductPlayerRecord,
+  log,
+});
+const {
+  upsertRole: upsertAdminRole,
+  expireSession: expireAdminSession,
+  removeParticipant: removeAdminParticipant,
+  clearSessionConductPlayer: clearAdminSessionConductPlayer,
+  clearSessionConductState: clearAdminSessionConductState,
+} = adminMutationService;
 const requestAuthorizer = createRequestAuthorizer({
   extractBearerToken,
   verifyAccessToken,
@@ -3240,67 +3265,23 @@ async function handleAdminRoleUpsert(req, res, pathname) {
   }
 
   const targetUid = decodeURIComponent(pathname.split("/")[4] ?? "").trim();
-  if (!targetUid) {
-    sendJson(res, 400, {
-      error: "Invalid UID",
-      reason: "invalid_uid",
-    });
-    return;
-  }
-
   const body = await parseJsonBody(req);
-  const hasRoleField =
-    body && typeof body === "object" && Object.prototype.hasOwnProperty.call(body, "role");
-  if (!hasRoleField) {
-    sendJson(res, 400, {
-      error: "Role is required",
-      reason: "missing_admin_role",
-    });
-    return;
-  }
-  const requestedRole = normalizeAdminRole(body?.role);
-  const rawRole = typeof body?.role === "string" ? body.role.trim() : "";
-  if (rawRole && !requestedRole) {
-    sendJson(res, 400, {
-      error: "Invalid role",
-      reason: "invalid_admin_role",
-    });
-    return;
-  }
-
-  if (isBootstrapOwnerUid(targetUid) && requestedRole !== ADMIN_ROLES.owner) {
-    sendJson(res, 409, {
-      error: "Bootstrap owner role is fixed",
-      reason: "bootstrap_owner_locked",
-    });
-    return;
-  }
-
-  const now = Date.now();
-  const current = store.firebasePlayers[targetUid] ?? { uid: targetUid };
-  const next = {
-    ...current,
-    uid: targetUid,
-    updatedAt: now,
-  };
-  if (requestedRole) {
-    next.adminRole = requestedRole;
-  } else {
-    delete next.adminRole;
-  }
-  next.adminRoleUpdatedAt = now;
-  next.adminRoleUpdatedBy = auth.uid ?? auth.authType;
-  store.firebasePlayers[targetUid] = next;
-  recordAdminAuditEvent(auth, "role_upsert", {
-    summary: `Set ${targetUid} role to ${requestedRole ?? "none"}`,
+  const upsert = await upsertAdminRole({
+    auth,
     targetUid,
-    role: requestedRole,
+    body,
   });
-  await persistStore();
+  if (!upsert.ok) {
+    sendJson(res, upsert.status, {
+      error: upsert.error,
+      reason: upsert.reason,
+    });
+    return;
+  }
 
   sendJson(res, 200, {
     ok: true,
-    roleRecord: buildAdminRoleRecord(targetUid, next),
+    roleRecord: upsert.roleRecord,
     principal: buildAdminPrincipal(auth),
   });
 }
@@ -3316,36 +3297,22 @@ async function handleAdminExpireSession(req, res, pathname) {
   }
 
   const sessionId = decodeURIComponent(pathname.split("/")[4] ?? "").trim();
-  if (!sessionId) {
-    sendJson(res, 400, {
-      error: "Invalid session ID",
-      reason: "invalid_session_id",
-    });
-    return;
-  }
-  if (!store.multiplayerSessions[sessionId]) {
-    sendJson(res, 404, {
-      error: "Session not found",
-      reason: "unknown_session",
-    });
-    return;
-  }
-
-  expireSession(sessionId, "admin_expired");
-  const roomInventoryChanged = reconcilePublicRoomInventory(Date.now());
-  recordAdminAuditEvent(auth, "session_expire", {
-    summary: `Expired room ${sessionId}`,
+  const expiration = await expireAdminSession({
+    auth,
     sessionId,
   });
-  await persistStore();
+  if (!expiration.ok) {
+    sendJson(res, expiration.status, {
+      error: expiration.error,
+      reason: expiration.reason,
+    });
+    return;
+  }
 
-  log.info(
-    `Admin expired session ${sessionId} by ${auth.uid ?? auth.authType ?? "unknown"} (${auth.role ?? "n/a"})`
-  );
   sendJson(res, 200, {
     ok: true,
-    sessionId,
-    roomInventoryChanged,
+    sessionId: expiration.sessionId,
+    roomInventoryChanged: expiration.roomInventoryChanged,
     principal: buildAdminPrincipal(auth),
   });
 }
@@ -3363,49 +3330,23 @@ async function handleAdminRemoveParticipant(req, res, pathname) {
   const segments = pathname.split("/");
   const sessionId = decodeURIComponent(segments[4] ?? "").trim();
   const playerId = decodeURIComponent(segments[6] ?? "").trim();
-  if (!sessionId) {
-    sendJson(res, 400, {
-      error: "Invalid session ID",
-      reason: "invalid_session_id",
-    });
-    return;
-  }
-  if (!playerId) {
-    sendJson(res, 400, {
-      error: "Invalid player ID",
-      reason: "invalid_player_id",
-    });
-    return;
-  }
-
-  const removal = removeParticipantFromSession(sessionId, playerId, {
-    source: "admin_remove",
-    socketReason: "removed_by_admin",
+  const removal = await removeAdminParticipant({
+    auth,
+    sessionId,
+    playerId,
   });
   if (!removal.ok) {
-    const status = removal.reason === "unknown_session" || removal.reason === "unknown_player" ? 404 : 409;
-    sendJson(res, status, {
-      error: "Failed to remove participant",
+    sendJson(res, removal.status, {
+      error: removal.error,
       reason: removal.reason,
     });
     return;
   }
 
-  recordAdminAuditEvent(auth, "participant_remove", {
-    summary: `Removed ${playerId} from ${sessionId}`,
-    sessionId,
-    playerId,
-    sessionExpired: removal.sessionExpired === true,
-    roomInventoryChanged: removal.roomInventoryChanged === true,
-  });
-  await persistStore();
-  log.info(
-    `Admin removed participant ${playerId} from ${sessionId} by ${auth.uid ?? auth.authType ?? "unknown"} (${auth.role ?? "n/a"})`
-  );
   sendJson(res, 200, {
     ok: true,
-    sessionId,
-    playerId,
+    sessionId: removal.sessionId,
+    playerId: removal.playerId,
     sessionExpired: removal.sessionExpired,
     roomInventoryChanged: removal.roomInventoryChanged,
     principal: buildAdminPrincipal(auth),
@@ -3665,68 +3606,28 @@ async function handleAdminClearSessionConductPlayer(req, res, pathname) {
   const segments = pathname.split("/");
   const sessionId = decodeURIComponent(segments[4] ?? "").trim();
   const playerId = decodeURIComponent(segments[7] ?? "").trim();
-  if (!sessionId) {
-    sendJson(res, 400, {
-      error: "Invalid session ID",
-      reason: "invalid_session_id",
-    });
-    return;
-  }
-  if (!playerId) {
-    sendJson(res, 400, {
-      error: "Invalid player ID",
-      reason: "invalid_player_id",
-    });
-    return;
-  }
-
-  const session = store.multiplayerSessions[sessionId];
-  if (!session || session.expiresAt <= Date.now()) {
-    sendJson(res, 404, {
-      error: "Session not found",
-      reason: "unknown_session",
-    });
-    return;
-  }
-
   const body = await parseJsonBody(req);
-  const resetTotalStrikes = body?.resetTotalStrikes === true;
-  const now = Date.now();
-  const state = ensureSessionChatConductState(session, now);
-  const existingRecord = state.players[playerId];
-  const hadRecord = Boolean(existingRecord);
-  if (existingRecord && typeof existingRecord === "object") {
-    existingRecord.strikeEvents = [];
-    existingRecord.lastViolationAt = 0;
-    existingRecord.mutedUntil = 0;
-    if (resetTotalStrikes) {
-      existingRecord.totalStrikes = 0;
-    }
-  }
-  session.chatConductState = normalizeChatConductState(state, CHAT_CONDUCT_BASE_POLICY, now);
-  const updatedPlayer = buildAdminChatConductPlayerRecord(
-    session,
-    playerId,
-    session.chatConductState?.players?.[playerId],
-    now
-  );
-
-  recordAdminAuditEvent(auth, "session_conduct_clear_player", {
-    summary: `Cleared chat conduct state for ${playerId} in ${sessionId}`,
+  const clearResult = await clearAdminSessionConductPlayer({
+    auth,
     sessionId,
     playerId,
-    hadRecord,
-    resetTotalStrikes,
+    resetTotalStrikes: body?.resetTotalStrikes === true,
   });
-  await persistStore();
+  if (!clearResult.ok) {
+    sendJson(res, clearResult.status, {
+      error: clearResult.error,
+      reason: clearResult.reason,
+    });
+    return;
+  }
 
   sendJson(res, 200, {
     ok: true,
-    sessionId,
-    playerId,
-    hadRecord,
-    resetTotalStrikes,
-    player: updatedPlayer,
+    sessionId: clearResult.sessionId,
+    playerId: clearResult.playerId,
+    hadRecord: clearResult.hadRecord,
+    resetTotalStrikes: clearResult.resetTotalStrikes,
+    player: clearResult.player,
     principal: buildAdminPrincipal(auth),
   });
 }
@@ -3742,39 +3643,22 @@ async function handleAdminClearSessionConductState(req, res, pathname) {
   }
 
   const sessionId = decodeURIComponent(pathname.split("/")[4] ?? "").trim();
-  if (!sessionId) {
-    sendJson(res, 400, {
-      error: "Invalid session ID",
-      reason: "invalid_session_id",
-    });
-    return;
-  }
-  const session = store.multiplayerSessions[sessionId];
-  if (!session || session.expiresAt <= Date.now()) {
-    sendJson(res, 404, {
-      error: "Session not found",
-      reason: "unknown_session",
-    });
-    return;
-  }
-
-  const now = Date.now();
-  const state = ensureSessionChatConductState(session, now);
-  const clearedPlayerCount = Object.keys(state.players).length;
-  state.players = {};
-  session.chatConductState = normalizeChatConductState(state, CHAT_CONDUCT_BASE_POLICY, now);
-
-  recordAdminAuditEvent(auth, "session_conduct_clear_all", {
-    summary: `Cleared chat conduct state for ${sessionId}`,
+  const clearResult = await clearAdminSessionConductState({
+    auth,
     sessionId,
-    clearedPlayerCount,
   });
-  await persistStore();
+  if (!clearResult.ok) {
+    sendJson(res, clearResult.status, {
+      error: clearResult.error,
+      reason: clearResult.reason,
+    });
+    return;
+  }
 
   sendJson(res, 200, {
     ok: true,
-    sessionId,
-    clearedPlayerCount,
+    sessionId: clearResult.sessionId,
+    clearedPlayerCount: clearResult.clearedPlayerCount,
     principal: buildAdminPrincipal(auth),
   });
 }
