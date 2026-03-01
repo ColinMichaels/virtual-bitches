@@ -37,6 +37,13 @@ Use these in `.env.local` for local dev and GitHub deploy environment values for
 | `VITE_OG_IMAGE_URL` | `https://.../assets/ads/betahelp_ad.png` | CDN/Storage image URL for share metadata |
 | `VITE_FACEBOOK_APP_ID` | numeric string | Facebook Developer app settings |
 
+Analytics runtime note:
+- Client analytics initializes only when all of these are true:
+  - Firebase web config is present and valid.
+  - `VITE_FIREBASE_MEASUREMENT_ID` is configured.
+  - The build/environment enables analytics (`environment.features.analytics`).
+  - The player enables `Settings -> Account -> Usage Analytics` (stored locally as consent).
+
 ### 1.3 Optional Asset Override Values
 
 | Key | Example shape | Where to obtain |

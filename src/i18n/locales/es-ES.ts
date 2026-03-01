@@ -247,6 +247,12 @@ export const esES: TranslationDictionary = {
   "settings.section.account.title": "Cuenta",
   "settings.section.account.description":
     "Administra inicio de sesion e identidad del leaderboard en un solo lugar.",
+  "settings.analytics.title": "Analiticas de uso",
+  "settings.analytics.description":
+    "Permite telemetria anonima para mejorar balance, UX y confiabilidad.",
+  "settings.analytics.toggle": "Activar analiticas anonimas",
+  "settings.analytics.unavailable":
+    "Las analiticas no estan disponibles en esta compilacion o falta configurar Firebase Measurement ID.",
   "settings.account.loading": "Cargando detalles de cuenta...",
   "settings.account.loadingAdmin": "Cargando consola de admin...",
   "settings.buttons.mainMenu": "Menu principal",
@@ -263,6 +269,8 @@ export const esES: TranslationDictionary = {
     "Inversion de controles bloqueada por accesibilidad",
   "settings.notification.cameraAssist.enabled": "Asistencia de camara activada para modo Facil.",
   "settings.notification.cameraAssist.disabled": "Asistencia de camara desactivada.",
+  "settings.notification.analyticsEnabled": "Analiticas anonimas activadas.",
+  "settings.notification.analyticsDisabled": "Analiticas anonimas desactivadas.",
   "settings.notification.language.changed":
     "Idioma actualizado: {{locale}}. Algunas etiquetas se actualizan al reiniciar.",
   "settings.confirm.startNewGame.title": "Comenzar nueva partida?",

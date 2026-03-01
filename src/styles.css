@@ -4258,6 +4258,50 @@ body.splash-active :is(
   margin: 0;
 }
 
+.settings-account-privacy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--ui-border-soft);
+  background: var(--ui-surface-card);
+}
+
+.settings-account-privacy-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ui-text-secondary);
+}
+
+.settings-account-privacy-description {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-account-privacy-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--ui-text-secondary);
+  cursor: pointer;
+}
+
+.settings-account-privacy-toggle input[type="checkbox"] {
+  width: auto;
+  cursor: pointer;
+}
+
+.settings-account-privacy-note {
+  margin: 0;
+  color: var(--ui-text-dim);
+  font-size: 11px;
+}
+
 .settings-account-stats-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -242,6 +242,12 @@ export const enUS = {
   "settings.section.account.title": "Account",
   "settings.section.account.description":
     "Manage sign-in status and leaderboard identity from one place.",
+  "settings.analytics.title": "Usage Analytics",
+  "settings.analytics.description":
+    "Allow anonymous usage telemetry so we can improve balance, UX, and reliability.",
+  "settings.analytics.toggle": "Enable anonymous analytics",
+  "settings.analytics.unavailable":
+    "Analytics is unavailable in this build or is missing Firebase Measurement ID configuration.",
   "settings.account.loading": "Loading account details...",
   "settings.account.loadingAdmin": "Loading admin console...",
   "settings.buttons.mainMenu": "Main Menu",
@@ -257,6 +263,8 @@ export const enUS = {
     "Control inversion blocked by accessibility setting",
   "settings.notification.cameraAssist.enabled": "Camera assist enabled for Easy mode.",
   "settings.notification.cameraAssist.disabled": "Camera assist disabled.",
+  "settings.notification.analyticsEnabled": "Anonymous analytics enabled.",
+  "settings.notification.analyticsDisabled": "Anonymous analytics disabled.",
   "settings.notification.language.changed":
     "Language updated: {{locale}}. Some labels refresh after restart.",
   "settings.confirm.startNewGame.title": "Start New Game?",
