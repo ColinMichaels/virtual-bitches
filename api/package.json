@@ -10,8 +10,9 @@
     "start": "node server.mjs",
     "test:bot-engine": "node bot/engine.test.mjs",
     "test:ws-protocol": "node ws/socketProtocol.test.mjs",
+    "test:ws-validation": "node ws/socketPayloadValidation.test.mjs",
     "test:ws-lifecycle": "node ws/socketLifecycle.test.mjs",
     "test:ws-relay": "node ws/socketRelay.test.mjs",
-    "test:ws-transport": "npm run test:ws-protocol && npm run test:ws-lifecycle && npm run test:ws-relay"
+    "test:ws-transport": "npm run test:ws-protocol && npm run test:ws-validation && npm run test:ws-lifecycle && npm run test:ws-relay"
   }
 }
