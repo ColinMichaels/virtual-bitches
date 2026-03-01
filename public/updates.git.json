@@ -1,8 +1,66 @@
 {
-  "generatedAt": "2026-03-01T03:21:07.549Z",
+  "generatedAt": "2026-03-01T03:39:13.373Z",
   "source": "git",
   "version": "1.0.0",
   "updates": [
+    {
+      "id": "git-bc8320d",
+      "date": "2026-03-01T03:33:41.000Z",
+      "title": "extract api route handler registry module",
+      "content": "<p>extract api route handler registry module</p><p><strong>Commit:</strong> <code>bc8320d</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "bc8320dc4ad1c421c9d4b95956f32e0c5c86116e",
+        "shortHash": "bc8320d",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/bc8320dc4ad1c421c9d4b95956f32e0c5c86116e"
+      }
+    },
+    {
+      "id": "git-3aae506",
+      "date": "2026-03-01T03:26:14.000Z",
+      "title": "sync phase-00 conflict fixes and preserve route dispatcher",
+      "content": "<p>sync phase-00 conflict fixes and preserve route dispatcher</p><p><strong>Commit:</strong> <code>3aae506</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "3aae5064bbd561fd2cf8bfc5674c28e1140ce918",
+        "shortHash": "3aae506",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/3aae5064bbd561fd2cf8bfc5674c28e1140ce918"
+      }
+    },
+    {
+      "id": "git-6a9d1a6",
+      "date": "2026-03-01T03:21:49.000Z",
+      "title": "resolve PR #182 conflicts and preserve unified game-config wiring",
+      "content": "<p>resolve PR #182 conflicts and preserve unified game-config wiring</p><p><strong>Commit:</strong> <code>6a9d1a6</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "6a9d1a6d31dd77c34c8c789c4acfa3c1efcf22a1",
+        "shortHash": "6a9d1a6",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/6a9d1a6d31dd77c34c8c789c4acfa3c1efcf22a1",
+        "pullRequestNumber": 182,
+        "pullRequestUrl": "https://github.com/ColinMichaels/virtual-bitches/pull/182"
+      }
+    },
+    {
+      "id": "git-c11d2ba",
+      "date": "2026-03-01T03:15:48.000Z",
+      "title": "extract api route dispatch module",
+      "content": "<p>extract api route dispatch module</p><p><strong>Commit:</strong> <code>c11d2ba</code></p>",
+      "version": "1.0.0",
+      "type": "announcement",
+      "source": "commit",
+      "commit": {
+        "hash": "c11d2ba06409c59ff7fd83e8eff0093e05b6f3ef",
+        "shortHash": "c11d2ba",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c11d2ba06409c59ff7fd83e8eff0093e05b6f3ef"
+      }
+    },
     {
       "id": "git-64e06e3",
       "date": "2026-03-01T03:09:00.000Z",
@@ -15,6 +73,20 @@
         "hash": "64e06e3e3bc36b58caeeac71d09c4fb61bb5ea7a",
         "shortHash": "64e06e3",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/64e06e3e3bc36b58caeeac71d09c4fb61bb5ea7a"
+      }
+    },
+    {
+      "id": "git-ce8c874",
+      "date": "2026-03-01T02:32:21.000Z",
+      "title": "add demo control actions, private-room enhancements, and session state updates",
+      "content": "<p>add demo control actions, private-room enhancements, and session state updates</p><p><strong>Commit:</strong> <code>ce8c874</code></p>",
+      "version": "1.0.0",
+      "type": "bugfix",
+      "source": "commit",
+      "commit": {
+        "hash": "ce8c874115760a2add5da2151d56ccf40c94a754",
+        "shortHash": "ce8c874",
+        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/ce8c874115760a2add5da2151d56ccf40c94a754"
       }
     },
     {
@@ -295,216 +367,6 @@
         "hash": "657cc4e564dfbaea35b0467a8c3578a5f457ae9e",
         "shortHash": "657cc4e",
         "url": "https://github.com/ColinMichaels/virtual-bitches/commit/657cc4e564dfbaea35b0467a8c3578a5f457ae9e"
-      }
-    },
-    {
-      "id": "git-a738cb5",
-      "date": "2026-02-28T18:48:40.000Z",
-      "title": "Harden private-room join smoke checks for transient session expiry",
-      "content": "<p>Harden private-room join smoke checks for transient session expiry</p><p><strong>Commit:</strong> <code>a738cb5</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "a738cb5a6a2a7d753fe19b737b6e7cbea5530857",
-        "shortHash": "a738cb5",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a738cb5a6a2a7d753fe19b737b6e7cbea5530857"
-      }
-    },
-    {
-      "id": "git-2071da1",
-      "date": "2026-02-28T18:40:13.000Z",
-      "title": "Add winner-queue diagnostics and temporary transient-session fallback",
-      "content": "<p>Add winner-queue diagnostics and temporary transient-session fallback</p><p><strong>Commit:</strong> <code>2071da1</code></p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "2071da1d7b212936f96000fb57bd008e1d0209ae",
-        "shortHash": "2071da1",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/2071da1d7b212936f96000fb57bd008e1d0209ae"
-      }
-    },
-    {
-      "id": "git-9a2151f",
-      "date": "2026-02-28T18:23:58.000Z",
-      "title": "Stabilize room saturation checks under transient session lookup drift",
-      "content": "<p>Stabilize room saturation checks under transient session lookup drift</p><p><strong>Commit:</strong> <code>9a2151f</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "9a2151f4ef3634d0e46d8bc8dfe3245199b7f1d2",
-        "shortHash": "9a2151f",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/9a2151f4ef3634d0e46d8bc8dfe3245199b7f1d2"
-      }
-    },
-    {
-      "id": "git-c69c302",
-      "date": "2026-02-28T18:16:51.000Z",
-      "title": "Harden session rehydrate retries for multiplayer lifecycle endpoints",
-      "content": "<p>Harden session rehydrate retries for multiplayer lifecycle endpoints</p><p><strong>Commit:</strong> <code>c69c302</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "c69c302098a107c6e03b0fe28b3393f887f7455c",
-        "shortHash": "c69c302",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c69c302098a107c6e03b0fe28b3393f887f7455c"
-      }
-    },
-    {
-      "id": "git-b0504a7",
-      "date": "2026-02-28T18:03:30.000Z",
-      "title": "Retry transient winner-queue lifecycle failures in deploy smoke",
-      "content": "<p>Retry transient winner-queue lifecycle failures in deploy smoke</p><p><strong>Commit:</strong> <code>b0504a7</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "b0504a74e1a488838089fdf4b89fcd044d3be0c6",
-        "shortHash": "b0504a7",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/b0504a74e1a488838089fdf4b89fcd044d3be0c6"
-      }
-    },
-    {
-      "id": "git-3547a0e",
-      "date": "2026-02-28T17:51:39.000Z",
-      "title": "Harden room-code probe against distributed room-state drift",
-      "content": "<p>Harden room-code probe against distributed room-state drift</p><p><strong>Commit:</strong> <code>3547a0e</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "3547a0efce5b938895df6123e345f9108d72c2c1",
-        "shortHash": "3547a0e",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/3547a0efce5b938895df6123e345f9108d72c2c1"
-      }
-    },
-    {
-      "id": "git-1a3e1bd",
-      "date": "2026-02-28T17:41:26.000Z",
-      "title": "Fix post-game auto-start timer drift under queue refresh traffic",
-      "content": "<p>Fix post-game auto-start timer drift under queue refresh traffic</p><p><strong>Commit:</strong> <code>1a3e1bd</code></p>",
-      "version": "1.0.0",
-      "type": "bugfix",
-      "source": "commit",
-      "commit": {
-        "hash": "1a3e1bdeeb8ea63fd8800d9a1118385bd12e853b",
-        "shortHash": "1a3e1bd",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/1a3e1bdeeb8ea63fd8800d9a1118385bd12e853b"
-      }
-    },
-    {
-      "id": "git-d164a7f",
-      "date": "2026-02-28T17:31:42.000Z",
-      "title": "Reduce queue smoke false negatives during restart window",
-      "content": "<p>Reduce queue smoke false negatives during restart window</p><p><strong>Commit:</strong> <code>d164a7f</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "d164a7f5f5390dd1828e60b67dd3bcf3b503217b",
-        "shortHash": "d164a7f",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/d164a7f5f5390dd1828e60b67dd3bcf3b503217b"
-      }
-    },
-    {
-      "id": "git-4fae016",
-      "date": "2026-02-28T17:15:44.000Z",
-      "title": "Stabilize winner queue smoke restart detection",
-      "content": "<p>Stabilize winner queue smoke restart detection</p><p><strong>Commit:</strong> <code>4fae016</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "4fae01627920704fb64eddde9d3075b6591fa804",
-        "shortHash": "4fae016",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/4fae01627920704fb64eddde9d3075b6591fa804"
-      }
-    },
-    {
-      "id": "git-bbed74d",
-      "date": "2026-02-28T17:01:27.000Z",
-      "title": "Make queue heartbeat failures transient in e2e smoke",
-      "content": "<p>Make queue heartbeat failures transient in e2e smoke</p><p><strong>Commit:</strong> <code>bbed74d</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "bbed74d6dbedc6550f679b49352933016136078d",
-        "shortHash": "bbed74d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/bbed74d6dbedc6550f679b49352933016136078d"
-      }
-    },
-    {
-      "id": "git-15bd807",
-      "date": "2026-02-28T16:51:14.000Z",
-      "title": "Harden room lifecycle smoke saturation checks",
-      "content": "<p>Harden room lifecycle smoke saturation checks</p><p><strong>Commit:</strong> <code>15bd807</code></p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "15bd8077602f1b6f4b5c7f2ebad41d4fee6fd249",
-        "shortHash": "15bd807",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/15bd8077602f1b6f4b5c7f2ebad41d4fee6fd249"
-      }
-    },
-    {
-      "id": "git-2be11c0",
-      "date": "2026-02-28T16:37:19.000Z",
-      "title": "Update `nextGameStartsAt` handling and introduce difficulty-based turn timeouts",
-      "content": "<p>Update `nextGameStartsAt` handling and introduce difficulty-based turn timeouts</p><p><strong>Commit:</strong> <code>2be11c0</code></p><p>- Allow `nextGameStartsAt` to accept nullable values and update logic to handle missing timestamps more robustly.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "2be11c078cee315a827b181ce019e7cc692e0a31",
-        "shortHash": "2be11c0",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/2be11c078cee315a827b181ce019e7cc692e0a31"
-      }
-    },
-    {
-      "id": "git-c09a0e6",
-      "date": "2026-02-28T15:59:06.000Z",
-      "title": "Update `updates.json` with pruned entries to reduce size and reorganize data structure for improved clarity and performance.",
-      "content": "<p>Update `updates.json` with pruned entries to reduce size and reorganize data structure for improved clarity and performance.</p><p><strong>Commit:</strong> <code>c09a0e6</code></p><p>Ticket: SIT-stand-funciton</p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "c09a0e6d7e139b3f1dd90d35b1c97ec4ef353417",
-        "shortHash": "c09a0e6",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/c09a0e6d7e139b3f1dd90d35b1c97ec4ef353417"
-      }
-    },
-    {
-      "id": "git-36a197d",
-      "date": "2026-02-28T08:02:38.000Z",
-      "title": "Handle transient queue refresh failures in e2e flows",
-      "content": "<p>Handle transient queue refresh failures in e2e flows</p><p><strong>Commit:</strong> <code>36a197d</code></p><p>- Updated queue lifecycle logic to retry on transient refresh failures using `isTransientQueueRefreshFailure`.</p>",
-      "version": "1.0.0",
-      "type": "announcement",
-      "source": "commit",
-      "commit": {
-        "hash": "36a197dc90864711bec692bf923c1f5a041064c7",
-        "shortHash": "36a197d",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/36a197dc90864711bec692bf923c1f5a041064c7"
-      }
-    },
-    {
-      "id": "git-a4dc94f",
-      "date": "2026-02-28T07:48:53.000Z",
-      "title": "Extend post-game idle for recently active participants and add transient session expiry handling in e2e flows",
-      "content": "<p>Extend post-game idle for recently active participants and add transient session expiry handling in e2e flows</p><p><strong>Commit:</strong> <code>a4dc94f</code></p><p>- Implemented activity-based post-game idle extension for human participants to prevent premature session expiration.</p>",
-      "version": "1.0.0",
-      "type": "feature",
-      "source": "commit",
-      "commit": {
-        "hash": "a4dc94f0f064c098fec5322cb39534949cb6591a",
-        "shortHash": "a4dc94f",
-        "url": "https://github.com/ColinMichaels/virtual-bitches/commit/a4dc94f0f064c098fec5322cb39534949cb6591a"
       }
     }
   ]

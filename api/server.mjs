@@ -7,6 +7,9 @@ import { logger } from "./logger.mjs";
 import { createStoreAdapter, DEFAULT_STORE } from "./storage/index.mjs";
 import { cloneStore } from "./storage/defaultStore.mjs";
 import { createBotEngine } from "./bot/engine.mjs";
+import { createSessionTurnEngine } from "./engine/sessionTurnEngine.mjs";
+import { dispatchApiRoute } from "./http/routeDispatcher.mjs";
+import { createApiRouteHandlers } from "./http/routeHandlers.mjs";
 import {
   buildChatConductWarning,
   createChatConductPolicy,
@@ -392,6 +395,27 @@ const botEngine = createBotEngine({
   },
   turnDelayByProfile: BOT_TURN_ADVANCE_DELAY_BY_PROFILE,
 });
+const sessionTurnController = createSessionTurnEngine({
+  turnPhases: TURN_PHASES,
+  defaultParticipantDiceCount: DEFAULT_PARTICIPANT_DICE_COUNT,
+  normalizeTurnPhase,
+  normalizeTurnRollSnapshot,
+  normalizeTurnScoreSummary,
+  serializeParticipantsInJoinOrder,
+  getActiveHumanParticipants,
+  areAllHumansReady,
+  isBotParticipant,
+  isParticipantActiveForCurrentGame,
+  isSessionDemoAutoRunEnabled,
+  resolveSessionTurnTimeoutMs,
+  serializeTurnRollSnapshot,
+  resolveSessionGameStartedAt,
+  isParticipantComplete,
+  scheduleSessionPostGameLifecycle,
+  normalizeParticipantScore,
+  normalizeParticipantRemainingDice,
+  normalizeParticipantCompletedAt,
+});
 
 void beginBootstrap();
 
@@ -633,6 +657,48 @@ async function ensureBootstrapReadyForRequest() {
   return bootstrapReady;
 }
 
+const API_ROUTE_HANDLERS = createApiRouteHandlers({
+  handleImageProxy,
+  handleAdminOverview,
+  handleAdminRooms,
+  handleAdminMetrics,
+  handleAdminStorage,
+  handleAdminModerationTermsOverview,
+  handleAdminUpsertModerationTerm,
+  handleAdminRemoveModerationTerm,
+  handleAdminRefreshModerationTerms,
+  handleAdminAudit,
+  handleAdminRoles,
+  handleAdminRoleUpsert,
+  handleAdminExpireSession,
+  handleAdminRemoveParticipant,
+  handleAdminSessionChannelMessage,
+  handleAdminSessionConductState,
+  handleAdminSessionConductPlayer,
+  handleAdminClearSessionConductPlayer,
+  handleAdminClearSessionConductState,
+  handleRefreshToken,
+  handleAuthMe,
+  handleGetProfile,
+  handlePutProfile,
+  handleGetPlayerScores,
+  handleAppendPlayerScores,
+  handleAppendLogs,
+  handleSubmitLeaderboardScore,
+  handleGetGlobalLeaderboard,
+  handleCreateSession,
+  handleListRooms,
+  handleJoinRoomByCode,
+  handleJoinSession,
+  handleSessionHeartbeat,
+  handleUpdateParticipantState,
+  handleUpdateSessionDemoControls,
+  handleModerateSessionParticipant,
+  handleQueueParticipantForNextGame,
+  handleLeaveSession,
+  handleRefreshSessionAuth,
+});
+
 async function handleRequest(req, res) {
   setCorsHeaders(res);
   if (req.method === "OPTIONS") {
@@ -750,211 +816,16 @@ async function handleRequest(req, res) {
     }
 
     cleanupExpiredRecords();
-
-    if (req.method === "GET" && pathname === "/api/media/image-proxy") {
-      await handleImageProxy(req, res, url);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/overview") {
-      await handleAdminOverview(req, res, url);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/rooms") {
-      await handleAdminRooms(req, res, url);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/metrics") {
-      await handleAdminMetrics(req, res);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/storage") {
-      await handleAdminStorage(req, res);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/moderation/terms") {
-      await handleAdminModerationTermsOverview(req, res, url);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/admin/moderation/terms/upsert") {
-      await handleAdminUpsertModerationTerm(req, res);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/admin/moderation/terms/remove") {
-      await handleAdminRemoveModerationTerm(req, res);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/admin/moderation/terms/refresh") {
-      await handleAdminRefreshModerationTerms(req, res);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/audit") {
-      await handleAdminAudit(req, res, url);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/admin/roles") {
-      await handleAdminRoles(req, res, url);
-      return;
-    }
-
-    if (req.method === "PUT" && /^\/api\/admin\/roles\/[^/]+$/.test(pathname)) {
-      await handleAdminRoleUpsert(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/admin\/sessions\/[^/]+\/expire$/.test(pathname)) {
-      await handleAdminExpireSession(req, res, pathname);
-      return;
-    }
-
-    if (
-      req.method === "POST" &&
-      /^\/api\/admin\/sessions\/[^/]+\/participants\/[^/]+\/remove$/.test(pathname)
-    ) {
-      await handleAdminRemoveParticipant(req, res, pathname);
-      return;
-    }
-
-    if (
-      req.method === "POST" &&
-      /^\/api\/admin\/sessions\/[^/]+\/channel\/messages$/.test(pathname)
-    ) {
-      await handleAdminSessionChannelMessage(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "GET" && /^\/api\/admin\/sessions\/[^/]+\/conduct$/.test(pathname)) {
-      await handleAdminSessionConductState(req, res, pathname, url);
-      return;
-    }
-
-    if (
-      req.method === "GET" &&
-      /^\/api\/admin\/sessions\/[^/]+\/conduct\/players\/[^/]+$/.test(pathname)
-    ) {
-      await handleAdminSessionConductPlayer(req, res, pathname);
-      return;
-    }
-
-    if (
-      req.method === "POST" &&
-      /^\/api\/admin\/sessions\/[^/]+\/conduct\/players\/[^/]+\/clear$/.test(pathname)
-    ) {
-      await handleAdminClearSessionConductPlayer(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/admin\/sessions\/[^/]+\/conduct\/clear$/.test(pathname)) {
-      await handleAdminClearSessionConductState(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/auth/token/refresh") {
-      await handleRefreshToken(req, res);
-      return;
-    }
-
-    if ((req.method === "GET" || req.method === "PUT") && pathname === "/api/auth/me") {
-      await handleAuthMe(req, res);
-      return;
-    }
-
-    if (req.method === "GET" && /^\/api\/players\/[^/]+\/profile$/.test(pathname)) {
-      await handleGetProfile(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "PUT" && /^\/api\/players\/[^/]+\/profile$/.test(pathname)) {
-      await handlePutProfile(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "GET" && /^\/api\/players\/[^/]+\/scores$/.test(pathname)) {
-      await handleGetPlayerScores(req, res, pathname, url);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/players\/[^/]+\/scores\/batch$/.test(pathname)) {
-      await handleAppendPlayerScores(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/logs/batch") {
-      await handleAppendLogs(req, res);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/leaderboard/scores") {
-      await handleSubmitLeaderboardScore(req, res);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/leaderboard/global") {
-      await handleGetGlobalLeaderboard(res, url);
-      return;
-    }
-
-    if (req.method === "POST" && pathname === "/api/multiplayer/sessions") {
-      await handleCreateSession(req, res);
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/api/multiplayer/rooms") {
-      await handleListRooms(res, url);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/rooms\/[^/]+\/join$/.test(pathname)) {
-      await handleJoinRoomByCode(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/join$/.test(pathname)) {
-      await handleJoinSession(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/heartbeat$/.test(pathname)) {
-      await handleSessionHeartbeat(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/participant-state$/.test(pathname)) {
-      await handleUpdateParticipantState(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/demo-controls$/.test(pathname)) {
-      await handleUpdateSessionDemoControls(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/moderate$/.test(pathname)) {
-      await handleModerateSessionParticipant(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/queue-next$/.test(pathname)) {
-      await handleQueueParticipantForNextGame(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/leave$/.test(pathname)) {
-      await handleLeaveSession(req, res, pathname);
-      return;
-    }
-
-    if (req.method === "POST" && /^\/api\/multiplayer\/sessions\/[^/]+\/auth\/refresh$/.test(pathname)) {
-      await handleRefreshSessionAuth(req, res, pathname);
+    const handled = await dispatchApiRoute(
+      {
+        req,
+        res,
+        url,
+        pathname,
+      },
+      API_ROUTE_HANDLERS
+    );
+    if (handled) {
       return;
     }
 
@@ -6023,335 +5894,29 @@ function resolveSessionCompletedAt(standings) {
 }
 
 function ensureSessionTurnState(session) {
-  if (!session) {
-    return null;
-  }
-
-  const currentState = session.turnState ?? null;
-  const currentActiveTurnPlayerId =
-    typeof currentState?.activeTurnPlayerId === "string"
-      ? currentState.activeTurnPlayerId
-      : null;
-  const keepCompletedActivePlayer =
-    normalizeTurnPhase(currentState?.phase) === TURN_PHASES.readyToEnd &&
-    typeof currentActiveTurnPlayerId === "string" &&
-    currentActiveTurnPlayerId.length > 0;
-
-  const orderedParticipants = serializeParticipantsInJoinOrder(session).filter(
-    (participant) =>
-      participant &&
-      participant.isSeated === true &&
-      !participant.isComplete &&
-      participant.queuedForNextGame !== true &&
-      (!keepCompletedActivePlayer || participant.playerId !== currentActiveTurnPlayerId)
-  );
-  if (keepCompletedActivePlayer) {
-    const activeParticipant = session.participants?.[currentActiveTurnPlayerId];
-    if (activeParticipant && isParticipantActiveForCurrentGame(activeParticipant)) {
-      orderedParticipants.push({
-        playerId: currentActiveTurnPlayerId,
-        isSeated: true,
-        isComplete: false,
-        joinedAt:
-          typeof activeParticipant.joinedAt === "number" && Number.isFinite(activeParticipant.joinedAt)
-            ? activeParticipant.joinedAt
-            : 0,
-      });
-      orderedParticipants.sort((left, right) => {
-        const joinedDelta = left.joinedAt - right.joinedAt;
-        if (joinedDelta !== 0) {
-          return joinedDelta;
-        }
-        return left.playerId.localeCompare(right.playerId);
-      });
-    }
-  }
-
-  const participantIds = orderedParticipants.map((participant) => participant.playerId);
-  const participantIdSet = new Set(participantIds);
-  const nextOrder = [];
-
-  if (Array.isArray(currentState?.order)) {
-    currentState.order.forEach((playerId) => {
-      if (participantIdSet.has(playerId) && !nextOrder.includes(playerId)) {
-        nextOrder.push(playerId);
-      }
-    });
-  }
-
-  participantIds.forEach((playerId) => {
-    if (!nextOrder.includes(playerId)) {
-      nextOrder.push(playerId);
-    }
-  });
-
-  const activeHumanParticipants = getActiveHumanParticipants(session);
-  const hasActiveHumanParticipant = activeHumanParticipants.length > 0;
-  const allHumansReady = hasActiveHumanParticipant ? areAllHumansReady(session) : false;
-  const hasBotParticipant = participantIds.some((playerId) =>
-    isBotParticipant(session?.participants?.[playerId])
-  );
-  const demoBotAutoplayReady =
-    isSessionDemoAutoRunEnabled(session) && !hasActiveHumanParticipant && hasBotParticipant;
-  const turnFlowReady = demoBotAutoplayReady || (hasActiveHumanParticipant && allHumansReady);
-  const now = Date.now();
-  let activeTurnPlayerId =
-    typeof currentState?.activeTurnPlayerId === "string"
-      ? currentState.activeTurnPlayerId
-      : null;
-  let activeTurnRecovered = false;
-  if (!turnFlowReady || participantIds.length === 0) {
-    activeTurnPlayerId = null;
-  } else if (!activeTurnPlayerId || !nextOrder.includes(activeTurnPlayerId)) {
-    activeTurnPlayerId = nextOrder[0] ?? null;
-    activeTurnRecovered = true;
-  }
-
-  const round =
-    typeof currentState?.round === "number" && Number.isFinite(currentState.round) && currentState.round > 0
-      ? Math.floor(currentState.round)
-      : 1;
-  const turnNumber =
-    typeof currentState?.turnNumber === "number" &&
-    Number.isFinite(currentState.turnNumber) &&
-    currentState.turnNumber > 0
-      ? Math.floor(currentState.turnNumber)
-      : 1;
-  const turnTimeoutMs = resolveSessionTurnTimeoutMs(session);
-  let phase = normalizeTurnPhase(currentState?.phase);
-  let lastRollSnapshot = normalizeTurnRollSnapshot(currentState?.lastRollSnapshot);
-  let lastScoreSummary = normalizeTurnScoreSummary(currentState?.lastScoreSummary);
-  let turnExpiresAt =
-    typeof currentState?.turnExpiresAt === "number" &&
-    Number.isFinite(currentState.turnExpiresAt) &&
-    currentState.turnExpiresAt > 0
-      ? Math.floor(currentState.turnExpiresAt)
-      : null;
-
-  if (!turnFlowReady || nextOrder.length === 0) {
-    phase = TURN_PHASES.awaitRoll;
-    lastRollSnapshot = null;
-    lastScoreSummary = null;
-    turnExpiresAt = null;
-  } else if (activeTurnRecovered) {
-    phase = TURN_PHASES.awaitRoll;
-    lastRollSnapshot = null;
-    lastScoreSummary = null;
-    turnExpiresAt = now + turnTimeoutMs;
-  } else if (phase === TURN_PHASES.awaitRoll) {
-    lastRollSnapshot = null;
-    lastScoreSummary = null;
-  } else if (phase === TURN_PHASES.awaitScore && !lastRollSnapshot) {
-    phase = TURN_PHASES.awaitRoll;
-    lastScoreSummary = null;
-  } else if (phase === TURN_PHASES.readyToEnd) {
-    if (!lastRollSnapshot) {
-      phase = TURN_PHASES.awaitRoll;
-      lastScoreSummary = null;
-    } else if (!lastScoreSummary) {
-      phase = TURN_PHASES.awaitScore;
-    } else if (lastScoreSummary.rollServerId !== lastRollSnapshot.serverRollId) {
-      phase = TURN_PHASES.awaitScore;
-      lastScoreSummary = null;
-    }
-  }
-
-  if (
-    turnFlowReady &&
-    nextOrder.length > 0 &&
-    activeTurnPlayerId &&
-    !turnExpiresAt
-  ) {
-    turnExpiresAt = now + turnTimeoutMs;
-  } else if (!turnFlowReady || !activeTurnPlayerId || nextOrder.length === 0) {
-    turnExpiresAt = null;
-  }
-
-  session.turnState = {
-    order: nextOrder,
-    activeTurnPlayerId,
-    round,
-    turnNumber,
-    phase,
-    lastRollSnapshot,
-    lastScoreSummary,
-    turnTimeoutMs,
-    turnExpiresAt,
-    updatedAt: now,
-  };
-
-  if (
-    turnFlowReady &&
-    !session.turnState.activeTurnPlayerId &&
-    session.turnState.order.length > 0
-  ) {
-    session.turnState.activeTurnPlayerId = session.turnState.order[0];
-  }
-
-  return session.turnState;
+  return sessionTurnController.ensureSessionTurnState(session);
 }
 
 function buildTurnStartMessage(session, options = {}) {
-  const turnState = ensureSessionTurnState(session);
-  if (!turnState?.activeTurnPlayerId) {
-    return null;
-  }
-  const now = Date.now();
-
-  const activeRoll = serializeTurnRollSnapshot(turnState.lastRollSnapshot);
-  const turnTimeoutMs = resolveSessionTurnTimeoutMs(session, turnState.turnTimeoutMs);
-  const turnExpiresAt =
-    typeof turnState.turnExpiresAt === "number" &&
-    Number.isFinite(turnState.turnExpiresAt) &&
-    turnState.turnExpiresAt > 0
-      ? Math.floor(turnState.turnExpiresAt)
-      : null;
-
-  return {
-    type: "turn_start",
-    sessionId: session.sessionId,
-    playerId: turnState.activeTurnPlayerId,
-    round: turnState.round,
-    turnNumber: turnState.turnNumber,
-    phase: normalizeTurnPhase(turnState.phase),
-    activeRoll,
-    activeRollServerId:
-      typeof activeRoll?.serverRollId === "string"
-        ? activeRoll.serverRollId
-        : null,
-    gameStartedAt: resolveSessionGameStartedAt(session, now),
-    turnExpiresAt,
-    turnTimeoutMs,
-    timestamp: now,
-    order: [...turnState.order],
-    source: options.source ?? "server",
-  };
+  return sessionTurnController.buildTurnStartMessage(session, options);
 }
 
 function buildTurnEndMessage(session, playerId, options = {}) {
-  const turnState = ensureSessionTurnState(session);
-  if (!turnState) {
-    return null;
-  }
-
-  return {
-    type: "turn_end",
-    sessionId: session.sessionId,
-    playerId,
-    round: turnState.round,
-    turnNumber: turnState.turnNumber,
-    timestamp: Date.now(),
-    source: options.source ?? "player",
-  };
+  return sessionTurnController.buildTurnEndMessage(session, playerId, options);
 }
 
 function buildTurnActionMessage(session, playerId, action, details = {}, options = {}) {
-  const turnState = ensureSessionTurnState(session);
-  if (!turnState) {
-    return null;
-  }
-
-  return {
-    type: "turn_action",
-    sessionId: session.sessionId,
+  return sessionTurnController.buildTurnActionMessage(
+    session,
     playerId,
     action,
-    ...(details.roll ? { roll: details.roll } : {}),
-    ...(details.score ? { score: details.score } : {}),
-    ...(details.select ? { select: details.select } : {}),
-    round: turnState.round,
-    turnNumber: turnState.turnNumber,
-    phase: normalizeTurnPhase(turnState.phase),
-    timestamp: Date.now(),
-    source: options.source ?? "player",
-  };
+    details,
+    options
+  );
 }
 
 function advanceSessionTurn(session, endedByPlayerId, options = {}) {
-  const turnState = ensureSessionTurnState(session);
-  if (!turnState || turnState.order.length === 0 || !turnState.activeTurnPlayerId) {
-    return null;
-  }
-
-  if (turnState.activeTurnPlayerId !== endedByPlayerId) {
-    return null;
-  }
-
-  const currentIndex = turnState.order.indexOf(endedByPlayerId);
-  if (currentIndex < 0) {
-    return null;
-  }
-
-  const timestamp = Date.now();
-  const turnEnd = {
-    type: "turn_end",
-    sessionId: session.sessionId,
-    playerId: endedByPlayerId,
-    round: turnState.round,
-    turnNumber: turnState.turnNumber,
-    timestamp,
-    source: options.source ?? "player",
-  };
-
-  const timeoutMs = resolveSessionTurnTimeoutMs(session, turnState.turnTimeoutMs);
-  const nextOrder = turnState.order.filter((playerId) => {
-    const participant = session.participants?.[playerId];
-    return Boolean(participant) && !isParticipantComplete(participant);
-  });
-
-  let nextActivePlayerId = null;
-  let wrapped = false;
-  for (let offset = 1; offset <= turnState.order.length; offset += 1) {
-    const candidateIndex = (currentIndex + offset) % turnState.order.length;
-    const candidatePlayerId = turnState.order[candidateIndex];
-    const participant = session.participants?.[candidatePlayerId];
-    if (!participant || isParticipantComplete(participant)) {
-      continue;
-    }
-    nextActivePlayerId = candidatePlayerId;
-    wrapped = candidateIndex <= currentIndex;
-    break;
-  }
-
-  turnState.order = nextOrder;
-  turnState.activeTurnPlayerId = nextActivePlayerId;
-  if (nextActivePlayerId) {
-    turnState.turnNumber = Math.max(1, Math.floor(turnState.turnNumber) + 1);
-    if (wrapped) {
-      turnState.round = Math.max(1, Math.floor(turnState.round) + 1);
-    }
-  }
-  turnState.phase = TURN_PHASES.awaitRoll;
-  turnState.lastRollSnapshot = null;
-  turnState.lastScoreSummary = null;
-  turnState.turnTimeoutMs = timeoutMs;
-  turnState.turnExpiresAt = nextActivePlayerId ? timestamp + timeoutMs : null;
-  turnState.updatedAt = timestamp;
-
-  if (!nextActivePlayerId) {
-    scheduleSessionPostGameLifecycle(session, timestamp);
-  }
-  const turnStart = nextActivePlayerId
-    ? {
-        type: "turn_start",
-        sessionId: session.sessionId,
-        playerId: turnState.activeTurnPlayerId,
-        round: turnState.round,
-        turnNumber: turnState.turnNumber,
-        phase: normalizeTurnPhase(turnState.phase),
-        gameStartedAt: resolveSessionGameStartedAt(session, timestamp),
-        turnExpiresAt: turnState.turnExpiresAt,
-        turnTimeoutMs: timeoutMs,
-        timestamp,
-        order: [...turnState.order],
-        source: options.source ?? "player",
-      }
-    : null;
-
-  return {
-    turnEnd,
-    turnStart,
-  };
+  return sessionTurnController.advanceSessionTurn(session, endedByPlayerId, options);
 }
 
 function resolveDataDir(rawValue) {
@@ -7779,38 +7344,11 @@ function broadcastRoundWinnerResolved(session, winnerPlayerId, timestamp = Date.
 }
 
 function applyParticipantScoreUpdate(participant, scoreSummary, rollDiceCount) {
-  const safeRollDiceCount =
-    Number.isFinite(rollDiceCount) && rollDiceCount > 0 ? Math.floor(rollDiceCount) : 0;
-  const currentScore = normalizeParticipantScore(participant?.score);
-  const points = Number.isFinite(scoreSummary?.points) ? Math.max(0, Math.floor(scoreSummary.points)) : 0;
-  const selectedDiceCount = Array.isArray(scoreSummary?.selectedDiceIds)
-    ? scoreSummary.selectedDiceIds.length
-    : 0;
-  const currentRemainingDice = normalizeParticipantRemainingDice(
-    participant?.remainingDice,
-    safeRollDiceCount || DEFAULT_PARTICIPANT_DICE_COUNT
+  return sessionTurnController.applyParticipantScoreUpdate(
+    participant,
+    scoreSummary,
+    rollDiceCount
   );
-  const remainingBase = safeRollDiceCount > 0 ? Math.max(currentRemainingDice, safeRollDiceCount) : currentRemainingDice;
-  const nextRemainingDice = Math.max(0, remainingBase - selectedDiceCount);
-  const didComplete = nextRemainingDice === 0;
-  const completedAt = didComplete
-    ? normalizeParticipantCompletedAt(participant?.completedAt) ?? Date.now()
-    : null;
-  const nextScore = currentScore + points;
-
-  if (participant) {
-    participant.score = nextScore;
-    participant.remainingDice = nextRemainingDice;
-    participant.isComplete = didComplete;
-    participant.completedAt = completedAt;
-  }
-
-  return {
-    nextScore,
-    nextRemainingDice,
-    didComplete,
-    completedAt,
-  };
 }
 
 function getHumanParticipantCount(session) {

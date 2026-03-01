@@ -1,6 +1,6 @@
 # BISCUITS - Session Summary
 **Date:** March 1, 2026  
-**Focus:** Unified game config contract follow-through (server + client wiring), baseline checkpoint before server modularization phases
+**Focus:** Unified game config follow-through plus Phase 01 routing extraction and Phase 02 engine-boundary checkpoint
 
 ---
 
@@ -25,6 +25,30 @@
 - Updated backend API docs to reflect actual legacy-vs-config precedence.
 - Documented that session create/join responses now include derived `gameConfig` snapshots.
 
+### Phase 01 - Routing Extraction (Incremental Refactor)
+- Extracted API route matching/dispatch out of `api/server.mjs` into:
+  - `api/http/routeDispatcher.mjs`
+- Replaced the long in-function endpoint if/else chain with:
+  - a centralized immutable route handler map in `server.mjs`
+  - a single dispatch call to the extracted route module
+- Preserved existing handler contracts and request/response behavior.
+- Extracted route handler-map construction into:
+  - `api/http/routeHandlers.mjs`
+  - server now composes handler dependencies instead of owning the full map literal
+
+### Phase 02 - Engine Boundaries (Incremental Refactor)
+- Extracted turn/session progression logic from `api/server.mjs` into:
+  - `api/engine/sessionTurnEngine.mjs`
+- Added dependency-injected engine composition in `server.mjs` so core turn transitions run behind explicit interfaces.
+- Kept transport and orchestration call sites stable via wrapper delegation:
+  - `ensureSessionTurnState`
+  - `buildTurnStartMessage`
+  - `buildTurnEndMessage`
+  - `buildTurnActionMessage`
+  - `advanceSessionTurn`
+  - `applyParticipantScoreUpdate`
+- Preserved API/WebSocket behavior while isolating core game transition logic from the server composition root.
+
 ---
 
 ## Validation Snapshot
@@ -32,7 +56,10 @@
 ### Confirmed
 - `npm run test:game-config` passes.
 - `npm run test:backend-api` passes.
+- `node --check api/engine/sessionTurnEngine.mjs` passes.
 - `node --check api/server.mjs` passes.
+- `node --check api/http/routeDispatcher.mjs` passes.
+- `node --check api/http/routeHandlers.mjs` passes.
 - `npm run build` passes.
 
 ### Notes
@@ -44,6 +71,10 @@
 
 - Created incremental phase branch for this checkpoint:
   - `feature/server-phase-00-game-config-baseline`
+- Created Phase 01 branch for routing extraction:
+  - `feature/server-phase-01-routing-extraction`
+- Created Phase 02 branch for engine boundary extraction:
+  - `feature/server-phase-02-engine-boundaries`
 - Added dedicated phase plan in:
   - `docs/SERVER-REFACTOR-PHASE-PLAN.md`
 
@@ -51,6 +82,6 @@
 
 ## Next Phase Candidate
 
-1. Phase 01: Extract route handlers and HTTP/WS composition scaffolding out of `api/server.mjs` without changing runtime behavior.
-2. Phase 02: Introduce plugin/filter registry with fail-open degradation policy for non-core addons.
-3. Phase 03: Move moderation/chat conduct and optional systems behind decoupled adapters.
+1. Phase 03: Introduce plugin/filter registry with fail-open degradation policy for non-core addons.
+2. Phase 04: Move moderation/chat conduct and optional systems behind decoupled adapters.
+3. Phase 05: Continue storage/auth adapter hardening with resilience-oriented failure-path tests.

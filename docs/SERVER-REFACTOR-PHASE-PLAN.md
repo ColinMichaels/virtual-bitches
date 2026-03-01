@@ -48,15 +48,26 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
 - Land unified `gameConfig` contract wiring across server/client/runtime.
 - Confirm no API contract breakage.
 - Preserve deploy/smoke baseline.
+- Status: ✅ Complete (`feature/server-phase-00-game-config-baseline`)
 
 ## Phase 01 - Routing Extraction
 - Move route matching/dispatch out of `server.mjs` into route modules.
 - Keep request/response contracts unchanged.
 - Maintain same auth/guard behavior.
+- Status: ✅ In progress checkpoint landed (`feature/server-phase-01-routing-extraction`)
+- Delivered in branch:
+  - `api/http/routeDispatcher.mjs`
+  - `api/server.mjs` dispatch-chain replacement using centralized handler map
+  - `api/http/routeHandlers.mjs` handler-registry extraction to keep server focused on composition
 
 ## Phase 02 - Engine Boundaries
 - Extract session/turn progression logic into core engine modules.
 - Keep side-effects behind interfaces (broadcast, persistence, timers).
+- Status: ✅ In progress checkpoint landed (`feature/server-phase-02-engine-boundaries`)
+- Delivered in branch:
+  - `api/engine/sessionTurnEngine.mjs`
+  - `api/server.mjs` delegates turn-state/progression/scoring transitions to composed engine module
+  - dependency-injected side-effect boundary for post-game lifecycle scheduling
 
 ## Phase 03 - Filter/Addon Registry
 - Introduce registry + policy model:
