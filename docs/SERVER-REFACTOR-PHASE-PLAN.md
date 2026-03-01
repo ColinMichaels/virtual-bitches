@@ -69,10 +69,12 @@ If a phase splits, suffix with `-a`, `-b` (example: `feature/server-phase-03a-fi
   - `api/engine/sessionLifecycleEngine.mjs`
   - `api/engine/botTurnEngine.mjs`
   - `api/engine/turnTimeoutEngine.mjs`
+  - `api/engine/turnActionEngine.mjs`
   - `api/server.mjs` delegates turn-state/progression/scoring transitions to composed engine module
   - `api/server.mjs` delegates post-game lifecycle transitions (queue/completion/restart timing state) to composed engine module
   - `api/server.mjs` delegates bot turn execution transitions to composed engine module
   - `api/server.mjs` delegates turn-timeout transition handling to composed engine module
+  - `api/server.mjs` delegates player turn-action transition handling (roll/select/score validation + mutation) to composed engine module
   - dependency-injected side-effect boundary for post-game lifecycle scheduling/reset/completion logic
 
 ## Phase 03 - Filter/Addon Registry

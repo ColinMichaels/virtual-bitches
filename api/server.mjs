@@ -11,6 +11,7 @@ import { createSessionTurnEngine } from "./engine/sessionTurnEngine.mjs";
 import { createSessionLifecycleEngine } from "./engine/sessionLifecycleEngine.mjs";
 import { createBotTurnEngine } from "./engine/botTurnEngine.mjs";
 import { createTurnTimeoutEngine } from "./engine/turnTimeoutEngine.mjs";
+import { createTurnActionEngine } from "./engine/turnActionEngine.mjs";
 import { dispatchApiRoute } from "./http/routeDispatcher.mjs";
 import { createApiRouteHandlers } from "./http/routeHandlers.mjs";
 import {
@@ -464,6 +465,24 @@ const turnTimeoutController = createTurnTimeoutEngine({
   standParticipantIntoObserverMode,
   resolveSessionTurnTimeoutMs,
   advanceSessionTurn,
+});
+const turnActionController = createTurnActionEngine({
+  turnPhases: TURN_PHASES,
+  defaultParticipantDiceCount: DEFAULT_PARTICIPANT_DICE_COUNT,
+  normalizeTurnPhase,
+  ensureSessionTurnState,
+  parseTurnRollPayload,
+  parseTurnSelectionPayload,
+  buildTurnScoreSummaryFromSelectedDice,
+  normalizeParticipantScore,
+  normalizeParticipantRemainingDice,
+  isParticipantComplete,
+  normalizeParticipantCompletedAt,
+  applyParticipantScoreUpdate,
+  parseTurnScorePayload,
+  clearParticipantTimeoutStrike,
+  buildTurnActionMessage,
+  completeSessionRoundWithWinner,
 });
 
 void beginBootstrap();
@@ -7184,6 +7203,10 @@ function applyParticipantScoreUpdate(participant, scoreSummary, rollDiceCount) {
   );
 }
 
+function processTurnAction(session, playerId, payload) {
+  return turnActionController.processTurnAction(session, playerId, payload);
+}
+
 function getHumanParticipantCount(session) {
   if (!session?.participants) {
     return 0;
@@ -9769,164 +9792,39 @@ function handleTurnActionMessage(client, session, payload) {
   const timestamp = Date.now();
   session.participants[client.playerId].lastHeartbeatAt = timestamp;
   markSessionActivity(session, client.playerId, timestamp);
-  const turnState = ensureSessionTurnState(session);
-  if (!turnState?.activeTurnPlayerId) {
-    sendSocketError(client, "turn_unavailable", "turn_unavailable");
-    return;
-  }
-
-  if (turnState.activeTurnPlayerId !== client.playerId) {
-    sendSocketError(client, "turn_not_active", "not_your_turn");
-    sendTurnSyncPayload(client, session, "sync");
-    return;
-  }
-
-  const action =
-    payload.action === "score"
-      ? "score"
-      : payload.action === "select"
-        ? "select"
-        : "roll";
-  const currentPhase = normalizeTurnPhase(turnState.phase);
-  if (action === "roll" && currentPhase !== TURN_PHASES.awaitRoll) {
-    sendSocketError(client, "turn_action_invalid_phase", "roll_not_expected");
-    sendTurnSyncPayload(client, session, "sync");
-    return;
-  }
-  if (
-    (action === "score" || action === "select") &&
-    currentPhase !== TURN_PHASES.awaitScore
-  ) {
-    sendSocketError(
-      client,
-      "turn_action_invalid_phase",
-      action === "select" ? "select_not_expected" : "score_not_expected"
-    );
-    sendTurnSyncPayload(client, session, "sync");
-    return;
-  }
-
-  let details = {};
-  let scoreDidComplete = false;
-  if (action === "roll") {
-    const parsedRoll = parseTurnRollPayload(payload);
-    if (!parsedRoll.ok) {
-      sendSocketError(client, "turn_action_invalid_payload", parsedRoll.reason);
+  const transition = processTurnAction(session, client.playerId, payload);
+  if (!transition.ok) {
+    sendSocketError(client, transition.code, transition.reason);
+    if (transition.sync) {
       sendTurnSyncPayload(client, session, "sync");
-      return;
     }
+    return;
+  }
 
-    turnState.lastRollSnapshot = parsedRoll.value;
-    turnState.lastScoreSummary = null;
-    turnState.phase = TURN_PHASES.awaitScore;
-    details = { roll: parsedRoll.value };
-  } else if (action === "select") {
-    const parsedSelection = parseTurnSelectionPayload(payload, turnState.lastRollSnapshot);
-    if (!parsedSelection.ok) {
-      sendSocketError(client, "turn_action_invalid_payload", parsedSelection.reason);
-      sendTurnSyncPayload(client, session, "sync");
-      return;
-    }
+  if (transition.message) {
+    broadcastToSession(client.sessionId, JSON.stringify(transition.message), null);
+  }
 
-    const previewScoreSummary = buildTurnScoreSummaryFromSelectedDice(
-      turnState.lastRollSnapshot,
-      parsedSelection.value.selectedDiceIds,
-      timestamp
+  if (transition.winnerResolved) {
+    broadcastRoundWinnerResolved(
+      session,
+      client.playerId,
+      transition.actionTimestamp,
+      "winner_complete"
     );
-    if (previewScoreSummary) {
-      const participant = session.participants[client.playerId];
-      const rollDiceCount = Array.isArray(turnState.lastRollSnapshot?.dice)
-        ? turnState.lastRollSnapshot.dice.length
-        : 0;
-      const participantPreview = participant
-        ? {
-            ...participant,
-            score: normalizeParticipantScore(participant.score),
-            remainingDice: normalizeParticipantRemainingDice(participant.remainingDice),
-            isComplete: isParticipantComplete(participant),
-            completedAt: normalizeParticipantCompletedAt(participant.completedAt),
-          }
-        : null;
-      const previewUpdate = participantPreview
-        ? applyParticipantScoreUpdate(participantPreview, previewScoreSummary, rollDiceCount)
-        : null;
-      turnState.lastScoreSummary = {
-        ...previewScoreSummary,
-        projectedTotalScore: previewUpdate?.nextScore ?? null,
-        remainingDice: previewUpdate?.nextRemainingDice ?? DEFAULT_PARTICIPANT_DICE_COUNT,
-        isComplete: previewUpdate?.didComplete === true,
-      };
-    } else {
-      turnState.lastScoreSummary = null;
-    }
-    details = { select: parsedSelection.value };
-  } else {
-    const parsedScore = parseTurnScorePayload(payload, turnState.lastRollSnapshot);
-    if (!parsedScore.ok) {
-      const code =
-        parsedScore.reason === "score_points_mismatch" ||
-        parsedScore.reason === "score_roll_mismatch"
-          ? "turn_action_invalid_score"
-          : "turn_action_invalid_payload";
-      sendSocketError(client, code, parsedScore.reason);
-      sendTurnSyncPayload(client, session, "sync");
-      return;
-    }
-
-    const participant = session.participants[client.playerId];
-    const rollDiceCount = Array.isArray(turnState.lastRollSnapshot?.dice)
-      ? turnState.lastRollSnapshot.dice.length
-      : 0;
-    const scoreUpdate = applyParticipantScoreUpdate(
-      participant,
-      parsedScore.value,
-      rollDiceCount
-    );
-
-    turnState.lastScoreSummary = {
-      ...parsedScore.value,
-      projectedTotalScore: scoreUpdate.nextScore,
-      remainingDice: scoreUpdate.nextRemainingDice,
-      isComplete: scoreUpdate.didComplete,
-    };
-    turnState.phase = TURN_PHASES.readyToEnd;
-    scoreDidComplete = scoreUpdate.didComplete;
-    details = { score: turnState.lastScoreSummary };
   }
 
-  turnState.updatedAt = Date.now();
-  if (action === "roll" || action === "score") {
-    clearParticipantTimeoutStrike(session.participants[client.playerId]);
-  }
-  const message = buildTurnActionMessage(
-    session,
-    client.playerId,
-    action,
-    details,
-    {
-      source: "player",
-    }
-  );
-  if (message) {
-    broadcastToSession(client.sessionId, JSON.stringify(message), null);
-  }
-
-  if (action === "score" && scoreDidComplete) {
-    const completedRound = completeSessionRoundWithWinner(session, client.playerId, timestamp);
-    if (completedRound.ok) {
-      broadcastRoundWinnerResolved(session, client.playerId, timestamp, "winner_complete");
-    }
-  }
-
-  if (action === "select") {
+  if (!transition.shouldBroadcastState) {
     reconcileSessionLoops(client.sessionId);
     return;
   }
 
-  broadcastSessionState(session, `turn_${action}`);
-  persistStore().catch((error) => {
-    log.warn("Failed to persist session after turn action", error);
-  });
+  broadcastSessionState(session, `turn_${transition.action}`);
+  if (transition.shouldPersist) {
+    persistStore().catch((error) => {
+      log.warn("Failed to persist session after turn action", error);
+    });
+  }
   reconcileSessionLoops(client.sessionId);
 }
 

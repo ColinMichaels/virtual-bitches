@@ -45,6 +45,8 @@
   - `api/engine/botTurnEngine.mjs`
 - Extracted turn-timeout transition logic from `api/server.mjs` into:
   - `api/engine/turnTimeoutEngine.mjs`
+- Extracted player turn-action transition logic from `api/server.mjs` into:
+  - `api/engine/turnActionEngine.mjs`
 - Added dependency-injected engine composition in `server.mjs` so core turn transitions run behind explicit interfaces.
 - Kept transport and orchestration call sites stable via wrapper delegation:
   - `ensureSessionTurnState`
@@ -66,6 +68,8 @@
   - `executeBotTurn`
 - Added stable wrapper delegation for timeout progression operations:
   - `handleTurnTimeoutExpiry` transition path via `turnTimeoutController.processTurnTimeoutTransition(...)`
+- Added stable wrapper delegation for player turn-action operations:
+  - `processTurnAction` transition path via `turnActionController.processTurnAction(...)`
 - Preserved API/WebSocket behavior while isolating core game transition logic from the server composition root.
 
 ---
