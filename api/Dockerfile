@@ -13,6 +13,7 @@ COPY filters ./filters
 COPY http ./http
 COPY moderation ./moderation
 COPY storage ./storage
+COPY ws ./ws
 COPY data ./data
 
 ENV NODE_ENV=production
