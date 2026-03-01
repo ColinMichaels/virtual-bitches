@@ -63,6 +63,7 @@ export class SplashScreen {
   private privateRoomCode = "";
   private roomCodeJoinInFlight = false;
   private readonly logoUrl = getBrandLogoUrl();
+  private entranceAnimationTimer: number | null = null;
   private roomCodeFeedback:
     | {
         tone: "info" | "success" | "error";
@@ -401,6 +402,9 @@ export class SplashScreen {
     document.body.appendChild(this.container);
     document.body.classList.add("splash-active");
     this.canvas = this.container.querySelector("#splash-canvas") as HTMLCanvasElement;
+    this.container.querySelector(".splash-content")?.addEventListener("dragstart", (event) => {
+      event.preventDefault();
+    });
 
     this.container.querySelectorAll<HTMLElement>("[data-play-mode]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -787,6 +791,20 @@ export class SplashScreen {
     this.syncPlayModeUi();
   }
 
+  playEntranceAnimation(): void {
+    this.container.classList.remove("splash-enter");
+    void this.container.offsetWidth;
+    this.container.classList.add("splash-enter");
+    if (this.entranceAnimationTimer !== null) {
+      window.clearTimeout(this.entranceAnimationTimer);
+      this.entranceAnimationTimer = null;
+    }
+    this.entranceAnimationTimer = window.setTimeout(() => {
+      this.container.classList.remove("splash-enter");
+      this.entranceAnimationTimer = null;
+    }, 980);
+  }
+
   async prepareBackground(onStatus?: (message: string) => void): Promise<void> {
     if (this.backgroundLoadPromise) {
       return this.backgroundLoadPromise;
@@ -809,7 +827,9 @@ export class SplashScreen {
 
   show(): void {
     document.body.classList.add("splash-active");
+    this.container.classList.remove("fade-out");
     this.container.style.display = "flex";
+    this.playEntranceAnimation();
     this.background3d?.start();
 
     if (!this.background3d) {
@@ -831,6 +851,10 @@ export class SplashScreen {
   }
 
   dispose(): void {
+    if (this.entranceAnimationTimer !== null) {
+      window.clearTimeout(this.entranceAnimationTimer);
+      this.entranceAnimationTimer = null;
+    }
     document.body.classList.remove("splash-active");
     this.background3d?.dispose();
     this.background3d = null;
